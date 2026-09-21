@@ -4,6 +4,10 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "boatPlacement": {
+      "model": "BoatPlacement",
+      "namespace": "public"
+    },
     "evaluation": {
       "model": "Evaluation",
       "namespace": "public"
@@ -69,6 +73,94 @@
           }
         },
         "models": {
+          "BoatPlacement": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "exerciseId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "ownerId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "teamId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "exerciseId": {
+                  "column": "exerciseId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "ownerId": {
+                  "column": "ownerId"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "teamId": {
+                  "column": "teamId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "boatPlacement"
+            }
+          },
           "Evaluation": {
             "fields": {
               "createdAt": {
@@ -99,10 +191,17 @@
                   "kind": "scalar"
                 }
               },
-              "isDiamond": {
+              "isValidated": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "note": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -113,14 +212,14 @@
                   "kind": "scalar"
                 }
               },
-              "score": {
+              "sessionId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "targetTeamId": {
+              "teamId": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -144,6 +243,38 @@
                   "model": "User",
                   "namespace": "public"
                 }
+              },
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              },
+              "team": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "teamId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Team",
+                  "namespace": "public"
+                }
               }
             },
             "storage": {
@@ -160,17 +291,20 @@
                 "id": {
                   "column": "id"
                 },
-                "isDiamond": {
-                  "column": "isDiamond"
+                "isValidated": {
+                  "column": "isValidated"
+                },
+                "note": {
+                  "column": "note"
                 },
                 "repsObserved": {
                   "column": "repsObserved"
                 },
-                "score": {
-                  "column": "score"
+                "sessionId": {
+                  "column": "sessionId"
                 },
-                "targetTeamId": {
-                  "column": "targetTeamId"
+                "teamId": {
+                  "column": "teamId"
                 }
               },
               "namespaceId": "public",
@@ -290,6 +424,36 @@
               }
             },
             "relations": {
+              "boatPlacements": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "BoatPlacement",
+                  "namespace": "public"
+                }
+              },
+              "evaluations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "Evaluation",
+                  "namespace": "public"
+                }
+              },
               "teams": {
                 "cardinality": "1:N",
                 "on": {
@@ -353,6 +517,21 @@
               }
             },
             "relations": {
+              "evaluations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "teamId"
+                  ]
+                },
+                "to": {
+                  "model": "Evaluation",
+                  "namespace": "public"
+                }
+              },
               "members": {
                 "cardinality": "1:N",
                 "on": {
@@ -617,6 +796,86 @@
       "public": {
         "entries": {
           "table": {
+            "boatPlacement": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "exerciseId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "ownerId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "teamId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "boatPlacement"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "boatPlacement_sessionId_idx_29f415d4",
+                  "prefix": "boatPlacement_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "teamId"
+                  ],
+                  "name": "boatPlacement_teamId_idx_f2b72ab3",
+                  "prefix": "boatPlacement_teamId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "evaluation": {
               "columns": {
                 "createdAt": {
@@ -643,7 +902,7 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "isDiamond": {
+                "isValidated": {
                   "codecId": "pg/bool@1",
                   "default": {
                     "kind": "literal",
@@ -652,23 +911,64 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
+                "note": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "repsObserved": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": false
                 },
-                "score": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 },
-                "targetTeamId": {
+                "teamId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 }
               },
               "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "evaluation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "teamId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "evaluation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "team"
+                  }
+                },
                 {
                   "source": {
                     "columns": [
@@ -693,6 +993,22 @@
                   ],
                   "name": "evaluation_evaluatorId_idx_010145e1",
                   "prefix": "evaluation_evaluatorId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "evaluation_sessionId_idx_29f415d4",
+                  "prefix": "evaluation_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "teamId"
+                  ],
+                  "name": "evaluation_teamId_idx_f2b72ab3",
+                  "prefix": "evaluation_teamId_idx",
                   "unique": false
                 }
               ],
@@ -1053,12 +1369,23 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6414281d02caf288fa3c0366bf5211f0b746fd1ef340d9928a093444866839ad"
+    "storageHash": "c9837e7fd6e6768164ae0e22461642faded292a46b9ddc11bbdf1b888a818c3c"
   },
   "execution": {
-    "executionHash": "5b3244ee577b59a5aa6764e04ef96c7860c837c5797d830e3bd44da7e5e7ef38",
+    "executionHash": "13cce07f1b60d76bf7ca09ac64209ae36b3fe2e48901f205e919e4f782b6738d",
     "mutations": {
       "defaults": [
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "boatPlacement"
+          }
+        },
         {
           "onCreate": {
             "id": "uuidv4",

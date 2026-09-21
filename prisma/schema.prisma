@@ -35,7 +35,9 @@ model Session {
   settings  Json?
   createdAt DateTime    @default(now())
 
-  teams     Team[]
+  teams           Team[]
+  evaluations     Evaluation[]
+  boatPlacements  BoatPlacement[]
 }
 
 model Team {
@@ -44,8 +46,9 @@ model Team {
   sessionId String
   session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  members   TeamMember[]
-  scores    Score[]
+  members     TeamMember[]
+  scores      Score[]
+  evaluations Evaluation[]
 }
 
 model TeamMember {
@@ -58,16 +61,35 @@ model TeamMember {
 
 model Evaluation {
   id           String   @id @default(uuid())
+  session      Session  @relation(fields: [sessionId], references: [id])
+  sessionId    String
+  team         Team     @relation(fields: [teamId], references: [id])
+  teamId       String
+  evaluator    User     @relation("EvaluationsGiven", fields: [evaluatorId], references: [id])
   evaluatorId  String
-  evaluator    User     @relation(fields: [evaluatorId], references: [id])
-  targetTeamId String
+  
   exerciseId   String
-
-  isDiamond    Boolean  @default(false)
-  score        Int
   repsObserved Int
-
+  note         Int      @default(0) // 5(TB), 4(B), 3(S), 0(I), -1(TI)
+  isValidated  Boolean  @default(false)
   createdAt    DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([teamId])
+  @@index([evaluatorId])
+}
+
+model BoatPlacement {
+  id           String   @id @default(uuid())
+  session      Session  @relation(fields: [sessionId], references: [id])
+  sessionId    String
+  teamId       String
+  exerciseId   String
+  ownerId      String   // User ID ou "GHOST_DAMZER"
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([teamId])
 }
 
 model Score {
