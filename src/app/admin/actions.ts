@@ -31,3 +31,33 @@ export async function createSessionAction(formData: FormData) {
 
   redirect("/greffier");
 }
+
+export type ImportUserPayload = {
+  firstName: string;
+  lastName: string;
+  className: string;
+};
+
+export async function importUsersAction(users: ImportUserPayload[]) {
+  let importedCount = 0;
+  await db.transaction(async (tx) => {
+    for (const user of users) {
+      // Create a unique name identifier. If there's a collision, we could append a number, but for now we append class name.
+      let computedName = `${user.firstName.trim()} ${user.lastName.trim()} (${user.className.trim()})`;
+      
+      // Check if exists
+      const existing = await tx.orm.public.User.where({ name: computedName }).first();
+      if (!existing) {
+        await tx.orm.public.User.create({
+          name: computedName,
+          firstName: user.firstName.trim(),
+          lastName: user.lastName.trim(),
+          className: user.className.trim(),
+          role: "STUDENT",
+        });
+        importedCount++;
+      }
+    }
+  });
+  return { success: true, count: importedCount };
+}

@@ -58,6 +58,23 @@
               }
             ]
           },
+          "Visibility": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PUBLIC",
+                "value": "PUBLIC"
+              },
+              {
+                "name": "PRIVATE",
+                "value": "PRIVATE"
+              },
+              {
+                "name": "SECRET",
+                "value": "SECRET"
+              }
+            ]
+          },
           "WodTemplate": {
             "codecId": "pg/text@1",
             "members": [
@@ -685,8 +702,22 @@
                   "kind": "scalar"
                 }
               },
+              "firstName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastName": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -704,6 +735,26 @@
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
+                }
+              },
+              "pinCode": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "profileVisibility": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "Visibility",
+                  "namespaceId": "public",
+                  "plane": "domain"
                 }
               },
               "reliability": {
@@ -767,14 +818,26 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
+                "firstName": {
+                  "column": "firstName"
+                },
                 "id": {
                   "column": "id"
+                },
+                "lastName": {
+                  "column": "lastName"
                 },
                 "name": {
                   "column": "name"
                 },
                 "password": {
                   "column": "password"
+                },
+                "pinCode": {
+                  "column": "pinCode"
+                },
+                "profileVisibility": {
+                  "column": "profileVisibility"
                 },
                 "reliability": {
                   "column": "reliability"
@@ -1276,6 +1339,11 @@
             "user": {
               "checks": [
                 {
+                  "expression": "\"profileVisibility\" IN ('PUBLIC', 'PRIVATE', 'SECRET')",
+                  "name": "user_profileVisibility_check_1a28e750",
+                  "prefix": "user_profileVisibility_check"
+                },
+                {
                   "expression": "\"role\" IN ('MASTER_ADMIN', 'ADMIN', 'GREFFIER', 'STUDENT')",
                   "name": "user_role_check_323831f8",
                   "prefix": "user_role_check"
@@ -1296,10 +1364,20 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "firstName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "lastName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "name": {
                   "codecId": "pg/text@1",
@@ -1310,6 +1388,26 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "pinCode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "profileVisibility": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "PUBLIC"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "Visibility",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "reliability": {
                   "codecId": "pg/int4@1",
@@ -1343,7 +1441,13 @@
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "name"
+                  ]
+                }
+              ]
             }
           },
           "valueSet": {
@@ -1354,6 +1458,14 @@
                 "ADMIN",
                 "GREFFIER",
                 "STUDENT"
+              ]
+            },
+            "Visibility": {
+              "kind": "valueSet",
+              "values": [
+                "PUBLIC",
+                "PRIVATE",
+                "SECRET"
               ]
             },
             "WodTemplate": {
@@ -1369,7 +1481,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "c9837e7fd6e6768164ae0e22461642faded292a46b9ddc11bbdf1b888a818c3c"
+    "storageHash": "97f1883ee86259b0b71ac17f83371fbac078aee47ec4509ee6bee0205cdd22eb"
   },
   "execution": {
     "executionHash": "13cce07f1b60d76bf7ca09ac64209ae36b3fe2e48901f205e919e4f782b6738d",

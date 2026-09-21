@@ -23,11 +23,22 @@ export default async function GreffierPage() {
     );
   }
 
+  const serializedTeams = session.teams.map(team => ({
+    ...team,
+    members: team.members.map(member => ({
+      ...member,
+      user: {
+        ...member.user,
+        createdAt: member.user.createdAt.toString()
+      }
+    }))
+  }));
+
   return (
     <GreffierClient 
       evaluator={evaluator}
       sessionId={session.id}
-      initialTeams={session.teams}
+      initialTeams={serializedTeams as any}
     />
   );
 }

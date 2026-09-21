@@ -14,15 +14,26 @@ enum WodTemplate {
   RELAIS_SPRINT = "RELAIS_SPRINT"
 }
 
-model User {
-  id          String       @id @default(uuid())
-  role        Role         @default(STUDENT)
-  name        String
-  className   String?
-  password    String?
-  reliability Int          @default(0)
+enum Visibility {
+  @@type("pg/text@1")
+  PUBLIC   = "PUBLIC"
+  PRIVATE  = "PRIVATE"
+  SECRET   = "SECRET"
+}
 
-  createdAt   DateTime     @default(now())
+model User {
+  id                String       @id @default(uuid())
+  role              Role         @default(STUDENT)
+  name              String       @unique
+  firstName         String?
+  lastName          String?
+  className         String?
+  password          String?
+  pinCode           String?
+  profileVisibility Visibility   @default(PUBLIC)
+  reliability       Int          @default(0)
+
+  createdAt         DateTime     @default(now())
 
   teams       TeamMember[]
   evaluations Evaluation[]
