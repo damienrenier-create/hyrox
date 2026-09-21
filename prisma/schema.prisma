@@ -1,0 +1,79 @@
+// use prisma-8
+
+enum Role {
+  @@type("pg/text@1")
+  MASTER_ADMIN = "MASTER_ADMIN"
+  ADMIN = "ADMIN"
+  GREFFIER = "GREFFIER"
+  STUDENT = "STUDENT"
+}
+
+enum WodTemplate {
+  @@type("pg/text@1")
+  PYRAMIDE_CLASSIQUE = "PYRAMIDE_CLASSIQUE"
+  RELAIS_SPRINT = "RELAIS_SPRINT"
+}
+
+model User {
+  id          String       @id @default(uuid())
+  role        Role         @default(STUDENT)
+  name        String
+  className   String?
+  password    String?
+  reliability Int          @default(0)
+
+  createdAt   DateTime     @default(now())
+
+  teams       TeamMember[]
+  evaluations Evaluation[]
+}
+
+model Session {
+  id        String      @id @default(uuid())
+  wodType   WodTemplate
+  isActive  Boolean     @default(true)
+  settings  Json?
+  createdAt DateTime    @default(now())
+
+  teams     Team[]
+}
+
+model Team {
+  id        String       @id @default(uuid())
+  name      String
+  sessionId String
+  session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  members   TeamMember[]
+  scores    Score[]
+}
+
+model TeamMember {
+  id     String @id @default(uuid())
+  teamId String
+  userId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Evaluation {
+  id           String   @id @default(uuid())
+  evaluatorId  String
+  evaluator    User     @relation(fields: [evaluatorId], references: [id])
+  targetTeamId String
+  exerciseId   String
+
+  isDiamond    Boolean  @default(false)
+  score        Int
+  repsObserved Int
+
+  createdAt    DateTime @default(now())
+}
+
+model Score {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  points    Int
+  createdAt DateTime @default(now())
+}
