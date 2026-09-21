@@ -2,7 +2,13 @@
 
 import { motion } from "framer-motion";
 
-export function ClockBar() {
+import { setRaceStatus } from "@/lib/firebase/firebase-sync";
+
+export function ClockBar({ sessionId }: { sessionId: string }) {
+  const startRace = async () => {
+    await setRaceStatus(sessionId, "COMBAT");
+  };
+
   return (
     <div className="sticky top-0 z-20 bg-white border-b-4 border-slate-900 px-4 py-3 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
       <div className="flex items-center gap-6">
@@ -20,7 +26,10 @@ export function ClockBar() {
       </div>
 
       <div className="flex gap-2 w-full md:w-auto">
-        <button className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-black text-lg px-8 py-3 rounded-xl transition-colors">
+        <button 
+          onClick={startRace}
+          className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-black text-lg px-8 py-3 rounded-xl transition-colors active:scale-95"
+        >
           Début de course
         </button>
       </div>

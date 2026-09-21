@@ -28,10 +28,23 @@ export default async function AdminDashboard() {
           Créer une nouvelle session va générer 24 équipes vides et préparer la base de données pour une nouvelle course de type Pyramide Classique.
         </p>
 
-        <form action={createSessionAction}>
+        <form action={createSessionAction} className="flex flex-col gap-6">
+          <div>
+            <label className="block text-sm font-medium text-cyan-300 mb-2">Nombre d'Équipes</label>
+            <input 
+              type="number" 
+              name="numTeams" 
+              defaultValue={24}
+              min={1}
+              max={50}
+              className="w-full bg-slate-950 border border-cyan-800 rounded-lg p-3 text-white focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition-colors"
+            />
+            <p className="text-xs text-slate-500 mt-1">Par défaut : 24. Le greffier et les arbitres s'adapteront à ce nombre.</p>
+          </div>
+
           <button 
             type="submit"
-            className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black tracking-widest py-4 px-8 rounded shadow-[0_0_15px_rgba(8,145,178,0.5)] transition-transform active:scale-95"
+            className="w-full bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black tracking-widest py-4 px-8 rounded shadow-[0_0_15px_rgba(8,145,178,0.5)] transition-transform active:scale-95"
           >
             LANCER UNE NOUVELLE COURSE
           </button>

@@ -10,31 +10,48 @@ export type FirebaseShot = {
   timestamp: number;
 };
 
-// Phase de placement
-export async function placeBoat(sessionId: string, teamId: string, exerciseId: string, ownerId: string) {
-  const boatRef = ref(db, `sessions/${sessionId}/grid/${teamId}_${exerciseId}/boats/${ownerId}`);
-  await set(boatRef, true);
+export type ShipData = {
+  id: string;
+  ownerId: string;
+  length: number;
+  orientation: "horizontal" | "vertical";
+  startTeamId: string;
+  startExerciseId: string;
+  coords: { teamId: string; exerciseId: string }[];
+};
+
+// Phase de placement (Bateaux Multi-cases)
+export async function placeShip(sessionId: string, ship: ShipData) {
+  // Enregistrer l'objet Ship
+  const shipRef = ref(db, `sessions/${sessionId}/ships/${ship.ownerId}/${ship.id}`);
+  await set(shipRef, ship);
+
+  // Marquer les cases occupées sur la grille globale pour affichage et collision rapides
+  for (const coord of ship.coords) {
+    const cellRef = ref(db, `sessions/${sessionId}/grid/${coord.teamId}_${coord.exerciseId}/boats/${ship.ownerId}`);
+    await set(cellRef, ship.id);
+  }
+}
+
+export async function setRaceStatus(sessionId: string, status: "PREPARATION" | "COMBAT" | "TERMINATED") {
+  const statusRef = ref(db, `sessions/${sessionId}/status`);
+  await set(statusRef, status);
 }
 
 // Phase de tir (Modale)
-export async function fireShot(
-  sessionId: string, 
-  teamId: string, 
-  exerciseId: string, 
-  reps: number, 
-  note: number, 
-  evaluator: SessionPayload
-) {
+export async function fireShot(sessionId: string, teamId: string, exerciseId: string, reps: number, note: number, evaluator: SessionPayload, isPostWod: boolean = false) {
   const coord = `${teamId}_${exerciseId}`;
   
   // 1. Enregistrer le tir
   const shotRef = push(ref(db, `sessions/${sessionId}/grid/${coord}/shots`));
-  const shotData: FirebaseShot = {
+  const shotData = {
     evaluatorId: evaluator.id,
+    evaluatorName: evaluator.name,
     role: evaluator.role,
-    repsObserved: reps,
-    note: note,
-    timestamp: Date.now()
+    reps,
+    note,
+    timestamp: Date.now(),
+    isPostWod
   };
   await set(shotRef, shotData);
 

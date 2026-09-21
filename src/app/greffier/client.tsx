@@ -21,7 +21,7 @@ export function GreffierClient({ sessionId, initialTeams, evaluator }: { session
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 font-sans">
-      <ClockBar />
+      <ClockBar sessionId={sessionId} />
       
       <main className="max-w-[1800px] mx-auto p-4">
         <div className="mb-6 p-4 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-wrap gap-6 items-center">
