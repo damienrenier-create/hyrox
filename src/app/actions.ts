@@ -4,29 +4,34 @@ import { login, SessionPayload } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
 export async function loginAction(formData: FormData) {
-  const role = formData.get("role") as SessionPayload["role"];
-  const name = formData.get("name") as string;
+  const rawName = formData.get("name") as string;
   const password = formData.get("password") as string;
 
-  // Validation très basique pour la démo
-  if (!name) throw new Error("Le nom est requis.");
+  if (!rawName) throw new Error("Le nom est requis.");
+  const name = rawName.trim().toUpperCase();
 
-  // Vérification des mots de passe (en dur pour la V1)
-  if (role === "MASTER_ADMIN" && password !== "boss") {
-    throw new Error("Mot de passe incorrect.");
-  }
-  if (role === "ADMIN" && password !== "coach") {
-    throw new Error("Mot de passe incorrect.");
-  }
-  if (role === "GREFFIER" && password !== "greffe") {
-    throw new Error("Mot de passe incorrect.");
+  let role: SessionPayload["role"] = "STUDENT";
+
+  // Auto-détection du rôle en fonction du Pseudo
+  if (name === "DAMZER") {
+    role = "MASTER_ADMIN";
+    if (password !== "boss") throw new Error("Mot de passe incorrect pour DAMZER.");
+  } else if (["AXEZER", "GUIZER", "SIMZER", "RACZER"].includes(name)) {
+    role = "ADMIN";
+    if (password !== "coach") throw new Error("Mot de passe incorrect.");
+  } else if (name === "GREFFIER") {
+    role = "GREFFIER";
+    if (password !== "greffe") throw new Error("Mot de passe incorrect.");
+  } else {
+    // Étudiant : on garde la casse originale pour l'affichage
+    role = "STUDENT";
   }
 
   // Créer la session JWT
   await login({
     id: `user_${Date.now()}`,
     role,
-    name,
+    name: role === "STUDENT" ? rawName.trim() : name,
   });
 
   // Redirection selon le rôle

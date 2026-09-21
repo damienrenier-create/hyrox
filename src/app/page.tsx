@@ -13,26 +13,13 @@ export default function LoginPage() {
 
         <form action={loginAction} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-2">Je suis...</label>
-            <select 
-              name="role" 
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
-            >
-              <option value="STUDENT">Élève (Arbitre)</option>
-              <option value="ADMIN">Coach (Arbitre Vétéran)</option>
-              <option value="GREFFIER">Le Greffier (Projecteur)</option>
-              <option value="MASTER_ADMIN">DAMZER (Master Admin)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-neutral-300 mb-2">Prénom ou Pseudo</label>
+            <label className="block text-sm font-medium text-neutral-300 mb-2">Ton Prénom ou Pseudo d'Arbitre</label>
             <input 
               type="text" 
               name="name" 
               required
               className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
-              placeholder="Ex: Thomas"
+              placeholder="Ex: Thomas, Sarah..."
             />
           </div>
 
