@@ -1,94 +1,144 @@
-// Detoure les bateaux Gemini (fond magenta uni) en PNG transparents, les recadre et les
-// normalise en hauteur, + prepare la texture de mer. Sortie : public/sprites/.
+// Detoure les images Gemini (fond magenta uni, parfois double fond) en PNG transparents, les recadre,
+// les normalise, decoupe les planches d'animation en bandes de 4 frames, et prepare les tuiles de mer.
+// Source : dossier local hors depot (voir SRC) — seules les sorties public/sprites/ sont versionnees.
 // Usage : node scripts/build-sprites.mjs
 import sharp from "sharp";
-import { mkdirSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
 
-const SRC = "C:\\Users\\Sartay\\Downloads\\bateaux";
+const SRC = process.env.SPRITES_SRC ?? "C:/Users/Sartay/Downloads/bateaux";
 const OUT = join(process.cwd(), "public", "sprites");
 mkdirSync(OUT, { recursive: true });
 
-// Bateaux vus du dessus, du plus court au plus long (ratio largeur/hauteur croissant)
-const SHIPS = [
-  { file: "Gemini_Generated_Image_ (6).jpg", name: "ship-1" },
-  { file: "Gemini_Generated_Image_hgf7kohgf7kohgf7.jpg", name: "ship-2" },
-  { file: "Gemini_Generated_Image_nvvyqxnvvyqxnvvy.jpg", name: "ship-3" },
-  { file: "Gemini_Generated_Image_uaowb8uaowb8uaow.jpg", name: "ship-4" },
-];
-const SEA = "Gemini_Generated_Image_218jh4218jh4218j.jpg";
-
+const MAGENTA = { r: 255, g: 0, b: 255 };
 const TOLERANCE = 80; // distance RGB max pour considerer un pixel comme "fond"
-const TARGET_HEIGHT = 96; // hauteur finale d'un bateau horizontal (1 case ~ 40px a l'ecran, on garde de la marge)
+const SHIP_HEIGHT = 96; // hauteur finale d'un bateau horizontal (1 case ~ 40 px a l'ecran)
+const FX = 64; // cote d'une frame d'effet
+const TILE = 256; // cote d'une tuile de mer
 
-function dist(r, g, b, R, G, B) {
-  return Math.sqrt((r - R) ** 2 + (g - G) ** 2 + (b - B) ** 2);
-}
+// Bateaux vus du dessus, fond magenta, proue a DROITE. Le chiffre = nombre de cases.
+const SHIPS = [
+  { file: "Gemini_Generated_Image_4c4ww94c4ww94c4w.jpg", name: "ship-1", cells: 1 }, // barque
+  { file: "Gemini_Generated_Image_u7w3qnu7w3qnu7w3.jpg", name: "ship-2", cells: 2 }, // sloop
+  { file: "Gemini_Generated_Image_qhlf1bqhlf1bqhlf.jpg", name: "ship-3", cells: 3 }, // brigantin
+  { file: "Gemini_Generated_Image_y2yocny2yocny2yo.jpg", name: "ship-4", cells: 4 }, // fregate
+  { file: "Gemini_Generated_Image_mg6885mg6885mg68.jpg", name: "ship-5", cells: 5 }, // galion
+];
 
-async function keyOut(file, name) {
-  const { data, info } = await sharp(join(SRC, file)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+// Gemini ne respecte jamais le ratio au pixel pres. On etire le bateau jusqu'a son ratio cible (n cases)
+// tant que la deformation reste discrete ; au-dela (la barque est dessinee en 2:1), on garde ses proportions
+// et le plateau la centre dans sa case.
+const MAX_STRETCH = 0.2;
+
+// Marqueurs fixes poses sur une case (carres, fond magenta).
+const MARKERS = [
+  { file: "Gemini_Generated_Image_2olwzw2olwzw2olw.jpg", name: "fx-hit" },    // impact en feu sur le pont
+  { file: "Gemini_Generated_Image_wmz6lkwmz6lkwmz6.jpg", name: "fx-wreck" },  // epave (coule)
+  { file: "Gemini_Generated_Image_qvukthqvukthqvuk.jpg", name: "fx-miss" },   // anneaux (a l'eau)
+  { file: "Gemini_Generated_Image_i7lfrpi7lfrpi7lf.jpg", name: "fx-target" }, // reticule (case visee)
+];
+
+// Planches d'animation : 4 frames carrees en ligne -> bande normalisee de 4 x FX px.
+const SHEETS = [
+  { file: "Gemini_Generated_Image_lpyxf4lpyxf4lpyx.jpg", name: "fx-splash" }, // tir a l'eau
+  { file: "Gemini_Generated_Image_kg83a9kg83a9kg83.jpg", name: "fx-fire" },   // touche
+  { file: "Gemini_Generated_Image_svztz6svztz6svzt.jpg", name: "fx-sink" },   // coule
+];
+
+// Tuiles de mer : remplissent l'image, aucun detourage.
+const TILES = [
+  { file: "Gemini_Generated_Image_yjd5ozyjd5ozyjd5.jpg", name: "sea" },      // calme
+  { file: "Gemini_Generated_Image_p6e8evp6e8evp6e8.jpg", name: "sea-foam" }, // ecume
+];
+
+const dist = (r, g, b, c) => Math.sqrt((r - c.r) ** 2 + (g - c.g) ** 2 + (b - c.b) ** 2);
+
+// Rend transparent tout pixel proche d'une des couleurs de fond. On prend systematiquement la couleur
+// du coin superieur gauche ET le magenta pur : certaines images ont deux fonds (cadre violet + carre magenta).
+async function keyOut(input) {
+  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height, channels } = info;
-  // couleur de fond = pixel du coin superieur gauche
-  const R = data[0], G = data[1], B = data[2];
-  let removed = 0;
+  const corner = { r: data[0], g: data[1], b: data[2] };
+  const keys = dist(corner.r, corner.g, corner.b, MAGENTA) < TOLERANCE ? [MAGENTA] : [corner, MAGENTA];
   for (let i = 0; i < width * height; i++) {
     const o = i * channels;
-    const d = dist(data[o], data[o + 1], data[o + 2], R, G, B);
-    if (d < TOLERANCE) {
-      data[o + 3] = 0;
-      removed++;
-    } else if (d < TOLERANCE * 1.6) {
-      // frange : on attenue plutot que de couper net
-      data[o + 3] = Math.round(255 * ((d - TOLERANCE) / (TOLERANCE * 0.6)));
-    }
+    const d = Math.min(...keys.map((k) => dist(data[o], data[o + 1], data[o + 2], k)));
+    if (d < TOLERANCE) data[o + 3] = 0;
+    else if (d < TOLERANCE * 1.6) data[o + 3] = Math.round(255 * ((d - TOLERANCE) / (TOLERANCE * 0.6))); // frange attenuee
   }
-  const png = await sharp(data, { raw: { width, height, channels: 4 } })
-    .png()
-    .toBuffer();
-  const trimmed = await sharp(png).trim().toBuffer({ resolveWithObject: true });
-  const out = await sharp(trimmed.data)
-    .resize({ height: TARGET_HEIGHT, kernel: "nearest" })
+  return { buffer: await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer(), corner, keys: keys.length };
+}
+
+async function ship({ file, name, cells }) {
+  const { buffer, keys } = await keyOut(join(SRC, file));
+  const trimmed = await sharp(buffer).trim().toBuffer({ resolveWithObject: true });
+  const ratio = trimmed.info.width / trimmed.info.height;
+  const snap = Math.abs(ratio - cells) / cells <= MAX_STRETCH;
+  const resize = snap
+    ? { width: cells * SHIP_HEIGHT, height: SHIP_HEIGHT, fit: "fill", kernel: "nearest" }
+    : { height: SHIP_HEIGHT, kernel: "nearest" };
+  const out = await sharp(trimmed.data).resize(resize).png({ compressionLevel: 9 }).toFile(join(OUT, `${name}.png`));
+  console.log(
+    `${name}: ${trimmed.info.width}x${trimmed.info.height} (ratio ${ratio.toFixed(2)}) -> ${out.width}x${out.height} ` +
+      `(${(out.width / out.height).toFixed(2)}, cible ${cells}, ${snap ? "recale" : "proportions gardees"}, ${keys} fond(s))`
+  );
+}
+
+async function marker({ file, name }) {
+  const { buffer, keys } = await keyOut(join(SRC, file));
+  const trimmed = await sharp(buffer).trim().toBuffer();
+  const out = await sharp(trimmed)
+    .resize({ width: FX, height: FX, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: "nearest" })
     .png({ compressionLevel: 9 })
     .toFile(join(OUT, `${name}.png`));
-  console.log(`${name}: fond=(${R},${G},${B}) ${removed} px retires, ${trimmed.info.width}x${trimmed.info.height} -> ${out.width}x${out.height} (ratio ${(out.width / out.height).toFixed(2)})`);
+  console.log(`${name}: ${out.width}x${out.height} (${keys} fond(s))`);
 }
 
-async function sea() {
-  const out = await sharp(join(SRC, SEA)).resize({ width: 512 }).jpeg({ quality: 82 }).toFile(join(OUT, "sea.jpg"));
-  console.log(`sea: ${out.width}x${out.height}`);
-}
-
-// Bateau de 5 cases : synthese "9-slice" a partir du long (poupe | troncon central repete | proue)
-async function makeShip5() {
-  const src = join(OUT, "ship-4.png");
-  const meta = await sharp(src).metadata();
-  const W = meta.width, H = meta.height;
-  const targetW = 5 * H; // ratio 5:1
-  const sternW = Math.round(W * 0.28);
-  const bowW = Math.round(W * 0.28);
-  const midX = Math.round(W * 0.32);
-  const midW = Math.round(W * 0.36);
-  const stern = await sharp(src).extract({ left: 0, top: 0, width: sternW, height: H }).toBuffer();
-  const bow = await sharp(src).extract({ left: W - bowW, top: 0, width: bowW, height: H }).toBuffer();
-  const mid = await sharp(src).extract({ left: midX, top: 0, width: midW, height: H }).toBuffer();
-  const composites = [{ input: stern, left: 0, top: 0 }];
-  let x = sternW;
-  const midEnd = targetW - bowW;
-  while (x < midEnd) {
-    const w = Math.min(midW, midEnd - x);
-    const piece = w === midW ? mid : await sharp(mid).extract({ left: 0, top: 0, width: w, height: H }).toBuffer();
-    composites.push({ input: piece, left: x, top: 0 });
-    x += w;
+// Decoupe 4 frames egales, detoure chacune, et les recolle en une bande 4xFX (animation CSS steps(4)).
+async function sheet({ file, name }) {
+  const { buffer, keys } = await keyOut(join(SRC, file));
+  const meta = await sharp(buffer).metadata();
+  const fw = Math.floor(meta.width / 4);
+  const frames = [];
+  for (let i = 0; i < 4; i++) {
+    const frame = await sharp(buffer)
+      .extract({ left: i * fw, top: 0, width: fw, height: meta.height })
+      .resize({ width: FX, height: FX, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: "nearest" })
+      .png()
+      .toBuffer();
+    frames.push({ input: frame, left: i * FX, top: 0 });
   }
-  composites.push({ input: bow, left: targetW - bowW, top: 0 });
-  const out = await sharp({ create: { width: targetW, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-    .composite(composites)
+  const out = await sharp({ create: { width: FX * 4, height: FX, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(frames)
     .png({ compressionLevel: 9 })
-    .toFile(join(OUT, "ship-5.png"));
-  console.log(`ship-5 (synthese): ${out.width}x${out.height} (ratio ${(out.width / out.height).toFixed(2)})`);
+    .toFile(join(OUT, `${name}.png`));
+  console.log(`${name}: 4 frames de ${fw}px -> ${out.width}x${out.height} (${keys} fond(s))`);
 }
 
-for (const s of SHIPS) await keyOut(s.file, s.name);
-await makeShip5();
-await sea();
+async function tile({ file, name }) {
+  const out = await sharp(join(SRC, file))
+    .resize({ width: TILE, height: TILE, fit: "cover", kernel: "nearest" })
+    .jpeg({ quality: 82 })
+    .toFile(join(OUT, `${name}.jpg`));
+  console.log(`${name}: ${out.width}x${out.height}`);
+}
+
+const all = [
+  ...SHIPS.map((s) => [ship, s]),
+  ...MARKERS.map((m) => [marker, m]),
+  ...SHEETS.map((s) => [sheet, s]),
+  ...TILES.map((t) => [tile, t]),
+];
+
+if (!existsSync(SRC)) {
+  console.error(`Dossier source introuvable : ${SRC}\nDefinis SPRITES_SRC=... ou depose les images (voir docs/sprites-prompts.md).`);
+  process.exit(1);
+}
+for (const [fn, spec] of all) {
+  if (!existsSync(join(SRC, spec.file))) {
+    console.warn(`! ${spec.name} ignore : ${spec.file} absent`);
+    continue;
+  }
+  await fn(spec);
+}
 console.log("OK ->", OUT);

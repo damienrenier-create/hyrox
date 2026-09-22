@@ -29,11 +29,25 @@ export function cellPos(tIdx: number, eIdx: number) {
   return { left: LABEL_W + GAP + eIdx * (CELL + GAP), top: HEADER_H + GAP + tIdx * (CELL + GAP) };
 }
 
+// Marqueurs fixes : sprites pixel art detoures (voir scripts/build-sprites.mjs). Le point d'ancrage
+// « selected » (placement de flotte) reste un glyphe : il n'a pas de sprite et doit rester tres lisible.
+function MarkerSprite({ name, size = CELL }: { name: string; size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/sprites/${name}.png`}
+      alt=""
+      draggable={false}
+      style={{ width: size, height: size, imageRendering: "pixelated" }}
+    />
+  );
+}
+
 const MARKER_ICON: Record<MarkerKind, ReactNode> = {
-  hit: <span className="text-base drop-shadow">💥</span>,
-  miss: <span className="text-[13px] opacity-80">🌊</span>,
-  target: <span className="text-base">🎯</span>,
-  selected: <span className="text-[11px] text-amber-300 font-black">⚓</span>,
+  hit: <MarkerSprite name="fx-hit" />,
+  miss: <MarkerSprite name="fx-miss" />,
+  target: <MarkerSprite name="fx-target" />,
+  selected: <span className="text-[11px] text-accent font-black drop-shadow">⚓</span>,
 };
 
 export function ShipSprite({ ship, tIdx, eIdx, animate }: { ship: BoardShip; tIdx: number; eIdx: number; animate?: boolean }) {
@@ -110,7 +124,7 @@ export function Board({
   return (
     <div className="overflow-auto pb-6">
       <div
-        className="relative rounded-xl border border-cyan-900/50 shadow-[inset_0_0_40px_rgba(0,0,0,0.35)]"
+        className="relative rounded-2xl border-2 border-sea/40 shadow-card"
         style={{ width, height, backgroundImage: "url(/sprites/sea.jpg)", backgroundSize: "256px", imageRendering: "pixelated" }}
       >
         {/* En-tetes exercices */}
@@ -122,7 +136,7 @@ export function Board({
             title={ex.label}
           >
             <span
-              className="text-[9px] font-bold uppercase text-amber-100 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)] leading-none"
+              className="text-[9px] font-bold uppercase text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] leading-none"
               style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: HEADER_H - 10, overflow: "hidden" }}
             >
               {ex.label}
@@ -134,7 +148,7 @@ export function Board({
         {teams.map((team, i) => (
           <div
             key={team.id}
-            className="absolute flex items-center pl-1 pr-1 text-[10px] font-bold text-amber-100 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)] truncate"
+            className="absolute flex items-center pl-1 pr-1 text-[10px] font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] truncate"
             style={{ left: 0, top: HEADER_H + GAP + i * (CELL + GAP), width: LABEL_W, height: CELL }}
             title={team.name}
           >
@@ -154,8 +168,8 @@ export function Board({
                 type="button"
                 disabled={disabled}
                 onClick={() => onCellClick?.(team, ex)}
-                className={`absolute rounded border border-cyan-200/20 bg-[#062230]/35 hover:bg-[#0d3b4f]/70 flex items-center justify-center transition-colors ${
-                  kind === "selected" ? "ring-2 ring-amber-300" : ""
+                className={`absolute rounded-md border border-white/40 bg-white/10 hover:bg-white/35 flex items-center justify-center transition-colors ${
+                  kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""
                 } ${cellExtraClass?.(team, ex) ?? ""}`}
                 style={{ left, top, width: CELL, height: CELL, zIndex: 2 }}
                 aria-label={`${team.name} · ${ex.label}`}

@@ -9,6 +9,8 @@ import { submitEvaluationAction } from "./actions";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
+import { Brand } from "../_components/Brand";
+import { btn, cx, ui } from "@/lib/ui";
 
 const REFRESH_MS = 5000;
 
@@ -122,7 +124,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   const myRank = leaderboard.findIndex((r) => r.refereeId === evaluator.id) + 1;
 
   return (
-    <div className={`min-h-[100dvh] text-amber-50 font-sans flex flex-col relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0d3b4f_0%,_#062230_55%,_#03141c_100%)] ${shake ? "tc-shake" : ""}`}>
+    <div className={cx(ui.page, "flex flex-col relative overflow-hidden", shake && "tc-shake")}>
       <style>{EFFECT_STYLES}</style>
       <AnimatePresence>
         {toast && (
@@ -134,13 +136,10 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             className="fixed inset-x-0 top-24 z-50 flex justify-center pointer-events-none"
           >
             <div
-              className={`px-6 py-4 rounded-full text-xl font-black shadow-2xl ${
-                toast.tone === "hit"
-                  ? "bg-red-600 text-red-50 shadow-[0_0_40px_rgba(220,38,38,0.9)]"
-                  : toast.tone === "alert"
-                    ? "bg-amber-500 text-slate-950 shadow-[0_0_40px_rgba(245,158,11,0.9)]"
-                    : "bg-sky-700 text-sky-50 shadow-[0_0_30px_rgba(14,116,144,0.8)]"
-              }`}
+              className={cx(
+                "px-6 py-4 rounded-full font-display text-xl font-extrabold shadow-pop",
+                toast.tone === "hit" ? "bg-danger text-white" : toast.tone === "alert" ? "bg-accent text-ink" : "bg-sea text-white"
+              )}
             >
               {toast.message}
             </div>
@@ -148,20 +147,24 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
         )}
       </AnimatePresence>
 
-      <header className="p-4 relative z-10 border-b border-amber-800/40 bg-[#062230]/80 backdrop-blur-md flex justify-between items-center gap-3">
+      <header className="px-4 py-3 relative z-10 bg-card/95 backdrop-blur border-b border-line flex justify-between items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-black tracking-widest text-amber-300 uppercase drop-shadow-[0_0_6px_rgba(217,180,80,0.4)]">Touché-Coulé 🏴‍☠️</h1>
-          <div className="text-[10px] text-amber-200/50 truncate">
+          <div className="flex items-center gap-2">
+            <Brand />
+            <span className="text-line-2">/</span>
+            <h1 className="font-display font-extrabold text-sea-ink truncate">Touché-Coulé 🏴‍☠️</h1>
+          </div>
+          <div className="text-[11px] text-ink-2 truncate">
             {evaluator.name}
-            {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-amber-200/80">mon espace</a></>}
+            {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-brand">mon espace</a></>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setShowBoard((v) => !v)} className="px-2 py-1 rounded text-xs font-bold border border-amber-700/60 text-amber-200/80" title="Classement des arbitres">
+          <button onClick={() => setShowBoard((v) => !v)} className={btn.smGhost} title="Classement des arbitres">
             {myRank ? `#${myRank}` : "—"}
           </button>
           <ScoreBadge score={score} />
-          <div className={`px-3 py-1 rounded text-xs font-bold border ${raceEnded ? "bg-slate-800 border-slate-600 text-slate-300" : "bg-emerald-900/40 border-emerald-700 text-emerald-300"}`}>
+          <div className={cx(ui.chip, "py-1", raceEnded ? ui.chipMuted : ui.chipOk)}>
             {raceEnded ? "POST-WOD" : "EN COURS"}
           </div>
         </div>
@@ -171,16 +174,16 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
         <AnimatePresence>
           {showBoard && (
             <motion.section initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
-              <div className="bg-black/30 border border-amber-800/40 rounded-xl p-2">
-                <div className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-1">Classement des arbitres</div>
-                {leaderboard.length === 0 ? <p className="text-xs text-amber-100/60">Personne n'a encore verrouillé sa flotte.</p> : <RefereeLeaderboard rows={leaderboard} meId={evaluator.id} compact />}
+              <div className={`${ui.card} p-2 border-sea/30`}>
+                <div className={`${ui.eyebrow} text-sea-ink mb-1`}>Classement des arbitres</div>
+                {leaderboard.length === 0 ? <p className={ui.hint}>Personne n&apos;a encore verrouillé sa flotte.</p> : <RefereeLeaderboard rows={leaderboard} meId={evaluator.id} compact />}
               </div>
             </motion.section>
           )}
         </AnimatePresence>
-        <p className="text-[11px] text-amber-100/60 px-1 mb-1">
+        <p className="text-[11px] text-ink-2 px-1 mb-1">
           Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.
-          {ownTeam && <> <span className="text-amber-300 font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
+          {ownTeam && <> <span className="text-accent-ink font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
         </p>
         <Board
           teams={teams}
@@ -203,19 +206,19 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             initial={{ y: 200, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 200, opacity: 0 }}
-            className="absolute bottom-0 left-0 right-0 z-20 bg-slate-900 border-t-4 border-cyan-600 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] rounded-t-3xl"
+            className="absolute bottom-0 left-0 right-0 z-20 bg-card border-t-4 border-accent p-4 shadow-pop rounded-t-3xl"
           >
-            <div className="flex justify-between items-center mb-4 px-2">
-              <div className="text-cyan-300 font-bold text-sm">
-                Cible : <span className="text-white">{teams.find((t) => t.id === target.teamId)?.name}</span> / <span className="text-white">{exercises.find((e) => e.id === target.exerciseId)?.label}</span>
+            <div className="flex justify-between items-center mb-4 px-1">
+              <div className="text-sm text-ink-2 font-semibold">
+                Cible : <span className="text-ink font-extrabold">{teams.find((t) => t.id === target.teamId)?.name}</span> / <span className="text-ink font-extrabold">{exercises.find((e) => e.id === target.exerciseId)?.label}</span>
               </div>
-              <button onClick={() => setTarget(null)} className="text-red-400 text-sm font-black bg-red-900/20 px-3 py-1 rounded-full">X ANNULER</button>
+              <button onClick={() => setTarget(null)} className={btn.smDanger}>✕ Annuler</button>
             </div>
 
-            <div className="flex gap-3 mb-6">
-              <div className="flex-[1] bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center">
-                <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Reps</div>
-                <div className="text-4xl font-black text-cyan-400">{reps || "0"}</div>
+            <div className="flex gap-3 mb-5">
+              <div className="flex-[1] bg-paper border border-line rounded-2xl p-3 flex flex-col items-center justify-center">
+                <div className={ui.eyebrow}>Reps</div>
+                <div className="font-display text-4xl font-extrabold text-brand tabular-nums">{reps || "0"}</div>
               </div>
               <div className="flex-[2] grid grid-cols-6 gap-1">
                 {QUALITY_LEVELS.map((n) => (
@@ -223,7 +226,11 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
                     key={n.code}
                     onClick={() => setNote(n.value)}
                     title={n.label}
-                    className={`text-sm font-black rounded-xl border-2 transition-all ${note === n.value ? `bg-slate-800 border-cyan-500 ${n.color} shadow-[0_0_10px_rgba(6,182,212,0.3)]` : "bg-slate-900 border-transparent text-slate-600 hover:bg-slate-800"}`}
+                    className={cx(
+                      "text-sm font-black rounded-xl border-2 transition-all",
+                      n.color,
+                      note === n.value ? "bg-card border-brand ring-2 ring-brand/20 shadow-sm" : "bg-paper border-transparent opacity-70 hover:opacity-100 hover:bg-line"
+                    )}
                   >
                     {n.code}
                   </button>
@@ -233,17 +240,17 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
 
             <div className="grid grid-cols-4 gap-2 mb-4">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
-                <button key={num} onClick={() => handleKeypad(num.toString())} className="bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xl font-black text-white shadow-sm transition-colors">{num}</button>
+                <button key={num} onClick={() => handleKeypad(num.toString())} className="bg-paper hover:bg-line border border-line py-3 rounded-xl font-display text-xl font-extrabold text-ink transition-colors active:scale-95">{num}</button>
               ))}
-              <button onClick={() => setReps("")} className="bg-slate-900 border border-red-900/50 py-3 rounded-xl text-red-500 font-black col-span-2 shadow-sm">EFFACER</button>
+              <button onClick={() => setReps("")} className="bg-danger-soft hover:bg-danger hover:text-white py-3 rounded-xl text-danger-ink font-black col-span-2 transition">Effacer</button>
             </div>
 
-            {error && <p className="text-red-400 text-sm mb-3 text-center">{error}</p>}
+            {error && <p className={`${ui.alertErr} mb-3 text-center`}>{error}</p>}
 
             <button
               onClick={handleFire}
               disabled={!reps || note === null || pending}
-              className="w-full bg-gradient-to-r from-red-600 to-orange-600 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 text-white font-black py-5 rounded-2xl text-2xl shadow-[0_0_20px_rgba(220,38,38,0.4)] disabled:shadow-none transition-all active:scale-[0.98]"
+              className="w-full bg-accent hover:bg-accent-hover disabled:bg-line disabled:text-ink-3 text-ink font-display font-extrabold py-5 rounded-2xl text-2xl shadow-card disabled:shadow-none transition-all active:scale-[0.98]"
             >
               {pending ? "…" : "FEU ! 🚀"}
             </button>

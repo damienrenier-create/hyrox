@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { placeShipAction, deleteShipAction, lockFleetAction } from "./actions";
 import { fleetFor } from "@/lib/wod-engines/core/fleet";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
+import { Brand } from "../_components/Brand";
+import { btn, ui } from "@/lib/ui";
 
 // Meme flotte que le serveur : adaptee a la grille equipes x ateliers de la seance en cours.
 function remainingSizes(spec: readonly number[], placed: number[]): number[] {
@@ -43,6 +45,7 @@ export function FleetPlacement({
   const router = useRouter();
   const [ships, setShips] = useState<BoardShip[]>(initialShips);
   const [firstTap, setFirstTap] = useState<{ teamId: string; exerciseId: string } | null>(null);
+  const [chosen, setChosen] = useState<number | null>(null); // taille choisie dans l'inventaire (facultatif)
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -52,6 +55,30 @@ export function FleetPlacement({
 
   const shipByCell = new Map<string, BoardShip>();
   ships.forEach((s) => cellsOf(s, teams, exercises).forEach((c) => shipByCell.set(c, s)));
+
+  // Cases ou la proue peut tomber apres le 1er tap : meme ligne / meme colonne, longueur encore disponible
+  // dans l'inventaire (ou exactement la taille choisie), et aucune case occupee par un de mes navires.
+  const validTargets = (() => {
+    if (!firstTap) return new Set<string>();
+    const ti = teams.findIndex((t) => t.id === firstTap.teamId);
+    const ei = exercises.findIndex((e) => e.id === firstTap.exerciseId);
+    const sizes = chosen ? [chosen] : remaining;
+    const out = new Set<string>();
+    for (const size of sizes) {
+      for (const dir of ["right", "left", "down", "up"] as const) {
+        const cells: string[] = [];
+        for (let i = 0; i < size; i++) {
+          const t = dir === "down" ? ti + i : dir === "up" ? ti - i : ti;
+          const e = dir === "right" ? ei + i : dir === "left" ? ei - i : ei;
+          if (!teams[t] || !exercises[e] || t < 0 || e < 0) break;
+          cells.push(`${teams[t].id}_${exercises[e].id}`);
+        }
+        if (cells.length !== size || cells.some((c) => shipByCell.has(c))) continue;
+        out.add(cells[cells.length - 1]); // c'est la case de la proue qu'on touche
+      }
+    }
+    return out;
+  })();
 
   function handleCell(team: BoardTeam, ex: BoardExercise) {
     if (pending) return;
@@ -81,9 +108,18 @@ export function FleetPlacement({
     }
 
     const from = firstTap;
+    if (!validTargets.has(coord)) {
+      setError(
+        chosen
+          ? `Pour un navire de ${chosen} case${chosen > 1 ? "s" : ""}, touche une case surlignée (même ligne ou même colonne, sans chevaucher un de tes navires).`
+          : "Touche une case surlignée : même ligne ou même colonne, longueur encore disponible, sans chevaucher un de tes navires."
+      );
+      return;
+    }
     startTransition(async () => {
       const res = await placeShipAction(sessionId, from.teamId, from.exerciseId, team.id, ex.id);
       setFirstTap(null);
+      setChosen(null);
       if ("error" in res) {
         setError(res.error);
         return;
@@ -117,59 +153,76 @@ export function FleetPlacement({
   const markers: BoardMarker[] = firstTap ? [{ teamId: firstTap.teamId, exerciseId: firstTap.exerciseId, kind: "selected" }] : [];
 
   return (
-    <div className="min-h-[100dvh] text-amber-50 font-sans p-4 relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0d3b4f_0%,_#062230_55%,_#03141c_100%)]">
-      <div className="absolute top-3 right-4 text-3xl opacity-30 select-none pointer-events-none">🧭</div>
+    <div className={`${ui.page} p-4 relative overflow-hidden`}>
+      <div className="absolute top-3 right-4 text-3xl opacity-20 select-none pointer-events-none">🧭</div>
 
       <header className="mb-3 relative z-10">
-        <h1 className="text-xl font-black text-amber-300 uppercase tracking-widest drop-shadow-[0_0_6px_rgba(217,180,80,0.4)]">
-          Place ta flotte 🏴‍☠️
-        </h1>
-        <p className="text-sm text-amber-200/60">
+        <div className="flex items-center gap-2">
+          <Brand />
+          <span className="text-line-2">/</span>
+          <h1 className="font-display font-extrabold text-sea-ink text-lg">Place ta flotte 🏴‍☠️</h1>
+        </div>
+        <p className="text-sm text-ink-2">
           {evaluator.name} · grille {teams.length} équipes × {exercises.length} ateliers · flotte de {spec.length} navires ({spec.reduce((a, b) => a + b, 0)} cases)
         </p>
       </header>
 
-      <div className="relative z-10 mb-3 bg-[#0a2a38]/80 border border-amber-800/40 p-3 rounded-xl backdrop-blur-sm space-y-2">
+      <div className={`${ui.card} border-sea/30 relative z-10 mb-3 p-3 space-y-2`}>
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-amber-200/70">Navires à placer :</span>
+          <span className="text-ink-2">Navires à placer :</span>
           {remaining.length ? (
             remaining.map((s, i) => (
-              <span key={i} className="px-2 py-0.5 rounded bg-[#6A4017] border border-[#3a2208] text-amber-100 font-bold text-xs">
+              <button
+                key={i}
+                type="button"
+                onClick={() => setChosen((c) => (c === s ? null : s))}
+                aria-pressed={chosen === s}
+                className={`${ui.chip} ${chosen === s ? ui.chipOk : ui.chipSea} text-xs px-2 py-1 ${chosen === s ? "ring-2 ring-accent" : ""}`}
+              >
                 {s} case{s > 1 ? "s" : ""}
-              </span>
+              </button>
             ))
           ) : (
-            <span className="text-emerald-400 font-bold">⚓ Flotte complète</span>
+            <span className="text-success-ink font-bold">⚓ Flotte complète</span>
           )}
         </div>
-        <p className="text-xs text-amber-100/70">
+        <p className={ui.hint}>
           {done
             ? "Touche un navire pour le retirer, ou verrouille ta flotte pour commencer à arbitrer."
             : firstTap
-              ? "Poupe posée ⚓ — touche maintenant la case de la proue (même ligne ou même colonne). Pour un navire d'1 case, retouche la même case."
-              : "Touche la case de la poupe, puis celle de la proue. Touche un navire déjà posé pour le retirer."}
+              ? `Poupe posée ⚓ — touche une case surlignée pour poser la proue${chosen ? ` du navire de ${chosen} case${chosen > 1 ? "s" : ""}` : ""}. Pour un navire d'1 case, retouche la même case. Le navire est enregistré aussitôt.`
+              : chosen
+                ? `Navire de ${chosen} case${chosen > 1 ? "s" : ""} choisi — touche la case de la poupe, puis celle de la proue.`
+                : "Touche la case de la poupe, puis celle de la proue : la taille du navire est déduite de la distance. Tu peux aussi choisir sa taille ci-dessus."}
         </p>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {firstTap && (
-            <button onClick={() => setFirstTap(null)} className="bg-[#0d3b4f] border border-amber-800/40 px-3 py-2 rounded text-sm text-amber-200">
+            <button onClick={() => setFirstTap(null)} className={btn.ghost}>
               Annuler la sélection
             </button>
           )}
-          {done && (
-            <button
-              onClick={handleLock}
-              disabled={pending}
-              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded text-sm disabled:opacity-40"
-            >
-              Verrouiller ma flotte
-            </button>
+          <button onClick={handleLock} disabled={pending || !done} className={done ? btn.accent : btn.ghost}>
+            ⚓ Verrouiller ma flotte
+          </button>
+          {!done && (
+            <span className={ui.hint}>
+              Encore {remaining.length} navire{remaining.length > 1 ? "s" : ""} à poser avant de pouvoir verrouiller.
+            </span>
           )}
         </div>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className={ui.alertErr}>{error}</p>}
       </div>
 
       <div className="relative z-10">
-        <Board teams={teams} exercises={exercises} ships={ships} markers={markers} onCellClick={handleCell} animateShips />
+        <Board
+          teams={teams}
+          exercises={exercises}
+          ships={ships}
+          markers={markers}
+          onCellClick={handleCell}
+          cellExtraClass={(team, ex) => (validTargets.has(`${team.id}_${ex.id}`) ? "ring-2 ring-accent bg-accent/30" : "")}
+          animateShips
+        />
       </div>
     </div>
   );

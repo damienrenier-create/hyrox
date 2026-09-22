@@ -3,71 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CELL, cellPos } from "./Board";
+import { cx } from "@/lib/ui";
 
 // Animations du Touche-Coule : eclaboussure (a l'eau), explosion (touche), naufrage (coule),
-// points qui sautent, classement anime. Tout est CSS/Framer, sans asset supplementaire.
+// points qui sautent, classement anime.
+// Les trois effets de tir sont des planches de 4 frames (public/sprites/fx-*.png, generees par
+// scripts/build-sprites.mjs) jouees en steps(4) : une frame occupe exactement une case du plateau.
 
 export type EffectKind = "splash" | "hit" | "sunk";
 export type BoardEffect = { id: string; teamId: string; exerciseId: string; kind: EffectKind };
 
+const FRAMES = 4;
+
+// Chaque planche fait 4 frames carrees ; a l'ecran une frame = une case (CELL px).
+const SHEET: Record<EffectKind, { src: string; ms: number }> = {
+  splash: { src: "/sprites/fx-splash.png", ms: 640 },
+  hit: { src: "/sprites/fx-fire.png", ms: 760 },
+  sunk: { src: "/sprites/fx-sink.png", ms: 1250 },
+};
+
 export const EFFECT_STYLES = `
-@keyframes tc-ring { 0% { transform: scale(0.2); opacity: 0.9 } 100% { transform: scale(2.6); opacity: 0 } }
-@keyframes tc-drop { 0% { transform: translate(0,0) scale(1); opacity: 1 } 100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0 } }
-@keyframes tc-burst { 0% { transform: scale(0.2); opacity: 1 } 60% { transform: scale(1.4); opacity: 1 } 100% { transform: scale(1.9); opacity: 0 } }
-@keyframes tc-spark { 0% { transform: translate(0,0) rotate(0deg); opacity: 1 } 100% { transform: translate(var(--dx), var(--dy)) rotate(180deg); opacity: 0 } }
-@keyframes tc-sink { 0% { transform: translateY(0) rotate(0deg); opacity: 1 } 100% { transform: translateY(26px) rotate(25deg); opacity: 0 } }
+@keyframes tc-frames { from { background-position: 0 0 } to { background-position: -${CELL * FRAMES}px 0 } }
 @keyframes tc-shake { 0%,100% { transform: translate(0,0) } 20% { transform: translate(-6px,2px) } 40% { transform: translate(6px,-2px) } 60% { transform: translate(-4px,1px) } 80% { transform: translate(4px,-1px) } }
 .tc-shake { animation: tc-shake 0.45s ease-in-out; }
+.tc-sheet {
+  width: ${CELL}px; height: ${CELL}px;
+  background-repeat: no-repeat;
+  background-size: ${CELL * FRAMES}px ${CELL}px;
+  image-rendering: pixelated;
+  animation-name: tc-frames;
+  animation-timing-function: steps(${FRAMES});
+  animation-fill-mode: forwards;
+}
+@media (prefers-reduced-motion: reduce) { .tc-sheet { animation-duration: 1ms !important } }
 `;
 
-const DROPS = [0, 45, 90, 135, 180, 225, 270, 315];
-
-function Splash() {
-  return (
-    <>
-      {[0, 120, 240].map((d) => (
-        <span key={d} className="absolute inset-0 rounded-full border-2 border-sky-200/90" style={{ animation: `tc-ring 0.8s ease-out ${d}ms forwards` }} />
-      ))}
-      {DROPS.map((a) => {
-        const r = 22;
-        const dx = Math.cos((a * Math.PI) / 180) * r;
-        const dy = Math.sin((a * Math.PI) / 180) * r - 10;
-        return (
-          <span
-            key={a}
-            className="absolute left-1/2 top-1/2 w-1.5 h-1.5 -ml-[3px] -mt-[3px] rounded-full bg-sky-100"
-            style={{ ["--dx" as string]: `${dx}px`, ["--dy" as string]: `${dy}px`, animation: "tc-drop 0.6s ease-out forwards" }}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-function Burst({ sunk }: { sunk: boolean }) {
-  return (
-    <>
-      <span className={`absolute inset-0 rounded-full ${sunk ? "bg-red-500" : "bg-orange-400"}`} style={{ animation: "tc-burst 0.5s ease-out forwards", boxShadow: "0 0 24px 8px rgba(251,146,60,0.7)" }} />
-      <span className="absolute inset-1 rounded-full bg-yellow-200" style={{ animation: "tc-burst 0.4s ease-out 60ms forwards" }} />
-      {DROPS.map((a) => {
-        const r = sunk ? 34 : 26;
-        const dx = Math.cos((a * Math.PI) / 180) * r;
-        const dy = Math.sin((a * Math.PI) / 180) * r;
-        return (
-          <span
-            key={a}
-            className={`absolute left-1/2 top-1/2 w-2 h-2 -ml-1 -mt-1 rounded-sm ${sunk ? "bg-red-300" : "bg-amber-300"}`}
-            style={{ ["--dx" as string]: `${dx}px`, ["--dy" as string]: `${dy}px`, animation: "tc-spark 0.7s ease-out forwards" }}
-          />
-        );
-      })}
-      {sunk && (
-        <span className="absolute inset-0 flex items-center justify-center text-2xl" style={{ animation: "tc-sink 1.1s ease-in 250ms forwards" }}>
-          ☠️
-        </span>
-      )}
-    </>
-  );
+function SheetFx({ kind }: { kind: EffectKind }) {
+  const { src, ms } = SHEET[kind];
+  return <span className="tc-sheet block" style={{ backgroundImage: `url(${src})`, animationDuration: `${ms}ms` }} />;
 }
 
 // Calque d'effets a placer DANS le conteneur relatif du plateau (prop `overlay` de Board).
@@ -87,12 +60,13 @@ export function BoardEffectsLayer({ effects, tIndex, eIndex, onDone }: { effects
 
 function EffectAt({ fx, left, top, onDone }: { fx: BoardEffect; left: number; top: number; onDone: (id: string) => void }) {
   useEffect(() => {
-    const t = setTimeout(() => onDone(fx.id), fx.kind === "sunk" ? 1500 : 900);
+    // On retire l'effet quand sa derniere frame a fini de s'afficher (+ une marge).
+    const t = setTimeout(() => onDone(fx.id), SHEET[fx.kind].ms + 150);
     return () => clearTimeout(t);
   }, [fx.id, fx.kind, onDone]);
   return (
     <div className="absolute pointer-events-none" style={{ left, top, width: CELL, height: CELL, zIndex: 9 }}>
-      {fx.kind === "splash" ? <Splash /> : <Burst sunk={fx.kind === "sunk"} />}
+      <SheetFx kind={fx.kind} />
     </div>
   );
 }
@@ -114,10 +88,10 @@ export function ScoreBadge({ score }: { score: number }) {
     <div className="relative">
       <motion.div
         key={score}
-        initial={{ scale: 1.5, backgroundColor: "rgba(245,158,11,0.6)" }}
-        animate={{ scale: 1, backgroundColor: "rgba(120,53,15,0.3)" }}
+        initial={{ scale: 1.5, backgroundColor: "rgba(255,122,47,0.85)" }}
+        animate={{ scale: 1, backgroundColor: "rgba(255,240,229,1)" }}
         transition={{ type: "spring", stiffness: 300, damping: 14 }}
-        className="px-3 py-1 rounded text-xs font-bold border border-amber-700 text-amber-300"
+        className="px-3 py-1 rounded-full text-xs font-bold border border-accent/50 text-accent-ink"
       >
         🏆 {score} pts
       </motion.div>
@@ -129,7 +103,7 @@ export function ScoreBadge({ score }: { score: number }) {
             animate={{ y: -28, opacity: 0, scale: 1.4 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.1, ease: "easeOut" }}
-            className="absolute -top-1 right-0 text-amber-300 font-black text-base drop-shadow pointer-events-none"
+            className="absolute -top-1 right-0 text-accent-ink font-display font-extrabold text-base pointer-events-none"
           >
             +{delta.value}
           </motion.span>
@@ -159,14 +133,14 @@ export function RefereeLeaderboard({ rows, meId, compact }: { rows: LeaderboardR
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${me ? "bg-amber-400/20 border border-amber-400/60" : "bg-black/20 border border-transparent"}`}
+              className={cx("flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm border", me ? "bg-accent-soft border-accent/60" : "bg-paper border-transparent")}
             >
-              <span className={`w-6 text-center font-black ${rank === 1 ? "text-yellow-300" : rank === 2 ? "text-slate-200" : rank === 3 ? "text-amber-600" : "text-slate-400"}`}>
+              <span className={cx("w-6 text-center font-black", rank === 1 ? "text-warn-ink" : rank === 2 ? "text-ink-2" : rank === 3 ? "text-amber-800" : "text-ink-3")}>
                 {rank <= 3 ? ["🥇", "🥈", "🥉"][rank - 1] : rank}
               </span>
-              <span className="flex-1 truncate font-bold">{r.name}{me ? " (toi)" : ""}</span>
-              <span className="text-[10px] text-slate-300/80 whitespace-nowrap">💥{r.hits} ☠️{r.sunk} 🛡️{r.intact}</span>
-              <motion.span key={r.score} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="font-black text-amber-300 w-12 text-right">
+              <span className="flex-1 truncate font-bold text-ink">{r.name}{me ? " (toi)" : ""}</span>
+              <span className="text-[10px] text-ink-3 whitespace-nowrap">💥{r.hits} ☠️{r.sunk} 🛡️{r.intact}</span>
+              <motion.span key={r.score} initial={{ scale: 1.4 }} animate={{ scale: 1 }} className="font-display font-extrabold text-brand w-12 text-right tabular-nums">
                 {r.score}
               </motion.span>
             </motion.li>
