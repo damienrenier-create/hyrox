@@ -44,7 +44,7 @@ export async function buildRaceContext(sessionId: string): Promise<RaceContextBu
   if (!rs) {
     return {
       ctx: {
-        settings: { rep0: 5, peak: 10, step: 1, capMin: 45, afterMin: 10, penMin: 1 },
+        settings: { rep0: 5, peak: 10, step: 1, capMin: 40, afterMin: 10, penMin: 1 },
         teams,
         exercises,
         noStartExerciseIds: new Set(),

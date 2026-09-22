@@ -2,7 +2,7 @@ import { WodTemplate, TeamState, WodEngineResult } from "../core/types";
 
 export const PyramideClassique: WodTemplate = {
   id: "PYRAMIDE_CLASSIQUE",
-  name: "Pyramide 24 Équipes",
+  name: "Pyramide",
   exercises: [
     { id: "ex1", label: "Commando bras", number: 1 },
     { id: "ex2", label: "Fentes disque", number: 2 },
@@ -21,6 +21,10 @@ export const PyramideClassique: WodTemplate = {
   // « var NOSTART = { "Hélicoptère":1, "Corde à sauter":1 } » du fichier d'origine : personne ne demarre
   // sur ces deux ateliers, le round-robin des departs les saute (ex5 et ex11).
   noStartExerciseIds: ["ex5", "ex11"],
+
+  // Pyramide 5 -> 10 -> 5, 40 minutes de temps limite, 20 equipes.
+  raceDefaults: { rep0: 5, peak: 10, step: 1, capMin: 40, afterMin: 10, penMin: 1 },
+  defaultTeams: 20,
 
   calculateScores(teams: TeamState[], startTime: number, unitMs: number, mode: "avg" | "sum"): WodEngineResult {
     const result: WodEngineResult = {

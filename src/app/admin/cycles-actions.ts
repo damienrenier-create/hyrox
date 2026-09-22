@@ -28,6 +28,14 @@ const int = (fd: FormData, k: string, def: number) => {
   const n = parseInt(str(fd, k), 10);
   return Number.isFinite(n) ? n : def;
 };
+// Nombre d'equipes propose par le WOD (20 pour la Pyramide), sans jamais lever sur un type inconnu.
+const defaultTeamsOf = (wodType: string) => {
+  try {
+    return getWodEngine(wodType).defaultTeams ?? 20;
+  } catch {
+    return 20;
+  }
+};
 
 // ===== Cycles =====
 
@@ -73,7 +81,7 @@ export async function addPlanAction(formData: FormData) {
   const cycleId = str(formData, "cycleId");
   const wodType = str(formData, "wodType");
   const label = str(formData, "label");
-  const numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", 24)));
+  const numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", defaultTeamsOf(wodType))));
   const refereeMode = formData.get("refereeMode") === "on";
   if (!label) fail("Nom de la séance requis.");
   try {
@@ -162,7 +170,7 @@ export async function openSessionAction(formData: FormData) {
 
   let wodType = str(formData, "wodType") || "PYRAMIDE_CLASSIQUE";
   let label = str(formData, "label");
-  let numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", 24)));
+  let numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", defaultTeamsOf(wodType))));
   let refereeMode = formData.get("refereeMode") === "on";
   let cycleId: string | null = null;
 

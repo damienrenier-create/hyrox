@@ -277,7 +277,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             </fieldset>
             <label className="text-sm">
               <span className={fieldLabel}>Nombre d&apos;équipes</span>
-              <input type="number" name="numTeams" defaultValue={plans.find((p) => p.isCurrent)?.numTeams ?? 24} min={1} max={50} className={input} />
+              <input type="number" name="numTeams" defaultValue={plans.find((p) => p.isCurrent)?.numTeams ?? 20} min={1} max={50} className={input} />
             </label>
             <label className="text-sm">
               <span className={fieldLabel}>Reste ouverte pendant</span>
@@ -367,7 +367,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                 </label>
                 <label className="text-xs">
                   <span className={fieldLabel}>Équipes</span>
-                  <input type="number" name="numTeams" defaultValue={24} min={1} max={50} className={input} />
+                  <input type="number" name="numTeams" defaultValue={20} min={1} max={50} className={input} />
                 </label>
                 <label className="text-xs flex items-center gap-2 pb-2.5 font-semibold text-ink-2">
                   <input type="checkbox" name="refereeMode" defaultChecked className={ui.check} /> Touché-Coulé

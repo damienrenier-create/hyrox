@@ -18,8 +18,12 @@ function toMs(v: unknown): number {
 
 export async function ensureRaceStateAction(sessionId: string): Promise<string> {
   const { session } = await requireGreffierAccess(sessionId);
-  // Ateliers ou personne ne commence : valeur par defaut du WOD (Pyramide : Helicoptere et Corde a sauter).
-  const noStart = getWodEngine(session.wodType).noStartExerciseIds ?? [];
+  // Reglages par defaut du WOD (voir wod-engines/templates) : ateliers sans depart, pyramide, temps limite.
+  // Ils sont ecrits explicitement a la creation plutot que laisses aux valeurs par defaut des colonnes :
+  // un changement de reglage reste ainsi une modification de code, sans migration.
+  const engine = getWodEngine(session.wodType);
+  const noStart = engine.noStartExerciseIds ?? [];
+  const defaults = engine.raceDefaults;
 
   const existing = await db.orm.public.RaceState.where({ sessionId }).first();
   if (existing) {
@@ -31,7 +35,7 @@ export async function ensureRaceStateAction(sessionId: string): Promise<string> 
     }
     return existing.id;
   }
-  const created = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: noStart });
+  const created = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: noStart, ...(defaults ?? {}) });
   return created.id;
 }
 

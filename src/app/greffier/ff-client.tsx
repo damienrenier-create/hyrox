@@ -235,7 +235,7 @@ export function FeteForaineClient({
       {settingsOpen && (
         <SettingsPanel
           sessionId={sessionId}
-          settings={{ rep0: 5, peak: 10, step: 1, capMin: 45, afterMin: 10, penMin: 1 }}
+          settings={{ rep0: 5, peak: 10, step: 1, capMin: 40, afterMin: 10, penMin: 1 }}
           noStartExerciseIds={[]}
           exercises={exercisesAll}
           numTeams={ctx.teams.length}

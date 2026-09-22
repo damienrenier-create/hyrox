@@ -32,6 +32,11 @@ export interface WodTemplate {
   exercises: { id: string; label: string; number: number }[];
   // Ateliers ou PERSONNE ne commence (NOSTART du fichier d'origine) : le round-robin des departs les saute.
   noStartExerciseIds?: string[];
+  // Reglages par defaut d'une course de ce WOD. Ils vivent ICI (et pas en valeurs par defaut de colonnes)
+  // pour qu'un changement soit une simple modification de code, sans migration ni valeur figee en base.
+  raceDefaults?: { rep0: number; peak: number; step: number; capMin: number; afterMin: number; penMin: number };
+  // Nombre d'equipes propose a la creation d'une seance.
+  defaultTeams?: number;
   
   // Calcul du score à partir de l'état
   calculateScores(

@@ -29,7 +29,7 @@ import {
   Standing,
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import type { RaceContextBundle } from "@/lib/race-context";
-import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
+import { TeamsManager, type TeamWithMembers, type RefereeView, type TeamMemberView } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { SettingsPanel } from "./SettingsPanel";
 import { ArbitrageTab } from "./ArbitrageTab";
@@ -556,7 +556,7 @@ export function GreffierClient({
             })}
           </div>
         ) : view === "results" ? (
-          <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} />
+          <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} membersByTeam={membersByTeam} />
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (
@@ -592,13 +592,14 @@ export function GreffierClient({
 }
 
 function ResultsTable({
-  ctx, phase, teamNames, exerciseLabels, tl,
+  ctx, phase, teamNames, exerciseLabels, tl, membersByTeam,
 }: {
   ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext;
   phase: "pre" | "run" | "post";
   teamNames: Record<string, string>;
   exerciseLabels: Record<string, string>;
   tl: ReturnType<typeof timeline>;
+  membersByTeam: Map<string, TeamMemberView[]>;
 }) {
   const st: Standing[] = standings(ctx, phase === "post");
   const T = total(ctx.settings);
@@ -608,7 +609,8 @@ function ResultsTable({
         <thead>
           <tr>
             <th className={ui.th}>#</th>
-            <th className={ui.th}>Équipe</th>
+            {/* Le classement parle des ELEVES : leurs noms d'abord, le numero d'equipe en second. */}
+            <th className={ui.th}>Participants</th>
             <th className={ui.th}>Tours</th>
             <th className={ui.th}>Temps</th>
             <th className={ui.th}>Temps sup.</th>
@@ -618,18 +620,30 @@ function ResultsTable({
           </tr>
         </thead>
         <tbody>
-          {st.map((s, i) => (
-            <motion.tr key={s.team.id} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className={ui.tr}>
-              <td className="p-2 font-display font-bold">{i + 1}</td>
-              <td className="p-2 font-bold">{teamNames[s.team.id] ?? s.team.id}</td>
-              <td className="p-2">{Math.min(s.n, T)} / {T}</td>
-              <td className="p-2 tabular-nums">{s.done ? `🏁 ${fmt(s.finishAt)}` : "—"}</td>
-              <td className="p-2 tabular-nums">{tl.late[s.team.id] != null ? `+${fmt(tl.late[s.team.id])}` : ""}</td>
-              <td className="p-2">{exerciseLabels[startOf(ctx, s.team).id]}</td>
-              <td className="p-2 font-bold">{s.reps}</td>
-              <td className="p-2">{s.yellowCards}</td>
-            </motion.tr>
-          ))}
+          {st.map((s, i) => {
+            const members = membersByTeam.get(s.team.id) ?? [];
+            return (
+              <motion.tr key={s.team.id} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className={ui.tr}>
+                <td className="p-2 font-display font-bold">{i + 1}</td>
+                <td className="p-2">
+                  {members.length ? (
+                    <>
+                      <div className="font-bold leading-tight">{members.map((m) => `${m.firstName} ${m.lastName}`).join(" · ")}</div>
+                      <div className="text-[11px] text-ink-3">{teamNames[s.team.id] ?? s.team.id}{members[0]?.className ? ` · ${members[0].className}` : ""}</div>
+                    </>
+                  ) : (
+                    <span className="font-bold text-ink-3">{teamNames[s.team.id] ?? s.team.id} <span className="font-normal italic">(personne encodé)</span></span>
+                  )}
+                </td>
+                <td className="p-2">{Math.min(s.n, T)} / {T}</td>
+                <td className="p-2 tabular-nums">{s.done ? `🏁 ${fmt(s.finishAt)}` : "—"}</td>
+                <td className="p-2 tabular-nums">{tl.late[s.team.id] != null ? `+${fmt(tl.late[s.team.id])}` : ""}</td>
+                <td className="p-2">{exerciseLabels[startOf(ctx, s.team).id]}</td>
+                <td className="p-2 font-bold">{s.reps}</td>
+                <td className="p-2">{s.yellowCards}</td>
+              </motion.tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

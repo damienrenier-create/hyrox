@@ -96,7 +96,7 @@ function pyramidStandings(
   const ctx: RaceContext = {
     settings: rs
       ? { rep0: rs.rep0, peak: rs.peak, step: rs.step, capMin: rs.capMin, afterMin: rs.afterMin, penMin: rs.penMin }
-      : { rep0: 5, peak: 10, step: 1, capMin: 45, afterMin: 10, penMin: 1 },
+      : { rep0: 5, peak: 10, step: 1, capMin: 40, afterMin: 10, penMin: 1 },
     teams: rawTeams.map((t) => ({ id: t.id, order: t.order ?? 0 })),
     exercises: sortedEx.map((e) => ({ id: e.id, number: e.number })),
     noStartExerciseIds: new Set(rs ? ((rs.noStartExerciseIds as string[]) ?? []) : []),
