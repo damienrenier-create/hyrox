@@ -1,21 +1,43 @@
 import { db } from "@/lib/db";
 import { buildStandingsForSessions } from "@/lib/standings-batch";
-import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
+import { isQualityCode, qualityCodeFromValue, type QualityCode } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { toMs } from "@/lib/scheduling";
 
 // Consultation des donnees evaluatives (admins) : une ligne = un eleve x une seance.
-// Filtres : cycle, seance, classe, eleve (prefixe), periode. Tout est relie par identifiant permanent.
+// Deux etages de filtrage. Les filtres de SEANCE (cycle, seance, periode) reduisent ce qu'on va
+// chercher en base ; les filtres de LIGNE (classe, recherche, role, niveau d'auto-eval) s'appliquent
+// ensuite en memoire, ce qui permet d'afficher « X lignes sur Y » sans requete supplementaire.
+// Meme grammaire que /admin/auto-evaluations : chronologique par defaut, 30 par page.
+
+export const PAGE_SIZE = 30;
+
+export type ConsultationSort = "recent" | "ancien" | "nom" | "prenom" | "classe" | "rang";
+export type ConsultationRole = "participant" | "arbitre";
 
 export type ConsultationFilters = {
   cycleId?: string;
   sessionId?: string;
   className?: string;
-  query?: string;
+  query?: string; // sous-chaine dans le prenom OU le nom (« max » -> Maxime ET Lemax)
   from?: string; // YYYY-MM-DD
   to?: string;
+  role?: ConsultationRole;
+  levels?: Partial<Record<string, QualityCode>>; // criterionId -> niveau exige en auto-evaluation
+  sort?: ConsultationSort;
+  page?: number;
+};
+
+export type ConsultationResult = {
+  rows: ConsultationRow[]; // page courante
+  all: ConsultationRow[]; // tout le resultat filtre (export CSV)
+  total: number; // apres filtres de ligne
+  totalAll: number; // avant filtres de ligne, sur les seances parcourues
+  page: number;
+  pages: number;
+  sessionsScanned: number;
 };
 
 export type ConsultationRow = {
@@ -43,7 +65,7 @@ export type ConsultationRow = {
   pirateScore: number | null;
 };
 
-export async function buildConsultation(f: ConsultationFilters): Promise<{ rows: ConsultationRow[]; sessionsScanned: number }> {
+export async function buildConsultation(f: ConsultationFilters): Promise<ConsultationResult> {
   let sessions = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all();
   if (f.sessionId) sessions = sessions.filter((s) => s.id === f.sessionId);
   if (f.cycleId) sessions = sessions.filter((s) => s.cycleId === f.cycleId);
@@ -62,7 +84,7 @@ export async function buildConsultation(f: ConsultationFilters): Promise<{ rows:
   if (!f.sessionId && !f.from && !f.to && !f.cycleId) sessions = sessions.slice(0, 15); // garde-fou : 15 dernieres seances
 
   const q = (f.query ?? "").trim().toLowerCase();
-  if (!sessions.length) return { rows: [], sessionsScanned: 0 };
+  if (!sessions.length) return { rows: [], all: [], total: 0, totalAll: 0, page: 1, pages: 1, sessionsScanned: 0 };
   const ids = sessions.map((s) => s.id);
 
   // ===== Tout charge en requetes GROUPEES (.in) : avant, une cascade par seance / equipe / eleve
@@ -127,11 +149,6 @@ export async function buildConsultation(f: ConsultationFilters): Promise<{ rows:
       const u = userById.get(studentId);
       if (!u) continue;
       const cls = u.className ?? "";
-      if (f.className && cls !== f.className) continue;
-      const full = `${u.firstName ?? ""} ${u.lastName ?? ""}`.toLowerCase();
-      const fullR = `${u.lastName ?? ""} ${u.firstName ?? ""}`.toLowerCase();
-      if (q && !(full.startsWith(q) || fullR.startsWith(q) || (u.lastName ?? "").toLowerCase().startsWith(q) || (u.firstName ?? "").toLowerCase().startsWith(q))) continue;
-
       const teamId = participants.get(studentId) ?? null;
       const ref = refereeById.get(studentId) ?? null;
       const team = teamId ? teams.find((t) => t.id === teamId) ?? null : null;
@@ -168,8 +185,60 @@ export async function buildConsultation(f: ConsultationFilters): Promise<{ rows:
     }
   }
 
-  rows.sort((a, b) => b.sessionDate.localeCompare(a.sessionDate) || a.className.localeCompare(b.className) || a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
-  return { rows, sessionsScanned: sessions.length };
+  // ===== Filtres de ligne =====
+  const levels = Object.entries(f.levels ?? {}).filter(([, v]) => v && isQualityCode(v)) as [string, QualityCode][];
+  const all = rows.filter((r) => {
+    if (f.className && r.className !== f.className) return false;
+    // Recherche par sous-chaine (et non par prefixe) : « max » trouve Maxime ET Lemax.
+    if (q && !`${r.firstName} ${r.lastName}`.toLowerCase().includes(q) && !`${r.lastName} ${r.firstName}`.toLowerCase().includes(q)) return false;
+    if (f.role === "participant" && r.role === "arbitre") return false;
+    if (f.role === "arbitre" && r.role === "participant") return false;
+    for (const [criterionId, level] of levels) if (r.selfEval?.[criterionId] !== level) return false;
+    return true;
+  });
+
+  const byName = (a: ConsultationRow, b: ConsultationRow) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+  const byDateDesc = (a: ConsultationRow, b: ConsultationRow) => b.sessionDate.localeCompare(a.sessionDate);
+  all.sort((a, b) => {
+    switch (f.sort ?? "recent") {
+      case "ancien":
+        return a.sessionDate.localeCompare(b.sessionDate) || a.className.localeCompare(b.className) || byName(a, b);
+      case "nom":
+        return byName(a, b) || byDateDesc(a, b);
+      case "prenom":
+        return a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName) || byDateDesc(a, b);
+      case "classe":
+        return a.className.localeCompare(b.className) || byName(a, b) || byDateDesc(a, b);
+      case "rang":
+        // Les arbitres et les eleves sans classement passent en fin de liste, pas en tete.
+        return (a.rank ?? Infinity) - (b.rank ?? Infinity) || byDateDesc(a, b) || byName(a, b);
+      default:
+        return byDateDesc(a, b) || a.className.localeCompare(b.className) || byName(a, b);
+    }
+  });
+
+  const pages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, f.page ?? 1), pages);
+  return {
+    rows: all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    all,
+    total: all.length,
+    totalAll: rows.length,
+    page,
+    pages,
+    sessionsScanned: sessions.length,
+  };
+}
+
+// Lit les filtres de niveau depuis l'URL : ?c_engagement=TB&c_technique=B
+export function readConsultationLevels(sp: Record<string, string | string[] | undefined>): Partial<Record<string, QualityCode>> {
+  const out: Partial<Record<string, QualityCode>> = {};
+  for (const c of SELF_EVAL_CRITERIA) {
+    const v = sp[`c_${c.id}`];
+    const s = Array.isArray(v) ? v[0] : v;
+    if (s && isQualityCode(s)) out[c.id] = s;
+  }
+  return out;
 }
 
 export function consultationCsv(rows: ConsultationRow[]): string {
