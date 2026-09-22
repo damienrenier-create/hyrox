@@ -221,14 +221,38 @@ function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?:
   return <span className="medals" aria-label={`${n} médaille${n > 1 ? "s" : ""}`}>{groups}</span>;
 }
 
-export type SessionOption = { id: string; label: string; classes: string[]; open: boolean };
+export type SessionOption = { id: string; label: string; classes: string[]; open: boolean; dateMs: number };
+
+export const sessionDay = (ms: number) =>
+  new Date(ms).toLocaleString("fr-BE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+
+// Un pas en arriere (seance plus ancienne) ou en avant (plus recente). Grise et inerte quand il n'y a rien
+// de ce cote, pour que la place reste stable et que le chronometre ne bouge pas d'un pixel.
+export function SessionStep({ to, dir }: { to: SessionOption | null; dir: "older" | "newer" }) {
+  const router = useRouter();
+  const arrow = dir === "older" ? "‹" : "›";
+  if (!to) return <span className="w-9 h-9 flex-shrink-0 rounded-full bg-paper/60 text-line-2 flex items-center justify-center text-xl leading-none select-none">{arrow}</span>;
+  return (
+    <button
+      type="button"
+      onClick={() => router.push(`/greffier?session=${to.id}`)}
+      title={`${dir === "older" ? "Séance précédente" : "Séance suivante"} : ${to.label}${to.classes.length ? ` · ${to.classes.join(", ")}` : ""} · ${to.open ? "ouverte" : sessionDay(to.dateMs)}`}
+      aria-label={dir === "older" ? "Séance précédente" : "Séance suivante"}
+      className="w-9 h-9 flex-shrink-0 rounded-full bg-paper hover:bg-line text-ink-2 hover:text-ink flex items-center justify-center font-bold text-xl leading-none transition"
+    >
+      {arrow}
+    </button>
+  );
+}
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
 }: {
   sessionId: string;
   sessionLabel: string;
   sessionOptions: SessionOption[];
+  olderSession: SessionOption | null;
+  newerSession: SessionOption | null;
   bundle: RaceContextBundle;
   teamsWithMembers: TeamWithMembers[];
   classes: string[];
@@ -488,7 +512,10 @@ export function GreffierClient({
           Pas de marque ici : sur un ecran projete devant une classe, seule la course compte. */}
       <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4 py-3">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <div className="min-w-0 justify-self-start">
+          {/* Navigation entre seances : revenir a celle qui vient de se terminer (revoir les scores,
+              finir d'encoder) ou passer a la suivante, sans repasser par la console. */}
+          <div className="min-w-0 justify-self-start flex items-center gap-2">
+            <SessionStep to={olderSession} dir="older" />
             <div className="min-w-0">
               {sessionOptions.length > 1 ? (
                 <select
@@ -498,7 +525,7 @@ export function GreffierClient({
                 >
                   {sessionOptions.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? "" : " (fermée)"}
+                      {o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? " — ouverte" : ` — ${sessionDay(o.dateMs)}`}
                     </option>
                   ))}
                 </select>
@@ -510,6 +537,7 @@ export function GreffierClient({
                 </p>
               )}
             </div>
+            <SessionStep to={newerSession} dir="newer" />
           </div>
 
           <p className={cx("justify-self-center font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>

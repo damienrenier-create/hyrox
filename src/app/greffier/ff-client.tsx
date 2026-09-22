@@ -21,8 +21,7 @@ import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { ArbitrageTab } from "./ArbitrageTab";
 import { SettingsPanel } from "./SettingsPanel";
 import type { PendingRequest } from "./referee-decisions";
-import type { SessionOption } from "./client";
-import { Brand } from "../_components/Brand";
+import { SessionStep, sessionDay, type SessionOption } from "./client";
 import { btn, cx, ui } from "@/lib/ui";
 
 type View = "race" | "results" | "runners" | "teams" | "arbitrage";
@@ -31,11 +30,13 @@ type View = "race" | "results" | "runners" | "teams" | "arbitrage";
 // avec les identifiants permanents (coureurs = membres d'equipe), la persistance Postgres et les onglets communs
 // (Equipes & arbitres, Arbitrage). Ecran PC projete.
 export function FeteForaineClient({
-  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll,
 }: {
   sessionId: string;
   sessionLabel: string;
   sessionOptions: SessionOption[];
+  olderSession: SessionOption | null;
+  newerSession: SessionOption | null;
   bundle: FFBundle;
   teamsWithMembers: TeamWithMembers[];
   classes: string[];
@@ -138,19 +139,22 @@ export function FeteForaineClient({
           <div className="flex items-center gap-5 min-w-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <Brand />
-                <span className="text-line-2">/</span>
                 <span className={ui.eyebrow}>Greffier · Fête Foraine</span>
               </div>
-              {sessionOptions.length > 1 ? (
-                <select value={sessionId} onChange={(e) => router.push(`/greffier?session=${e.target.value}`)} className={`${ui.input} w-auto max-w-[280px] py-1.5 font-bold`}>
-                  {sessionOptions.map((o) => (
-                    <option key={o.id} value={o.id}>{o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? "" : " (fermée)"}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm font-bold leading-tight">{sessionLabel}{classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}</p>
-              )}
+              {/* Meme navigation entre seances que la Pyramide. */}
+              <div className="flex items-center gap-2 min-w-0">
+                <SessionStep to={olderSession} dir="older" />
+                {sessionOptions.length > 1 ? (
+                  <select value={sessionId} onChange={(e) => router.push(`/greffier?session=${e.target.value}`)} className={`${ui.input} w-auto max-w-[280px] py-1.5 font-bold`}>
+                    {sessionOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? " — ouverte" : ` — ${sessionDay(o.dateMs)}`}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm font-bold leading-tight">{sessionLabel}{classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}</p>
+                )}
+                <SessionStep to={newerSession} dir="newer" />
+              </div>
               <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "Course terminée" : isPaused ? "EN PAUSE — pointages bloqués" : "Course en cours"}</p>
             </div>
             <p className={cx("font-display text-[3rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>{fmt(liveMs) || "0:00"}</p>

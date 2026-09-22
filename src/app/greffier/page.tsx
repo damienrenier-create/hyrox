@@ -6,7 +6,7 @@ import { buildBoardData } from "@/lib/referee-board";
 import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
-import { ensureAutoSessions, listOpenSessions } from "@/lib/scheduling";
+import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
@@ -43,15 +43,23 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const options: SessionOption[] = open.map((s) => ({
+  // Navigation entre seances : le greffier doit pouvoir revenir a celle qui vient de se terminer
+  // (revoir les scores, finir d'encoder) ou passer a la suivante, sans repasser par la console.
+  // On liste les 12 dernieres seances par ordre chronologique, la plus recente en tete.
+  const openIds = new Set(open.map((s) => s.id));
+  const recent = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).slice(0, 12);
+  const chain = recent.some((s) => s.id === session!.id) ? recent : [session, ...recent];
+  const options: SessionOption[] = chain.map((s) => ({
     id: s.id,
     label: s.label ?? wodLabel(s.wodType),
     classes: readSessionClasses(s.settings),
-    open: true,
+    open: openIds.has(s.id),
+    dateMs: toMs(s.createdAt),
   }));
-  if (!options.some((o) => o.id === session!.id)) {
-    options.push({ id: session.id, label: session.label ?? wodLabel(session.wodType), classes: readSessionClasses(session.settings), open: false });
-  }
+  const at = options.findIndex((o) => o.id === session!.id);
+  // « Précédente » = la seance plus ancienne, « Suivante » = la plus recente : la liste est en ordre decroissant.
+  const olderSession = at >= 0 && at < options.length - 1 ? options[at + 1] : null;
+  const newerSession = at > 0 ? options[at - 1] : null;
 
   await ensureRaceStateAction(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
@@ -103,6 +111,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         sessionId={session.id}
         sessionLabel={session.label ?? wodLabel(session.wodType)}
         sessionOptions={options}
+        olderSession={olderSession}
+        newerSession={newerSession}
         bundle={ffBundle}
         teamsWithMembers={teamsWithMembers}
         classes={classes}
@@ -121,6 +131,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       sessionId={session.id}
       sessionLabel={session.label ?? wodLabel(session.wodType)}
       sessionOptions={options}
+      olderSession={olderSession}
+      newerSession={newerSession}
       bundle={bundle}
       teamsWithMembers={teamsWithMembers}
       classes={classes}
