@@ -5,11 +5,13 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import crypto from "crypto";
 
-export async function loginAction(formData: FormData) {
+export type LoginState = { error: string } | undefined;
+
+export async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const rawName = formData.get("name") as string;
   const password = formData.get("password") as string;
 
-  if (!rawName) throw new Error("Le nom est requis.");
+  if (!rawName) return { error: "Le nom est requis." };
   const name = rawName.trim().toUpperCase();
 
   let role: SessionPayload["role"] = "STUDENT";
@@ -17,13 +19,13 @@ export async function loginAction(formData: FormData) {
   // Auto-détection du rôle en fonction du Pseudo
   if (name === "DAMZER") {
     role = "MASTER_ADMIN";
-    if (password !== "boss") throw new Error("Mot de passe incorrect pour DAMZER.");
+    if (password !== "boss") return { error: "Mot de passe incorrect pour DAMZER." };
   } else if (["AXEZER", "GUIZER", "SIMZER", "RACZER"].includes(name)) {
     role = "ADMIN";
-    if (password !== "coach") throw new Error("Mot de passe incorrect.");
+    if (password !== "coach") return { error: "Mot de passe incorrect." };
   } else if (name === "GREFFIER") {
     role = "GREFFIER";
-    if (password !== "greffe") throw new Error("Mot de passe incorrect.");
+    if (password !== "greffe") return { error: "Mot de passe incorrect." };
   } else {
     // Étudiant : on garde la casse originale pour l'affichage
     role = "STUDENT";

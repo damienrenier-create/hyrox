@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useActionState } from "react";
 import {
   loginAction,
   listClassesAction,
@@ -47,8 +47,10 @@ export default function LoginPage() {
 }
 
 function AdminLogin() {
+  const [state, formAction, pending] = useActionState(loginAction, undefined);
+
   return (
-    <form action={loginAction} className="space-y-6">
+    <form action={formAction} className="space-y-6">
       <div>
         <label className="block text-sm font-medium text-neutral-300 mb-2">Pseudo</label>
         <input
@@ -66,11 +68,13 @@ function AdminLogin() {
           className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
         />
       </div>
+      {state?.error && <p className="text-red-400 text-sm">{state.error}</p>}
       <button
         type="submit"
-        className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-lg transition-transform active:scale-95"
+        disabled={pending}
+        className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold py-3 rounded-lg transition-transform active:scale-95"
       >
-        ENTRER
+        {pending ? "…" : "ENTRER"}
       </button>
     </form>
   );
