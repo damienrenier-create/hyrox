@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
 import { broadcastShot } from "@/lib/firebase/firebase-sync";
-import { submitEvaluationAction } from "./actions";
+import { submitEvaluationAction, unlockFleetAction } from "./actions";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
@@ -32,11 +32,12 @@ type Props = {
   wreckCells: Cell[]; // cases des navires coules (reveles a tout le monde)
   raceEnded: boolean;
   myScore: number;
+  canUnlock: boolean; // aucune de mes cases n'a encore ete visee : je peux rouvrir ma flotte pour la deplacer
   ownTeam?: { id: string; name: string } | null; // arbitre issu d'une equipe (DNF...) : ne peut pas evaluer sa propre equipe
   leaderboard: LeaderboardRow[];
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard, canUnlock }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
   const tIndex = useMemo(() => new Map(teams.map((t, i) => [t.id, i] as const)), [teams]);
@@ -208,7 +209,26 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
         <p className="text-[11px] text-ink-2 px-1 mb-1">
           Touche une case (équipe × exercice) pour évaluer, puis tirer. Une case ne s&apos;évalue qu&apos;une seule fois. Tes bateaux sont affichés, les autres restent cachés.
           {ownTeam && <> <span className="text-accent-ink font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
+          {canUnlock && (
+            <>
+              {" "}
+              <button
+                onClick={() => {
+                  if (!confirm("Rouvrir ta flotte pour déplacer tes bateaux ? Tu devras la reverrouiller avant d'arbitrer.")) return;
+                  startTransition(async () => {
+                    const res = await unlockFleetAction(sessionId);
+                    if ("error" in res) setError(res.error);
+                    else router.refresh();
+                  });
+                }}
+                className="underline text-brand font-bold"
+              >
+                ⚓ Déplacer mes bateaux
+              </button>
+            </>
+          )}
         </p>
+        {error && !target && <p className={`${ui.alertErr} mx-1 mb-2`}>{error}</p>}
         <Board
           teams={teams}
           exercises={exercises}

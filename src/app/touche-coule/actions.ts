@@ -171,6 +171,121 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
   return { ok: true };
 }
 
+// Deverrouille sa flotte pour deplacer des navires. Interdit des qu'une de ses cases a ete visee :
+// sinon on pourrait esquiver les tirs deja recus. Tant que personne ne t'a tire dessus, tu reorganises.
+export async function unlockFleetAction(sessionId: string): Promise<{ error: string } | { ok: true }> {
+  const evaluator = await getSession();
+  if (!evaluator) throw new Error("Non authentifié.");
+
+  const fleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
+  if (!fleet) return { error: "Aucune flotte à déverrouiller." };
+  if (fleet.status !== "LOCKED") return { ok: true };
+
+  const ships = await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).all();
+  const shipIds = new Set(ships.map((s) => s.id));
+  const placements = await db.orm.public.BoatPlacement.where({ sessionId }).all();
+  const myCells = new Set(placements.filter((p) => p.shipId && shipIds.has(p.shipId)).map((p) => `${p.teamId}_${p.exerciseId}`));
+  const shots = await db.orm.public.Shot.where({ sessionId }).all();
+  if (shots.some((s) => myCells.has(`${s.targetTeamId}_${s.targetExerciseId}`))) {
+    return { error: "Un de tes bateaux a déjà été touché : la flotte ne peut plus bouger." };
+  }
+
+  await db.orm.public.RefereeFleet.where({ id: fleet.id }).update({ status: "PLACING", lockedAt: null });
+  return { ok: true };
+}
+
+export type ReusableFleet = { sessionId: string; label: string; date: string; ships: number; rows: number; cols: number };
+
+// Derniere flotte verrouillee de cet arbitre sur une AUTRE seance, si elle rentre dans la grille actuelle.
+export async function lastFleetAction(sessionId: string): Promise<ReusableFleet | null> {
+  const evaluator = await getSession();
+  if (!evaluator) return null;
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) return null;
+  const teams = await db.orm.public.Team.where({ sessionId }).all();
+  const exercises = exercisesFor(session);
+
+  const fleets = (await db.orm.public.RefereeFleet.where({ refereeId: evaluator.id, slot: 0, status: "LOCKED" }).all())
+    .filter((f) => f.sessionId !== sessionId)
+    .sort((a, b) => String(b.lockedAt ?? "").localeCompare(String(a.lockedAt ?? "")));
+  for (const f of fleets) {
+    const src = await db.orm.public.Session.where({ id: f.sessionId }).first();
+    if (!src) continue;
+    const srcTeams = await db.orm.public.Team.where({ sessionId: f.sessionId }).all();
+    const srcEx = exercisesFor(src);
+    const ships = await db.orm.public.RefereeShip.where({ fleetId: f.id }).all();
+    // Les positions sont reportees par INDEX (les identifiants d'equipe changent d'une seance a l'autre) :
+    // la grille d'accueil doit donc etre au moins aussi grande.
+    if (srcTeams.length > teams.length || srcEx.length > exercises.length) continue;
+    return {
+      sessionId: f.sessionId,
+      label: src.label ?? src.wodType,
+      date: String(src.createdAt),
+      ships: ships.length,
+      rows: srcTeams.length,
+      cols: srcEx.length,
+    };
+  }
+  return null;
+}
+
+// Rejoue cette flotte sur la seance en cours : memes positions (par index), un seul geste au lieu de huit.
+export async function reuseLastFleetAction(sessionId: string): Promise<{ error: string } | { ok: true; placed: number }> {
+  const { evaluator, session, teams, exercises } = await loadContext(sessionId);
+
+  const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
+  if (current?.status === "LOCKED") return { error: "Ta flotte est déjà verrouillée." };
+  const currentShips = current ? await db.orm.public.RefereeShip.where({ fleetId: current.id }).all() : [];
+  if (currentShips.length) return { error: "Retire d'abord tes navires déjà posés." };
+
+  const last = await lastFleetAction(sessionId);
+  if (!last) return { error: "Aucune flotte précédente réutilisable." };
+
+  const srcSession = await db.orm.public.Session.where({ id: last.sessionId }).first();
+  if (!srcSession) return { error: "Séance d'origine introuvable." };
+  const srcFleet = await db.orm.public.RefereeFleet.where({ sessionId: last.sessionId, refereeId: evaluator.id, slot: 0 }).first();
+  if (!srcFleet) return { error: "Flotte d'origine introuvable." };
+  const srcTeams = (await db.orm.public.Team.where({ sessionId: last.sessionId }).all()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const srcEx = exercisesFor(srcSession);
+  const srcShips = await db.orm.public.RefereeShip.where({ fleetId: srcFleet.id }).all();
+
+  const spec = fleetFor(teams.length, exercises.length);
+  if (remainingSizes(spec, srcShips.map((s) => s.size)).length || srcShips.length !== spec.length) {
+    return { error: "Cette flotte ne correspond pas à la grille de cette séance." };
+  }
+
+  const planned: { size: number; orientation: Orientation; direction: string | null; startTeamId: string; startExerciseId: string; cells: { teamId: string; exerciseId: string }[] }[] = [];
+  const taken = new Set<string>();
+  for (const s of srcShips) {
+    const ti = srcTeams.findIndex((t) => t.id === s.startTeamId);
+    const ei = srcEx.findIndex((e) => e.id === s.startExerciseId);
+    if (ti === -1 || ei === -1 || !teams[ti] || !exercises[ei]) return { error: "Cette flotte ne rentre pas dans la grille de cette séance." };
+    const cells = computeCells(teams, exercises, s.size, s.orientation as Orientation, teams[ti].id, exercises[ei].id);
+    if (!cells || cells.some((c) => taken.has(`${c.teamId}_${c.exerciseId}`))) return { error: "Cette flotte ne rentre pas dans la grille de cette séance." };
+    cells.forEach((c) => taken.add(`${c.teamId}_${c.exerciseId}`));
+    planned.push({ size: s.size, orientation: s.orientation as Orientation, direction: s.direction ?? null, startTeamId: teams[ti].id, startExerciseId: exercises[ei].id, cells });
+  }
+
+  await db.transaction(async (tx) => {
+    const fleet = current ?? (await tx.orm.public.RefereeFleet.create({ sessionId, refereeId: evaluator.id, slot: 0, status: "PLACING" }));
+    for (const p of planned) {
+      const ship = await tx.orm.public.RefereeShip.create({
+        fleetId: fleet.id,
+        size: p.size,
+        orientation: p.orientation,
+        direction: p.direction,
+        startTeamId: p.startTeamId,
+        startExerciseId: p.startExerciseId,
+      });
+      for (const c of p.cells) {
+        await tx.orm.public.BoatPlacement.create({ sessionId, teamId: c.teamId, exerciseId: c.exerciseId, ownerId: evaluator.id, shipId: ship.id });
+      }
+    }
+  });
+
+  return { ok: true, placed: planned.length };
+}
+
 // ===== Phase 4-5 : évaluation (reps + qualité) -> tir, atomique, verifie serveur =====
 
 const VALID_NOTES = QUALITY_VALUES; // TI, I, S, B, TB, E — echelle partagee avec l'auto-evaluation

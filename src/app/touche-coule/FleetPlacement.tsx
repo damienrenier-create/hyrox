@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { placeShipAction, deleteShipAction, lockFleetAction } from "./actions";
+import { placeShipAction, deleteShipAction, lockFleetAction, reuseLastFleetAction, type ReusableFleet } from "./actions";
 import { fleetFor } from "@/lib/wod-engines/core/fleet";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { Brand } from "../_components/Brand";
@@ -35,12 +35,14 @@ export function FleetPlacement({
   teams,
   exercises,
   ships: initialShips,
+  reusable = null,
 }: {
   evaluator: { name: string };
   sessionId: string;
   teams: BoardTeam[];
   exercises: BoardExercise[];
   ships: BoardShip[];
+  reusable?: ReusableFleet | null; // flotte d'une seance precedente, rejouable en un geste
 }) {
   const router = useRouter();
   const [ships, setShips] = useState<BoardShip[]>(initialShips);
@@ -138,6 +140,18 @@ export function FleetPlacement({
     });
   }
 
+  function handleReuse() {
+    setError("");
+    startTransition(async () => {
+      const res = await reuseLastFleetAction(sessionId);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function handleLock() {
     setError("");
     startTransition(async () => {
@@ -196,6 +210,11 @@ export function FleetPlacement({
                 : "Touche la case de la poupe, puis celle de la proue : la taille du navire est déduite de la distance. Tu peux aussi choisir sa taille ci-dessus."}
         </p>
         <div className="flex gap-2 flex-wrap items-center">
+          {reusable && ships.length === 0 && (
+            <button onClick={handleReuse} disabled={pending} className={btn.accent}>
+              ♻️ Reprendre ma flotte du {new Date(reusable.date).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit" })} ({reusable.ships} navires)
+            </button>
+          )}
           {firstTap && (
             <button onClick={() => setFirstTap(null)} className={btn.ghost}>
               Annuler la sélection

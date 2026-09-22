@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
 import { buildBoardData } from "@/lib/referee-board";
 import { refereeAccess } from "@/lib/referee-access";
+import { lastFleetAction } from "./actions";
 import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
@@ -83,7 +84,9 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
   }));
 
   if (!fleet || fleet.status !== "LOCKED") {
-    return <FleetPlacement evaluator={evaluator} sessionId={session.id} teams={teams} exercises={exercises} ships={myShips} />;
+    // Flotte deja posee lors d'une autre seance : proposee en un geste (memes positions).
+    const reusable = myShips.length === 0 ? await lastFleetAction(session.id) : null;
+    return <FleetPlacement evaluator={evaluator} sessionId={session.id} teams={teams} exercises={exercises} ships={myShips} reusable={reusable} />;
   }
 
   const myShipIds = new Set(rawShips.map((s) => s.id));
@@ -138,6 +141,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       myScore={myScore}
       ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
       leaderboard={leaderboard}
+      canUnlock={allShots.every((s) => !myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`))}
     />
   );
 }
