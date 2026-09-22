@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useMemo } from "react";
+import { useState, useEffect, useTransition, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   RaceSettings,
@@ -17,6 +17,9 @@ import {
   standings,
   medalInfo,
   maxMedals,
+  medalOrder,
+  tierSizes,
+  dirLabel,
   tierOf,
   startOf,
   elapsed,
@@ -47,26 +50,100 @@ import { finishRaceAction } from "./actions";
 import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
 
-// Paliers de la pyramide (bronze → diamant) : fond + couleur de texte lisible sur chacun.
-const TIER_COLORS: Record<string, string> = { b: "#8a5226", s: "#7b8794", g: "#d9ad00", p: "#8fb0c8", d: "#5fcdeb" };
-const TIER_TEXT: Record<string, string> = { b: "#ffffff", s: "#ffffff", g: "#1d1b18", p: "#1d1b18", d: "#1d1b18" };
-const TIER_LETTERS = ["b", "s", "g", "p", "d"];
+// ===== Tuiles d'equipe : port FIDELE de « compte-tours-wod Pyramide final.html » (memes classes, memes
+// couleurs, memes degrades). 15 medailles = 5 paliers (bronze, argent, or, platine, diamant) x 3 eclats ;
+// fond de la tuile = couleur de la derniere medaille ; diamant = reflet anime ; flash jaune au tour valide.
+const TIERS = ["b", "s", "g", "p", "d"];
+const MEDAL_NAMES = ["Bronze", "Argent", "Or", "Platine", "Diamant"];
+const TOP_RANKED = 5; // les 5 premieres equipes a obtenir une medaille voient leur rang inscrit dedans
+const ordinal = (n: number) => (n === 1 ? "1re" : `${n}e`);
 
-function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
-  const count = Math.min(n, maxMedals(settings));
-  const dots = [];
-  for (let k = 0; k < count; k++) {
-    const info = medalInfo(settings, k);
-    const opacity = info.size === 1 ? 1 : 0.45 + (info.variant / 2) * 0.55;
-    dots.push(
-      <span
-        key={k}
-        className="inline-block w-2 h-2 rounded-full mr-[1px] mb-[1px] ring-1 ring-white/60"
-        style={{ background: TIER_COLORS[TIER_LETTERS[info.tier]], opacity }}
-      />
-    );
+const PYR_STYLES = `
+.pyr{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+@media(min-width:560px){.pyr{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:900px){.pyr{grid-template-columns:repeat(6,1fr)}}
+@media(min-width:1200px){.pyr{grid-template-columns:repeat(8,1fr)}}
+@media(min-width:1600px){.pyr{grid-template-columns:repeat(12,1fr)}}
+.pyr .cell{display:flex;flex-direction:column;min-width:0}
+.pyr .cell .tile{flex:1}
+.pyr .tile{border:0;border-radius:12px;padding:6px 3px 7px;background:#16344E;color:#fff;font:inherit;text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:92px;overflow:hidden;
+  min-width:0;width:100%;position:relative;cursor:pointer;transition:transform .08s}
+.pyr .tile:active{transform:scale(.97)}
+.pyr .tile > span{max-width:100%}
+.pyr .tile .num{font-size:13px;font-weight:800;opacity:.85;line-height:1.1}
+.pyr .tile .reps{font-size:28px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
+.pyr .tile.done .reps{font-size:22px}
+.pyr .tile .lbl{font-size:10.5px;opacity:.88;line-height:1.15;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pyr .tile .who{font-size:9.5px;opacity:.75;padding:0 3px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pyr .tile.unset{box-shadow:inset 0 0 0 3px #FFC93C}
+.pyr .ycard{margin-top:3px;width:100%;min-height:19px;border:1px dashed #D2B200;background:#FFFBE6;color:#6B5600;border-radius:8px;
+  padding:1px 6px;font:700 10.5px/1.2 inherit;display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.pyr .ycard.has{border-style:solid;background:#FFF1A6;color:#4A3B00}
+.pyr .ycard:active{background:#FFE36B}
+.pyr .yc{width:8px;height:11px;border-radius:1.5px;background:#FFD200;box-shadow:0 0 0 1px #A88700;display:inline-block;transform:rotate(-8deg);flex:none}
+.pyr .yplus{font-weight:600;opacity:.75}
+.pyr .medals{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:2px 3px;max-width:120px;margin:0 auto 3px;min-height:12px}
+.pyr .trio{display:flex;gap:1px}
+.pyr .md{width:12px;height:12px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 1px rgba(0,0,0,.30);font:800 8px/1 "Helvetica Neue",Arial,sans-serif;color:#1A1A1A;text-shadow:none}
+.pyr .md i{font-style:normal;display:block}
+.pyr .md.b0{background:radial-gradient(circle at 40% 35%,#B9906E,#8C5E3A 60%,#664127);color:#FFF}
+.pyr .md.b1{background:radial-gradient(circle at 34% 30%,#EBC39C,#C27A3E 55%,#7E4A1E)}
+.pyr .md.b2{background:radial-gradient(circle at 30% 26%,#FFE3C4 0%,#E3903F 38%,#9A5520 100%);box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 4px rgba(227,144,63,.85)}
+.pyr .md.s0{background:radial-gradient(circle at 40% 35%,#C4C4C4,#979797 60%,#6E6E6E)}
+.pyr .md.s1{background:radial-gradient(circle at 34% 30%,#F2F2F2,#B8B8B8 55%,#7A7A7A)}
+.pyr .md.s2{background:radial-gradient(circle at 30% 26%,#FFFFFF 0%,#E4E4E4 35%,#9A9A9A 100%);box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 4px rgba(255,255,255,.95)}
+.pyr .md.g0{background:radial-gradient(circle at 40% 35%,#D6C07E,#B39433 60%,#86690F)}
+.pyr .md.g1{background:radial-gradient(circle at 34% 30%,#FFF0A8,#E8BE1E 55%,#9C7400)}
+.pyr .md.g2{background:radial-gradient(circle at 30% 26%,#FFFBE0 0%,#FFD700 38%,#C08A00 100%);box-shadow:0 0 0 1px rgba(0,0,0,.2),0 0 5px rgba(255,215,0,.95)}
+.pyr .md.p0{background:radial-gradient(circle at 40% 35%,#E3EAEE,#AEBFCA 60%,#7D93A2);box-shadow:0 0 0 1px #5A7282}
+.pyr .md.p1{background:radial-gradient(circle at 34% 30%,#FAFDFF,#C9D9E3 50%,#7F9AAC);box-shadow:0 0 0 1px #57758A}
+.pyr .md.p2{background:radial-gradient(circle at 30% 26%,#FFFFFF 0%,#E4F4FC 40%,#8FB9CF 100%);box-shadow:0 0 0 1px #4E7A92,0 0 5px rgba(200,235,250,.95)}
+.pyr .md.d0,.pyr .md.d1,.pyr .md.d2{border-radius:1px;transform:rotate(45deg) scale(.84)}
+.pyr .md.d0 i,.pyr .md.d1 i,.pyr .md.d2 i{transform:rotate(-45deg)}
+.pyr .md.d0{background:linear-gradient(135deg,#EAFBFF,#A3DDEE 60%,#70B9CF);box-shadow:0 0 0 1px #3F8FA8}
+.pyr .md.d1{background:linear-gradient(135deg,#F7FEFF,#B4ECF8 50%,#6CC6DE);box-shadow:0 0 0 1px #3593B0,0 0 3px rgba(95,205,235,.8)}
+.pyr .md.d2{background:linear-gradient(135deg,#FFFFFF,#BDF4FF 40%,#5FCDEB 70%,#FFFFFF);box-shadow:0 0 0 1px #2B8FB0,0 0 7px 1px rgba(95,205,235,.95)}
+.pyr .cell.tier .tile{text-shadow:0 1px 2px rgba(0,0,0,.45)}
+.pyr .cell.t1 .tile{outline:2px solid #CD7F32;outline-offset:-2px;background:linear-gradient(115deg,transparent 35%,rgba(255,205,160,.22) 48%,transparent 62%),linear-gradient(160deg,#8A5226 0%,#5A3316 55%,#3A2010 100%)}
+.pyr .cell.t2 .tile{outline:2px solid #D5DBE0;outline-offset:-2px;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.26) 48%,transparent 62%),linear-gradient(160deg,#7C8894 0%,#4F5B66 55%,#313A43 100%)}
+.pyr .cell.t3 .tile{outline:2px solid #FFD000;outline-offset:-2px;background:linear-gradient(115deg,transparent 35%,rgba(255,232,140,.30) 48%,transparent 62%),linear-gradient(160deg,#A07A08 0%,#6E5200 55%,#463400 100%)}
+.pyr .cell.t4 .tile{outline:2px solid #E4F4FF;outline-offset:-2px;box-shadow:0 0 10px rgba(180,225,245,.65);background:linear-gradient(115deg,transparent 32%,rgba(235,248,255,.36) 47%,transparent 62%),linear-gradient(160deg,#8FA9BA 0%,#4E6A7D 55%,#2C3F4C 100%)}
+.pyr .cell.t4 .tile.unset{box-shadow:inset 0 0 0 3px #FFC93C,0 0 10px rgba(180,225,245,.65)}
+.pyr .cell.t5 .tile{background:linear-gradient(135deg,#0A3350 0%,#17678A 42%,#46B3D1 52%,#17678A 62%,#0A3350 100%);box-shadow:0 0 0 2px #BDF4FF,0 0 16px rgba(95,205,235,.8)}
+.pyr .cell.t5 .tile.unset{box-shadow:inset 0 0 0 3px #FFC93C,0 0 16px rgba(95,205,235,.8)}
+.pyr .cell.t5 .tile::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.5) 45%,transparent 60%);background-size:250% 100%;animation:pyr-sheen 2.4s linear infinite}
+.pyr .cell.t5 .reps{text-shadow:0 0 10px rgba(189,244,255,.9)}
+.pyr .cell .tile.hit{background:#FFC93C !important;color:#0E1A26;text-shadow:none}
+@keyframes pyr-sheen{from{background-position:130% 0}to{background-position:-130% 0}}
+@media (prefers-reduced-motion: reduce){.pyr .cell.t5 .tile::after{animation:none;background-position:50% 0}}
+`;
+
+// medalsHtml() du fichier d'origine : groupes par palier, eclat croissant, rang inscrit pour les 5 premieres.
+function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?: { pos: number; at: number }[] }) {
+  const k = Math.min(n, maxMedals(settings));
+  const sz = tierSizes(settings);
+  const p = pyramid(settings);
+  const groups = [];
+  let idx = 0;
+  for (let i = 0; i < 5 && idx < k; i++) {
+    if (!sz[i]) continue;
+    const items = [];
+    for (let j = 0; j < sz[i] && idx < k; j++, idx++) {
+      const m = medalInfo(settings, idx);
+      const o = ord?.[idx];
+      const pos = o ? o.pos : 0;
+      const title = `${MEDAL_NAMES[i]} ${j + 1}/${sz[i]} · tour à ${p[idx]} reps${pos && o ? ` · ${ordinal(pos)} équipe à l'obtenir · ${fmt(o.at)}` : ""}`;
+      items.push(
+        <span key={idx} className={`md ${TIERS[i]}${m.variant}`} title={title}>
+          {pos && pos <= TOP_RANKED ? <i>{pos}</i> : null}
+        </span>
+      );
+    }
+    groups.push(<span key={i} className="trio">{items}</span>);
   }
-  return <span className="flex flex-wrap max-w-[64px]">{dots}</span>;
+  return <span className="medals" aria-label={`${n} médaille${n > 1 ? "s" : ""}`}>{groups}</span>;
 }
 
 export type SessionOption = { id: string; label: string; classes: string[]; open: boolean };
@@ -86,12 +163,45 @@ export function GreffierClient({
   board: BoardData | null;
 }) {
   const router = useRouter();
-  const { ctx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
+  const { ctx: serverCtx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
   const [now, setNow] = useState(() => Date.now());
+
+  // ===== Etat OPTIMISTE : un tap = un tour (ou une carte) affiche IMMEDIATEMENT — medaille, palier, niveau,
+  // classement — sans attendre le serveur. L'action part en arriere-plan ; le re-rendu serveur est groupe
+  // (1,5 s apres la derniere saisie) et absorbe les saisies locales une a une (pas de doublon, pas de saut).
+  type LocalEntry = { teamId: string; at: number; serverCountBefore: number };
+  const [localLaps, setLocalLaps] = useState<LocalEntry[]>([]);
+  const [localCards, setLocalCards] = useState<LocalEntry[]>([]);
+  const localLapsRef = useRef(localLaps);
+  localLapsRef.current = localLaps;
+  const localCardsRef = useRef(localCards);
+  localCardsRef.current = localCards;
+  useEffect(() => {
+    const laps = (teamId: string) => serverCtx.laps.filter((l) => l.teamId === teamId).length;
+    const cards = (teamId: string) => serverCtx.cards.filter((c) => c.teamId === teamId).length;
+    setLocalLaps((ls) => ls.filter((l) => l.serverCountBefore >= laps(l.teamId)));
+    setLocalCards((cs) => cs.filter((c) => c.serverCountBefore >= cards(c.teamId)));
+  }, [serverCtx]);
+  const ctx = useMemo<typeof serverCtx>(() => {
+    if (!localLaps.length && !localCards.length) return serverCtx;
+    return {
+      ...serverCtx,
+      laps: [...serverCtx.laps, ...localLaps.map(({ teamId, at }) => ({ teamId, at }))].sort((a, b) => a.at - b.at),
+      cards: [...serverCtx.cards, ...localCards.map(({ teamId, at }) => ({ teamId, at }))],
+    };
+  }, [serverCtx, localLaps, localCards]);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function scheduleRefresh(ms = 1500) {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => router.refresh(), ms);
+  }
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
+  const lastTap = useRef(new Map<string, number>()); // anti double-tap par equipe (600 ms)
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hitTeam, setHitTeam] = useState<string | null>(null);
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
 
   const isPaused = pauses.some((p) => p.to === null);
@@ -121,6 +231,9 @@ export function GreffierClient({
   }, [phase, startedAtMs, endedAtMs, pauses, now]);
 
   const tl = useMemo(() => timeline(ctx), [ctx]);
+  const ord = useMemo(() => medalOrder(ctx), [ctx]);
+  const membersByTeam = useMemo(() => new Map(teamsWithMembers.map((t) => [t.id, t.members])), [teamsWithMembers]);
+  const startByTeam = useMemo(() => Object.fromEntries(ctx.teams.map((t) => [t.id, exerciseLabels[startOf(ctx, t).id] ?? ""])), [ctx, exerciseLabels]);
   const finishedCount = useMemo(() => ctx.teams.filter((t) => finishAt(ctx, t.id) !== null).length, [ctx]);
   const T = total(ctx.settings);
 
@@ -147,19 +260,60 @@ export function GreffierClient({
   function handlePause() {
     run(() => togglePauseAction(sessionId));
   }
+  function nowElapsed() {
+    return elapsed(startedAtMs, pauses, Date.now()) ?? 0;
+  }
   function handleLap(teamId: string) {
     if (phase !== "run" || isPaused) {
       setOpenTeamId(teamId);
       return;
     }
     if (finishAt(ctx, teamId) !== null) return;
-    run(() => validateLapAction(sessionId, teamId));
+    const t = Date.now();
+    if (t - (lastTap.current.get(teamId) ?? 0) < 600) return; // double-tap accidentel = un seul tour
+    lastTap.current.set(teamId, t);
+    // blink() du fichier d'origine : la tuile flashe en jaune 350 ms + vibration.
+    setHitTeam(teamId);
+    setTimeout(() => setHitTeam((x) => (x === teamId ? null : x)), 350);
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
+    // Affichage immediat, serveur ensuite.
+    const before = serverCtx.laps.filter((l) => l.teamId === teamId).length + localLapsRef.current.filter((l) => l.teamId === teamId).length;
+    setLocalLaps((ls) => [...ls, { teamId, at: nowElapsed(), serverCountBefore: before }]);
+    setError("");
+    startTransition(async () => {
+      const res = await validateLapAction(sessionId, teamId);
+      if ("error" in res) {
+        setError(res.error);
+        setLocalLaps((ls) => ls.filter((l) => !(l.teamId === teamId && l.serverCountBefore === before)));
+        return;
+      }
+      scheduleRefresh();
+    });
   }
   function handleCard(teamId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    run(() => giveCardAction(sessionId, teamId));
+    const before = serverCtx.cards.filter((c) => c.teamId === teamId).length + localCardsRef.current.filter((c) => c.teamId === teamId).length;
+    setLocalCards((cs) => [...cs, { teamId, at: nowElapsed(), serverCountBefore: before }]);
+    setError("");
+    startTransition(async () => {
+      const res = await giveCardAction(sessionId, teamId);
+      if ("error" in res) {
+        setError(res.error);
+        setLocalCards((cs) => cs.filter((c) => !(c.teamId === teamId && c.serverCountBefore === before)));
+        return;
+      }
+      scheduleRefresh();
+    });
   }
   function handleUndo() {
+    // Optimiste : la derniere saisie encore locale disparait tout de suite ; le serveur retire la sienne,
+    // puis un rafraichissement immediat recolle les deux.
+    const lastLap = localLaps[localLaps.length - 1];
+    const lastCard = localCards[localCards.length - 1];
+    if (lastLap || lastCard) {
+      if (!lastCard || (lastLap && lastLap.at >= lastCard.at)) setLocalLaps((ls) => ls.slice(0, -1));
+      else setLocalCards((cs) => cs.slice(0, -1));
+    }
     run(() => undoLastAction(sessionId));
   }
   function handleFinish() {
@@ -333,7 +487,8 @@ export function GreffierClient({
 
       <main className="max-w-[1800px] mx-auto p-4">
         {view === "grid" ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-2">
+          <div className="pyr">
+            <style>{PYR_STYLES}</style>
             {ctx.teams.map((team) => {
               const n = lapsOf(ctx, team.id);
               const fa = finishAt(ctx, team.id);
@@ -341,37 +496,51 @@ export function GreffierClient({
               const tier = tierOf(ctx.settings, n);
               const yc = cardsOf(ctx, team.id);
               const isDone = fa !== null;
-              const tierKey = tier > 0 && !isDone ? TIER_LETTERS[tier - 1] : null;
+              const who = (membersByTeam.get(team.id) ?? []).map((m) => m.firstName).join(", ");
+              // drawGrid() du fichier d'origine : grand chiffre + libelle selon la phase.
+              let cls = "tile";
+              let big: string | number;
+              let lbl: string;
+              if (phase === "pre") {
+                const st = startOf(ctx, team);
+                big = st.number;
+                lbl = `départ · ${exerciseLabels[st.id] ?? ""}`;
+              } else if (isDone) {
+                cls += " done";
+                big = fmt(fa);
+                lbl = `🏁 ${ordinal(arrivalRank(ctx, team.id))} arrivée${tl.late[team.id] != null ? ` · +${fmt(tl.late[team.id])}` : ""}`;
+              } else if (phase === "run") {
+                big = level ?? n;
+                lbl = `reps · tour ${n + 1}/${T} ${dirLabel(ctx.settings, n)}`;
+              } else {
+                big = n;
+                const e = ctx.endOverride.get(team.id);
+                lbl = `sur ${T} · ${e == null ? "fin ?" : e === "NONE" ? "fin : aucun" : `fin : ex. ${ctx.exercises.find((x) => x.id === e)?.number ?? "?"}`}`;
+                if (e == null) cls += " unset";
+              }
+              if (hitTeam === team.id) cls += " hit";
               return (
-                <div key={team.id} className="flex flex-col gap-1">
-                  <button
-                    onClick={() => handleLap(team.id)}
-                    className={cx(
-                      "rounded-2xl p-2 min-h-[92px] flex flex-col items-center justify-center shadow-card transition-transform active:scale-95",
-                      isDone ? "bg-success text-white" : tierKey ? "" : "bg-brand text-white"
-                    )}
-                    style={tierKey ? { background: TIER_COLORS[tierKey], color: TIER_TEXT[tierKey] } : undefined}
-                  >
-                    <span className="text-[11px] font-bold opacity-85">{teamNames[team.id] ?? team.id}</span>
-                    {phase === "pre" && (
-                      <span className="text-[9px] opacity-70 leading-tight text-center line-clamp-1">
-                        {teamsWithMembers.find((t) => t.id === team.id)?.members.map((m) => m.firstName).join(", ") || "—"}
-                      </span>
-                    )}
-                    <span className="font-display text-2xl font-extrabold leading-tight tabular-nums">
-                      {phase === "pre" ? exerciseLabels[startOf(ctx, team).id]?.slice(0, 10) : isDone ? fmt(fa) : level ?? n}
-                    </span>
-                    <span className="text-[10px] opacity-80">
-                      {phase === "pre" ? "départ" : isDone ? `🏁 ${arrivalRank(ctx, team.id)}e` : `tour ${n + 1}/${T}`}
-                    </span>
-                    {phase !== "pre" && <MedalDots settings={ctx.settings} n={n} />}
+                <div key={team.id} className={`cell${tier ? ` tier t${tier}` : ""}`}>
+                  <button type="button" onClick={() => handleLap(team.id)} className={cls} data-team={team.id}>
+                    {phase !== "pre" && <Medals settings={ctx.settings} n={n} ord={ord[team.id]} />}
+                    <span className="num">{teamNames[team.id] ?? team.id}</span>
+                    <span className="reps">{big}</span>
+                    <span className="lbl">{lbl}</span>
+                    {who && <span className="who">{who}</span>}
                   </button>
-                  <button
-                    onClick={(e) => handleCard(team.id, e)}
-                    className={cx("text-[10px] font-bold rounded-lg py-1 transition", yc ? "bg-warn text-warn-ink" : "bg-line/70 text-ink-3 hover:bg-line hover:text-ink")}
-                  >
-                    {yc ? `🟨 ×${yc}` : "+ carton"}
-                  </button>
+                  {phase !== "pre" && (
+                    <button type="button" onClick={(e) => handleCard(team.id, e)} className={`ycard${yc ? " has" : ""}`} aria-label={`Carte jaune pour ${teamNames[team.id] ?? team.id}`}>
+                      {yc ? (
+                        <>
+                          {Array.from({ length: Math.min(yc, 3) }).map((_, i) => <span key={i} className="yc" />)}
+                          {yc > 3 ? ` ×${yc}` : ""}
+                          <span className="yplus">+</span>
+                        </>
+                      ) : (
+                        <span className="yplus">+ carte jaune</span>
+                      )}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -381,7 +550,7 @@ export function GreffierClient({
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (
-          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} />
+          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} />
         )}
       </main>
 

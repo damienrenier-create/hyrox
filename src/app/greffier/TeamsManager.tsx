@@ -26,6 +26,7 @@ type Props = {
   allClasses: string[];
   referees: RefereeView[];
   phase: "pre" | "run" | "post";
+  startByTeam?: Record<string, string>; // Pyramide : atelier de depart de chaque equipe (a annoncer aux eleves)
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -33,7 +34,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -163,6 +164,9 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
                   {team.members.length} élève{team.members.length > 1 ? "s" : ""}
                 </span>
               </div>
+              {startByTeam?.[team.id] && (
+                <p className="text-xs font-bold text-accent-ink bg-accent/25 rounded-md px-1.5 py-0.5 mb-1 truncate">→ Départ : {startByTeam[team.id]}</p>
+              )}
               {team.members.length === 0 ? (
                 <p className="text-xs text-ink-3 italic">Aucun élève encodé</p>
               ) : (
@@ -221,7 +225,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
       {active && (
         <StudentPicker
-          title={active.name}
+          title={startByTeam?.[active.id] ? `${active.name} · départ : ${startByTeam[active.id]}` : active.name}
           classes={classes}
           onClose={() => setActiveTeamId(null)}
           nextLabel={activeIndex >= 0 && activeIndex < teams.length - 1 ? `${teams[activeIndex + 1].name} →` : null}
