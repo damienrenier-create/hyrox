@@ -112,11 +112,12 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       exerciseId: s.targetExerciseId,
       hit: occupiedCells.has(`${s.targetTeamId}_${s.targetExerciseId}`),
     }));
-  const hitsOnMyFleet = allShots.filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`)).length;
+  // Degats subis : uniquement les tirs des AUTRES. Un arbitre peut evaluer une case ou il est pose,
+  // et ce geste d'arbitrage ne doit jamais abimer sa propre flotte ni lui couter un point.
+  const incoming = allShots.filter((s) => s.refereeId !== evaluator.id && myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`));
+  const hitsOnMyFleet = incoming.length;
   // Cases de MA flotte deja touchees : l'arbitre doit voir OU il encaisse, pas seulement un compteur.
-  const damagedCells = allShots
-    .filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`))
-    .map((s) => ({ teamId: s.targetTeamId, exerciseId: s.targetExerciseId }));
+  const damagedCells = incoming.map((s) => ({ teamId: s.targetTeamId, exerciseId: s.targetExerciseId }));
 
   // Classement pirate (meme calcul pour tous : greffier, carte admin, arbitres).
   const board = await buildBoardData(session.id);
@@ -147,7 +148,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       myScore={myScore}
       ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
       leaderboard={leaderboard}
-      canUnlock={allShots.every((s) => !myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`))}
+      canUnlock={incoming.length === 0}
     />
   );
 }

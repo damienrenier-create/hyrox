@@ -401,7 +401,9 @@ export async function submitEvaluationAction(
     return { error: "Place et verrouille ta flotte avant de pouvoir arbitrer." };
   }
 
-  // Règle d'or (§12) : jamais tirer sur sa propre flotte, verifie cote serveur.
+  // Un arbitre PEUT evaluer une case ou se trouve un de ses propres navires : l'evaluation d'un eleve ne
+  // doit jamais dependre de l'endroit ou il a pose ses bateaux. En revanche il IGNORE sa propre flotte :
+  // le tir ne touche que les navires des autres, et ne peut donc pas se saborder.
   const myShips = await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).all();
   const myShipIds = new Set(myShips.map((s) => s.id));
   const cellPlacements = await db.orm.public.BoatPlacement.where({
@@ -409,9 +411,6 @@ export async function submitEvaluationAction(
     teamId: targetTeamId,
     exerciseId: targetExerciseId,
   }).all();
-  if (cellPlacements.some((p) => p.shipId && myShipIds.has(p.shipId))) {
-    return { error: "Tu ne peux pas tirer sur ta propre flotte." };
-  }
 
   // Phase liee a l'etat reel de la session, jamais a une valeur envoyee par le client (§8).
   const phase: "DURING_WOD" | "POST_WOD" = session.raceEndedAt ? "POST_WOD" : "DURING_WOD";
@@ -423,11 +422,6 @@ export async function submitEvaluationAction(
     await db.transaction(async (tx) => {
       const myFleet = await tx.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
       if (!myFleet || myFleet.status !== "LOCKED") throw new GuardError("Place et verrouille ta flotte avant de pouvoir arbitrer.");
-
-      const myShipsNow = await tx.orm.public.RefereeShip.where({ fleetId: myFleet.id }).all();
-      const myShipIdsNow = new Set(myShipsNow.map((s) => s.id));
-      const cellNow = await tx.orm.public.BoatPlacement.where({ sessionId, teamId: targetTeamId, exerciseId: targetExerciseId }).all();
-      if (cellNow.some((p) => p.shipId && myShipIdsNow.has(p.shipId))) throw new GuardError("Tu ne peux pas tirer sur ta propre flotte.");
 
       const myTeams = await tx.orm.public.TeamMember.where({ userId: evaluator.id }).all();
       if (myTeams.some((m) => m.teamId === targetTeamId)) throw new GuardError("Tu ne peux pas arbitrer ta propre équipe.");
@@ -460,8 +454,9 @@ export async function submitEvaluationAction(
     throw e;
   }
 
-  // Resolution des bateaux touches (le mien est deja exclu ci-dessus).
-  const hitShipIds = [...new Set(cellPlacements.filter((p) => p.shipId).map((p) => p.shipId as string))];
+  // Resolution des bateaux touches : MES navires sont exclus, donc evaluer une case ou je suis pose
+  // ne me coute rien. S'il n'y a que moi sur la case, le tir part a l'eau.
+  const hitShipIds = [...new Set(cellPlacements.filter((p) => p.shipId && !myShipIds.has(p.shipId)).map((p) => p.shipId as string))];
   const allShots = await db.orm.public.Shot.where({ sessionId }).all();
   const shotCells = new Set(allShots.map((s) => `${s.targetTeamId}_${s.targetExerciseId}`));
 

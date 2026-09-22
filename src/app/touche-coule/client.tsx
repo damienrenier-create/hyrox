@@ -133,15 +133,16 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   // mes tirs < degats encaisses < epaves des navires coules < case actuellement visee.
   const shots = [...myShots, ...localShots];
   // Une case deja evaluee par moi est definitivement fermee (une seule evaluation par equipe et par
-  // atelier), au meme titre que ma propre flotte et ma propre equipe.
+  // atelier), au meme titre que la ligne de ma propre equipe.
   const myShotCells = new Set(shots.map(key));
+  // Une case portant un de MES navires reste evaluable : l'arbitrage d'un eleve ne depend pas de l'endroit
+  // ou il a pose sa flotte. Le tir ignore simplement ses propres bateaux (rien a encaisser, rien a perdre).
   const isBlocked = (teamId: string, exerciseId: string) =>
-    myCellSet.has(`${teamId}_${exerciseId}`) || myShotCells.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
+    myShotCells.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
   // Sur mobile il n'y a pas de curseur : sans ce message, un tap sur une case fermee ne dit rien du tout
   // et l'eleve croit que l'ecran a plante. On nomme donc toujours la raison du refus.
   const blockedReason = (teamId: string, exerciseId: string): string | null => {
     if (teamId === ownTeam?.id) return `⛔ Ton équipe (${ownTeam.name})`;
-    if (myCellSet.has(`${teamId}_${exerciseId}`)) return "⚓ Un de tes bateaux";
     if (myShotCells.has(`${teamId}_${exerciseId}`)) return "✓ Déjà évaluée";
     return null;
   };

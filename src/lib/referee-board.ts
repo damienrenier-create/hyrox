@@ -110,7 +110,8 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   }
 
   // Tirs, dans l'ordre : touche / coule / a l'eau, et score par tireur (+1 par navire touche, +3 par navire coule).
-  // Un tir touche TOUS les navires de la case sauf ceux du tireur (qui ne peut de toute facon pas viser ses cases).
+  // Un tir touche TOUS les navires de la case SAUF ceux du tireur : il peut evaluer une case ou il est
+  // pose lui-meme, son tir ignore alors sa flotte et part a l'eau s'il n'y a personne d'autre.
   const hitByShip = new Map<string, Set<string>>();
   const stats = new Map<string, { hits: number; sunk: number; misses: number }>();
   const bump = (id: string, k: "hits" | "sunk" | "misses", n = 1) => {
@@ -150,13 +151,15 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   }
 
   // Classement des arbitres (flottes reelles = slot 0, fantomes exclus)
-  const everShot = new Set(shots.map((s) => `${s.teamId}_${s.exerciseId}`));
   const referees: RefereeRow[] = [];
   for (const f of fleets.filter((f) => f.slot === 0)) {
     const u = userById.get(f.refereeId);
     const myShips = ships.filter((s) => s.refereeId === f.refereeId && fleetOfShip.get(s.id)?.id === f.id);
     const myCells = myShips.flatMap((s) => cellsByShip.get(s.id) ?? []);
-    const intact = myCells.filter((c) => !everShot.has(c)).length;
+    // Une case n'est « perdue » que si un AUTRE arbitre l'a visee : evaluer une case ou l'on est pose
+    // soi-meme est un acte d'arbitrage, pas un sabordage, et ne doit pas coûter le point d'intactitude.
+    const shotByOthers = new Set(shots.filter((s) => s.refereeId !== f.refereeId).map((s) => `${s.teamId}_${s.exerciseId}`));
+    const intact = myCells.filter((c) => !shotByOthers.has(c)).length;
     const st = stats.get(f.refereeId) ?? { hits: 0, sunk: 0, misses: 0 };
     referees.push({
       refereeId: f.refereeId,
