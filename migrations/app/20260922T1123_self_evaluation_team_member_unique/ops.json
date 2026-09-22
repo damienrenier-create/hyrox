@@ -1,0 +1,287 @@
+[
+  {
+    "id": "table.selfEvaluation",
+    "label": "Create table \"selfEvaluation\"",
+    "summary": "Creates table \"selfEvaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"selfEvaluation\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"selfEvaluation\"",
+        "sql": "CREATE TABLE \"public\".\"selfEvaluation\" (\n  \"answers\" json NOT NULL,\n  \"id\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"submittedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"selfEvaluation\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.selfEvaluation.selfEvaluation_sessionId_studentId_key",
+    "label": "Add unique constraint on \"selfEvaluation\" (sessionId, studentId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "selfEvaluation_sessionId_studentId_key",
+        "table": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"selfEvaluation_sessionId_studentId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_sessionId_studentId_key",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"selfEvaluation_sessionId_studentId_key\"",
+        "sql": "ALTER TABLE \"public\".\"selfEvaluation\" ADD CONSTRAINT \"selfEvaluation_sessionId_studentId_key\" UNIQUE (\"sessionId\", \"studentId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"selfEvaluation_sessionId_studentId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_sessionId_studentId_key",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.teamMember.teamMember_teamId_userId_key",
+    "label": "Add unique constraint on \"teamMember\" (teamId, userId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "teamMember_teamId_userId_key",
+        "table": "teamMember"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"teamMember_teamId_userId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "teamMember_teamId_userId_key",
+          "public",
+          "\"public\".\"teamMember\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"teamMember_teamId_userId_key\"",
+        "sql": "ALTER TABLE \"public\".\"teamMember\" ADD CONSTRAINT \"teamMember_teamId_userId_key\" UNIQUE (\"teamId\", \"userId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"teamMember_teamId_userId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "teamMember_teamId_userId_key",
+          "public",
+          "\"public\".\"teamMember\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.selfEvaluation.selfEvaluation_sessionId_idx_29f415d4",
+    "label": "Create index \"selfEvaluation_sessionId_idx_29f415d4\" on \"selfEvaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "selfEvaluation_sessionId_idx_29f415d4",
+        "table": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"selfEvaluation_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"selfEvaluation_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"selfEvaluation_sessionId_idx_29f415d4\" ON \"public\".\"selfEvaluation\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"selfEvaluation_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.selfEvaluation.selfEvaluation_studentId_idx_bf255322",
+    "label": "Create index \"selfEvaluation_studentId_idx_bf255322\" on \"selfEvaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "selfEvaluation_studentId_idx_bf255322",
+        "table": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"selfEvaluation_studentId_idx_bf255322\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation_studentId_idx_bf255322\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"selfEvaluation_studentId_idx_bf255322\"",
+        "sql": "CREATE INDEX \"selfEvaluation_studentId_idx_bf255322\" ON \"public\".\"selfEvaluation\" (\"studentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"selfEvaluation_studentId_idx_bf255322\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"selfEvaluation_studentId_idx_bf255322\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.selfEvaluation.selfEvaluation_sessionId_fkey",
+    "label": "Add foreign key \"selfEvaluation_sessionId_fkey\" on \"selfEvaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "selfEvaluation_sessionId_fkey",
+        "table": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"selfEvaluation_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_sessionId_fkey",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"selfEvaluation_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"selfEvaluation\"\nADD CONSTRAINT \"selfEvaluation_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"selfEvaluation_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_sessionId_fkey",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.selfEvaluation.selfEvaluation_studentId_fkey",
+    "label": "Add foreign key \"selfEvaluation_studentId_fkey\" on \"selfEvaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "selfEvaluation_studentId_fkey",
+        "table": "selfEvaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"selfEvaluation_studentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_studentId_fkey",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"selfEvaluation_studentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"selfEvaluation\"\nADD CONSTRAINT \"selfEvaluation_studentId_fkey\"\nFOREIGN KEY (\"studentId\")\nREFERENCES \"public\".\"user\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"selfEvaluation_studentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "selfEvaluation_studentId_fkey",
+          "public",
+          "\"public\".\"selfEvaluation\""
+        ]
+      }
+    ]
+  }
+]

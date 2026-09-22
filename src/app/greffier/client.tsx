@@ -25,7 +25,8 @@ import {
   fmtUp,
   Standing,
 } from "@/lib/wod-engines/templates/pyramide-engine";
-import type { RaceContextBundle } from "./race-actions";
+import type { RaceContextBundle } from "@/lib/race-context";
+import { TeamsManager, type TeamWithMembers } from "./TeamsManager";
 import {
   startRaceAction,
   togglePauseAction,
@@ -58,14 +59,15 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
   return <span className="flex flex-wrap max-w-[64px]">{dots}</span>;
 }
 
-export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundle: RaceContextBundle }) {
+export function GreffierClient({ sessionId, bundle, teamsWithMembers }: { sessionId: string; bundle: RaceContextBundle; teamsWithMembers: TeamWithMembers[] }) {
   const router = useRouter();
   const { ctx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
-  const [view, setView] = useState<"grid" | "results">("grid");
+  const [view, setView] = useState<"grid" | "results" | "teams">("grid");
+  const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
 
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
@@ -257,6 +259,9 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
         <div className="flex gap-2 mt-3">
           <button onClick={() => setView("grid")} className={`text-sm font-bold px-3 py-1 rounded ${view === "grid" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Grille</button>
           <button onClick={() => setView("results")} className={`text-sm font-bold px-3 py-1 rounded ${view === "results" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Résultats</button>
+          <button onClick={() => setView("teams")} className={`text-sm font-bold px-3 py-1 rounded ${view === "teams" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
+            Équipes <span className={`ml-1 text-[10px] px-1.5 rounded-full ${memberCount ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>{memberCount}</span>
+          </button>
         </div>
       </header>
 
@@ -280,6 +285,11 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
                     style={tier > 0 && !isDone ? { background: TIER_COLORS[TIER_LETTERS[tier - 1]] } : undefined}
                   >
                     <span className="text-[11px] font-bold opacity-85">{teamNames[team.id] ?? team.id}</span>
+                    {phase === "pre" && (
+                      <span className="text-[9px] opacity-70 leading-tight text-center line-clamp-1">
+                        {teamsWithMembers.find((t) => t.id === team.id)?.members.map((m) => m.firstName).join(", ") || "—"}
+                      </span>
+                    )}
                     <span className="text-2xl font-black leading-tight">
                       {phase === "pre" ? exerciseLabels[startOf(ctx, team).id]?.slice(0, 10) : isDone ? fmt(fa) : level ?? n}
                     </span>
@@ -298,8 +308,10 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
               );
             })}
           </div>
-        ) : (
+        ) : view === "results" ? (
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} />
+        ) : (
+          <TeamsManager teams={teamsWithMembers} />
         )}
       </main>
 

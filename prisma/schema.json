@@ -36,6 +36,10 @@
       "model": "Score",
       "namespace": "public"
     },
+    "selfEvaluation": {
+      "model": "SelfEvaluation",
+      "namespace": "public"
+    },
     "session": {
       "model": "Session",
       "namespace": "public"
@@ -1106,6 +1110,100 @@
               "table": "score"
             }
           },
+          "SelfEvaluation": {
+            "fields": {
+              "answers": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "studentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "submittedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              },
+              "student": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "studentId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "answers": {
+                  "column": "answers"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "studentId": {
+                  "column": "studentId"
+                },
+                "submittedAt": {
+                  "column": "submittedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "selfEvaluation"
+            }
+          },
           "Session": {
             "fields": {
               "createdAt": {
@@ -1223,6 +1321,21 @@
                 },
                 "to": {
                   "model": "RefereeFleet",
+                  "namespace": "public"
+                }
+              },
+              "selfEvaluations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "SelfEvaluation",
                   "namespace": "public"
                 }
               },
@@ -1778,6 +1891,21 @@
                 },
                 "to": {
                   "model": "RefereeFleet",
+                  "namespace": "public"
+                }
+              },
+              "selfEvaluations": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "studentId"
+                  ]
+                },
+                "to": {
+                  "model": "SelfEvaluation",
                   "namespace": "public"
                 }
               },
@@ -2743,6 +2871,104 @@
               },
               "uniques": []
             },
+            "selfEvaluation": {
+              "columns": {
+                "answers": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "studentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "submittedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "selfEvaluation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "studentId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "selfEvaluation"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "selfEvaluation_sessionId_idx_29f415d4",
+                  "prefix": "selfEvaluation_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "studentId"
+                  ],
+                  "name": "selfEvaluation_studentId_idx_bf255322",
+                  "prefix": "selfEvaluation_studentId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId",
+                    "studentId"
+                  ]
+                }
+              ]
+            },
             "session": {
               "checks": [
                 {
@@ -3112,7 +3338,14 @@
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "teamId",
+                    "userId"
+                  ]
+                }
+              ]
             },
             "user": {
               "checks": [
@@ -3368,10 +3601,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f2fb34c181b3f09f505bde58274900a7cb692cdcacfbe494b5c532f7be462961"
+    "storageHash": "30b14a3453eba066a44081461bded368c9814e5741b7b785f652e4f1d80e2bf7"
   },
   "execution": {
-    "executionHash": "93fead1a290a5ca18737a40a5f0508ed5e314faf419d9e951e51d01541454b0d",
+    "executionHash": "dff0cfb452e16b926ccf41d71cad07a6ecc434082a13298fc6be41dbf320bfd6",
     "mutations": {
       "defaults": [
         {
@@ -3460,6 +3693,17 @@
             "column": "id",
             "namespace": "public",
             "table": "score"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "selfEvaluation"
           }
         },
         {

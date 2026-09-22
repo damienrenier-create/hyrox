@@ -56,10 +56,11 @@ model User {
 
   createdAt         DateTime     @default(now())
 
-  teams          TeamMember[]
-  evaluations    Evaluation[]
-  refereeFleets  RefereeFleet[]
-  shotsFired     Shot[]
+  teams           TeamMember[]
+  evaluations     Evaluation[]
+  refereeFleets   RefereeFleet[]
+  shotsFired      Shot[]
+  selfEvaluations SelfEvaluation[]
 }
 
 model Session {
@@ -77,6 +78,7 @@ model Session {
   refereeFleets   RefereeFleet[]
   shots           Shot[]
   raceState       RaceState?
+  selfEvaluations SelfEvaluation[]
 }
 
 model Team {
@@ -99,6 +101,24 @@ model TeamMember {
   userId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+// Auto-evaluation d'un eleve participant, ouverte 24h apres la fin de son equipe / du WOD.
+// answers = { [criterionId]: "TI"|"I"|"S"|"B"|"TB"|"E" } (voir wod-engines/core/self-eval.ts)
+model SelfEvaluation {
+  id          String   @id @default(uuid())
+  session     Session  @relation(fields: [sessionId], references: [id])
+  sessionId   String
+  student     User     @relation(fields: [studentId], references: [id])
+  studentId   String
+  answers     Json
+  submittedAt DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
 }
 
 model Evaluation {

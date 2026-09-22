@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
 import { broadcastShot } from "@/lib/firebase/firebase-sync";
 import { submitEvaluationAction } from "./actions";
+import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 
 const REFRESH_MS = 5000;
@@ -132,7 +133,10 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       <header className="p-4 relative z-10 border-b border-amber-800/40 bg-[#062230]/80 backdrop-blur-md flex justify-between items-center gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-black tracking-widest text-amber-300 uppercase drop-shadow-[0_0_6px_rgba(217,180,80,0.4)]">Touché-Coulé 🏴‍☠️</h1>
-          <div className="text-[10px] text-amber-200/50 truncate">{evaluator.name}</div>
+          <div className="text-[10px] text-amber-200/50 truncate">
+            {evaluator.name}
+            {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-amber-200/80">mon espace</a></>}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="px-3 py-1 bg-amber-900/30 rounded text-xs font-bold border border-amber-700 text-amber-300">🏆 {score} pts</div>
@@ -178,14 +182,15 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
                 <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Reps</div>
                 <div className="text-4xl font-black text-cyan-400">{reps || "0"}</div>
               </div>
-              <div className="flex-[2] grid grid-cols-5 gap-1">
-                {[{ l: "TI", v: -1, c: "text-red-500" }, { l: "I", v: 0, c: "text-orange-500" }, { l: "S", v: 3, c: "text-yellow-500" }, { l: "B", v: 4, c: "text-green-400" }, { l: "TB", v: 5, c: "text-emerald-400" }].map((n) => (
+              <div className="flex-[2] grid grid-cols-6 gap-1">
+                {QUALITY_LEVELS.map((n) => (
                   <button
-                    key={n.l}
-                    onClick={() => setNote(n.v)}
-                    className={`text-sm font-black rounded-xl border-2 transition-all ${note === n.v ? `bg-slate-800 border-cyan-500 ${n.c} shadow-[0_0_10px_rgba(6,182,212,0.3)]` : "bg-slate-900 border-transparent text-slate-600 hover:bg-slate-800"}`}
+                    key={n.code}
+                    onClick={() => setNote(n.value)}
+                    title={n.label}
+                    className={`text-sm font-black rounded-xl border-2 transition-all ${note === n.value ? `bg-slate-800 border-cyan-500 ${n.color} shadow-[0_0_10px_rgba(6,182,212,0.3)]` : "bg-slate-900 border-transparent text-slate-600 hover:bg-slate-800"}`}
                   >
-                    {n.l}
+                    {n.code}
                   </button>
                 ))}
               </div>

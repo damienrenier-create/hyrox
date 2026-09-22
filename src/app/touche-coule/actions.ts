@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { getWodEngine } from "@/lib/wod-engines";
 import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/wod-engines/core/fleet";
+import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 
 export type Direction = "right" | "left" | "down" | "up";
 
@@ -164,7 +165,7 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
 
 // ===== Phase 4-5 : évaluation (reps + qualité) -> tir, atomique, verifie serveur =====
 
-const VALID_NOTES = [-1, 0, 3, 4, 5]; // TI, I, S, B, TB
+const VALID_NOTES = QUALITY_VALUES; // TI, I, S, B, TB, E — echelle partagee avec l'auto-evaluation
 
 export type EvaluationResult =
   | { error: string }

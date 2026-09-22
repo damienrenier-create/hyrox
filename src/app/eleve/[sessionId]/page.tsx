@@ -1,0 +1,108 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { buildRaceContext, teamFinishedAtMs } from "@/lib/race-context";
+import { standings, total, finishAt, startOf, fmt, timeline } from "@/lib/wod-engines/templates/pyramide-engine";
+import { getWodEngine } from "@/lib/wod-engines";
+import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
+import { SELF_EVAL_CRITERIA, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
+import { wodLabel, fmtDate } from "@/lib/student-sessions";
+import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
+
+export default async function EleveSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId } = await params;
+  const user = await getSession();
+  if (!user) redirect("/");
+  if (user.role !== "STUDENT") redirect("/eleve");
+
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) redirect("/eleve");
+
+  // Acces uniquement si l'eleve a ete encode (par identifiant) dans une equipe de cette seance.
+  const teams = await db.orm.public.Team.where({ sessionId }).all();
+  const memberships = await db.orm.public.TeamMember.where({ userId: user.id }).all();
+  const myTeam = teams.find((t) => memberships.some((m) => m.teamId === t.id));
+  if (!myTeam) redirect("/eleve");
+
+  const teammatesRaw = await db.orm.public.TeamMember.where({ teamId: myTeam.id }).all();
+  const teammates: string[] = [];
+  for (const tm of teammatesRaw) {
+    if (tm.userId === user.id) continue;
+    const u = await db.orm.public.User.where({ id: tm.userId }).first();
+    if (u) teammates.push(`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+  }
+
+  const bundle = await buildRaceContext(sessionId);
+  const { ctx, teamNames, exerciseLabels } = bundle;
+  const ended = !!session.raceEndedAt;
+  const T = total(ctx.settings);
+  const tl = timeline(ctx);
+  const st = standings(ctx, ended);
+  const results: ResultRow[] = st.map((s, i) => ({
+    rank: i + 1,
+    teamId: s.team.id,
+    teamName: teamNames[s.team.id] ?? s.team.id,
+    laps: Math.min(s.n, T),
+    lapsTotal: T,
+    time: s.done ? fmt(s.finishAt) : null,
+    late: tl.late[s.team.id] != null ? fmt(tl.late[s.team.id]) : null,
+    start: exerciseLabels[startOf(ctx, s.team).id] ?? "",
+    reps: s.reps,
+    cards: s.yellowCards,
+    mine: s.team.id === myTeam.id,
+  }));
+
+  // Evaluations donnees par les arbitres sur MON equipe (anonymes pour l'eleve).
+  const exerciseNumber: Record<string, number> = {};
+  for (const e of getWodEngine(session.wodType).exercises) exerciseNumber[e.id] = e.number;
+  const evals = await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
+  const refereeEvals: RefereeEvalRow[] = evals
+    .map((e) => ({
+      exerciseId: e.exerciseId,
+      exerciseNumber: exerciseNumber[e.exerciseId] ?? 0,
+      exerciseLabel: exerciseLabels[e.exerciseId] ?? e.exerciseId,
+      reps: e.repsObserved,
+      quality: qualityCodeFromValue(e.note),
+      at: new Date(String(e.createdAt)).getTime(),
+    }))
+    .sort((a, b) => a.exerciseNumber - b.exerciseNumber || a.at - b.at);
+
+  // Fenetre d'auto-evaluation : 24h a partir de l'arrivee de l'equipe (sinon de la fin officielle du WOD).
+  const finishedAt = teamFinishedAtMs(bundle, finishAt(ctx, myTeam.id));
+  const raceEndedAtMs = session.raceEndedAt ? new Date(String(session.raceEndedAt)).getTime() : null;
+  const win = selfEvalWindow(finishedAt, raceEndedAtMs);
+  const existing = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: user.id }).first();
+
+  return (
+    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 font-sans">
+      <header className="bg-white border-b-4 border-slate-900 px-4 py-3 flex items-center gap-3">
+        <Link href="/eleve" className="text-slate-500 font-black text-xl leading-none" aria-label="Retour">‹</Link>
+        <div className="min-w-0">
+          <h1 className="text-lg font-black leading-tight truncate">{wodLabel(session.wodType)}</h1>
+          <p className="text-xs text-slate-500 truncate">
+            {fmtDate(session.createdAt)} · {myTeam.name}
+            {teammates.length > 0 && <> · avec {teammates.join(", ")}</>}
+          </p>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto p-4">
+        <WodView
+          sessionId={sessionId}
+          ended={ended}
+          myTeamName={myTeam.name}
+          results={results}
+          refereeEvals={refereeEvals}
+          criteria={SELF_EVAL_CRITERIA}
+          selfEval={{
+            initial: existing ? (existing.answers as Record<string, string>) : null,
+            state: win.isOpen ? "open" : win.notYet ? "notYet" : "expired",
+            closesAt: win.closesAt,
+            submittedAt: existing ? new Date(String(existing.submittedAt)).getTime() : null,
+          }}
+        />
+      </main>
+    </div>
+  );
+}

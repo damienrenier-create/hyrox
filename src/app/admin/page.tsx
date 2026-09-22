@@ -19,7 +19,14 @@ export default async function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-50 font-mono p-8">
-      <h1 className="text-3xl font-black text-cyan-400 mb-8 uppercase tracking-widest">Master Admin - Console</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+        <h1 className="text-3xl font-black text-cyan-400 uppercase tracking-widest">Master Admin - Console</h1>
+        <nav className="flex gap-2 text-sm">
+          <a href="/admin/auto-evaluations" className="bg-slate-900 border border-cyan-800 hover:border-cyan-400 text-cyan-200 px-3 py-2 rounded">Auto-évaluations</a>
+          <a href="/greffier" className="bg-slate-900 border border-cyan-800 hover:border-cyan-400 text-cyan-200 px-3 py-2 rounded">Greffier</a>
+          <a href="/touche-coule" className="bg-slate-900 border border-cyan-800 hover:border-cyan-400 text-cyan-200 px-3 py-2 rounded">Touché-Coulé</a>
+        </nav>
+      </div>
       
       <div className="bg-slate-900 border border-cyan-900 rounded-xl p-6 max-w-2xl shadow-xl">
         <h2 className="text-xl font-bold mb-4">Création de Session</h2>

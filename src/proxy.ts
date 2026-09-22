@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { decrypt } from "@/lib/auth";
 
-const protectedRoutes = ["/greffier", "/touche-coule"];
+const protectedRoutes = ["/greffier", "/touche-coule", "/eleve"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -39,5 +39,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/greffier/:path*", "/touche-coule/:path*"],
+  matcher: ["/greffier/:path*", "/touche-coule/:path*", "/eleve/:path*"],
 };

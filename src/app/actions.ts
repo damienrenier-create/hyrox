@@ -105,5 +105,5 @@ export async function studentLoginAction(
     },
     remember
   );
-  redirect("/touche-coule");
+  redirect("/eleve");
 }
