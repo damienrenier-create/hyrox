@@ -262,8 +262,8 @@ export function Board({
               const { left, top } = cellPos(ti, ei);
               const marker = markerAt.get(`${team.id}_${ex.id}`);
               const kind = marker?.kind;
-              // Case a moi qui encaisse : liseré rouge et fond rouge, pour la distinguer d'un coup porte
-              // a un adversaire, qui utilise pourtant le meme sprite d'impact.
+              // Ce qui m'appartient est dessine EN TRANSPARENCE, comme ma propre flotte : mes degats et mes
+              // epaves s'effacent au second plan, les coups que je porte restent pleins et lisibles.
               const ownHit = marker?.own && (marker.kind === "hit" || marker.kind === "wreck");
               const disabled = isCellDisabled?.(team, ex) ?? false;
               const inLine = team.id === hlTeam || ex.id === hlEx;
@@ -279,11 +279,11 @@ export function Board({
                   onClick={() => onCellClick?.(team, ex)}
                   className={`absolute rounded-md border flex items-center justify-center transition-colors ${
                     isHl ? "ring-4 ring-accent border-accent bg-accent/40" : inLine ? "border-accent/70 bg-white/15" : "border-white/40 bg-white/10 hover:bg-white/35"
-                  } ${kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""} ${ownHit ? "ring-2 ring-danger border-danger bg-danger/35" : ""} ${cellExtraClass?.(team, ex) ?? ""}`}
+                  } ${kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""} ${cellExtraClass?.(team, ex) ?? ""}`}
                   style={{ left, top, width: CELL, height: CELL, zIndex: kind || isHl ? 6 : 2 }}
                   aria-label={`${team.name} · ${ex.label}`}
                 >
-                  <span>{kind ? MARKER_ICON[kind] : null}</span>
+                  <span style={ownHit ? { opacity: 0.4 } : undefined}>{kind ? MARKER_ICON[kind] : null}</span>
                 </button>
               );
             })

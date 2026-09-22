@@ -49,7 +49,6 @@ import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
 import { finishRaceAction } from "./actions";
-import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
 
 // ===== Tuiles d'equipe : port FIDELE de « compte-tours-wod Pyramide final.html » (memes classes, memes
@@ -125,6 +124,7 @@ const PYR_STYLES = `
 
 /* Classement en tete, sous la grille : port de #leaders du fichier d'origine. */
 .ld{margin-top:12px}
+.ld.top{margin-top:0;margin-bottom:10px}
 .ld ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .ld li{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:#fff;border:1px solid #E6EBEF}
 .ld li.done{background:#EEF9F1;border-color:#BFE3CA}
@@ -483,15 +483,12 @@ export function GreffierClient({
   return (
     <div className={`${ui.page} pb-24`}>
       <RefereeRequestsPopup sessionId={sessionId} initial={pendingRequests} />
+      {/* Haut de l'ecran projete : la seance a gauche, le CHRONOMETRE au centre, le temps limite a droite.
+          Pas de marque ici : sur un ecran projete devant une classe, seule la course compte. */}
       <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-5 min-w-0">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div className="min-w-0 justify-self-start">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Brand />
-                <span className="text-line-2">/</span>
-                <span className={ui.eyebrow}>Greffier</span>
-              </div>
               {sessionOptions.length > 1 ? (
                 <select
                   value={sessionId}
@@ -512,9 +509,13 @@ export function GreffierClient({
                 </p>
               )}
             </div>
-            <p className={cx("font-display text-[3rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>
-              {fmt(liveMs)}
-            </p>
+          </div>
+
+          <p className={cx("justify-self-center font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>
+            {fmt(liveMs)}
+          </p>
+
+          <div className="justify-self-end">
             {phase !== "pre" && (
               <div
                 className={cx(
@@ -533,57 +534,48 @@ export function GreffierClient({
               </div>
             )}
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {phase === "pre" && (
-              <>
-                <button onClick={() => setSettingsOpen(true)} disabled={pending} className={btn.lgGhost}>
-                  ⚙️ Réglages
-                </button>
-                <button onClick={handleStart} disabled={pending} className={btn.lgSuccess}>
-                  Début de course
-                </button>
-              </>
-            )}
-            {phase === "run" && (
-              <>
-                <button onClick={handlePause} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>
-                  {isPaused ? "Reprendre" : "Pause"}
-                </button>
-                <button onClick={handleUndo} disabled={pending} className={btn.lgGhost}>
-                  Annuler le dernier
-                </button>
-                <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>
-                  Fin de course
-                </button>
-              </>
-            )}
-            {phase === "post" && (
-              <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>
-            )}
-            <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
-          </div>
         </div>
         {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
-        <div className={`${ui.segmented} mt-3 flex-wrap`}>
-          <button onClick={() => setView("grid")} className={tabBtn(view === "grid")}>Grille</button>
-          <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Résultats</button>
-          <button onClick={() => setView("score")} className={tabBtn(view === "score")}>Score final</button>
-          <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
-            Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
-            {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
-          </button>
-          {board && (
-            <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
-              Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
-            </button>
-          )}
-        </div>
       </header>
 
       <main className="max-w-[1800px] mx-auto p-4">
         {view === "grid" ? (
           <div className="pyr">
             <style>{PYR_STYLES}</style>
+            {/* Classement EN TETE, AU-DESSUS de la grille : c'est ce que la classe regarde en premier. */}
+            {phase !== "pre" && (
+              <section className="ld top col-span-full">
+                <h3 className={`${ui.eyebrow} mb-1`}>{phase === "post" ? "Classement final" : "En tête"}</h3>
+                {(() => {
+                  const arr = standings(ctx, phase === "post").filter((e) => lapsOf(ctx, e.team.id) > 0);
+                  if (!arr.length) return <p className={ui.hint}>Le classement apparaît au premier tour validé.</p>;
+                  return (
+                    <ol>
+                      {arr.slice(0, 5).map((e, i) => {
+                        const n = lapsOf(ctx, e.team.id);
+                        const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
+                        const who = (membersByTeam.get(e.team.id) ?? []).map((x) => x.firstName).join(", ");
+                        const val = e.done
+                          ? `🏁 ${fmt(e.finishAt)}${tl.late[e.team.id] != null ? ` (+${fmt(tl.late[e.team.id])})` : ""}`
+                          : phase === "post"
+                            ? `${e.reps} reps${e.known ? "" : " ?"}`
+                            : `${n}/${T}`;
+                        return (
+                          <motion.li key={e.team.id} layout className={e.done ? "done" : undefined}>
+                            <span className="rank">{i + 1}</span>
+                            {n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
+                            <span className="team">{teamNames[e.team.id] ?? e.team.id}</span>
+                            {who && <span className="who">{who}</span>}
+                            {e.yellowCards > 0 && <span className="y"><span className="yc" />{e.yellowCards}</span>}
+                            <span className="val">{val}</span>
+                          </motion.li>
+                        );
+                      })}
+                    </ol>
+                  );
+                })()}
+              </section>
+            )}
             {ctx.teams.map((team) => {
               const n = lapsOf(ctx, team.id);
               const fa = finishAt(ctx, team.id);
@@ -639,40 +631,6 @@ export function GreffierClient({
                 </div>
               );
             })}
-            {/* Classement « En tête » sous la grille (drawLeaders du fichier d'origine) */}
-            {phase !== "pre" && (
-              <section className="ld col-span-full">
-                <h3 className={`${ui.eyebrow} mb-1`}>{phase === "post" ? "Classement final" : "En tête"}</h3>
-                {(() => {
-                  const arr = standings(ctx, phase === "post").filter((e) => lapsOf(ctx, e.team.id) > 0);
-                  if (!arr.length) return <p className={ui.hint}>Le classement apparaît au premier tour validé.</p>;
-                  return (
-                    <ol>
-                      {arr.slice(0, 5).map((e, i) => {
-                        const n = lapsOf(ctx, e.team.id);
-                        const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
-                        const who = (membersByTeam.get(e.team.id) ?? []).map((x) => x.firstName).join(", ");
-                        const val = e.done
-                          ? `🏁 ${fmt(e.finishAt)}${tl.late[e.team.id] != null ? ` (+${fmt(tl.late[e.team.id])})` : ""}`
-                          : phase === "post"
-                            ? `${e.reps} reps${e.known ? "" : " ?"}`
-                            : `${n}/${T}`;
-                        return (
-                          <motion.li key={e.team.id} layout className={e.done ? "done" : undefined}>
-                            <span className="rank">{i + 1}</span>
-                            {n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
-                            <span className="team">{teamNames[e.team.id] ?? e.team.id}</span>
-                            {who && <span className="who">{who}</span>}
-                            {e.yellowCards > 0 && <span className="y"><span className="yc" />{e.yellowCards}</span>}
-                            <span className="val">{val}</span>
-                          </motion.li>
-                        );
-                      })}
-                    </ol>
-                  );
-                })()}
-              </section>
-            )}
           </div>
         ) : view === "results" ? (
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} membersByTeam={membersByTeam} />
@@ -684,6 +642,46 @@ export function GreffierClient({
           <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} />
         )}
       </main>
+
+      {/* Barre basse : la navigation et les commandes sont sous le contenu, hors du champ de lecture.
+          Le haut de l'ecran reste consacre au chronometre et au classement. */}
+      <footer className="fixed bottom-0 left-0 right-0 z-20 bg-card/95 backdrop-blur border-t border-line px-4 py-2">
+        <div className="max-w-[1800px] mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div className={`${ui.segmented} flex-wrap`}>
+            <button onClick={() => setView("grid")} className={tabBtn(view === "grid")}>Grille</button>
+            <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Résultats</button>
+            <button onClick={() => setView("score")} className={tabBtn(view === "score")}>Score final</button>
+            <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
+              Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
+              {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
+            </button>
+            {board && (
+              <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
+                Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {phase === "pre" && (
+              <>
+                <button onClick={() => setSettingsOpen(true)} disabled={pending} className={btn.lgGhost}>⚙️ Réglages</button>
+                <button onClick={handleStart} disabled={pending} className={btn.lgSuccess}>Début de course</button>
+              </>
+            )}
+            {phase === "run" && (
+              <>
+                <button onClick={handlePause} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>
+                  {isPaused ? "Reprendre" : "Pause"}
+                </button>
+                <button onClick={handleUndo} disabled={pending} className={btn.lgGhost}>Annuler le dernier</button>
+                <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>Fin de course</button>
+              </>
+            )}
+            {phase === "post" && <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>}
+            <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
+          </div>
+        </div>
+      </footer>
 
       {settingsOpen && (
         <SettingsPanel

@@ -11,7 +11,6 @@ import { usePulse } from "../_components/usePulse";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
-import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
 import { displayPseudo } from "@/lib/staff-names";
 
@@ -147,7 +146,8 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
     return null;
   };
   const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
-  // `own` distingue ce que J'ENCAISSE de ce que JE TOUCHE : meme sprite d'impact, liseré rouge sur mes cases.
+  // `own` distingue ce que J'ENCAISSE de ce que JE TOUCHE : meme sprite d'impact, mais dessine en
+  // transparence sur mes cases, comme ma flotte, pour qu'il passe au second plan.
   damagedCells.forEach((c) => markers.push({ ...c, kind: "hit", own: true }));
   wreckCells.forEach((c) => markers.push({ ...c, kind: "wreck", own: myCellSet.has(key(c)) }));
   if (target) markers.push({ teamId: target.teamId, exerciseId: target.exerciseId, kind: "target" });
@@ -178,15 +178,21 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       </AnimatePresence>
 
       <header className="px-4 py-3 relative z-10 bg-card/95 backdrop-blur border-b border-line flex justify-between items-center gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Brand />
-            <span className="text-line-2">/</span>
-            <h1 className="font-display font-extrabold text-sea-ink truncate">Touché-Coulé 🏴‍☠️</h1>
-          </div>
-          <div className="text-[11px] text-ink-2 truncate">
-            {displayPseudo(evaluator.name)}
-            {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-brand">mon espace</a></>}
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Sortie franche : sur un telephone, le lien de 11 px sous le pseudo etait introuvable. */}
+          <a
+            href={evaluator.role === "STUDENT" ? "/eleve" : "/admin"}
+            aria-label="Quitter le Touché-Coulé"
+            className="w-10 h-10 flex-shrink-0 rounded-full bg-paper hover:bg-line text-ink-2 flex items-center justify-center font-bold text-2xl leading-none"
+          >
+            ‹
+          </a>
+          <div className="min-w-0">
+            <h1 className="font-display font-extrabold text-sea-ink truncate leading-tight">Touché-Coulé 🏴‍☠️</h1>
+            <div className="text-[11px] text-ink-2 truncate">
+              {displayPseudo(evaluator.name)}
+              {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-brand">quitter</a></>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -280,8 +286,8 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             <span className="inline-flex items-center gap-1">
               <img src="/sprites/fx-wreck.png" alt="" width={14} height={14} style={{ imageRendering: "pixelated" }} /> navire coulé
             </span>
-            <span className="inline-flex items-center gap-1 font-bold text-danger-ink">
-              <span className="w-3.5 h-3.5 rounded-sm ring-2 ring-danger border border-danger bg-danger/35 inline-block" /> cadre rouge = c&apos;est à toi
+            <span className="inline-flex items-center gap-1 font-bold">
+              <img src="/sprites/fx-wreck.png" alt="" width={14} height={14} style={{ imageRendering: "pixelated", opacity: 0.4 }} /> en transparence = c&apos;est à toi
             </span>
           </div>
         )}

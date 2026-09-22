@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { placeShipAction, deleteShipAction, lockFleetAction, reuseLastFleetAction, randomFleetAction, type ReusableFleet } from "./actions";
 import { fleetFor } from "@/lib/wod-engines/core/fleet";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
-import { Brand } from "../_components/Brand";
 import { btn, ui } from "@/lib/ui";
 import { displayPseudo } from "@/lib/staff-names";
 
@@ -205,8 +204,14 @@ export function FleetPlacement({
 
       <header className="mb-3 relative z-10">
         <div className="flex items-center gap-2">
-          <Brand />
-          <span className="text-line-2">/</span>
+          {/* Sortie franche, comme sur l'ecran d'arbitrage : un eleve doit pouvoir partir a tout moment. */}
+          <a
+            href="/eleve"
+            aria-label="Quitter"
+            className="w-10 h-10 flex-shrink-0 rounded-full bg-card hover:bg-line text-ink-2 flex items-center justify-center font-bold text-2xl leading-none"
+          >
+            ‹
+          </a>
           <h1 className="font-display font-extrabold text-sea-ink text-lg">Place ta flotte 🏴‍☠️</h1>
         </div>
         <p className="text-sm text-ink-2">
