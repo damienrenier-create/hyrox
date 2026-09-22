@@ -34,9 +34,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'1d79e4d946eaa3cb14d6e306b0f0fed626dbed67f8d22d8dadc95c30771cc312'>;
+  StorageHashBase<'13fb9bea21aa67b4f011575c4d26bf4f7e7463d24c942eca4c13a19bfbef6f18'>;
 export type ExecutionHash =
-  ExecutionHashBase<'93fead1a290a5ca18737a40a5f0508ed5e314faf419d9e951e51d01541454b0d'>;
+  ExecutionHashBase<'ede9a763dac00944ecbe8cbe8b06ce3f19e533649a706c60124fc8caba7367cb'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -262,33 +262,6 @@ export type FieldOutputTypes = {
       readonly isValidated: CodecTypes['pg/bool@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
-    readonly Lap: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly teamId: CodecTypes['pg/text@1']['output'];
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    };
-    readonly RacePause: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly from: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-    };
-    readonly RaceState: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
-      readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-      readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-      readonly rep0: CodecTypes['pg/int4@1']['output'];
-      readonly peak: CodecTypes['pg/int4@1']['output'];
-      readonly step: CodecTypes['pg/int4@1']['output'];
-      readonly runs: CodecTypes['pg/int4@1']['output'];
-      readonly capMin: CodecTypes['pg/int4@1']['output'];
-      readonly afterMin: CodecTypes['pg/int4@1']['output'];
-      readonly penMin: CodecTypes['pg/int4@1']['output'];
-      readonly noStartExerciseIds: CodecTypes['pg/json@1']['output'];
-      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    };
     readonly RefereeFleet: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
@@ -336,8 +309,6 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'] | null;
-      readonly startExerciseId: CodecTypes['pg/text@1']['output'] | null;
-      readonly endExerciseId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
     };
     readonly TeamMember: {
@@ -359,12 +330,6 @@ export type FieldOutputTypes = {
       readonly profileVisibility: 'PUBLIC' | 'PRIVATE' | 'SECRET';
       readonly reliability: CodecTypes['pg/int4@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    };
-    readonly YellowCard: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly teamId: CodecTypes['pg/text@1']['output'];
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
   };
 };
@@ -390,33 +355,6 @@ export type FieldInputTypes = {
       readonly isValidated: CodecTypes['pg/bool@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
-    readonly Lap: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly teamId: CodecTypes['pg/text@1']['input'];
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
-    };
-    readonly RacePause: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly from: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly to: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-    };
-    readonly RaceState: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
-      readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-      readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-      readonly rep0: CodecTypes['pg/int4@1']['input'];
-      readonly peak: CodecTypes['pg/int4@1']['input'];
-      readonly step: CodecTypes['pg/int4@1']['input'];
-      readonly runs: CodecTypes['pg/int4@1']['input'];
-      readonly capMin: CodecTypes['pg/int4@1']['input'];
-      readonly afterMin: CodecTypes['pg/int4@1']['input'];
-      readonly penMin: CodecTypes['pg/int4@1']['input'];
-      readonly noStartExerciseIds: CodecTypes['pg/json@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
-    };
     readonly RefereeFleet: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
@@ -464,8 +402,6 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'] | null;
-      readonly startExerciseId: CodecTypes['pg/text@1']['input'] | null;
-      readonly endExerciseId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
     };
     readonly TeamMember: {
@@ -487,12 +423,6 @@ export type FieldInputTypes = {
       readonly profileVisibility: 'PUBLIC' | 'PRIVATE' | 'SECRET';
       readonly reliability: CodecTypes['pg/int4@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
-    };
-    readonly YellowCard: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly teamId: CodecTypes['pg/text@1']['input'];
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
   };
 };
@@ -517,33 +447,6 @@ export type StorageColumnTypes = {
       readonly repsObserved: CodecTypes['pg/int4@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly lap: {
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly teamId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly racePause: {
-      readonly from: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-    };
-    readonly raceState: {
-      readonly afterMin: CodecTypes['pg/int4@1']['output'];
-      readonly capMin: CodecTypes['pg/int4@1']['output'];
-      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly noStartExerciseIds: CodecTypes['pg/json@1']['output'];
-      readonly peak: CodecTypes['pg/int4@1']['output'];
-      readonly penMin: CodecTypes['pg/int4@1']['output'];
-      readonly rep0: CodecTypes['pg/int4@1']['output'];
-      readonly runs: CodecTypes['pg/int4@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
-      readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-      readonly step: CodecTypes['pg/int4@1']['output'];
     };
     readonly refereeFleet: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -589,12 +492,10 @@ export type StorageColumnTypes = {
       readonly targetTeamId: CodecTypes['pg/text@1']['output'];
     };
     readonly team: {
-      readonly endExerciseId: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
-      readonly startExerciseId: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly teamMember: {
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -615,12 +516,6 @@ export type StorageColumnTypes = {
       readonly reliability: CodecTypes['pg/int4@1']['output'];
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
       readonly sex: 'M' | 'F' | null;
-    };
-    readonly yellowCard: {
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly raceStateId: CodecTypes['pg/text@1']['output'];
-      readonly teamId: CodecTypes['pg/text@1']['output'];
     };
   };
 };
@@ -645,33 +540,6 @@ export type StorageColumnInputTypes = {
       readonly repsObserved: CodecTypes['pg/int4@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly lap: {
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly teamId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly racePause: {
-      readonly from: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly to: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-    };
-    readonly raceState: {
-      readonly afterMin: CodecTypes['pg/int4@1']['input'];
-      readonly capMin: CodecTypes['pg/int4@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly noStartExerciseIds: CodecTypes['pg/json@1']['input'];
-      readonly peak: CodecTypes['pg/int4@1']['input'];
-      readonly penMin: CodecTypes['pg/int4@1']['input'];
-      readonly rep0: CodecTypes['pg/int4@1']['input'];
-      readonly runs: CodecTypes['pg/int4@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
-      readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
-      readonly step: CodecTypes['pg/int4@1']['input'];
     };
     readonly refereeFleet: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -717,12 +585,10 @@ export type StorageColumnInputTypes = {
       readonly targetTeamId: CodecTypes['pg/text@1']['input'];
     };
     readonly team: {
-      readonly endExerciseId: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
-      readonly startExerciseId: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly teamMember: {
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -743,12 +609,6 @@ export type StorageColumnInputTypes = {
       readonly reliability: CodecTypes['pg/int4@1']['input'];
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
       readonly sex: 'M' | 'F' | null;
-    };
-    readonly yellowCard: {
-      readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly raceStateId: CodecTypes['pg/text@1']['input'];
-      readonly teamId: CodecTypes['pg/text@1']['input'];
     };
   };
 };
@@ -784,19 +644,16 @@ export namespace Models {
     createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     boatPlacements: public_BoatPlacement[];
     evaluations: public_Evaluation[];
-    raceState: public_RaceState | null;
     refereeFleets: public_RefereeFleet[];
     shots: public_Shot[];
     teams: public_Team[];
     readonly [RelationKeys]?:
-      'boatPlacements' | 'evaluations' | 'raceState' | 'refereeFleets' | 'shots' | 'teams';
+      'boatPlacements' | 'evaluations' | 'refereeFleets' | 'shots' | 'teams';
   };
   export type public_Team = {
     id: CodecTypes['pg/text@1']['output'];
     name: CodecTypes['pg/text@1']['output'];
     order: CodecTypes['pg/int4@1']['output'] | null;
-    startExerciseId: CodecTypes['pg/text@1']['output'] | null;
-    endExerciseId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     evaluations: public_Evaluation[];
     members: public_TeamMember[];
@@ -873,50 +730,6 @@ export namespace Models {
     fleet: public_RefereeFleet;
     readonly [RelationKeys]?: 'cells' | 'fleet';
   };
-  export type public_RaceState = {
-    id: CodecTypes['pg/text@1']['output'];
-    sessionId: CodecTypes['pg/text@1']['output'];
-    startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-    endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-    rep0: CodecTypes['pg/int4@1']['output'];
-    peak: CodecTypes['pg/int4@1']['output'];
-    step: CodecTypes['pg/int4@1']['output'];
-    runs: CodecTypes['pg/int4@1']['output'];
-    capMin: CodecTypes['pg/int4@1']['output'];
-    afterMin: CodecTypes['pg/int4@1']['output'];
-    penMin: CodecTypes['pg/int4@1']['output'];
-    noStartExerciseIds: CodecTypes['pg/json@1']['output'];
-    createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    cards: public_YellowCard[];
-    laps: public_Lap[];
-    pauses: public_RacePause[];
-    session: public_Session;
-    readonly [RelationKeys]?: 'cards' | 'laps' | 'pauses' | 'session';
-  };
-  export type public_RacePause = {
-    id: CodecTypes['pg/text@1']['output'];
-    raceStateId: CodecTypes['pg/text@1']['output'];
-    from: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
-    raceState: public_RaceState;
-    readonly [RelationKeys]?: 'raceState';
-  };
-  export type public_Lap = {
-    id: CodecTypes['pg/text@1']['output'];
-    raceStateId: CodecTypes['pg/text@1']['output'];
-    teamId: CodecTypes['pg/text@1']['output'];
-    at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    raceState: public_RaceState;
-    readonly [RelationKeys]?: 'raceState';
-  };
-  export type public_YellowCard = {
-    id: CodecTypes['pg/text@1']['output'];
-    raceStateId: CodecTypes['pg/text@1']['output'];
-    teamId: CodecTypes['pg/text@1']['output'];
-    at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-    raceState: public_RaceState;
-    readonly [RelationKeys]?: 'raceState';
-  };
   export type public_Shot = {
     id: CodecTypes['pg/text@1']['output'];
     sessionId: CodecTypes['pg/text@1']['output'];
@@ -944,10 +757,6 @@ export declare const models: {
     Score: Models.public_Score;
     RefereeFleet: Models.public_RefereeFleet;
     RefereeShip: Models.public_RefereeShip;
-    RaceState: Models.public_RaceState;
-    RacePause: Models.public_RacePause;
-    Lap: Models.public_Lap;
-    YellowCard: Models.public_YellowCard;
     Shot: Models.public_Shot;
   };
 };
@@ -1177,228 +986,6 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'user';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
-            readonly lap: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly raceStateId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly teamId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly at: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
-              indexes: readonly [
-                {
-                  readonly name: 'lap_raceStateId_teamId_idx_76b9cf9a';
-                  readonly prefix: 'lap_raceStateId_teamId_idx';
-                  readonly columns: readonly ['raceStateId', 'teamId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'lap_raceStateId_idx_1a905bb3';
-                  readonly prefix: 'lap_raceStateId_idx';
-                  readonly columns: readonly ['raceStateId'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'lap';
-                    readonly columns: readonly ['raceStateId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'raceState';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
-            readonly racePause: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly raceStateId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly from: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: false;
-                };
-                readonly to: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: true;
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
-              indexes: readonly [
-                {
-                  readonly name: 'racePause_raceStateId_idx_1a905bb3';
-                  readonly prefix: 'racePause_raceStateId_idx';
-                  readonly columns: readonly ['raceStateId'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'racePause';
-                    readonly columns: readonly ['raceStateId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'raceState';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
-            readonly raceState: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly sessionId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly startedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: true;
-                };
-                readonly endedAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: true;
-                };
-                readonly rep0: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 5>;
-                  };
-                };
-                readonly peak: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 10>;
-                  };
-                };
-                readonly step: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 1>;
-                  };
-                };
-                readonly runs: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 2>;
-                  };
-                };
-                readonly capMin: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 45>;
-                  };
-                };
-                readonly afterMin: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 10>;
-                  };
-                };
-                readonly penMin: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 1>;
-                  };
-                };
-                readonly noStartExerciseIds: {
-                  readonly nativeType: 'json';
-                  readonly codecId: 'pg/json@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/json@1', '[]'>;
-                  };
-                };
-                readonly createdAt: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [{ readonly columns: readonly ['sessionId'] }];
-              indexes: readonly [];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'raceState';
-                    readonly columns: readonly ['sessionId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'session';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -1781,16 +1368,6 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/int4@1';
                   readonly nullable: true;
                 };
-                readonly startExerciseId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly endExerciseId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -1969,61 +1546,6 @@ type ContractBase = Omit<
               indexes: readonly [];
               foreignKeys: readonly [];
             };
-            readonly yellowCard: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly raceStateId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly teamId: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly at: {
-                  readonly nativeType: 'timestamptz';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                  readonly nullable: false;
-                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
-              indexes: readonly [
-                {
-                  readonly name: 'yellowCard_raceStateId_teamId_idx_76b9cf9a';
-                  readonly prefix: 'yellowCard_raceStateId_teamId_idx';
-                  readonly columns: readonly ['raceStateId', 'teamId'];
-                  readonly unique: false;
-                },
-                {
-                  readonly name: 'yellowCard_raceStateId_idx_1a905bb3';
-                  readonly prefix: 'yellowCard_raceStateId_idx';
-                  readonly columns: readonly ['raceStateId'];
-                  readonly unique: false;
-                },
-              ];
-              foreignKeys: readonly [
-                {
-                  readonly source: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'yellowCard';
-                    readonly columns: readonly ['raceStateId'];
-                  };
-                  readonly target: {
-                    readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'raceState';
-                    readonly columns: readonly ['id'];
-                  };
-                },
-              ];
-            };
           };
           readonly valueSet: {
             readonly FleetStatus: {
@@ -2085,13 +1607,6 @@ type ContractBase = Omit<
     readonly refereeShip: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'RefereeShip';
-    };
-    readonly raceState: { readonly namespace: 'public' & NamespaceId; readonly model: 'RaceState' };
-    readonly racePause: { readonly namespace: 'public' & NamespaceId; readonly model: 'RacePause' };
-    readonly lap: { readonly namespace: 'public' & NamespaceId; readonly model: 'Lap' };
-    readonly yellowCard: {
-      readonly namespace: 'public' & NamespaceId;
-      readonly model: 'YellowCard';
     };
     readonly shot: { readonly namespace: 'public' & NamespaceId; readonly model: 'Shot' };
   };
@@ -2268,231 +1783,6 @@ type ContractBase = Omit<
                 readonly repsObserved: { readonly column: 'repsObserved' };
                 readonly note: { readonly column: 'note' };
                 readonly isValidated: { readonly column: 'isValidated' };
-                readonly createdAt: { readonly column: 'createdAt' };
-              };
-            };
-          };
-          readonly Lap: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly raceStateId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly teamId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly at: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly raceState: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RaceState';
-                };
-                readonly cardinality: 'N:1';
-                readonly nullable: false;
-                readonly on: {
-                  readonly localFields: readonly ['raceStateId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'lap';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly raceStateId: { readonly column: 'raceStateId' };
-                readonly teamId: { readonly column: 'teamId' };
-                readonly at: { readonly column: 'at' };
-              };
-            };
-          };
-          readonly RacePause: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly raceStateId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly from: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-              readonly to: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly raceState: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RaceState';
-                };
-                readonly cardinality: 'N:1';
-                readonly nullable: false;
-                readonly on: {
-                  readonly localFields: readonly ['raceStateId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'racePause';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly raceStateId: { readonly column: 'raceStateId' };
-                readonly from: { readonly column: 'from' };
-                readonly to: { readonly column: 'to' };
-              };
-            };
-          };
-          readonly RaceState: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly sessionId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly startedAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-              readonly endedAt: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-              readonly rep0: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly peak: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly step: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly runs: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly capMin: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly afterMin: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly penMin: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly noStartExerciseIds: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/json@1' };
-              };
-              readonly createdAt: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly cards: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'YellowCard';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['raceStateId'];
-                };
-              };
-              readonly laps: {
-                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'Lap' };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['raceStateId'];
-                };
-              };
-              readonly pauses: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RacePause';
-                };
-                readonly cardinality: '1:N';
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['raceStateId'];
-                };
-              };
-              readonly session: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'Session';
-                };
-                readonly cardinality: 'N:1';
-                readonly nullable: false;
-                readonly on: {
-                  readonly localFields: readonly ['sessionId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'raceState';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly sessionId: { readonly column: 'sessionId' };
-                readonly startedAt: { readonly column: 'startedAt' };
-                readonly endedAt: { readonly column: 'endedAt' };
-                readonly rep0: { readonly column: 'rep0' };
-                readonly peak: { readonly column: 'peak' };
-                readonly step: { readonly column: 'step' };
-                readonly runs: { readonly column: 'runs' };
-                readonly capMin: { readonly column: 'capMin' };
-                readonly afterMin: { readonly column: 'afterMin' };
-                readonly penMin: { readonly column: 'penMin' };
-                readonly noStartExerciseIds: { readonly column: 'noStartExerciseIds' };
                 readonly createdAt: { readonly column: 'createdAt' };
               };
             };
@@ -2759,18 +2049,6 @@ type ContractBase = Omit<
                   readonly targetFields: readonly ['sessionId'];
                 };
               };
-              readonly raceState: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RaceState';
-                };
-                readonly cardinality: '1:1';
-                readonly nullable: true;
-                readonly on: {
-                  readonly localFields: readonly ['id'];
-                  readonly targetFields: readonly ['sessionId'];
-                };
-              };
               readonly refereeFleets: {
                 readonly to: {
                   readonly namespace: 'public' & NamespaceId;
@@ -2915,14 +2193,6 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
-              readonly startExerciseId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly endExerciseId: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly sessionId: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -2982,8 +2252,6 @@ type ContractBase = Omit<
                 readonly id: { readonly column: 'id' };
                 readonly name: { readonly column: 'name' };
                 readonly order: { readonly column: 'order' };
-                readonly startExerciseId: { readonly column: 'startExerciseId' };
-                readonly endExerciseId: { readonly column: 'endExerciseId' };
                 readonly sessionId: { readonly column: 'sessionId' };
               };
             };
@@ -3157,53 +2425,6 @@ type ContractBase = Omit<
               };
             };
           };
-          readonly YellowCard: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly raceStateId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly teamId: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly at: {
-                readonly nullable: false;
-                readonly type: {
-                  readonly kind: 'scalar';
-                  readonly codecId: 'pg/timestamptz-temporal@1';
-                };
-              };
-            };
-            readonly relations: {
-              readonly raceState: {
-                readonly to: {
-                  readonly namespace: 'public' & NamespaceId;
-                  readonly model: 'RaceState';
-                };
-                readonly cardinality: 'N:1';
-                readonly nullable: false;
-                readonly on: {
-                  readonly localFields: readonly ['raceStateId'];
-                  readonly targetFields: readonly ['id'];
-                };
-              };
-            };
-            readonly storage: {
-              readonly table: 'yellowCard';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly raceStateId: { readonly column: 'raceStateId' };
-                readonly teamId: { readonly column: 'teamId' };
-                readonly at: { readonly column: 'at' };
-              };
-            };
-          };
         };
         readonly enum: {
           readonly Role: {
@@ -3298,30 +2519,6 @@ type ContractBase = Omit<
         {
           readonly ref: {
             readonly namespace: 'public';
-            readonly table: 'lap';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'racePause';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'raceState';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
             readonly table: 'refereeFleet';
             readonly column: 'id';
           };
@@ -3379,14 +2576,6 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'user';
-            readonly column: 'id';
-          };
-          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
-        },
-        {
-          readonly ref: {
-            readonly namespace: 'public';
-            readonly table: 'yellowCard';
             readonly column: 'id';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };

@@ -1,0 +1,647 @@
+[
+  {
+    "id": "table.lap",
+    "label": "Create table \"lap\"",
+    "summary": "Creates table \"lap\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "lap"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"lap\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"lap\"",
+        "sql": "CREATE TABLE \"public\".\"lap\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"raceStateId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"lap\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.racePause",
+    "label": "Create table \"racePause\"",
+    "summary": "Creates table \"racePause\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "racePause"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"racePause\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"racePause\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"racePause\"",
+        "sql": "CREATE TABLE \"public\".\"racePause\" (\n  \"from\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"raceStateId\" text NOT NULL,\n  \"to\" timestamptz,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"racePause\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"racePause\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.raceState",
+    "label": "Create table \"raceState\"",
+    "summary": "Creates table \"raceState\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "raceState"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"raceState\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raceState\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"raceState\"",
+        "sql": "CREATE TABLE \"public\".\"raceState\" (\n  \"afterMin\" int4 DEFAULT 10 NOT NULL,\n  \"capMin\" int4 DEFAULT 45 NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"endedAt\" timestamptz,\n  \"id\" text NOT NULL,\n  \"noStartExerciseIds\" json DEFAULT '\"[]\"'::json NOT NULL,\n  \"peak\" int4 DEFAULT 10 NOT NULL,\n  \"penMin\" int4 DEFAULT 1 NOT NULL,\n  \"rep0\" int4 DEFAULT 5 NOT NULL,\n  \"runs\" int4 DEFAULT 2 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"startedAt\" timestamptz,\n  \"step\" int4 DEFAULT 1 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"raceState\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"raceState\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.yellowCard",
+    "label": "Create table \"yellowCard\"",
+    "summary": "Creates table \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"yellowCard\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"yellowCard\"",
+        "sql": "CREATE TABLE \"public\".\"yellowCard\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"raceStateId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"yellowCard\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.team.endExerciseId",
+    "label": "Add column \"endExerciseId\" to \"team\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "endExerciseId",
+        "table": "team"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"endExerciseId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "endExerciseId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"endExerciseId\"",
+        "sql": "ALTER TABLE \"public\".\"team\" ADD COLUMN \"endExerciseId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"endExerciseId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "endExerciseId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.team.startExerciseId",
+    "label": "Add column \"startExerciseId\" to \"team\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "startExerciseId",
+        "table": "team"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"startExerciseId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "startExerciseId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"startExerciseId\"",
+        "sql": "ALTER TABLE \"public\".\"team\" ADD COLUMN \"startExerciseId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"startExerciseId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "startExerciseId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.raceState.raceState_sessionId_key",
+    "label": "Add unique constraint on \"raceState\" (sessionId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "raceState_sessionId_key",
+        "table": "raceState"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"raceState_sessionId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raceState_sessionId_key",
+          "public",
+          "\"public\".\"raceState\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"raceState_sessionId_key\"",
+        "sql": "ALTER TABLE \"public\".\"raceState\" ADD CONSTRAINT \"raceState_sessionId_key\" UNIQUE (\"sessionId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"raceState_sessionId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raceState_sessionId_key",
+          "public",
+          "\"public\".\"raceState\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.lap.lap_raceStateId_idx_1a905bb3",
+    "label": "Create index \"lap_raceStateId_idx_1a905bb3\" on \"lap\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "lap_raceStateId_idx_1a905bb3",
+        "table": "lap"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"lap_raceStateId_idx_1a905bb3\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"lap_raceStateId_idx_1a905bb3\"",
+        "sql": "CREATE INDEX \"lap_raceStateId_idx_1a905bb3\" ON \"public\".\"lap\" (\"raceStateId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"lap_raceStateId_idx_1a905bb3\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.lap.lap_raceStateId_teamId_idx_76b9cf9a",
+    "label": "Create index \"lap_raceStateId_teamId_idx_76b9cf9a\" on \"lap\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "lap_raceStateId_teamId_idx_76b9cf9a",
+        "table": "lap"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"lap_raceStateId_teamId_idx_76b9cf9a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap_raceStateId_teamId_idx_76b9cf9a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"lap_raceStateId_teamId_idx_76b9cf9a\"",
+        "sql": "CREATE INDEX \"lap_raceStateId_teamId_idx_76b9cf9a\" ON \"public\".\"lap\" (\"raceStateId\", \"teamId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"lap_raceStateId_teamId_idx_76b9cf9a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"lap_raceStateId_teamId_idx_76b9cf9a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.racePause.racePause_raceStateId_idx_1a905bb3",
+    "label": "Create index \"racePause_raceStateId_idx_1a905bb3\" on \"racePause\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "racePause_raceStateId_idx_1a905bb3",
+        "table": "racePause"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"racePause_raceStateId_idx_1a905bb3\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"racePause_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"racePause_raceStateId_idx_1a905bb3\"",
+        "sql": "CREATE INDEX \"racePause_raceStateId_idx_1a905bb3\" ON \"public\".\"racePause\" (\"raceStateId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"racePause_raceStateId_idx_1a905bb3\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"racePause_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.yellowCard.yellowCard_raceStateId_idx_1a905bb3",
+    "label": "Create index \"yellowCard_raceStateId_idx_1a905bb3\" on \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "yellowCard_raceStateId_idx_1a905bb3",
+        "table": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"yellowCard_raceStateId_idx_1a905bb3\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"yellowCard_raceStateId_idx_1a905bb3\"",
+        "sql": "CREATE INDEX \"yellowCard_raceStateId_idx_1a905bb3\" ON \"public\".\"yellowCard\" (\"raceStateId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"yellowCard_raceStateId_idx_1a905bb3\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard_raceStateId_idx_1a905bb3\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.yellowCard.yellowCard_raceStateId_teamId_idx_76b9cf9a",
+    "label": "Create index \"yellowCard_raceStateId_teamId_idx_76b9cf9a\" on \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "yellowCard_raceStateId_teamId_idx_76b9cf9a",
+        "table": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"yellowCard_raceStateId_teamId_idx_76b9cf9a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard_raceStateId_teamId_idx_76b9cf9a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"yellowCard_raceStateId_teamId_idx_76b9cf9a\"",
+        "sql": "CREATE INDEX \"yellowCard_raceStateId_teamId_idx_76b9cf9a\" ON \"public\".\"yellowCard\" (\"raceStateId\", \"teamId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"yellowCard_raceStateId_teamId_idx_76b9cf9a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"yellowCard_raceStateId_teamId_idx_76b9cf9a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.lap.lap_raceStateId_fkey",
+    "label": "Add foreign key \"lap_raceStateId_fkey\" on \"lap\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "lap_raceStateId_fkey",
+        "table": "lap"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"lap_raceStateId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "lap_raceStateId_fkey",
+          "public",
+          "\"public\".\"lap\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"lap_raceStateId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"lap\"\nADD CONSTRAINT \"lap_raceStateId_fkey\"\nFOREIGN KEY (\"raceStateId\")\nREFERENCES \"public\".\"raceState\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"lap_raceStateId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "lap_raceStateId_fkey",
+          "public",
+          "\"public\".\"lap\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.racePause.racePause_raceStateId_fkey",
+    "label": "Add foreign key \"racePause_raceStateId_fkey\" on \"racePause\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "racePause_raceStateId_fkey",
+        "table": "racePause"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"racePause_raceStateId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "racePause_raceStateId_fkey",
+          "public",
+          "\"public\".\"racePause\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"racePause_raceStateId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"racePause\"\nADD CONSTRAINT \"racePause_raceStateId_fkey\"\nFOREIGN KEY (\"raceStateId\")\nREFERENCES \"public\".\"raceState\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"racePause_raceStateId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "racePause_raceStateId_fkey",
+          "public",
+          "\"public\".\"racePause\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.raceState.raceState_sessionId_fkey",
+    "label": "Add foreign key \"raceState_sessionId_fkey\" on \"raceState\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "raceState_sessionId_fkey",
+        "table": "raceState"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"raceState_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raceState_sessionId_fkey",
+          "public",
+          "\"public\".\"raceState\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"raceState_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"raceState\"\nADD CONSTRAINT \"raceState_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"raceState_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "raceState_sessionId_fkey",
+          "public",
+          "\"public\".\"raceState\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.yellowCard.yellowCard_raceStateId_fkey",
+    "label": "Add foreign key \"yellowCard_raceStateId_fkey\" on \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "yellowCard_raceStateId_fkey",
+        "table": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"yellowCard_raceStateId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "yellowCard_raceStateId_fkey",
+          "public",
+          "\"public\".\"yellowCard\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"yellowCard_raceStateId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"yellowCard\"\nADD CONSTRAINT \"yellowCard_raceStateId_fkey\"\nFOREIGN KEY (\"raceStateId\")\nREFERENCES \"public\".\"raceState\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"yellowCard_raceStateId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "yellowCard_raceStateId_fkey",
+          "public",
+          "\"public\".\"yellowCard\""
+        ]
+      }
+    ]
+  }
+]

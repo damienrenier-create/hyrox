@@ -22,16 +22,21 @@ export function CsvUpload() {
         const users: ImportUserPayload[] = [];
         
         for (const row of results.data as any[]) {
-          // Fallback sur différentes casses possibles pour les colonnes
-          const firstName = row["Prenom"] || row["Prénom"] || row["prenom"] || row["First Name"];
-          const lastName = row["Nom"] || row["nom"] || row["Last Name"];
+          // Fallback sur différentes casses/variantes possibles pour les colonnes
+          const firstName = row["Prénom Elève"] || row["Prenom"] || row["Prénom"] || row["prenom"] || row["First Name"];
+          const lastName = row["Nom Elève"] || row["Nom"] || row["nom"] || row["Last Name"];
           const className = row["Classe"] || row["classe"] || row["Class"];
+          const sexRaw = (row["Sexe"] || row["sexe"] || "").toString().trim().toUpperCase();
+          const sex = sexRaw === "M" || sexRaw === "F" ? sexRaw : undefined;
+          const dateOfBirth = row["DateNaiss"] || row["Date de naissance"] || undefined;
 
           if (firstName && lastName) {
             users.push({
               firstName,
               lastName,
               className: className || "Non Assigné",
+              sex,
+              dateOfBirth,
             });
           }
         }
@@ -63,7 +68,7 @@ export function CsvUpload() {
     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mt-8">
       <h2 className="text-xl font-bold text-slate-800 mb-2">📥 Importer une Base Élèves (CSV)</h2>
       <p className="text-slate-500 mb-6 text-sm">
-        Uploadez un fichier .csv contenant les colonnes <strong>Nom</strong>, <strong>Prenom</strong>, et <strong>Classe</strong>. Les élèves existants seront ignorés.
+        Uploadez un fichier .csv contenant les colonnes <strong>Nom Elève</strong>, <strong>Prénom Elève</strong>, <strong>Sexe</strong>, <strong>DateNaiss</strong> et <strong>Classe</strong>. Les élèves déjà importés (même prénom + nom + classe) sont ignorés. Pour un professeur, mets <strong>PROF</strong> dans la colonne Classe.
       </p>
 
       <div className="flex flex-col gap-4">

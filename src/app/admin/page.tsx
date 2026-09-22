@@ -1,7 +1,13 @@
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { createSessionAction } from "./actions";
+import { generateGhostFleetsAction } from "../touche-coule/actions";
 import { db } from "@/lib/db";
+
+async function runGenerateGhostFleets(sessionId: string) {
+  "use server";
+  await generateGhostFleetsAction(sessionId, 2);
+}
 
 export default async function AdminDashboard() {
   const user = await getSession();
@@ -42,7 +48,12 @@ export default async function AdminDashboard() {
             <p className="text-xs text-slate-500 mt-1">Par défaut : 24. Le greffier et les arbitres s'adapteront à ce nombre.</p>
           </div>
 
-          <button 
+          <label className="flex items-center gap-3 text-sm text-cyan-200">
+            <input type="checkbox" name="refereeMode" defaultChecked className="w-5 h-5 accent-cyan-500" />
+            Activer le Touché-Coulé (arbitrage par les élèves)
+          </label>
+
+          <button
             type="submit"
             className="w-full bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black tracking-widest py-4 px-8 rounded shadow-[0_0_15px_rgba(8,145,178,0.5)] transition-transform active:scale-95"
           >
@@ -50,6 +61,23 @@ export default async function AdminDashboard() {
           </button>
         </form>
       </div>
+
+      {activeSession?.refereeMode && (
+        <div className="bg-slate-900 border border-amber-900 rounded-xl p-6 max-w-2xl shadow-xl mt-6">
+          <h2 className="text-xl font-bold mb-2">Flottes fantômes 🏴‍☠️</h2>
+          <p className="text-slate-400 mb-4 text-sm">
+            Génère des flottes déjà verrouillées, portées par Damien Renier, pour garantir des cibles même avec peu d'arbitres.
+          </p>
+          <form action={runGenerateGhostFleets.bind(null, activeSession.id)}>
+            <button
+              type="submit"
+              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black tracking-widest py-3 px-6 rounded shadow-[0_0_15px_rgba(217,119,6,0.4)] transition-transform active:scale-95"
+            >
+              GÉNÉRER 2 FLOTTES FANTÔMES
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

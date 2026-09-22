@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { ensureRaceStateAction, buildRaceContext } from "./race-actions";
 import { GreffierClient } from "./client";
 
 export default async function GreffierPage() {
@@ -9,36 +10,22 @@ export default async function GreffierPage() {
     redirect("/");
   }
 
-  const session = await db.orm.public.Session.where({ isActive: true })
-    .include('teams', (t) => t.include('members', (m) => m.include('user')))
-    .first();
+  // Pas de filtre isActive : le greffier doit pouvoir revoir les resultats finaux juste apres
+  // avoir clos la course, meme si l'admin en a ouvert une autre entre-temps.
+  const session = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).first();
 
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-cyan-50 font-mono text-center">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Aucune session active</h1>
+          <h1 className="text-2xl font-bold mb-2">Aucune session</h1>
         </div>
       </div>
     );
   }
 
-  const serializedTeams = session.teams.map(team => ({
-    ...team,
-    members: team.members.map(member => ({
-      ...member,
-      user: {
-        ...member.user,
-        createdAt: member.user.createdAt.toString()
-      }
-    }))
-  }));
+  await ensureRaceStateAction(session.id);
+  const bundle = await buildRaceContext(session.id);
 
-  return (
-    <GreffierClient 
-      evaluator={evaluator}
-      sessionId={session.id}
-      initialTeams={serializedTeams as any}
-    />
-  );
+  return <GreffierClient sessionId={session.id} bundle={bundle} />;
 }

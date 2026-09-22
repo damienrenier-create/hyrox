@@ -12,6 +12,7 @@ enum WodTemplate {
   @@type("pg/text@1")
   PYRAMIDE_CLASSIQUE = "PYRAMIDE_CLASSIQUE"
   RELAIS_SPRINT = "RELAIS_SPRINT"
+  TOUCHE_COULE_HYROX = "TOUCHE_COULE_HYROX"
 }
 
 enum Visibility {
@@ -21,13 +22,33 @@ enum Visibility {
   SECRET   = "SECRET"
 }
 
+enum Sex {
+  @@type("pg/text@1")
+  M = "M"
+  F = "F"
+}
+
+enum FleetStatus {
+  @@type("pg/text@1")
+  PLACING = "PLACING"
+  LOCKED = "LOCKED"
+}
+
+enum ShotPhase {
+  @@type("pg/text@1")
+  DURING_WOD = "DURING_WOD"
+  POST_WOD = "POST_WOD"
+}
+
 model User {
   id                String       @id @default(uuid())
   role              Role         @default(STUDENT)
-  name              String       @unique
+  name              String
   firstName         String?
   lastName          String?
   className         String?
+  sex               Sex?
+  dateOfBirth       DateTime?
   password          String?
   pinCode           String?
   profileVisibility Visibility   @default(PUBLIC)
@@ -35,27 +56,37 @@ model User {
 
   createdAt         DateTime     @default(now())
 
-  teams       TeamMember[]
-  evaluations Evaluation[]
+  teams          TeamMember[]
+  evaluations    Evaluation[]
+  refereeFleets  RefereeFleet[]
+  shotsFired     Shot[]
 }
 
 model Session {
-  id        String      @id @default(uuid())
-  wodType   WodTemplate
-  isActive  Boolean     @default(true)
-  settings  Json?
-  createdAt DateTime    @default(now())
+  id          String      @id @default(uuid())
+  wodType     WodTemplate
+  isActive    Boolean     @default(true)
+  refereeMode Boolean     @default(false) // Touche-Coule actif pour cette seance, independamment du wodType
+  settings    Json?
+  raceEndedAt DateTime?
+  createdAt   DateTime    @default(now())
 
   teams           Team[]
   evaluations     Evaluation[]
   boatPlacements  BoatPlacement[]
+  refereeFleets   RefereeFleet[]
+  shots           Shot[]
+  raceState       RaceState?
 }
 
 model Team {
-  id        String       @id @default(uuid())
-  name      String
-  sessionId String
-  session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id              String       @id @default(uuid())
+  name            String
+  order           Int?         // position stable de l'equipe dans la grille (pour les bateaux verticaux)
+  startExerciseId String?      // depart pyramide (override du round-robin par defaut)
+  endExerciseId   String?      // dernier exercice termine (saisi apres la fin, pour une equipe non arrivee)
+  sessionId       String
+  session         Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   members     TeamMember[]
   scores      Score[]
@@ -85,22 +116,27 @@ model Evaluation {
   isValidated  Boolean  @default(false)
   createdAt    DateTime @default(now())
 
+  shot Shot?
+
   @@index([sessionId])
   @@index([teamId])
   @@index([evaluatorId])
 }
 
 model BoatPlacement {
-  id           String   @id @default(uuid())
-  session      Session  @relation(fields: [sessionId], references: [id])
+  id           String       @id @default(uuid())
+  session      Session      @relation(fields: [sessionId], references: [id])
   sessionId    String
   teamId       String
   exerciseId   String
-  ownerId      String   // User ID ou "GHOST_DAMZER"
-  createdAt    DateTime @default(now())
+  ownerId      String       // legacy : User ID ou "GHOST_DAMZER" (conserve, plus utilisé pour l'ecriture)
+  shipId       String?
+  ship         RefereeShip? @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
 
   @@index([sessionId])
   @@index([teamId])
+  @@index([sessionId, teamId, exerciseId])
 }
 
 model Score {
@@ -109,4 +145,104 @@ model Score {
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   points    Int
   createdAt DateTime @default(now())
+}
+
+model RefereeFleet {
+  id         String      @id @default(uuid())
+  session    Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  referee    User        @relation(fields: [refereeId], references: [id])
+  refereeId  String
+  slot       Int         @default(0)   // 0 = flotte reelle de l'arbitre ; >0 = flottes fantomes du meme User systeme
+  status     FleetStatus @default(PLACING)
+  lockedAt   DateTime?
+  createdAt  DateTime    @default(now())
+
+  ships RefereeShip[]
+
+  @@unique([sessionId, refereeId, slot])
+  @@index([sessionId])
+}
+
+model RefereeShip {
+  id              String   @id @default(uuid())
+  fleet           RefereeFleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  fleetId         String
+  size            Int
+  orientation     String   // "horizontal" | "vertical"
+  startTeamId     String
+  startExerciseId String
+  createdAt       DateTime @default(now())
+
+  cells BoatPlacement[]
+
+  @@index([fleetId])
+}
+
+model RaceState {
+  id                 String    @id @default(uuid())
+  session            Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId          String    @unique
+  startedAt          DateTime?
+  endedAt            DateTime?
+  rep0               Int       @default(5)
+  peak               Int       @default(10)
+  step               Int       @default(1)
+  runs               Int       @default(2)   // conserve pour export/fidelite ; jamais consomme par le calcul (deja mort dans le fichier d'origine)
+  capMin             Int       @default(45)
+  afterMin           Int       @default(10)
+  penMin             Int       @default(1)
+  noStartExerciseIds Json      @default("[]")
+  createdAt          DateTime  @default(now())
+
+  pauses RacePause[]
+  laps   Lap[]
+  cards  YellowCard[]
+}
+
+model RacePause {
+  id          String    @id @default(uuid())
+  raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
+  raceStateId String
+  from        DateTime
+  to          DateTime?
+
+  @@index([raceStateId])
+}
+
+model Lap {
+  id          String    @id @default(uuid())
+  raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
+  raceStateId String
+  teamId      String
+  at          DateTime  @default(now())
+
+  @@index([raceStateId, teamId])
+}
+
+model YellowCard {
+  id          String    @id @default(uuid())
+  raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
+  raceStateId String
+  teamId      String
+  at          DateTime  @default(now())
+
+  @@index([raceStateId, teamId])
+}
+
+model Shot {
+  id               String    @id @default(uuid())
+  session          Session   @relation(fields: [sessionId], references: [id])
+  sessionId        String
+  referee          User      @relation(fields: [refereeId], references: [id])
+  refereeId        String
+  targetTeamId     String
+  targetExerciseId String
+  evaluation       Evaluation @relation(fields: [evaluationId], references: [id])
+  evaluationId     String    @unique
+  phase            ShotPhase
+  createdAt        DateTime  @default(now())
+
+  @@index([sessionId, targetTeamId, targetExerciseId])
+  @@index([refereeId])
 }

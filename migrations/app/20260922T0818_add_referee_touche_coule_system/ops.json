@@ -1,0 +1,1103 @@
+[
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_7d2d42df",
+    "label": "Drop check constraint \"session_wodType_check_7d2d42df\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_7d2d42df",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_7d2d42df\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7d2d42df",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_7d2d42df\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_7d2d42df\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_7d2d42df\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7d2d42df",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.refereeFleet",
+    "label": "Create table \"refereeFleet\"",
+    "summary": "Creates table \"refereeFleet\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"refereeFleet\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"refereeFleet\"",
+        "sql": "CREATE TABLE \"public\".\"refereeFleet\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lockedAt\" timestamptz,\n  \"refereeId\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"slot\" int4 DEFAULT 0 NOT NULL,\n  \"status\" text DEFAULT 'PLACING' NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"refereeFleet_status_check_433336be\" CHECK (\"status\" IN ('PLACING', 'LOCKED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"refereeFleet\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.refereeShip",
+    "label": "Create table \"refereeShip\"",
+    "summary": "Creates table \"refereeShip\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "refereeShip"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"refereeShip\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeShip\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"refereeShip\"",
+        "sql": "CREATE TABLE \"public\".\"refereeShip\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"fleetId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"orientation\" text NOT NULL,\n  \"size\" int4 NOT NULL,\n  \"startExerciseId\" text NOT NULL,\n  \"startTeamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"refereeShip\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeShip\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.shot",
+    "label": "Create table \"shot\"",
+    "summary": "Creates table \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"shot\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"shot\"",
+        "sql": "CREATE TABLE \"public\".\"shot\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"evaluationId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"phase\" text NOT NULL,\n  \"refereeId\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"targetExerciseId\" text NOT NULL,\n  \"targetTeamId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"shot_phase_check_808a095a\" CHECK (\"phase\" IN ('DURING_WOD', 'POST_WOD'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"shot\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.boatPlacement.shipId",
+    "label": "Add column \"shipId\" to \"boatPlacement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "shipId",
+        "table": "boatPlacement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"shipId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "boatPlacement",
+          "shipId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"shipId\"",
+        "sql": "ALTER TABLE \"public\".\"boatPlacement\" ADD COLUMN \"shipId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"shipId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "boatPlacement",
+          "shipId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.raceEndedAt",
+    "label": "Add column \"raceEndedAt\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "raceEndedAt",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"raceEndedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "raceEndedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"raceEndedAt\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"raceEndedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"raceEndedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "raceEndedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.dateOfBirth",
+    "label": "Add column \"dateOfBirth\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "dateOfBirth",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"dateOfBirth\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dateOfBirth"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"dateOfBirth\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"dateOfBirth\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"dateOfBirth\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "dateOfBirth"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.sex",
+    "label": "Add column \"sex\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "sex",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"sex\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "sex"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"sex\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"sex\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"sex\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "sex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.refereeFleet.refereeFleet_sessionId_refereeId_slot_key",
+    "label": "Add unique constraint on \"refereeFleet\" (sessionId, refereeId, slot)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "refereeFleet_sessionId_refereeId_slot_key",
+        "table": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"refereeFleet_sessionId_refereeId_slot_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_sessionId_refereeId_slot_key",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"refereeFleet_sessionId_refereeId_slot_key\"",
+        "sql": "ALTER TABLE \"public\".\"refereeFleet\" ADD CONSTRAINT \"refereeFleet_sessionId_refereeId_slot_key\" UNIQUE (\"sessionId\", \"refereeId\", \"slot\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"refereeFleet_sessionId_refereeId_slot_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_sessionId_refereeId_slot_key",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_b588abc4",
+    "label": "Add check constraint \"session_wodType_check_b588abc4\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_b588abc4",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_b588abc4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_b588abc4\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_b588abc4\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_b588abc4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.shot.shot_evaluationId_key",
+    "label": "Add unique constraint on \"shot\" (evaluationId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "shot_evaluationId_key",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"shot_evaluationId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_evaluationId_key",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"shot_evaluationId_key\"",
+        "sql": "ALTER TABLE \"public\".\"shot\" ADD CONSTRAINT \"shot_evaluationId_key\" UNIQUE (\"evaluationId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"shot_evaluationId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_evaluationId_key",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.user.user_sex_check_3b7aee9e",
+    "label": "Add check constraint \"user_sex_check_3b7aee9e\" on \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "user_sex_check_3b7aee9e",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_sex_check_3b7aee9e\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_sex_check_3b7aee9e",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"user_sex_check_3b7aee9e\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD CONSTRAINT \"user_sex_check_3b7aee9e\" CHECK (\"sex\" IN ('M', 'F'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_sex_check_3b7aee9e\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_sex_check_3b7aee9e",
+          "public",
+          "\"public\".\"user\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.boatPlacement.boatPlacement_sessionId_teamId_exerciseId_idx_461b904c",
+    "label": "Create index \"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\" on \"boatPlacement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "boatPlacement_sessionId_teamId_exerciseId_idx_461b904c",
+        "table": "boatPlacement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\"",
+        "sql": "CREATE INDEX \"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\" ON \"public\".\"boatPlacement\" (\"sessionId\", \"teamId\", \"exerciseId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"boatPlacement_sessionId_teamId_exerciseId_idx_461b904c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.boatPlacement.boatPlacement_shipId_idx_526fd031",
+    "label": "Create index \"boatPlacement_shipId_idx_526fd031\" on \"boatPlacement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "boatPlacement_shipId_idx_526fd031",
+        "table": "boatPlacement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"boatPlacement_shipId_idx_526fd031\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"boatPlacement_shipId_idx_526fd031\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"boatPlacement_shipId_idx_526fd031\"",
+        "sql": "CREATE INDEX \"boatPlacement_shipId_idx_526fd031\" ON \"public\".\"boatPlacement\" (\"shipId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"boatPlacement_shipId_idx_526fd031\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"boatPlacement_shipId_idx_526fd031\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.refereeFleet.refereeFleet_refereeId_idx_939405ab",
+    "label": "Create index \"refereeFleet_refereeId_idx_939405ab\" on \"refereeFleet\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "refereeFleet_refereeId_idx_939405ab",
+        "table": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"refereeFleet_refereeId_idx_939405ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet_refereeId_idx_939405ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"refereeFleet_refereeId_idx_939405ab\"",
+        "sql": "CREATE INDEX \"refereeFleet_refereeId_idx_939405ab\" ON \"public\".\"refereeFleet\" (\"refereeId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"refereeFleet_refereeId_idx_939405ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet_refereeId_idx_939405ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.refereeFleet.refereeFleet_sessionId_idx_29f415d4",
+    "label": "Create index \"refereeFleet_sessionId_idx_29f415d4\" on \"refereeFleet\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "refereeFleet_sessionId_idx_29f415d4",
+        "table": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"refereeFleet_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"refereeFleet_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"refereeFleet_sessionId_idx_29f415d4\" ON \"public\".\"refereeFleet\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"refereeFleet_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeFleet_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.refereeShip.refereeShip_fleetId_idx_dce13b35",
+    "label": "Create index \"refereeShip_fleetId_idx_dce13b35\" on \"refereeShip\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "refereeShip_fleetId_idx_dce13b35",
+        "table": "refereeShip"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"refereeShip_fleetId_idx_dce13b35\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeShip_fleetId_idx_dce13b35\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"refereeShip_fleetId_idx_dce13b35\"",
+        "sql": "CREATE INDEX \"refereeShip_fleetId_idx_dce13b35\" ON \"public\".\"refereeShip\" (\"fleetId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"refereeShip_fleetId_idx_dce13b35\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"refereeShip_fleetId_idx_dce13b35\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.shot.shot_refereeId_idx_939405ab",
+    "label": "Create index \"shot_refereeId_idx_939405ab\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "shot_refereeId_idx_939405ab",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"shot_refereeId_idx_939405ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_refereeId_idx_939405ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"shot_refereeId_idx_939405ab\"",
+        "sql": "CREATE INDEX \"shot_refereeId_idx_939405ab\" ON \"public\".\"shot\" (\"refereeId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"shot_refereeId_idx_939405ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_refereeId_idx_939405ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.shot.shot_sessionId_idx_29f415d4",
+    "label": "Create index \"shot_sessionId_idx_29f415d4\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "shot_sessionId_idx_29f415d4",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"shot_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"shot_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"shot_sessionId_idx_29f415d4\" ON \"public\".\"shot\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"shot_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.shot.shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93",
+    "label": "Create index \"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\"",
+        "sql": "CREATE INDEX \"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\" ON \"public\".\"shot\" (\"sessionId\", \"targetTeamId\", \"targetExerciseId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"shot_sessionId_targetTeamId_targetExerciseId_idx_15b01c93\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.refereeFleet.refereeFleet_sessionId_fkey",
+    "label": "Add foreign key \"refereeFleet_sessionId_fkey\" on \"refereeFleet\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "refereeFleet_sessionId_fkey",
+        "table": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"refereeFleet_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_sessionId_fkey",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"refereeFleet_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"refereeFleet\"\nADD CONSTRAINT \"refereeFleet_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"refereeFleet_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_sessionId_fkey",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.refereeFleet.refereeFleet_refereeId_fkey",
+    "label": "Add foreign key \"refereeFleet_refereeId_fkey\" on \"refereeFleet\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "refereeFleet_refereeId_fkey",
+        "table": "refereeFleet"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"refereeFleet_refereeId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_refereeId_fkey",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"refereeFleet_refereeId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"refereeFleet\"\nADD CONSTRAINT \"refereeFleet_refereeId_fkey\"\nFOREIGN KEY (\"refereeId\")\nREFERENCES \"public\".\"user\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"refereeFleet_refereeId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeFleet_refereeId_fkey",
+          "public",
+          "\"public\".\"refereeFleet\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.refereeShip.refereeShip_fleetId_fkey",
+    "label": "Add foreign key \"refereeShip_fleetId_fkey\" on \"refereeShip\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "refereeShip_fleetId_fkey",
+        "table": "refereeShip"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"refereeShip_fleetId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeShip_fleetId_fkey",
+          "public",
+          "\"public\".\"refereeShip\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"refereeShip_fleetId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"refereeShip\"\nADD CONSTRAINT \"refereeShip_fleetId_fkey\"\nFOREIGN KEY (\"fleetId\")\nREFERENCES \"public\".\"refereeFleet\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"refereeShip_fleetId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "refereeShip_fleetId_fkey",
+          "public",
+          "\"public\".\"refereeShip\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.boatPlacement.boatPlacement_shipId_fkey",
+    "label": "Add foreign key \"boatPlacement_shipId_fkey\" on \"boatPlacement\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "boatPlacement_shipId_fkey",
+        "table": "boatPlacement"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"boatPlacement_shipId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "boatPlacement_shipId_fkey",
+          "public",
+          "\"public\".\"boatPlacement\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"boatPlacement_shipId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"boatPlacement\"\nADD CONSTRAINT \"boatPlacement_shipId_fkey\"\nFOREIGN KEY (\"shipId\")\nREFERENCES \"public\".\"refereeShip\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"boatPlacement_shipId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "boatPlacement_shipId_fkey",
+          "public",
+          "\"public\".\"boatPlacement\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.shot.shot_sessionId_fkey",
+    "label": "Add foreign key \"shot_sessionId_fkey\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "shot_sessionId_fkey",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"shot_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_sessionId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"shot_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"shot\"\nADD CONSTRAINT \"shot_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"shot_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_sessionId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.shot.shot_refereeId_fkey",
+    "label": "Add foreign key \"shot_refereeId_fkey\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "shot_refereeId_fkey",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"shot_refereeId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_refereeId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"shot_refereeId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"shot\"\nADD CONSTRAINT \"shot_refereeId_fkey\"\nFOREIGN KEY (\"refereeId\")\nREFERENCES \"public\".\"user\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"shot_refereeId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_refereeId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.shot.shot_evaluationId_fkey",
+    "label": "Add foreign key \"shot_evaluationId_fkey\" on \"shot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "shot_evaluationId_fkey",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"shot_evaluationId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_evaluationId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"shot_evaluationId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"shot\"\nADD CONSTRAINT \"shot_evaluationId_fkey\"\nFOREIGN KEY (\"evaluationId\")\nREFERENCES \"public\".\"evaluation\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"shot_evaluationId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_evaluationId_fkey",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  }
+]
