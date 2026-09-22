@@ -25,9 +25,12 @@ export type BoardShip = {
 export type MarkerKind = "hit" | "miss" | "target" | "selected" | "wreck";
 export type SeaTile = "sea" | "sea-foam";
 export type BoardMarker = { teamId: string; exerciseId: string; kind: MarkerKind };
+export type BoardHighlight = { teamId: string; exerciseId: string } | null;
 
+// Position d'une case DANS LE CORPS du plateau (hors etiquettes) : le corps est un conteneur relatif
+// separe des en-tetes, qui eux restent colles (sticky) pendant le defilement sur mobile.
 export function cellPos(tIdx: number, eIdx: number) {
-  return { left: LABEL_W + GAP + eIdx * (CELL + GAP), top: HEADER_H + GAP + tIdx * (CELL + GAP) };
+  return { left: GAP + eIdx * (CELL + GAP), top: GAP + tIdx * (CELL + GAP) };
 }
 
 // Marqueurs fixes : sprites pixel art detoures (voir scripts/build-sprites.mjs). Le point d'ancrage
@@ -52,7 +55,7 @@ const MARKER_ICON: Record<MarkerKind, ReactNode> = {
   selected: <span className="text-[11px] text-accent font-black drop-shadow">⚓</span>,
 };
 
-export function ShipSprite({ ship, tIdx, eIdx, animate }: { ship: BoardShip; tIdx: number; eIdx: number; animate?: boolean }) {
+export function ShipSprite({ ship, tIdx, eIdx, animate, opacity = 1 }: { ship: BoardShip; tIdx: number; eIdx: number; animate?: boolean; opacity?: number }) {
   const horizontal = ship.orientation === "horizontal";
   const length = ship.size * CELL + (ship.size - 1) * GAP;
   const { left, top } = cellPos(tIdx, eIdx);
@@ -80,7 +83,9 @@ export function ShipSprite({ ship, tIdx, eIdx, animate }: { ship: BoardShip; tId
           height: CELL,
           transform,
           transformOrigin: "center",
-          opacity: ship.dimmed ? 0.45 : 1,
+          // Un navire pose ne doit pas cacher les cases qu'il couvre : l'appelant choisit sa transparence
+          // (placement : bien visible ; arbitrage : discret). Un navire coule reste attenue.
+          opacity: ship.dimmed ? Math.min(0.45, opacity) : opacity,
           filter: ship.ghost ? "grayscale(0.7) sepia(0.5) brightness(0.9)" : undefined,
         }}
       >
@@ -107,6 +112,9 @@ export function Board({
   animateShips,
   overlay,
   tile = "sea",
+  highlight = null,
+  shipOpacity = 1,
+  maxHeight = "72dvh",
 }: {
   teams: BoardTeam[];
   exercises: BoardExercise[];
@@ -116,84 +124,128 @@ export function Board({
   isCellDisabled?: (team: BoardTeam, exercise: BoardExercise) => boolean;
   cellExtraClass?: (team: BoardTeam, exercise: BoardExercise) => string;
   animateShips?: boolean;
-  overlay?: ReactNode; // calque d'animations (effets de tir), positionne dans le repere du plateau
+  overlay?: ReactNode; // calque d'animations (effets de tir), positionne dans le repere du CORPS du plateau
   tile?: SeaTile; // mer agitee au placement, mer calme en arbitrage (lisibilite des marqueurs)
+  highlight?: BoardHighlight; // case en cours : sa ligne (equipe) et sa colonne (exercice) sont surlignees
+  shipOpacity?: number; // transparence des navires poses (1 = opaque)
+  maxHeight?: string; // hauteur max de la zone defilante (les en-tetes restent colles)
 }) {
-  const width = LABEL_W + GAP + exercises.length * (CELL + GAP);
-  const height = HEADER_H + GAP + teams.length * (CELL + GAP);
+  const bodyW = GAP + exercises.length * (CELL + GAP);
+  const bodyH = GAP + teams.length * (CELL + GAP);
   const tIndex = new Map(teams.map((t, i) => [t.id, i] as const));
   const eIndex = new Map(exercises.map((e, i) => [e.id, i] as const));
   const markerAt = new Map(markers.map((m) => [`${m.teamId}_${m.exerciseId}`, m.kind] as const));
+  const hlTeam = highlight?.teamId ?? null;
+  const hlEx = highlight?.exerciseId ?? null;
+
+  // Fond des en-tetes : opaque et sombre, pour rester lisibles quand la grille defile dessous.
+  const headerBg = "rgba(6, 34, 48, 0.94)";
 
   return (
-    <div className="overflow-auto pb-6">
+    <div className="overflow-auto pb-2 rounded-2xl border-2 border-sea/40 shadow-card" style={{ maxHeight, WebkitOverflowScrolling: "touch" }}>
       <div
-        className="relative rounded-2xl border-2 border-sea/40 shadow-card"
-        style={{ width, height, backgroundImage: `url(/sprites/${tile}.jpg)`, backgroundSize: "256px", imageRendering: "pixelated" }}
+        style={{
+          display: "grid",
+          gridTemplateColumns: `${LABEL_W}px ${bodyW}px`,
+          gridTemplateRows: `${HEADER_H}px ${bodyH}px`,
+          width: LABEL_W + bodyW,
+          height: HEADER_H + bodyH,
+        }}
       >
-        {/* En-tetes exercices */}
-        {exercises.map((ex, i) => (
-          <div
-            key={ex.id}
-            className="absolute flex items-end justify-center"
-            style={{ left: LABEL_W + GAP + i * (CELL + GAP), top: 4, width: CELL, height: HEADER_H - 8 }}
-            title={ex.label}
-          >
-            <span
-              className="text-[9px] font-bold uppercase text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] leading-none"
-              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: HEADER_H - 10, overflow: "hidden" }}
-            >
-              {ex.label}
-            </span>
-          </div>
-        ))}
+        {/* Coin : colle en haut a gauche */}
+        <div style={{ position: "sticky", top: 0, left: 0, zIndex: 30, background: headerBg }} className="flex items-end justify-center pb-1">
+          <span className="text-[9px] font-bold uppercase text-white/60">éq. ↓ · exo →</span>
+        </div>
 
-        {/* Etiquettes equipes */}
-        {teams.map((team, i) => (
-          <div
-            key={team.id}
-            className="absolute flex items-center pl-1 pr-1 text-[10px] font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] truncate"
-            style={{ left: 0, top: HEADER_H + GAP + i * (CELL + GAP), width: LABEL_W, height: CELL }}
-            title={team.name}
-          >
-            {team.name}
-          </div>
-        ))}
-
-        {/* Cases. Une case marquee passe AU-DESSUS des navires (z 5) : sinon l'impact sur un de mes
-            propres bateaux serait masque par le sprite du bateau. */}
-        {teams.map((team, ti) =>
-          exercises.map((ex, ei) => {
-            const { left, top } = cellPos(ti, ei);
-            const kind = markerAt.get(`${team.id}_${ex.id}`);
-            const disabled = isCellDisabled?.(team, ex) ?? false;
+        {/* En-tetes exercices : colles en haut */}
+        <div style={{ position: "sticky", top: 0, zIndex: 20, background: headerBg, height: HEADER_H }} className="relative">
+          {exercises.map((ex, i) => {
+            const on = ex.id === hlEx;
             return (
-              <button
-                key={`${team.id}_${ex.id}`}
-                type="button"
-                disabled={disabled}
-                onClick={() => onCellClick?.(team, ex)}
-                className={`absolute rounded-md border border-white/40 bg-white/10 hover:bg-white/35 flex items-center justify-center transition-colors ${
-                  kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""
-                } ${cellExtraClass?.(team, ex) ?? ""}`}
-                style={{ left, top, width: CELL, height: CELL, zIndex: kind ? 6 : 2 }}
-                aria-label={`${team.name} · ${ex.label}`}
+              <div
+                key={ex.id}
+                className={`absolute flex items-end justify-center rounded-t-md transition-colors ${on ? "bg-accent" : ""}`}
+                style={{ left: GAP + i * (CELL + GAP), top: 4, width: CELL, height: HEADER_H - 4 }}
+                title={ex.label}
               >
-                <span>{kind ? MARKER_ICON[kind] : null}</span>
-              </button>
+                <span
+                  className={`text-[9px] font-bold uppercase leading-none pb-1 ${on ? "text-ink" : "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"}`}
+                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: HEADER_H - 12, overflow: "hidden" }}
+                >
+                  {ex.label}
+                </span>
+              </div>
             );
-          })
-        )}
+          })}
+        </div>
 
-        {/* Navires (au-dessus des cases, sans capter les clics) */}
-        {ships.map((ship) => {
-          const ti = tIndex.get(ship.startTeamId);
-          const ei = eIndex.get(ship.startExerciseId);
-          if (ti === undefined || ei === undefined) return null;
-          return <ShipSprite key={ship.id} ship={ship} tIdx={ti} eIdx={ei} animate={animateShips} />;
-        })}
+        {/* Etiquettes equipes : collees a gauche */}
+        <div style={{ position: "sticky", left: 0, zIndex: 20, background: headerBg, width: LABEL_W }} className="relative">
+          {teams.map((team, i) => {
+            const on = team.id === hlTeam;
+            return (
+              <div
+                key={team.id}
+                className={`absolute flex items-center px-1 text-[10px] font-bold truncate rounded-l-md transition-colors ${on ? "bg-accent text-ink" : "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"}`}
+                style={{ left: 0, top: GAP + i * (CELL + GAP), width: LABEL_W, height: CELL }}
+                title={team.name}
+              >
+                {team.name}
+              </div>
+            );
+          })}
+        </div>
 
-        {overlay}
+        {/* Corps : mer + cases + navires + effets, dans un repere commun (cellPos) */}
+        <div
+          className="relative"
+          style={{ width: bodyW, height: bodyH, backgroundImage: `url(/sprites/${tile}.jpg)`, backgroundSize: "256px", imageRendering: "pixelated" }}
+        >
+          {/* Bandes de surbrillance : toute la ligne de l'equipe et toute la colonne de l'exercice */}
+          {hlTeam !== null && tIndex.has(hlTeam) && (
+            <div className="absolute pointer-events-none bg-accent/25" style={{ left: 0, top: cellPos(tIndex.get(hlTeam)!, 0).top - GAP / 2, width: bodyW, height: CELL + GAP, zIndex: 1 }} />
+          )}
+          {hlEx !== null && eIndex.has(hlEx) && (
+            <div className="absolute pointer-events-none bg-accent/25" style={{ left: cellPos(0, eIndex.get(hlEx)!).left - GAP / 2, top: 0, width: CELL + GAP, height: bodyH, zIndex: 1 }} />
+          )}
+
+          {/* Cases. Une case marquee passe AU-DESSUS des navires (z 5) : sinon l'impact sur un de mes
+              propres bateaux serait masque par le sprite du bateau. */}
+          {teams.map((team, ti) =>
+            exercises.map((ex, ei) => {
+              const { left, top } = cellPos(ti, ei);
+              const kind = markerAt.get(`${team.id}_${ex.id}`);
+              const disabled = isCellDisabled?.(team, ex) ?? false;
+              const inLine = team.id === hlTeam || ex.id === hlEx;
+              const isHl = team.id === hlTeam && ex.id === hlEx;
+              return (
+                <button
+                  key={`${team.id}_${ex.id}`}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onCellClick?.(team, ex)}
+                  className={`absolute rounded-md border flex items-center justify-center transition-colors ${
+                    isHl ? "ring-4 ring-accent border-accent bg-accent/40" : inLine ? "border-accent/70 bg-white/15" : "border-white/40 bg-white/10 hover:bg-white/35"
+                  } ${kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""} ${cellExtraClass?.(team, ex) ?? ""}`}
+                  style={{ left, top, width: CELL, height: CELL, zIndex: kind || isHl ? 6 : 2 }}
+                  aria-label={`${team.name} · ${ex.label}`}
+                >
+                  <span>{kind ? MARKER_ICON[kind] : null}</span>
+                </button>
+              );
+            })
+          )}
+
+          {/* Navires (au-dessus des cases, sans capter les clics) */}
+          {ships.map((ship) => {
+            const ti = tIndex.get(ship.startTeamId);
+            const ei = eIndex.get(ship.startExerciseId);
+            if (ti === undefined || ei === undefined) return null;
+            return <ShipSprite key={ship.id} ship={ship} tIdx={ti} eIdx={ei} animate={animateShips} opacity={shipOpacity} />;
+          })}
+
+          {overlay}
+        </div>
       </div>
     </div>
   );

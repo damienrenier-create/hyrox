@@ -223,6 +223,8 @@ export function FleetPlacement({
           cellExtraClass={(team, ex) => (validTargets.has(`${team.id}_${ex.id}`) ? "ring-2 ring-accent bg-accent/30" : "")}
           animateShips
           tile="sea-foam"
+          highlight={firstTap}
+          shipOpacity={0.75}
         />
       </div>
     </div>

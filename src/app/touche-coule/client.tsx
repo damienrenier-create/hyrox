@@ -227,6 +227,9 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
                 : ""
           }
           overlay={<BoardEffectsLayer effects={effects} tIndex={tIndex} eIndex={eIndex} onDone={removeEffect} />}
+          highlight={target}
+          shipOpacity={0.35}
+          maxHeight={target ? "38dvh" : "72dvh"}
         />
       </main>
 
@@ -238,9 +241,14 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             exit={{ y: 200, opacity: 0 }}
             className="absolute bottom-0 left-0 right-0 z-20 bg-card border-t-4 border-accent p-4 shadow-pop rounded-t-3xl"
           >
-            <div className="flex justify-between items-center mb-4 px-1">
-              <div className="text-sm text-ink-2 font-semibold">
-                Cible : <span className="text-ink font-extrabold">{teams.find((t) => t.id === target.teamId)?.name}</span> / <span className="text-ink font-extrabold">{exercises.find((e) => e.id === target.exerciseId)?.label}</span>
+            <div className="flex justify-between items-center mb-4 px-1 gap-3">
+              <div className="min-w-0">
+                <div className={ui.eyebrow}>Cible</div>
+                <div className="font-display font-extrabold text-ink text-lg leading-tight truncate">
+                  <span className="bg-accent px-1.5 rounded">{teams.find((t) => t.id === target.teamId)?.name}</span>
+                  <span className="text-ink-2 font-semibold text-sm"> · </span>
+                  <span className="bg-accent px-1.5 rounded">{exercises.find((e) => e.id === target.exerciseId)?.label}</span>
+                </div>
               </div>
               <button onClick={() => setTarget(null)} className={btn.smDanger}>✕ Annuler</button>
             </div>
