@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
 
 async function requireGreffier() {

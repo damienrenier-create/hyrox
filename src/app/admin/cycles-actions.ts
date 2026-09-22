@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { openSession, parseHHMM } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { getWodEngine } from "@/lib/wod-engines";

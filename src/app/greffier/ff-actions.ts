@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FF_COLORS, FF_UNITS } from "@/lib/wod-engines/templates/fete-foraine-engine";
 

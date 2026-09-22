@@ -53,7 +53,7 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
     setError("");
     startTransition(async () => {
       if (teams !== initialTeams) {
-        if (teams < initialTeams && !confirm(`Passer de ${initialTeams} à ${teams} équipes supprime les équipes ${teams + 1}→${initialTeams} et les flottes d'arbitres qui débordent. Continuer ?`)) return;
+        if (teams < initialTeams && !confirm(`Passer de ${initialTeams} à ${teams} équipes supprime les équipes ${teams + 1}→${initialTeams}. Les bateaux des arbitres qui se retrouvent hors carte seront repositionnés automatiquement. Continuer ?`)) return;
         const r = await setTeamCountAction(sessionId, teams);
         if ("error" in r) return setError(r.error);
       }
@@ -85,7 +85,7 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
             <h4 className={`${ui.h3} mb-2`}>Équipes</h4>
             <label className={small}>Nombre d&apos;équipes (1–50)</label>
             <input type="number" min={1} max={50} value={teams} onChange={(e) => setTeams(parseInt(e.target.value || "0", 10))} className={field} />
-            {teams < initialTeams && <p className={`${ui.alertWarn} mt-2 text-[11px]`}>⚠️ La carte sera croppée : équipes {teams + 1}→{initialTeams} et flottes qui débordent supprimées.</p>}
+            {teams < initialTeams && <p className={`${ui.alertWarn} mt-2 text-[11px]`}>⚠️ La carte sera croppée : équipes {teams + 1}→{initialTeams} supprimées. Les bateaux hors carte sont replacés automatiquement, les flottes restent complètes.</p>}
           </section>
 
           {!hidePyramid && (<>

@@ -11,6 +11,7 @@ import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMa
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
 import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
+import { displayPseudo } from "@/lib/staff-names";
 
 const REFRESH_MS = 5000;
 
@@ -175,7 +176,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             <h1 className="font-display font-extrabold text-sea-ink truncate">Touché-Coulé 🏴‍☠️</h1>
           </div>
           <div className="text-[11px] text-ink-2 truncate">
-            {evaluator.name}
+            {displayPseudo(evaluator.name)}
             {evaluator.role === "STUDENT" && <> · <a href="/eleve" className="underline text-brand">mon espace</a></>}
           </div>
         </div>

@@ -1,13 +1,31 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { exercisesFor } from "@/lib/session-exercises";
 import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/wod-engines/core/fleet";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 import { refereeAccess } from "@/lib/referee-access";
+import { displayName } from "@/lib/staff-names";
 
 export type Direction = "right" | "left" | "down" | "up";
+
+// Regle de jeu violee pendant la transaction : on annule l'ecriture et on rend le message tel quel.
+class GuardError extends Error {}
+
+// Violation d'unicite Postgres (23505), quelle que soit la facon dont le pilote l'emballe.
+function isUniqueViolation(e: unknown): boolean {
+  const seen = new Set<unknown>();
+  let cur: unknown = e;
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur);
+    const o = cur as { code?: unknown; message?: unknown; cause?: unknown };
+    if (o.code === "23505") return true;
+    if (typeof o.message === "string" && /duplicate key value|unique constraint/i.test(o.message)) return true;
+    cur = o.cause;
+  }
+  return false;
+}
 
 async function loadContext(sessionId: string) {
   const evaluator = await getSession();
@@ -169,6 +187,47 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
     .update({ status: "LOCKED", lockedAt: Temporal.Now.instant() });
 
   return { ok: true };
+}
+
+// Tire une flotte complete au hasard (eleves : un tap au lieu de huit placements).
+export async function randomFleetAction(sessionId: string): Promise<{ error: string } | { ok: true; placed: number }> {
+  const { evaluator, teams, exercises } = await loadContext(sessionId);
+
+  const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
+  if (current?.status === "LOCKED") return { error: "Ta flotte est déjà verrouillée." };
+  const placed = current ? await db.orm.public.RefereeShip.where({ fleetId: current.id }).all() : [];
+  const spec = fleetFor(teams.length, exercises.length);
+  const missing = remainingSizes(spec, placed.map((s) => s.size));
+  if (!missing.length) return { error: "Ta flotte est déjà complète." };
+
+  const allPlacements = await db.orm.public.BoatPlacement.where({ sessionId }).all();
+  const myShipIds = new Set(placed.map((s) => s.id));
+  const mine = new Set(allPlacements.filter((p) => p.shipId && myShipIds.has(p.shipId)).map((p) => `${p.teamId}_${p.exerciseId}`));
+
+  let ships;
+  try {
+    ships = generateRandomFleet(teams, exercises, mine, missing);
+  } catch {
+    return { error: "Impossible de placer la flotte au hasard sur cette grille." };
+  }
+
+  await db.transaction(async (tx) => {
+    const fleet = current ?? (await tx.orm.public.RefereeFleet.create({ sessionId, refereeId: evaluator.id, slot: 0, status: "PLACING" }));
+    for (const s of ships) {
+      const ship = await tx.orm.public.RefereeShip.create({
+        fleetId: fleet.id,
+        size: s.size,
+        orientation: s.orientation,
+        direction: s.orientation === "horizontal" ? (Math.random() < 0.5 ? "right" : "left") : Math.random() < 0.5 ? "down" : "up",
+        startTeamId: s.startTeamId,
+        startExerciseId: s.startExerciseId,
+      });
+      for (const c of s.cells) {
+        await tx.orm.public.BoatPlacement.create({ sessionId, teamId: c.teamId, exerciseId: c.exerciseId, ownerId: evaluator.id, shipId: ship.id });
+      }
+    }
+  });
+  return { ok: true, placed: ships.length };
 }
 
 // Deverrouille sa flotte pour deplacer des navires. Interdit des qu'une de ses cases a ete visee :
@@ -347,25 +406,48 @@ export async function submitEvaluationAction(
   const phase: "DURING_WOD" | "POST_WOD" = session.raceEndedAt ? "POST_WOD" : "DURING_WOD";
 
   // Evaluation + Tir crees dans la meme transaction : jamais l'un sans l'autre (§26).
-  await db.transaction(async (tx) => {
-    const evaluation = await tx.orm.public.Evaluation.create({
-      sessionId,
-      teamId: targetTeamId,
-      exerciseId: targetExerciseId,
-      evaluatorId: evaluator.id,
-      repsObserved: reps,
-      note,
-      isValidated: true,
+  // Les deux regles d'or sont RE-VERIFIEES ICI, dans la transaction : entre la lecture plus haut et
+  // l'ecriture, l'arbitre a pu etre ajoute a une equipe ou deplacer sa flotte depuis un autre appareil.
+  try {
+    await db.transaction(async (tx) => {
+      const myFleet = await tx.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
+      if (!myFleet || myFleet.status !== "LOCKED") throw new GuardError("Place et verrouille ta flotte avant de pouvoir arbitrer.");
+
+      const myShipsNow = await tx.orm.public.RefereeShip.where({ fleetId: myFleet.id }).all();
+      const myShipIdsNow = new Set(myShipsNow.map((s) => s.id));
+      const cellNow = await tx.orm.public.BoatPlacement.where({ sessionId, teamId: targetTeamId, exerciseId: targetExerciseId }).all();
+      if (cellNow.some((p) => p.shipId && myShipIdsNow.has(p.shipId))) throw new GuardError("Tu ne peux pas tirer sur ta propre flotte.");
+
+      const myTeams = await tx.orm.public.TeamMember.where({ userId: evaluator.id }).all();
+      if (myTeams.some((m) => m.teamId === targetTeamId)) throw new GuardError("Tu ne peux pas arbitrer ta propre équipe.");
+
+      const evaluation = await tx.orm.public.Evaluation.create({
+        sessionId,
+        teamId: targetTeamId,
+        exerciseId: targetExerciseId,
+        evaluatorId: evaluator.id,
+        repsObserved: reps,
+        note,
+        isValidated: true,
+      });
+      await tx.orm.public.Shot.create({
+        sessionId,
+        refereeId: evaluator.id,
+        targetTeamId,
+        targetExerciseId,
+        evaluationId: evaluation.id,
+        phase,
+      });
     });
-    await tx.orm.public.Shot.create({
-      sessionId,
-      refereeId: evaluator.id,
-      targetTeamId,
-      targetExerciseId,
-      evaluationId: evaluation.id,
-      phase,
-    });
-  });
+  } catch (e) {
+    if (e instanceof GuardError) return { error: e.message };
+    // Deux appareils (ou un double-tap) a la milliseconde pres : la contrainte unique sur Shot tranche.
+    // On rend le meme message lisible que le pre-controle plutot qu'une erreur technique.
+    if (isUniqueViolation(e)) {
+      return { error: "Tu as déjà évalué cette case : une seule évaluation par équipe et par atelier." };
+    }
+    throw e;
+  }
 
   // Resolution des bateaux touches (le mien est deja exclu ci-dessus).
   const hitShipIds = [...new Set(cellPlacements.filter((p) => p.shipId).map((p) => p.shipId as string))];
@@ -381,7 +463,7 @@ export async function submitEvaluationAction(
     const owner = await db.orm.public.User.where({ id: ownerFleet.refereeId }).first();
     const shipCells = await db.orm.public.BoatPlacement.where({ shipId }).all();
     const sunk = shipCells.every((c) => shotCells.has(`${c.teamId}_${c.exerciseId}`));
-    hits.push({ refereeId: ownerFleet.refereeId, refereeName: owner?.name ?? "?", shipId, sunk });
+    hits.push({ refereeId: ownerFleet.refereeId, refereeName: owner ? displayName(owner) : "?", shipId, sunk });
   }
 
   return { ok: true, phase, hits };

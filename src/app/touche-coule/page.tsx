@@ -1,10 +1,11 @@
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
 import { buildBoardData } from "@/lib/referee-board";
 import { refereeAccess } from "@/lib/referee-access";
 import { lastFleetAction } from "./actions";
+import { ensureFleet } from "@/lib/fleet-autopilot";
 import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
@@ -67,6 +68,11 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     .sort((a, b) => a.order - b.order);
 
   const exercises = exercisesFor(session).map((e) => ({ id: e.id, label: e.label }));
+
+  // Profs, coachs et greffier n'ont jamais a re-placer huit bateaux : leur flotte est reprise de la derniere
+  // seance du meme type de WOD, sinon tiree au hasard, puis verrouillee automatiquement (src/lib/fleet-autopilot.ts).
+  // Les eleves gardent l'ecran de placement (le rituel fait partie du jeu), avec reprise et tirage au sort en un tap.
+  if (evaluator.role !== "STUDENT") await ensureFleet(session.id, evaluator.id);
 
   const fleet = await db.orm.public.RefereeFleet.where({
     sessionId: session.id,

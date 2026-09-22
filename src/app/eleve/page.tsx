@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { sessionsForStudent, wodLabel, fmtDate } from "@/lib/student-sessions";
 import { openSessionsForStudent, toMs } from "@/lib/scheduling";

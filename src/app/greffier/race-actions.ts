@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 
 async function requireGreffierAccess(sessionId: string) {
   const user = await getSession();

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { buildSessionStandings } from "@/lib/session-standings";
 import { SELF_EVAL_CRITERIA, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { isQualityCode } from "@/lib/wod-engines/core/quality";

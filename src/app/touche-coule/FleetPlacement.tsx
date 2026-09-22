@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { placeShipAction, deleteShipAction, lockFleetAction, reuseLastFleetAction, type ReusableFleet } from "./actions";
+import { placeShipAction, deleteShipAction, lockFleetAction, reuseLastFleetAction, randomFleetAction, type ReusableFleet } from "./actions";
 import { fleetFor } from "@/lib/wod-engines/core/fleet";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { Brand } from "../_components/Brand";
 import { btn, ui } from "@/lib/ui";
+import { displayPseudo } from "@/lib/staff-names";
 
 // Meme flotte que le serveur : adaptee a la grille equipes x ateliers de la seance en cours.
 function remainingSizes(spec: readonly number[], placed: number[]): number[] {
@@ -152,6 +153,18 @@ export function FleetPlacement({
     });
   }
 
+  function handleRandom() {
+    setError("");
+    startTransition(async () => {
+      const res = await randomFleetAction(sessionId);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function handleLock() {
     setError("");
     startTransition(async () => {
@@ -177,7 +190,7 @@ export function FleetPlacement({
           <h1 className="font-display font-extrabold text-sea-ink text-lg">Place ta flotte 🏴‍☠️</h1>
         </div>
         <p className="text-sm text-ink-2">
-          {evaluator.name} · grille {teams.length} équipes × {exercises.length} ateliers · flotte de {spec.length} navires ({spec.reduce((a, b) => a + b, 0)} cases)
+          {displayPseudo(evaluator.name)} · grille {teams.length} équipes × {exercises.length} ateliers · flotte de {spec.length} navires ({spec.reduce((a, b) => a + b, 0)} cases)
         </p>
       </header>
 
@@ -213,6 +226,11 @@ export function FleetPlacement({
           {reusable && ships.length === 0 && (
             <button onClick={handleReuse} disabled={pending} className={btn.accent}>
               ♻️ Reprendre ma flotte du {new Date(reusable.date).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit" })} ({reusable.ships} navires)
+            </button>
+          )}
+          {!done && (
+            <button onClick={handleRandom} disabled={pending} className={btn.ghost}>
+              🎲 {ships.length === 0 ? "Flotte au hasard" : `Compléter au hasard (${remaining.length})`}
             </button>
           )}
           {firstTap && (

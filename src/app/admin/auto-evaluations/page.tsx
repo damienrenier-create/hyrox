@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";

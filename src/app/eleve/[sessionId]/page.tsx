@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { buildSessionStandings } from "@/lib/session-standings";
 import { exercisesFor } from "@/lib/session-exercises";

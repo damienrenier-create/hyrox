@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { buildRaceContext } from "@/lib/race-context";

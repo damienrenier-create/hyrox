@@ -55,9 +55,10 @@ export type GhostShip = {
 export function generateRandomFleet(
   teams: { id: string }[],
   exercises: { id: string }[],
-  avoid: Set<string> = new Set()
+  avoid: Set<string> = new Set(),
+  sizes?: readonly number[] // par defaut la flotte complete ; sinon les seules tailles a poser (re-placement)
 ): GhostShip[] {
-  const spec = fleetFor(teams.length, exercises.length);
+  const spec = sizes ?? fleetFor(teams.length, exercises.length);
   const occupied = new Set(avoid);
   const ships: GhostShip[] = [];
 

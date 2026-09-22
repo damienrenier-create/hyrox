@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { getWodEngine } from "@/lib/wod-engines";
 import { setTeamCount } from "@/lib/team-count";
 import { exercisesFor } from "@/lib/session-exercises";

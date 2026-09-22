@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 
 // Le greffier (popup sur l'ecran projete) ou un prof accepte / refuse une demande d'arbitrage.
 export async function decideRefereeAction(sessionId: string, userId: string, decision: "APPROVED" | "REFUSED"): Promise<{ error: string } | { ok: true }> {

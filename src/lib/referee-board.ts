@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
+import { displayName } from "@/lib/staff-names";
 
 // Vue complete d'une seance Touche-Coule (greffier « Arbitrage », carte admin, classement des arbitres) :
 // toutes les flottes, tous les tirs, toutes les evaluations, et le score pirate de chaque arbitre
@@ -49,7 +50,6 @@ export type BoardData = {
   evaluationsCount: number;
 };
 
-const GHOST_USER_NAME = "Damien Renier";
 
 export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
@@ -65,12 +65,12 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const rawShots = (await db.orm.public.Shot.where({ sessionId }).all()).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   const evaluations = await db.orm.public.Evaluation.where({ sessionId }).all();
 
-  // Noms
+  // Noms (jamais les pseudos de connexion : voir src/lib/staff-names.ts)
   const userIds = new Set<string>([...fleets.map((f) => f.refereeId), ...rawShots.map((s) => s.refereeId)]);
-  const userById = new Map<string, { name: string; className: string | null; ghost: boolean }>();
+  const userById = new Map<string, { name: string; className: string | null }>();
   for (const id of userIds) {
     const u = await db.orm.public.User.where({ id }).first();
-    if (u) userById.set(id, { name: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.name, className: u.className ?? null, ghost: u.name === GHOST_USER_NAME });
+    if (u) userById.set(id, { name: displayName(u), className: u.className ?? null });
   }
 
   // Navires + cases. Calques par arbitre : une case peut porter plusieurs navires (de flottes differentes).
@@ -101,7 +101,9 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
         startExerciseId: s.startExerciseId,
         refereeId: f.refereeId,
         refereeName: u?.name ?? "?",
-        ghost: f.slot > 0 || !!u?.ghost,
+        // Seul le SLOT distingue une flotte fantome : le prof qui porte les fantomes joue aussi avec sa
+        // propre flotte (slot 0), et celle-la compte comme celle de n'importe quel arbitre.
+        ghost: f.slot > 0,
         sunk: false,
       });
     }
@@ -152,7 +154,6 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const referees: RefereeRow[] = [];
   for (const f of fleets.filter((f) => f.slot === 0)) {
     const u = userById.get(f.refereeId);
-    if (u?.ghost) continue;
     const myShips = ships.filter((s) => s.refereeId === f.refereeId && fleetOfShip.get(s.id)?.id === f.id);
     const myCells = myShips.flatMap((s) => cellsByShip.get(s.id) ?? []);
     const intact = myCells.filter((c) => !everShot.has(c)).length;

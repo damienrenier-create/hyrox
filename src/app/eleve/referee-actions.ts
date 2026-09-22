@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { isSessionOpen } from "@/lib/scheduling";
 import { REFEREE_REASONS } from "@/lib/session-roles";
 
