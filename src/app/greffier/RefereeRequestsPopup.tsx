@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { decideRefereeAction, listPendingRequestsAction, type PendingRequest } from "./referee-decisions";
+import { btn, ui } from "@/lib/ui";
 
 // Popup du greffier (ecran projete) : demandes d'arbitrage des eleves, rafraichies toutes les 5 s, meme
 // quand la course n'est pas lancee. Accepter / refuser en un clic.
@@ -50,17 +51,17 @@ export function RefereeRequestsPopup({ sessionId, initial }: { sessionId: string
             initial={{ x: 60, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 60, opacity: 0 }}
-            className="pointer-events-auto bg-[#062230] text-amber-50 border-2 border-amber-400 rounded-2xl p-3 shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
+            className="pointer-events-auto bg-card text-ink border-2 border-accent rounded-2xl p-3 shadow-pop"
           >
-            <div className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-1">🏴‍☠️ Demande d'arbitrage</div>
-            <div className="font-black text-base leading-tight">{r.name} <span className="text-amber-200/60 font-bold text-sm">· {r.className ?? "?"}</span></div>
-            <div className="text-xs text-amber-100/80 mb-2">
-              Motif : <b>{r.note ?? "—"}</b>
+            <div className={`${ui.eyebrow} text-accent-ink mb-1`}>🏴‍☠️ Demande d&apos;arbitrage</div>
+            <div className="font-display font-extrabold text-base leading-tight">{r.name} <span className="text-ink-3 font-sans font-bold text-sm">· {r.className ?? "?"}</span></div>
+            <div className="text-xs text-ink-2 mb-2">
+              Motif : <b className="text-ink">{r.note ?? "—"}</b>
               {r.teamName && <> · participait dans {r.teamName}</>}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => decide(r.userId, "APPROVED")} disabled={pending} className="bg-emerald-500 text-slate-950 font-black py-2 rounded-lg disabled:opacity-50">Accepter</button>
-              <button onClick={() => decide(r.userId, "REFUSED")} disabled={pending} className="bg-red-700 text-red-50 font-black py-2 rounded-lg disabled:opacity-50">Refuser</button>
+              <button onClick={() => decide(r.userId, "APPROVED")} disabled={pending} className={btn.success}>Accepter</button>
+              <button onClick={() => decide(r.userId, "REFUSED")} disabled={pending} className={btn.danger}>Refuser</button>
             </div>
           </motion.div>
         ))}

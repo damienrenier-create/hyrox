@@ -13,6 +13,7 @@ import {
 } from "./team-actions";
 import { decideRefereeAction } from "./referee-decisions";
 import { MAX_CLASSES, REFEREE_REASONS } from "@/lib/session-roles";
+import { btn, cx, ui } from "@/lib/ui";
 
 export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
@@ -87,20 +88,22 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
 
   const statusBadge = (r: RefereeView) =>
     r.status === "PENDING" ? (
-      <span className="ml-2 text-[10px] font-bold text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded">en attente</span>
+      <span className={`${ui.chip} ${ui.chipWarn} ml-2`}>en attente</span>
     ) : r.status === "REFUSED" ? (
-      <span className="ml-2 text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">refusé</span>
+      <span className={`${ui.chip} ${ui.chipErr} ml-2`}>refusé</span>
     ) : null;
+
+  const counter = "text-ink-3 font-sans font-normal text-sm";
 
   return (
     <div className="space-y-6">
-      {error && <p className="text-red-600 text-sm font-bold">{error}</p>}
+      {error && <p className={ui.alertErr}>{error}</p>}
 
       {/* 1. Classes participantes */}
-      <section className="bg-white rounded-xl border border-slate-200 p-4">
+      <section className={ui.cardPad}>
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-          <h3 className="font-black">1 · Classes qui participent <span className="text-slate-400 font-normal text-sm">({classes.length}/{MAX_CLASSES})</span></h3>
-          <p className="text-xs text-slate-500">La saisie des noms se limite ensuite à ces classes.</p>
+          <h3 className={ui.h3}>1 · Classes qui participent <span className={counter}>({classes.length}/{MAX_CLASSES})</span></h3>
+          <p className={ui.hint}>La saisie des noms se limite ensuite à ces classes.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {allClasses.map((c) => {
@@ -110,7 +113,7 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
                 key={c}
                 onClick={() => toggleClass(c)}
                 disabled={pending}
-                className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-2 transition-colors ${on ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-200 text-slate-600 hover:border-slate-500"} disabled:opacity-60`}
+                className={cx(ui.pill, on ? ui.pillOn : ui.pillOff, "disabled:opacity-60")}
               >
                 {c}
               </button>
@@ -122,30 +125,30 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
       {/* 2. Equipes */}
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-          <h3 className="font-black">2 · Équipes <span className="text-slate-400 font-normal text-sm">({totalMembers} élève{totalMembers > 1 ? "s" : ""} · {filledTeams}/{teams.length} équipes)</span></h3>
-          <p className="text-xs text-slate-500">Touche une équipe pour y ajouter des élèves.</p>
+          <h3 className={ui.h3}>2 · Équipes <span className={counter}>({totalMembers} élève{totalMembers > 1 ? "s" : ""} · {filledTeams}/{teams.length} équipes)</span></h3>
+          <p className={ui.hint}>Touche une équipe pour y ajouter des élèves.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
           {teams.map((team) => (
             <button
               key={team.id}
               onClick={() => { setActiveTeamId(team.id); setError(""); }}
-              className={`text-left bg-white rounded-xl border-2 p-3 transition-colors ${activeTeamId === team.id ? "border-slate-900" : "border-slate-200 hover:border-slate-400"}`}
+              className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
               <div className="flex justify-between items-center mb-1">
-                <span className="font-black">{team.name}</span>
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${team.members.length ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-400"}`}>
+                <span className="font-display font-bold">{team.name}</span>
+                <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
                   {team.members.length} élève{team.members.length > 1 ? "s" : ""}
                 </span>
               </div>
               {team.members.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Aucun élève encodé</p>
+                <p className="text-xs text-ink-3 italic">Aucun élève encodé</p>
               ) : (
-                <ul className="text-xs text-slate-700 space-y-0.5">
+                <ul className="text-xs text-ink-2 space-y-0.5">
                   {team.members.map((m) => (
                     <li key={m.id} className="truncate">
-                      {m.firstName} {m.lastName} <span className="text-slate-400">· {m.className ?? "?"}</span>
-                      {approvedIds.has(m.id) && <span className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1 rounded">arbitre</span>}
+                      <span className="text-ink">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
+                      {approvedIds.has(m.id) && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>arbitre</span>}
                     </li>
                   ))}
                 </ul>
@@ -156,37 +159,37 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
       </section>
 
       {/* 3. Arbitres */}
-      <section className="bg-white rounded-xl border border-slate-200 p-4">
+      <section className={ui.cardPad}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h3 className="font-black">
-            3 · Arbitres <span className="text-slate-400 font-normal text-sm">({approvedIds.size} autorisé{approvedIds.size > 1 ? "s" : ""}{pendingCount ? ` · ${pendingCount} en attente` : ""})</span>
+          <h3 className={ui.h3}>
+            3 · Arbitres <span className={counter}>({approvedIds.size} autorisé{approvedIds.size > 1 ? "s" : ""}{pendingCount ? ` · ${pendingCount} en attente` : ""})</span>
           </h3>
-          <button onClick={() => { setRefereeOpen(true); setError(""); }} className="bg-[#062230] text-amber-300 text-sm font-black px-3 py-2 rounded-lg">+ Ajouter un arbitre</button>
+          <button onClick={() => { setRefereeOpen(true); setError(""); }} className={btn.sea}>🏴‍☠️ Ajouter un arbitre</button>
         </div>
-        <p className="text-xs text-slate-500 mb-3">
-          Modifiable pendant tout le WOD{phase === "run" ? " (course en cours)" : ""}. Un élève n'arbitre que s'il est autorisé ici (motif obligatoire) ; ses demandes arrivent aussi en popup.
-          Un participant basculé arbitre (blessure, abandon) garde ses résultats d'équipe.
+        <p className={`${ui.hint} mb-3`}>
+          Modifiable pendant tout le WOD{phase === "run" ? " (course en cours)" : ""}. Un élève n&apos;arbitre que s&apos;il est autorisé ici (motif obligatoire) ; ses demandes arrivent aussi en popup.
+          Un participant basculé arbitre (blessure, abandon) garde ses résultats d&apos;équipe.
         </p>
         {referees.length === 0 ? (
-          <p className="text-sm text-slate-400 italic">Aucun arbitre encodé.</p>
+          <p className="text-sm text-ink-3 italic">Aucun arbitre encodé.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
+          <ul className="divide-y divide-line border border-line rounded-xl">
             {referees.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 p-2 text-sm">
                 <span className="min-w-0">
-                  <span className="font-bold">{r.firstName} {r.lastName}</span> <span className="text-slate-400">· {r.className ?? "?"}</span>
-                  {r.note && <span className="ml-2 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{r.note}</span>}
+                  <span className="font-bold">{r.firstName} {r.lastName}</span> <span className="text-ink-3">· {r.className ?? "?"}</span>
+                  {r.note && <span className={`${ui.chip} ${ui.chipMuted} ml-2`}>{r.note}</span>}
                   {statusBadge(r)}
-                  {r.teamName && <span className="block text-[11px] text-slate-500">participait dans {r.teamName} (résultats conservés)</span>}
+                  {r.teamName && <span className="block text-[11px] text-ink-2">participait dans {r.teamName} (résultats conservés)</span>}
                 </span>
                 <span className="flex gap-1 flex-shrink-0">
                   {r.status !== "APPROVED" && (
-                    <button onClick={() => decide(r.id, "APPROVED")} disabled={pending} className="text-emerald-800 text-xs font-bold px-2 py-1 rounded bg-emerald-100 disabled:opacity-50">Accepter</button>
+                    <button onClick={() => decide(r.id, "APPROVED")} disabled={pending} className={btn.smSuccess}>Accepter</button>
                   )}
                   {r.status === "PENDING" && (
-                    <button onClick={() => decide(r.id, "REFUSED")} disabled={pending} className="text-red-700 text-xs font-bold px-2 py-1 rounded bg-red-100 disabled:opacity-50">Refuser</button>
+                    <button onClick={() => decide(r.id, "REFUSED")} disabled={pending} className={btn.smDanger}>Refuser</button>
                   )}
-                  <button onClick={() => removeReferee(r.id)} disabled={pending} className="text-red-600 text-xs font-bold px-2 py-1 rounded bg-red-50 disabled:opacity-50">Retirer</button>
+                  <button onClick={() => removeReferee(r.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
                 </span>
               </li>
             ))}
@@ -303,35 +306,35 @@ function StudentPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl p-5 w-full sm:max-w-md max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+    <div className={ui.backdrop} onClick={onClose}>
+      <div className={`${ui.sheet} sm:max-w-md`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3 gap-2">
-          <h3 className="font-black text-lg">{title}</h3>
+          <h3 className={ui.h2}>{title}</h3>
           <div className="flex items-center gap-2">
-            {nextLabel && <button onClick={onNext} className="text-xs font-bold bg-slate-100 px-2 py-1 rounded">{nextLabel}</button>}
-            <button onClick={onClose} className="text-slate-400 font-bold">✕</button>
+            {nextLabel && <button onClick={onNext} className={btn.smSoft}>{nextLabel}</button>}
+            <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
           </div>
         </div>
 
-        <ul className="mb-4 divide-y divide-slate-100 border border-slate-200 rounded-lg">
-          {list.length === 0 && <li className="p-2 text-sm text-slate-400 italic">Personne pour l'instant.</li>}
+        <ul className="mb-4 divide-y divide-line border border-line rounded-xl">
+          {list.length === 0 && <li className="p-2 text-sm text-ink-3 italic">Personne pour l&apos;instant.</li>}
           {list.map((m) => (
             <li key={m.id} className="flex items-center justify-between p-2 text-sm">
               <span>
-                <span className="font-bold">{m.firstName} {m.lastName}</span> <span className="text-slate-400">· {m.className ?? "?"}</span>
-                {m.tag && <span className="ml-2 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">{m.tag}</span>}
+                <span className="font-bold">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
+                {m.tag && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{m.tag}</span>}
               </span>
-              <button onClick={() => onRemove(m.id)} disabled={pending} className="text-red-600 text-xs font-bold px-2 py-1 rounded bg-red-50 disabled:opacity-50">Retirer</button>
+              <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
             </li>
           ))}
         </ul>
 
         {withNote && (
-          <div className="mb-2">
-            <p className="text-xs font-bold text-slate-600 mb-1">Motif (obligatoire)</p>
+          <div className="mb-3">
+            <p className={ui.label}>Motif (obligatoire)</p>
             <div className="flex flex-wrap gap-1">
               {REFEREE_REASONS.map((n) => (
-                <button key={n} onClick={() => setNote(n)} className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-2 ${note === n ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500"}`}>
+                <button key={n} onClick={() => setNote(n)} className={cx(ui.pill, note === n ? ui.pillOn : ui.pillOff)}>
                   {n}
                 </button>
               ))}
@@ -339,7 +342,7 @@ function StudentPicker({
           </div>
         )}
 
-        <label className="block text-sm font-bold mb-1">Ajouter un élève</label>
+        <label className={ui.label}>Ajouter un élève</label>
         <input
           ref={inputRef}
           value={query}
@@ -348,12 +351,12 @@ function StudentPicker({
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          className="w-full border-2 border-slate-300 focus:border-slate-900 rounded-lg p-3 text-base outline-none"
+          className={`${ui.input} text-base py-3`}
         />
-        <p className="text-[11px] text-slate-400 mt-1">Recherche dans : {classes.length ? classes.join(", ") : "toutes les classes (aucune classe sélectionnée)"}.</p>
-        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
+        <p className={`${ui.hint} mt-1`}>Recherche dans : {classes.length ? classes.join(", ") : "toutes les classes (aucune classe sélectionnée)"}.</p>
+        {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
         {hits.length > 0 && (
-          <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-64 overflow-auto">
+          <ul className="mt-2 border border-line rounded-xl divide-y divide-line max-h-64 overflow-auto">
             {hits.map((h) => {
               const st = statusOf(h);
               return (
@@ -361,17 +364,17 @@ function StudentPicker({
                   <button
                     onClick={() => pick(h)}
                     disabled={pending || st.disabled}
-                    className={`w-full text-left p-2 text-sm flex justify-between items-center gap-2 ${st.disabled ? "text-slate-400" : "hover:bg-slate-50"}`}
+                    className={cx("w-full text-left p-2 text-sm flex justify-between items-center gap-2 transition", st.disabled ? "text-ink-3" : "hover:bg-brand-soft")}
                   >
                     <span><span className="font-bold">{h.lastName}</span> {h.firstName}</span>
-                    <span className="text-xs text-slate-400 text-right">{h.className ?? "?"}{st.label ? ` · ${st.label}` : ""}</span>
+                    <span className="text-xs text-ink-3 text-right">{h.className ?? "?"}{st.label ? ` · ${st.label}` : ""}</span>
                   </button>
                 </li>
               );
             })}
           </ul>
         )}
-        {query.trim().length > 0 && hits.length === 0 && <p className="text-xs text-slate-400 mt-2">Aucun élève trouvé.</p>}
+        {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Aucun élève trouvé.</p>}
       </div>
     </div>
   );

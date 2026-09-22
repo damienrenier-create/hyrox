@@ -42,3 +42,8 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# fichiers de travail locaux (scratch, verrous Word, previews de sprites)
+/scratch-*.js
+~$*
+/.sprite-tmp/

@@ -44,8 +44,12 @@ import {
 } from "./race-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { finishRaceAction } from "./actions";
+import { Brand } from "../_components/Brand";
+import { btn, cx, ui } from "@/lib/ui";
 
-const TIER_COLORS: Record<string, string> = { b: "#8a5226", s: "#8f9aa5", g: "#caa000", p: "#8fb0c8", d: "#5fcdeb" };
+// Paliers de la pyramide (bronze → diamant) : fond + couleur de texte lisible sur chacun.
+const TIER_COLORS: Record<string, string> = { b: "#8a5226", s: "#7b8794", g: "#d9ad00", p: "#8fb0c8", d: "#5fcdeb" };
+const TIER_TEXT: Record<string, string> = { b: "#ffffff", s: "#ffffff", g: "#1d1b18", p: "#1d1b18", d: "#1d1b18" };
 const TIER_LETTERS = ["b", "s", "g", "p", "d"];
 
 function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
@@ -57,7 +61,7 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
     dots.push(
       <span
         key={k}
-        className="inline-block w-2 h-2 rounded-full mr-[1px] mb-[1px]"
+        className="inline-block w-2 h-2 rounded-full mr-[1px] mb-[1px] ring-1 ring-white/60"
         style={{ background: TIER_COLORS[TIER_LETTERS[info.tier]], opacity }}
       />
     );
@@ -232,19 +236,25 @@ export function GreffierClient({
 
   const rest = tl.end - liveMs;
   const overtime = phase === "run" && rest <= 0;
+  const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 font-sans">
+    <div className={`${ui.page} pb-24`}>
       <RefereeRequestsPopup sessionId={sessionId} initial={pendingRequests} />
-      <header className="sticky top-0 z-20 bg-white border-b-4 border-slate-900 px-4 py-3 shadow-sm">
+      <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <div>
+          <div className="flex items-center gap-5 min-w-0">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Brand />
+                <span className="text-line-2">/</span>
+                <span className={ui.eyebrow}>Greffier</span>
+              </div>
               {sessionOptions.length > 1 ? (
                 <select
                   value={sessionId}
                   onChange={(e) => router.push(`/greffier?session=${e.target.value}`)}
-                  className="text-sm font-black bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 max-w-[260px]"
+                  className={`${ui.input} w-auto max-w-[280px] py-1.5 font-bold`}
                 >
                   {sessionOptions.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -253,69 +263,69 @@ export function GreffierClient({
                   ))}
                 </select>
               ) : (
-                <p className="text-sm font-black leading-tight">
+                <p className="text-sm font-bold leading-tight">
                   {sessionLabel}
-                  {classes.length > 0 && <span className="text-slate-500 font-bold"> · {classes.join(", ")}</span>}
-                  {sessionOptions[0] && !sessionOptions[0].open && <span className="text-slate-400 font-normal"> (fermée)</span>}
+                  {classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}
+                  {sessionOptions[0] && !sessionOptions[0].open && <span className="text-ink-3 font-normal"> (fermée)</span>}
                 </p>
               )}
             </div>
-            <p className={`text-[3rem] font-black leading-none tracking-tight ${phase === "pre" ? "text-slate-300" : isPaused ? "text-amber-500" : "text-slate-900"}`}>
+            <p className={cx("font-display text-[3rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>
               {fmt(liveMs)}
             </p>
             {phase !== "pre" && (
-              <div className={`border-2 rounded-xl px-3 py-1 text-right min-w-[130px] ${overtime ? "border-red-600 bg-red-50" : "border-slate-200 bg-white"}`}>
-                <div className="text-[10px] font-extrabold tracking-widest uppercase text-slate-500">
+              <div className={cx("border rounded-xl px-3 py-1.5 text-right min-w-[130px]", overtime ? "border-danger bg-danger-soft" : "border-line bg-paper")}>
+                <div className={ui.eyebrow}>
                   {phase === "post" ? "WOD" : overtime ? "Temps supp." : tl.count ? "Fin dans" : "Temps limite"}
                 </div>
-                <div className={`text-2xl font-black leading-tight ${overtime ? "text-red-600" : "text-slate-700"}`}>
+                <div className={cx("font-display text-2xl font-extrabold leading-tight tabular-nums", overtime ? "text-danger" : "text-ink")}>
                   {phase === "post" ? "terminé" : overtime ? `−${fmtUp(-rest)}` : fmtDown(rest)}
                 </div>
-                <div className="text-[11px] text-slate-500">{finishedCount}/{ctx.teams.length} arrivées</div>
+                <div className="text-[11px] text-ink-2">{finishedCount}/{ctx.teams.length} arrivées</div>
               </div>
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
             {phase === "pre" && (
               <>
-                <button onClick={() => setSettingsOpen(true)} disabled={pending} className="bg-slate-200 hover:bg-slate-300 px-4 py-3 rounded-xl font-bold disabled:opacity-50">
+                <button onClick={() => setSettingsOpen(true)} disabled={pending} className={btn.lgGhost}>
                   ⚙️ Réglages
                 </button>
-                <button onClick={handleStart} disabled={pending} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-6 py-3 rounded-xl disabled:opacity-50">
+                <button onClick={handleStart} disabled={pending} className={btn.lgSuccess}>
                   Début de course
                 </button>
               </>
             )}
             {phase === "run" && (
               <>
-                <button onClick={handlePause} disabled={pending} className={`font-black px-5 py-3 rounded-xl text-white ${isPaused ? "bg-emerald-600" : "bg-amber-500"} disabled:opacity-50`}>
+                <button onClick={handlePause} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>
                   {isPaused ? "Reprendre" : "Pause"}
                 </button>
-                <button onClick={handleUndo} disabled={pending} className="bg-slate-200 px-4 py-3 rounded-xl font-bold disabled:opacity-50">
+                <button onClick={handleUndo} disabled={pending} className={btn.lgGhost}>
                   Annuler le dernier
                 </button>
-                <button onClick={handleFinish} disabled={pending} className="bg-red-600 hover:bg-red-700 text-white font-black px-6 py-3 rounded-xl disabled:opacity-50">
-                  FIN DE COURSE
+                <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>
+                  Fin de course
                 </button>
               </>
             )}
             {phase === "post" && (
-              <span className="bg-emerald-100 text-emerald-800 font-bold px-4 py-3 rounded-xl">🏁 WOD terminé</span>
+              <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>
             )}
-            <button onClick={exportCsv} className="bg-slate-800 text-white px-4 py-3 rounded-xl font-bold">Exporter CSV</button>
+            <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
           </div>
         </div>
-        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
-        <div className="flex gap-2 mt-3">
-          <button onClick={() => setView("grid")} className={`text-sm font-bold px-3 py-1 rounded ${view === "grid" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Grille</button>
-          <button onClick={() => setView("results")} className={`text-sm font-bold px-3 py-1 rounded ${view === "results" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Résultats</button>
-          <button onClick={() => setView("teams")} className={`text-sm font-bold px-3 py-1 rounded ${view === "teams" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
-            Équipes &amp; arbitres <span className={`ml-1 text-[10px] px-1.5 rounded-full ${memberCount ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>{memberCount}</span>
-            {referees.length > 0 && <span className="ml-1 text-[10px] px-1.5 rounded-full bg-[#062230] text-amber-300">🏴‍☠️ {referees.length}</span>}
+        {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
+        <div className={`${ui.segmented} mt-3 flex-wrap`}>
+          <button onClick={() => setView("grid")} className={tabBtn(view === "grid")}>Grille</button>
+          <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Résultats</button>
+          <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
+            Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
+            {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
           </button>
           {board && (
-            <button onClick={() => setView("arbitrage")} className={`text-sm font-bold px-3 py-1 rounded ${view === "arbitrage" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
-              Arbitrage <span className="ml-1 text-[10px] px-1.5 rounded-full bg-amber-400 text-amber-950">{board.evaluationsCount}</span>
+            <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
+              Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
             </button>
           )}
         </div>
@@ -331,14 +341,16 @@ export function GreffierClient({
               const tier = tierOf(ctx.settings, n);
               const yc = cardsOf(ctx, team.id);
               const isDone = fa !== null;
+              const tierKey = tier > 0 && !isDone ? TIER_LETTERS[tier - 1] : null;
               return (
                 <div key={team.id} className="flex flex-col gap-1">
                   <button
                     onClick={() => handleLap(team.id)}
-                    className={`rounded-xl p-2 min-h-[92px] flex flex-col items-center justify-center text-white transition-transform active:scale-95 ${
-                      isDone ? "bg-emerald-700" : tier > 0 ? "" : "bg-slate-700"
-                    }`}
-                    style={tier > 0 && !isDone ? { background: TIER_COLORS[TIER_LETTERS[tier - 1]] } : undefined}
+                    className={cx(
+                      "rounded-2xl p-2 min-h-[92px] flex flex-col items-center justify-center shadow-card transition-transform active:scale-95",
+                      isDone ? "bg-success text-white" : tierKey ? "" : "bg-brand text-white"
+                    )}
+                    style={tierKey ? { background: TIER_COLORS[tierKey], color: TIER_TEXT[tierKey] } : undefined}
                   >
                     <span className="text-[11px] font-bold opacity-85">{teamNames[team.id] ?? team.id}</span>
                     {phase === "pre" && (
@@ -346,7 +358,7 @@ export function GreffierClient({
                         {teamsWithMembers.find((t) => t.id === team.id)?.members.map((m) => m.firstName).join(", ") || "—"}
                       </span>
                     )}
-                    <span className="text-2xl font-black leading-tight">
+                    <span className="font-display text-2xl font-extrabold leading-tight tabular-nums">
                       {phase === "pre" ? exerciseLabels[startOf(ctx, team).id]?.slice(0, 10) : isDone ? fmt(fa) : level ?? n}
                     </span>
                     <span className="text-[10px] opacity-80">
@@ -356,7 +368,7 @@ export function GreffierClient({
                   </button>
                   <button
                     onClick={(e) => handleCard(team.id, e)}
-                    className={`text-[10px] font-bold rounded py-1 ${yc ? "bg-amber-300 text-amber-900" : "bg-slate-100 text-slate-400"}`}
+                    className={cx("text-[10px] font-bold rounded-lg py-1 transition", yc ? "bg-warn text-warn-ink" : "bg-line/70 text-ink-3 hover:bg-line hover:text-ink")}
                   >
                     {yc ? `🟨 ×${yc}` : "+ carton"}
                   </button>
@@ -412,28 +424,28 @@ function ResultsTable({
   const st: Standing[] = standings(ctx, phase === "post");
   const T = total(ctx.settings);
   return (
-    <div className="overflow-auto bg-white rounded-xl border border-slate-200">
+    <div className={`${ui.card} overflow-auto`}>
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b-2 border-slate-900 text-left">
-            <th className="p-2">#</th>
-            <th className="p-2">Équipe</th>
-            <th className="p-2">Tours</th>
-            <th className="p-2">Temps</th>
-            <th className="p-2">Temps sup.</th>
-            <th className="p-2">Départ</th>
-            <th className="p-2">Total reps</th>
-            <th className="p-2">Cartes</th>
+          <tr>
+            <th className={ui.th}>#</th>
+            <th className={ui.th}>Équipe</th>
+            <th className={ui.th}>Tours</th>
+            <th className={ui.th}>Temps</th>
+            <th className={ui.th}>Temps sup.</th>
+            <th className={ui.th}>Départ</th>
+            <th className={ui.th}>Total reps</th>
+            <th className={ui.th}>Cartes</th>
           </tr>
         </thead>
         <tbody>
           {st.map((s, i) => (
-            <motion.tr key={s.team.id} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className="border-b border-slate-100 odd:bg-slate-50">
-              <td className="p-2">{i + 1}</td>
+            <motion.tr key={s.team.id} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className={ui.tr}>
+              <td className="p-2 font-display font-bold">{i + 1}</td>
               <td className="p-2 font-bold">{teamNames[s.team.id] ?? s.team.id}</td>
               <td className="p-2">{Math.min(s.n, T)} / {T}</td>
-              <td className="p-2">{s.done ? `🏁 ${fmt(s.finishAt)}` : "—"}</td>
-              <td className="p-2">{tl.late[s.team.id] != null ? `+${fmt(tl.late[s.team.id])}` : ""}</td>
+              <td className="p-2 tabular-nums">{s.done ? `🏁 ${fmt(s.finishAt)}` : "—"}</td>
+              <td className="p-2 tabular-nums">{tl.late[s.team.id] != null ? `+${fmt(tl.late[s.team.id])}` : ""}</td>
               <td className="p-2">{exerciseLabels[startOf(ctx, s.team).id]}</td>
               <td className="p-2 font-bold">{s.reps}</td>
               <td className="p-2">{s.yellowCards}</td>
@@ -473,29 +485,31 @@ function TeamPanel({
     });
   }
 
+  const choice = "border border-line-2 rounded-xl py-2 text-sm font-semibold bg-card hover:bg-paper transition disabled:opacity-50";
+
   return (
-    <div className="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl p-5 w-full sm:max-w-md max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+    <div className={ui.backdrop} onClick={onClose}>
+      <div className={`${ui.sheet} sm:max-w-md`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="font-black text-lg">{teamName}</h3>
-          <button onClick={onClose} className="text-slate-400 font-bold">✕</button>
+          <h3 className={ui.h2}>{teamName}</h3>
+          <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
         </div>
 
         {!finished ? (
           <>
             <p className="text-sm font-bold mb-2">Dernier exercice entièrement terminé ?</p>
-            <p className="text-xs text-slate-500 mb-3">Départ : {exerciseLabels[startEx.id]}{partial != null ? ` · actuellement ${partial} exercice(s) du dernier tour` : ""}</p>
+            <p className={`${ui.hint} mb-3`}>Départ : {exerciseLabels[startEx.id]}{partial != null ? ` · actuellement ${partial} exercice(s) du dernier tour` : ""}</p>
             <div className="grid grid-cols-2 gap-2 mb-4">
-              <button onClick={() => setEnd(null)} disabled={pending} className="border border-slate-200 rounded-lg py-2 text-sm">aucun</button>
+              <button onClick={() => setEnd(null)} disabled={pending} className={choice}>aucun</button>
               {ctx.exercises.map((ex) => (
-                <button key={ex.id} onClick={() => setEnd(ex.id)} disabled={pending} className="border border-slate-200 rounded-lg py-2 text-sm">
+                <button key={ex.id} onClick={() => setEnd(ex.id)} disabled={pending} className={choice}>
                   {ex.number} · {exerciseLabels[ex.id]}
                 </button>
               ))}
             </div>
           </>
         ) : (
-          <p className="text-sm text-emerald-700 font-bold mb-4">🏁 Équipe arrivée.</p>
+          <p className="text-sm text-success-ink font-bold mb-4">🏁 Équipe arrivée.</p>
         )}
 
         <p className="text-sm font-bold mb-2">Changer le départ</p>
@@ -505,7 +519,7 @@ function TeamPanel({
               key={ex.id}
               onClick={() => setStart(ex.id)}
               disabled={pending}
-              className={`border rounded-lg py-2 text-sm ${startEx.id === ex.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200"}`}
+              className={cx(choice, startEx.id === ex.id && "border-brand bg-brand text-white hover:bg-brand-hover")}
             >
               {ex.number} · {exerciseLabels[ex.id]}
             </button>

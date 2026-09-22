@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
+import { TopBar } from "../../_components/TopBar";
+import { btn, ui } from "@/lib/ui";
 
 type Row = {
   studentId: string;
@@ -50,72 +51,71 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
     rows = rows.sort((a, b) => a.className.localeCompare(b.className) || a.name.localeCompare(b.name));
   }
 
-  const colorOf = (code: string) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-slate-500";
+  const colorOf = (code: string) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-cyan-50 font-mono p-4 sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-black text-cyan-400 uppercase tracking-widest">Auto-évaluations</h1>
-        {user.role === "MASTER_ADMIN" && <Link href="/admin" className="text-sm text-cyan-300 underline">← Console</Link>}
-      </div>
-
-      <form className="mb-6 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-cyan-300">Séance</label>
-        <select name="session" defaultValue={session?.id ?? ""} className="bg-slate-900 border border-cyan-800 rounded p-2 text-sm">
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label ?? wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · ouverte" : ""}{s.raceEndedAt ? " · terminée" : ""}
-            </option>
-          ))}
-        </select>
-        <button type="submit" className="bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-bold px-4 py-2 rounded">Voir</button>
-      </form>
-
-      {!session ? (
-        <p className="text-slate-400">Aucune séance.</p>
-      ) : (
-        <>
-          <p className="text-sm text-slate-400 mb-3">
-            {rows.length} auto-évaluation(s) reçue(s) sur {participants} participant(s) encodé(s).
-          </p>
-          <div className="overflow-x-auto bg-slate-900 border border-cyan-900 rounded-xl">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b border-cyan-900 text-cyan-300">
-                  <th className="p-2">Classe</th>
-                  <th className="p-2">Élève</th>
-                  <th className="p-2">Équipe</th>
-                  {SELF_EVAL_CRITERIA.map((c) => (
-                    <th key={c.id} className="p-2 text-center">{c.label}</th>
-                  ))}
-                  <th className="p-2">Envoyé</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 && (
-                  <tr><td colSpan={4 + SELF_EVAL_CRITERIA.length} className="p-4 text-slate-500 italic">Aucune auto-évaluation pour cette séance.</td></tr>
-                )}
-                {rows.map((r) => (
-                  <tr key={r.studentId} className="border-b border-slate-800">
-                    <td className="p-2 text-slate-400">{r.className}</td>
-                    <td className="p-2 font-bold">{r.name}</td>
-                    <td className="p-2 text-slate-300">{r.teamName}</td>
-                    {SELF_EVAL_CRITERIA.map((c) => (
-                      <td key={c.id} className={`p-2 text-center font-black ${colorOf(r.answers[c.id])}`}>{r.answers[c.id] ?? "—"}</td>
-                    ))}
-                    <td className="p-2 text-xs text-slate-500">{new Date(r.submittedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-slate-500">
-            {QUALITY_LEVELS.map((l) => (
-              <span key={l.code}><b className={l.color}>{l.code}</b> = {l.label}</span>
+    <div className={ui.page}>
+      <TopBar title="Auto-évaluations" back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined}>
+        <form className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-semibold text-ink-2">Séance</label>
+          <select name="session" defaultValue={session?.id ?? ""} className={`${ui.input} w-auto max-w-full`}>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label ?? wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · ouverte" : ""}{s.raceEndedAt ? " · terminée" : ""}
+              </option>
             ))}
-          </div>
-        </>
-      )}
+          </select>
+          <button type="submit" className={btn.primary}>Voir</button>
+        </form>
+      </TopBar>
+
+      <main className={`${ui.container} py-6`}>
+        {!session ? (
+          <p className={ui.muted}>Aucune séance.</p>
+        ) : (
+          <>
+            <p className={`${ui.muted} mb-3`}>
+              <b className="text-ink">{rows.length}</b> auto-évaluation(s) reçue(s) sur <b className="text-ink">{participants}</b> participant(s) encodé(s).
+            </p>
+            <div className={`${ui.card} overflow-x-auto`}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className={ui.th}>Classe</th>
+                    <th className={ui.th}>Élève</th>
+                    <th className={ui.th}>Équipe</th>
+                    {SELF_EVAL_CRITERIA.map((c) => (
+                      <th key={c.id} className={`${ui.th} text-center`}>{c.label}</th>
+                    ))}
+                    <th className={ui.th}>Envoyé</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 && (
+                    <tr><td colSpan={4 + SELF_EVAL_CRITERIA.length} className="p-4 text-ink-3 italic">Aucune auto-évaluation pour cette séance.</td></tr>
+                  )}
+                  {rows.map((r) => (
+                    <tr key={r.studentId} className={ui.tr}>
+                      <td className="p-2 text-ink-2">{r.className}</td>
+                      <td className="p-2 font-bold">{r.name}</td>
+                      <td className="p-2 text-ink-2">{r.teamName}</td>
+                      {SELF_EVAL_CRITERIA.map((c) => (
+                        <td key={c.id} className={`p-2 text-center font-black ${colorOf(r.answers[c.id])}`}>{r.answers[c.id] ?? "—"}</td>
+                      ))}
+                      <td className="p-2 text-xs text-ink-3">{new Date(r.submittedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-ink-3">
+              {QUALITY_LEVELS.map((l) => (
+                <span key={l.code}><b className={l.color}>{l.code}</b> = {l.label}</span>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
     </div>
   );
 }

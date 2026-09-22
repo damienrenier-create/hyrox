@@ -8,39 +8,42 @@ import {
   studentLoginAction,
   StudentMatch,
 } from "./actions";
+import { Brand } from "./_components/Brand";
+import { btn, cx, ui } from "@/lib/ui";
 
 export default function LoginPage() {
   const [tab, setTab] = useState<"eleve" | "admin">("eleve");
 
   return (
-    <div className="min-h-[100dvh] bg-neutral-950 flex flex-col items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-8 shadow-2xl my-auto">
+    <div className="min-h-[100dvh] bg-paper flex flex-col items-center justify-center p-4 overflow-y-auto relative">
+      {/* halos doux, jamais de neon */}
+      <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-brand-soft blur-3xl opacity-80" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-40 -right-24 w-[460px] h-[460px] rounded-full bg-accent-soft blur-3xl opacity-90" />
+
+      <div className="relative w-full max-w-md my-auto">
         <div className="text-center mb-6">
-          <h1 className="text-4xl font-black text-white italic tracking-tighter">
-            HYROX <span className="text-yellow-500">WOD</span>
-          </h1>
+          <Brand size="lg" />
+          <p className="text-sm text-ink-2 mt-2">Cours d&apos;éducation physique · séances, arbitrage, résultats</p>
         </div>
 
-        <div className="flex mb-6 border border-neutral-800 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setTab("eleve")}
-            className={`flex-1 py-2 text-sm font-bold transition-colors ${
-              tab === "eleve" ? "bg-yellow-500 text-black" : "text-neutral-400"
-            }`}
-          >
-            Élève
-          </button>
-          <button
-            onClick={() => setTab("admin")}
-            className={`flex-1 py-2 text-sm font-bold transition-colors ${
-              tab === "admin" ? "bg-yellow-500 text-black" : "text-neutral-400"
-            }`}
-          >
-            Coach / Greffier / Admin
-          </button>
-        </div>
+        <div className={`${ui.card} p-6 sm:p-8`}>
+          <div className={`${ui.segmented} w-full mb-6`}>
+            <button
+              onClick={() => setTab("eleve")}
+              className={cx("flex-1 py-2 text-sm font-bold rounded-lg transition", tab === "eleve" ? ui.segOn : ui.segOff)}
+            >
+              Élève
+            </button>
+            <button
+              onClick={() => setTab("admin")}
+              className={cx("flex-1 py-2 text-sm font-bold rounded-lg transition", tab === "admin" ? ui.segOn : ui.segOff)}
+            >
+              Coach / Greffier / Admin
+            </button>
+          </div>
 
-        {tab === "eleve" ? <StudentLogin /> : <AdminLogin />}
+          {tab === "eleve" ? <StudentLogin /> : <AdminLogin />}
+        </div>
       </div>
     </div>
   );
@@ -50,9 +53,9 @@ function AdminLogin() {
   const [state, formAction, pending] = useActionState(loginAction, undefined);
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-5">
       <div>
-        <label className="block text-sm font-medium text-neutral-300 mb-2">Pseudo</label>
+        <label className={ui.label}>Pseudo</label>
         <input
           type="text"
           name="name"
@@ -60,31 +63,27 @@ function AdminLogin() {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
+          className={ui.input}
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-neutral-300 mb-2">Mot de passe</label>
+        <label className={ui.label}>Mot de passe</label>
         <input
           type="password"
           name="password"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
+          className={ui.input}
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-neutral-400">
-        <input type="checkbox" name="remember" className="w-4 h-4 accent-yellow-500" />
+      <label className="flex items-center gap-2 text-sm text-ink-2">
+        <input type="checkbox" name="remember" className={ui.check} />
         Se souvenir de moi (30 jours)
       </label>
-      {state?.error && <p className="text-red-400 text-sm">{state.error}</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold py-3 rounded-lg transition-transform active:scale-95"
-      >
-        {pending ? "…" : "ENTRER"}
+      {state?.error && <p className={ui.alertErr}>{state.error}</p>}
+      <button type="submit" disabled={pending} className={`${btn.lgPrimary} w-full`}>
+        {pending ? "…" : "Entrer"}
       </button>
     </form>
   );
@@ -93,6 +92,8 @@ function AdminLogin() {
 function scrollIntoViewOnFocus(e: React.FocusEvent<HTMLInputElement>) {
   setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
 }
+
+const pinInput = `${ui.input} tracking-[0.5em] text-center text-xl py-3`;
 
 function StudentLogin() {
   const [step, setStep] = useState<"classe" | "nom" | "pin">("classe");
@@ -143,18 +144,20 @@ function StudentLogin() {
     });
   }
 
+  const backLink = "text-xs font-bold text-ink-2 hover:text-ink mb-3 inline-flex items-center gap-1";
+
   return (
     <div className="space-y-5">
       {step === "classe" && (
         <div>
-          <label className="block text-sm font-medium text-neutral-300 mb-2">Ta classe</label>
+          <label className={ui.label}>Ta classe</label>
           <select
             value={className}
             onChange={(e) => {
               setClassName(e.target.value);
               if (e.target.value) setStep("nom");
             }}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500"
+            className={`${ui.input} py-3`}
           >
             <option value="">Choisis ta classe…</option>
             {classes.map((c) => (
@@ -174,31 +177,31 @@ function StudentLogin() {
               setQuery("");
               setMatches([]);
             }}
-            className="text-xs text-neutral-500 mb-3"
+            className={backLink}
           >
             ← {className}
           </button>
-          <label className="block text-sm font-medium text-neutral-300 mb-2">Ton prénom ou nom</label>
+          <label className={ui.label}>Ton prénom ou nom</label>
           <input
             type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Commence à taper…"
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500"
+            className={`${ui.input} py-3`}
           />
           <div className="mt-3 space-y-2">
             {matches.map((m) => (
               <button
                 key={m.id}
                 onClick={() => pickStudent(m)}
-                className="w-full text-left bg-neutral-800 hover:bg-neutral-700 rounded-lg p-3 text-white transition-colors"
+                className="w-full text-left bg-paper hover:bg-brand-soft hover:text-brand-ink border border-line rounded-xl p-3 font-semibold transition"
               >
                 {m.firstName} {m.lastName}
               </button>
             ))}
             {query.trim().length > 0 && matches.length === 0 && (
-              <p className="text-sm text-neutral-500">Personne trouvé — vérifie l'orthographe ou demande à ton prof.</p>
+              <p className={ui.muted}>Personne trouvé — vérifie l&apos;orthographe ou demande à ton prof.</p>
             )}
           </div>
         </div>
@@ -212,17 +215,17 @@ function StudentLogin() {
               setSelected(null);
               setError("");
             }}
-            className="text-xs text-neutral-500 mb-3"
+            className={backLink}
           >
             ← {selected.firstName} {selected.lastName}
           </button>
-          <p className="text-white font-bold mb-3">
+          <p className="font-display font-bold text-lg mb-3">
             {selected.firstName} {selected.lastName}
           </p>
 
           {selected.hasPin ? (
             <>
-              <label className="block text-sm font-medium text-neutral-300 mb-2">Ton code PIN</label>
+              <label className={ui.label}>Ton code PIN</label>
               <input
                 type="password"
                 inputMode="numeric"
@@ -231,15 +234,13 @@ function StudentLogin() {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                 onFocus={scrollIntoViewOnFocus}
                 autoFocus
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl"
+                className={pinInput}
               />
             </>
           ) : (
             <>
-              <p className="text-xs text-neutral-500 mb-3">
-                Première connexion — crée un code PIN à 4 chiffres que tu garderas pour la suite.
-              </p>
-              <label className="block text-sm font-medium text-neutral-300 mb-2">Nouveau code PIN</label>
+              <p className={`${ui.alertInfo} mb-3`}>Première connexion — crée un code PIN à 4 chiffres que tu garderas pour la suite.</p>
+              <label className={ui.label}>Nouveau code PIN</label>
               <input
                 type="password"
                 inputMode="numeric"
@@ -248,9 +249,9 @@ function StudentLogin() {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                 onFocus={scrollIntoViewOnFocus}
                 autoFocus
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl mb-3"
+                className={`${pinInput} mb-3`}
               />
-              <label className="block text-sm font-medium text-neutral-300 mb-2">Confirme le code</label>
+              <label className={ui.label}>Confirme le code</label>
               <input
                 type="password"
                 inputMode="numeric"
@@ -258,24 +259,20 @@ function StudentLogin() {
                 value={pinConfirm}
                 onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ""))}
                 onFocus={scrollIntoViewOnFocus}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl"
+                className={pinInput}
               />
             </>
           )}
 
-          <label className="flex items-center gap-2 text-sm text-neutral-400 mt-4">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-4 h-4 accent-yellow-500" />
+          <label className="flex items-center gap-2 text-sm text-ink-2 mt-4">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className={ui.check} />
             Se souvenir de moi (30 jours)
           </label>
 
-          {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+          {error && <p className={`${ui.alertErr} mt-3`}>{error}</p>}
 
-          <button
-            onClick={submitPin}
-            disabled={pending || pin.length < 4}
-            className="w-full mt-4 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-bold py-3 rounded-lg transition-transform active:scale-95"
-          >
-            {pending ? "…" : "ENTRER"}
+          <button onClick={submitPin} disabled={pending || pin.length < 4} className={`${btn.lgPrimary} w-full mt-4`}>
+            {pending ? "…" : "Entrer"}
           </button>
         </div>
       )}

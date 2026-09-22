@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildBoardData } from "@/lib/referee-board";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { Board, type BoardMarker } from "../../touche-coule/Board";
+import { TopBar } from "../../_components/TopBar";
+import { btn, ui } from "@/lib/ui";
 
 // Carte admin (lecture seule) : toutes les flottes (fantomes grisees), tous les tirs, classement des arbitres.
 export default async function CartePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
@@ -27,83 +28,82 @@ export default async function CartePage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-cyan-50 font-mono p-4 sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-black text-cyan-400 uppercase tracking-widest">Carte Touché-Coulé</h1>
-        {user.role === "MASTER_ADMIN" && <Link href="/admin" className="text-sm text-cyan-300 underline">← Console</Link>}
-      </div>
+    <div className={ui.page}>
+      <TopBar title="Carte Touché-Coulé" wide back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined}>
+        <form className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-semibold text-ink-2">Séance</label>
+          <select name="session" defaultValue={session?.id ?? ""} className={`${ui.input} w-auto max-w-full`}>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label ?? wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · ouverte" : ""}{s.raceEndedAt ? " · terminée" : ""}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className={btn.primary}>Voir</button>
+        </form>
+      </TopBar>
 
-      <form className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-cyan-300">Séance</label>
-        <select name="session" defaultValue={session?.id ?? ""} className="bg-slate-900 border border-cyan-800 rounded p-2 text-sm">
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label ?? wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · ouverte" : ""}{s.raceEndedAt ? " · terminée" : ""}
-            </option>
-          ))}
-        </select>
-        <button type="submit" className="bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-bold px-4 py-2 rounded">Voir</button>
-      </form>
-
-      {!board ? (
-        <p className="text-slate-400">Aucune séance avec arbitrage.</p>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4">
-          <div className="bg-[#062230] rounded-xl p-2 text-amber-50">
-            <p className="text-[11px] text-amber-100/60 px-1 mb-1">
-              {board.ships.length} navire(s) · {board.shots.length} tir(s) · {board.evaluationsCount} évaluation(s). Les flottes fantômes apparaissent grisées, les navires coulés assombris.
-            </p>
-            <Board
-              teams={board.teams}
-              exercises={board.exercises}
-              ships={board.ships.map((s) => ({ ...s, dimmed: s.sunk }))}
-              markers={markers}
-              isCellDisabled={() => true}
-            />
-          </div>
-          <aside className="space-y-4">
-            <div className="bg-slate-900 border border-cyan-900 rounded-xl p-3">
-              <h2 className="font-bold text-cyan-300 mb-2">Arbitres</h2>
-              {board.referees.length === 0 ? (
-                <p className="text-xs text-slate-400">Aucune flotte réelle.</p>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-left text-slate-400 border-b border-cyan-900">
-                      <th className="p-1">#</th><th className="p-1">Arbitre</th><th className="p-1">Pts</th><th className="p-1">💥</th><th className="p-1">☠️</th><th className="p-1">🌊</th><th className="p-1">🛡️</th><th className="p-1">Flotte</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {board.referees.map((r, i) => (
-                      <tr key={r.refereeId} className="border-b border-slate-800">
-                        <td className="p-1">{i + 1}</td>
-                        <td className="p-1 font-bold">{r.name} <span className="text-slate-500">{r.className ?? ""}</span></td>
-                        <td className="p-1 font-black text-amber-300">{r.score}</td>
-                        <td className="p-1">{r.hits}</td><td className="p-1">{r.sunk}</td><td className="p-1">{r.misses}</td><td className="p-1">{r.intact}/{r.cellsTotal}</td>
-                        <td className="p-1 text-slate-400">{r.fleetLocked ? `${r.shipsTotal - r.shipsLost}/${r.shipsTotal} à flot` : "en placement"}</td>
+      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-6">
+        {!board ? (
+          <p className={ui.muted}>Aucune séance avec arbitrage.</p>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4">
+            <div className={`${ui.card} p-3`}>
+              <p className={`${ui.hint} px-1 mb-2`}>
+                <b className="text-ink">{board.ships.length}</b> navire(s) · <b className="text-ink">{board.shots.length}</b> tir(s) · <b className="text-ink">{board.evaluationsCount}</b> évaluation(s). Les flottes fantômes apparaissent grisées, les navires coulés assombris.
+              </p>
+              <Board
+                teams={board.teams}
+                exercises={board.exercises}
+                ships={board.ships.map((s) => ({ ...s, dimmed: s.sunk }))}
+                markers={markers}
+                isCellDisabled={() => true}
+              />
+            </div>
+            <aside className="space-y-4">
+              <div className={`${ui.card} p-3`}>
+                <h2 className={`${ui.h3} mb-2`}>Arbitres</h2>
+                {board.referees.length === 0 ? (
+                  <p className={ui.hint}>Aucune flotte réelle.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className={ui.th}>#</th><th className={ui.th}>Arbitre</th><th className={ui.th}>Pts</th><th className={ui.th}>💥</th><th className={ui.th}>☠️</th><th className={ui.th}>🌊</th><th className={ui.th}>🛡️</th><th className={ui.th}>Flotte</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="bg-slate-900 border border-cyan-900 rounded-xl p-3">
-              <h2 className="font-bold text-cyan-300 mb-2">Navires</h2>
-              <ul className="text-xs space-y-0.5 max-h-72 overflow-auto">
-                {board.ships.map((s) => {
-                  const t = board.teams.find((x) => x.id === s.startTeamId)?.name ?? "?";
-                  const e = board.exercises.findIndex((x) => x.id === s.startExerciseId) + 1;
-                  return (
-                    <li key={s.id} className={s.sunk ? "text-red-300 line-through" : "text-slate-300"}>
-                      {s.ghost ? "👻 " : ""}{s.refereeName} · taille {s.size} {s.orientation === "horizontal" ? "↔" : "↕"} · {t} / exo {e}{s.sunk ? " · coulé" : ""}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </aside>
-        </div>
-      )}
+                    </thead>
+                    <tbody>
+                      {board.referees.map((r, i) => (
+                        <tr key={r.refereeId} className={ui.tr}>
+                          <td className="p-1.5">{i + 1}</td>
+                          <td className="p-1.5 font-bold">{r.name} <span className="text-ink-3 font-normal">{r.className ?? ""}</span></td>
+                          <td className="p-1.5 font-black text-brand">{r.score}</td>
+                          <td className="p-1.5">{r.hits}</td><td className="p-1.5">{r.sunk}</td><td className="p-1.5">{r.misses}</td><td className="p-1.5">{r.intact}/{r.cellsTotal}</td>
+                          <td className="p-1.5 text-ink-2">{r.fleetLocked ? `${r.shipsTotal - r.shipsLost}/${r.shipsTotal} à flot` : "en placement"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className={`${ui.card} p-3`}>
+                <h2 className={`${ui.h3} mb-2`}>Navires</h2>
+                <ul className="text-xs space-y-0.5 max-h-72 overflow-auto">
+                  {board.ships.map((s) => {
+                    const t = board.teams.find((x) => x.id === s.startTeamId)?.name ?? "?";
+                    const e = board.exercises.findIndex((x) => x.id === s.startExerciseId) + 1;
+                    return (
+                      <li key={s.id} className={s.sunk ? "text-danger line-through" : "text-ink-2"}>
+                        {s.ghost ? "👻 " : ""}{s.refereeName} · taille {s.size} {s.orientation === "horizontal" ? "↔" : "↕"} · {t} / exo {e}{s.sunk ? " · coulé" : ""}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </aside>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { QUALITY_LEVELS, type QualityCode } from "@/lib/wod-engines/core/quality";
 import type { SelfEvalCriterion } from "@/lib/wod-engines/core/self-eval";
 import { submitSelfEvaluationAction } from "./actions";
+import { btn, cx, ui } from "@/lib/ui";
 
 type Props = {
   sessionId: string;
@@ -20,7 +21,7 @@ type Props = {
 const LEVEL_STYLE: Record<QualityCode, { idle: string; on: string }> = {
   TI: { idle: "bg-red-50 border-red-100", on: "bg-red-600 border-red-700 text-white" },
   I: { idle: "bg-orange-50 border-orange-100", on: "bg-orange-500 border-orange-600 text-white" },
-  S: { idle: "bg-yellow-50 border-yellow-100", on: "bg-yellow-400 border-yellow-500 text-slate-900" },
+  S: { idle: "bg-yellow-50 border-yellow-100", on: "bg-yellow-400 border-yellow-500 text-ink" },
   B: { idle: "bg-lime-50 border-lime-100", on: "bg-lime-600 border-lime-700 text-white" },
   TB: { idle: "bg-emerald-50 border-emerald-100", on: "bg-emerald-600 border-emerald-700 text-white" },
   E: { idle: "bg-sky-50 border-sky-100", on: "bg-sky-600 border-sky-700 text-white" },
@@ -55,32 +56,32 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
   return (
     <div>
       {state === "notYet" && (
-        <p className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3 mb-4">
-          ⏳ L'auto-évaluation s'ouvrira dès que ton équipe aura terminé le WOD (et restera disponible 24 h).
+        <p className={`${ui.alertWarn} mb-4`}>
+          ⏳ L&apos;auto-évaluation s&apos;ouvrira dès que ton équipe aura terminé le WOD (et restera disponible 24 h).
         </p>
       )}
       {state === "expired" && (
-        <p className="bg-slate-100 border border-slate-200 text-slate-600 text-sm rounded-lg p-3 mb-4">
+        <p className="bg-paper border border-line text-ink-2 text-sm rounded-xl p-3 mb-4">
           🔒 Le délai de 24 h est écoulé. {initial ? "Voici ce que tu avais coché." : "Tu n'as pas rempli ton auto-évaluation."}
         </p>
       )}
       {state === "open" && (
-        <p className="text-xs text-slate-500 mb-3">
-          {closesAt && <>Ouverte jusqu'au {fmt(closesAt)}.</>}
+        <p className={`${ui.hint} mb-3`}>
+          {closesAt && <>Ouverte jusqu&apos;au {fmt(closesAt)}.</>}
           {submittedAt && <> Dernier envoi : {fmt(submittedAt)}.</>}
         </p>
       )}
 
-      <p className="text-sm italic text-slate-700 mb-4"><b>Consigne :</b> {instruction}</p>
+      <p className="text-sm italic text-ink-2 mb-4"><b className="text-ink not-italic">Consigne :</b> {instruction}</p>
 
       <div className="space-y-5">
         {criteria.map((c, idx) => {
           const chosen = answers[c.id];
           return (
-            <section key={c.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <header className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-900 text-white">
-                <h3 className="font-black text-sm">{idx + 1}. {c.label}</h3>
-                <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${chosen ? "bg-white text-slate-900" : "bg-slate-700 text-slate-300"}`}>
+            <section key={c.id} className={`${ui.card} overflow-hidden`}>
+              <header className="flex items-center justify-between gap-2 px-3 py-2 bg-paper border-b border-line">
+                <h3 className="font-display font-bold text-sm">{idx + 1}. {c.label}</h3>
+                <span className={cx(ui.chip, chosen ? "bg-brand text-white" : ui.chipMuted)}>
                   {chosen ? QUALITY_LEVELS.find((l) => l.code === chosen)?.label : "à cocher"}
                 </span>
               </header>
@@ -95,9 +96,9 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
                       disabled={!editable || pending}
                       aria-pressed={selected}
                       onClick={() => setAnswers((a) => ({ ...a, [c.id]: l.code }))}
-                      className={`text-left rounded-lg border-2 px-3 py-2 transition-all flex gap-2 items-start ${selected ? `${style.on} shadow-md scale-[1.01]` : `${style.idle} ${editable ? "hover:border-slate-400" : "opacity-60"}`}`}
+                      className={cx("text-left rounded-xl border-2 px-3 py-2 transition-all flex gap-2 items-start", selected ? `${style.on} shadow-md scale-[1.01]` : `${style.idle} ${editable ? "hover:border-ink-3" : "opacity-60"}`)}
                     >
-                      <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[11px] font-black ${selected ? "bg-white text-slate-900 border-white" : "border-slate-400 text-transparent"}`}>✓</span>
+                      <span className={cx("mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[11px] font-black", selected ? "bg-white text-ink border-white" : "border-ink-3/60 text-transparent")}>✓</span>
                       <span className="min-w-0">
                         <span className="block text-[11px] font-black uppercase tracking-wide opacity-80">{l.label} · {l.code}</span>
                         <span className="block text-xs leading-snug">{c.levels[l.code].replace(" [~]", "")}</span>
@@ -112,20 +113,20 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
       </div>
 
       {message && (
-        <p className={`text-sm mt-4 font-bold ${message.tone === "ok" ? "text-emerald-700" : "text-red-600"}`}>{message.text}</p>
+        <p className={cx("mt-4", message.tone === "ok" ? ui.alertOk : ui.alertErr)}>{message.text}</p>
       )}
 
       {editable && (
         <button
           onClick={submit}
           disabled={!complete || pending}
-          className="mt-4 w-full bg-slate-900 disabled:bg-slate-300 text-white font-black py-4 rounded-2xl text-lg transition-transform active:scale-[0.98]"
+          className={`${btn.lgPrimary} mt-4 w-full py-4 text-lg rounded-2xl`}
         >
           {pending ? "…" : initial ? "Mettre à jour mon auto-évaluation" : "Envoyer mon auto-évaluation"}
         </button>
       )}
       {editable && !complete && (
-        <p className="text-xs text-slate-500 mt-2 text-center">
+        <p className={`${ui.hint} mt-2 text-center`}>
           Encore {criteria.filter((c) => !answers[c.id]).length} ligne(s) à cocher pour pouvoir envoyer.
         </p>
       )}

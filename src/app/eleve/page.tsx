@@ -7,6 +7,8 @@ import { openSessionsForStudent, toMs } from "@/lib/scheduling";
 import { refereeAccess } from "@/lib/referee-access";
 import { LogoutButton } from "./LogoutButton";
 import { RefereeRequest } from "./RefereeRequest";
+import { TopBar } from "../_components/TopBar";
+import { ui } from "@/lib/ui";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -28,30 +30,24 @@ export default async function ElevePage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 font-sans">
-      <header className="bg-white border-b-4 border-slate-900 px-4 py-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg font-black leading-tight truncate">{user.name}</h1>
-          <p className="text-xs text-slate-500">{user.className ?? ""}</p>
-        </div>
-        <LogoutButton />
-      </header>
+    <div className={ui.page}>
+      <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
         <section>
-          <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">WOD en cours</h2>
+          <h2 className={`${ui.eyebrow} mb-2`}>WOD en cours</h2>
           {cards.length === 0 ? (
-            <p className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-500">
-              Aucune séance ouverte pour ta classe en ce moment. Elle s'ouvrira automatiquement pendant ton cours d'EP (ou quand le prof l'ouvrira).
+            <p className={`${ui.cardPad} ${ui.muted}`}>
+              Aucune séance ouverte pour ta classe en ce moment. Elle s&apos;ouvrira automatiquement pendant ton cours d&apos;EP (ou quand le prof l&apos;ouvrira).
             </p>
           ) : (
             <div className="space-y-3">
               {cards.map(({ s, membership, access }) => (
-                <div key={s.id} className="bg-white border-2 border-slate-900 rounded-2xl p-4">
+                <div key={s.id} className={`${ui.card} border-brand/40 p-4`}>
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div>
-                      <div className="font-black text-lg">{s.label ?? wodLabel(s.wodType)}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="font-display font-extrabold text-lg">{s.label ?? wodLabel(s.wodType)}</div>
+                      <div className="text-xs text-ink-2">
                         {fmtDate(s.createdAt)}
                         {s.raceEndedAt ? " · terminé" : " · ouvert"}
                         {s.closesAt ? ` jusqu'à ${new Date(toMs(s.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" })}` : ""}
@@ -59,14 +55,14 @@ export default async function ElevePage() {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       {membership && (
-                        <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">{membership.teamName}</span>
+                        <span className={`${ui.chip} ${ui.chipOk}`}>{membership.teamName}</span>
                       )}
                       {access.status === "APPROVED" && (
-                        <span className="text-[11px] font-bold bg-[#062230] text-amber-300 px-2 py-1 rounded-full">🏴‍☠️ arbitre{access.note ? ` · ${access.note}` : ""}</span>
+                        <span className={`${ui.chip} ${ui.chipSea}`}>🏴‍☠️ arbitre{access.note ? ` · ${access.note}` : ""}</span>
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-slate-600 mb-3">
+                  <p className={`${ui.muted} mb-3`}>
                     {access.status === "APPROVED"
                       ? "Tu es autorisé à arbitrer sur ce WOD."
                       : membership
@@ -75,11 +71,11 @@ export default async function ElevePage() {
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {!s.refereeMode ? (
-                      <div className="bg-slate-100 text-slate-400 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d'arbitrage sur ce WOD</div>
+                      <div className="bg-paper text-ink-3 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d&apos;arbitrage sur ce WOD</div>
                     ) : access.allowed ? (
-                      <Link href={`/touche-coule?session=${s.id}`} className="bg-[#062230] text-amber-300 font-black text-center rounded-xl py-4 px-2 leading-tight">
+                      <Link href={`/touche-coule?session=${s.id}`} className="bg-sea hover:bg-sea-hover text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm transition">
                         🏴‍☠️ Arbitre
-                        <span className="block text-[11px] font-normal text-amber-100/70 mt-1">Touché-Coulé</span>
+                        <span className="block text-[11px] font-normal text-white/80 mt-1">Touché-Coulé</span>
                       </Link>
                     ) : (
                       <RefereeRequest
@@ -90,14 +86,14 @@ export default async function ElevePage() {
                       />
                     )}
                     {membership ? (
-                      <Link href={`/eleve/${s.id}`} className="bg-emerald-600 text-white font-black text-center rounded-xl py-4 px-2 leading-tight">
+                      <Link href={`/eleve/${s.id}`} className="bg-success hover:bg-success/90 text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm transition">
                         💪 Participant
-                        <span className="block text-[11px] font-normal text-emerald-100 mt-1">Résultats · arbitrages · auto-éval</span>
+                        <span className="block text-[11px] font-normal text-white/85 mt-1">Résultats · arbitrages · auto-éval</span>
                       </Link>
                     ) : (
-                      <div className="bg-slate-100 text-slate-500 rounded-xl py-3 px-3 text-xs leading-snug">
-                        <span className="font-black text-slate-700 block mb-1">💪 Participant</span>
-                        Le greffier doit d'abord t'encoder dans une équipe. Reviens ici ensuite : tes résultats et ton auto-évaluation apparaîtront.
+                      <div className="bg-paper text-ink-2 rounded-xl py-3 px-3 text-xs leading-snug">
+                        <span className="font-extrabold text-ink block mb-1">💪 Participant</span>
+                        Le greffier doit d&apos;abord t&apos;encoder dans une équipe. Reviens ici ensuite : tes résultats et ton auto-évaluation apparaîtront.
                       </div>
                     )}
                   </div>
@@ -108,22 +104,22 @@ export default async function ElevePage() {
         </section>
 
         <section>
-          <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Mes WOD</h2>
+          <h2 className={`${ui.eyebrow} mb-2`}>Mes WOD</h2>
           {history.length === 0 ? (
-            <p className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-500">
-              Ton nom n'est encore apparu dans aucun WOD précédent.
+            <p className={`${ui.cardPad} ${ui.muted}`}>
+              Ton nom n&apos;est encore apparu dans aucun WOD précédent.
             </p>
           ) : (
             <ul className="space-y-2">
               {history.map((r) => (
                 <li key={r.sessionId}>
-                  <Link href={`/eleve/${r.sessionId}`} className="block bg-white border border-slate-200 hover:border-slate-900 rounded-xl p-4">
+                  <Link href={`/eleve/${r.sessionId}`} className={`block ${ui.card} hover:border-brand p-4 transition`}>
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="font-black">{r.label}</div>
-                        <div className="text-xs text-slate-500">{fmtDate(r.createdAt)} · {r.teamName}</div>
+                        <div className="font-display font-bold">{r.label}</div>
+                        <div className="text-xs text-ink-2">{fmtDate(r.createdAt)} · {r.teamName}</div>
                       </div>
-                      <span className="text-slate-400 font-black">›</span>
+                      <span className="text-ink-3 font-black">›</span>
                     </div>
                   </Link>
                 </li>

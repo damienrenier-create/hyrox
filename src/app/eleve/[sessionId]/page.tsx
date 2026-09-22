@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -8,6 +7,8 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
+import { TopBar } from "../../_components/TopBar";
+import { ui } from "@/lib/ui";
 
 export default async function EleveSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -64,17 +65,13 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
   const existing = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: user.id }).first();
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 font-sans">
-      <header className="bg-white border-b-4 border-slate-900 px-4 py-3 flex items-center gap-3">
-        <Link href="/eleve" className="text-slate-500 font-black text-xl leading-none" aria-label="Retour">‹</Link>
-        <div className="min-w-0">
-          <h1 className="text-lg font-black leading-tight truncate">{session.label ?? wodLabel(session.wodType)}</h1>
-          <p className="text-xs text-slate-500 truncate">
-            {fmtDate(session.createdAt)} · {myTeam.name}
-            {teammates.length > 0 && <> · avec {teammates.join(", ")}</>}
-          </p>
-        </div>
-      </header>
+    <div className={ui.page}>
+      <TopBar
+        brand={false}
+        back={{ href: "/eleve", label: "Retour" }}
+        title={session.label ?? wodLabel(session.wodType)}
+        subtitle={<>{fmtDate(session.createdAt)} · {myTeam.name}{teammates.length > 0 && <> · avec {teammates.join(", ")}</>}</>}
+      />
 
       <main className="max-w-2xl mx-auto p-4">
         <WodView

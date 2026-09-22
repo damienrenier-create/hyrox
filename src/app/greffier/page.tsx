@@ -14,6 +14,7 @@ import { getSessionClasses } from "./team-actions";
 import { GreffierClient, type SessionOption } from "./client";
 import type { RefereeView, TeamWithMembers } from "./TeamsManager";
 import type { PendingRequest } from "./referee-decisions";
+import { ui } from "@/lib/ui";
 
 export default async function GreffierPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
@@ -32,10 +33,11 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-cyan-50 font-mono text-center">
-        <div>
-          <h1 className="text-2xl font-bold mb-2">Aucune séance</h1>
-          <p className="text-slate-400 text-sm">DAMZER doit ouvrir une séance (ou définir un cycle avec les horaires des classes).</p>
+      <div className={`${ui.page} flex items-center justify-center p-4 text-center`}>
+        <div className={`${ui.cardPad} max-w-sm`}>
+          <div className="text-4xl mb-3">🕒</div>
+          <h1 className={`${ui.h2} mb-2`}>Aucune séance</h1>
+          <p className={ui.muted}>DAMZER doit ouvrir une séance (ou définir un cycle avec les horaires des classes).</p>
         </div>
       </div>
     );

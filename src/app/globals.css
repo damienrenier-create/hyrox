@@ -1,26 +1,86 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  DA « terrain clair » : fond papier chaud, cartes blanches, texte encre,
+  cobalt = marque / actions principales, orange = accent energie (chrono, badges),
+  vert / rouge = etats, bleu mer = tout ce qui touche au Touche-Coule.
+  Les utilitaires Tailwind (bg-brand, text-ink-2, border-line…) decoulent de ces tokens.
+*/
+@theme {
+  /* Surfaces */
+  --color-paper: #f6f4ef;
+  --color-card: #ffffff;
+  --color-line: #e8e3da;
+  --color-line-2: #d3ccbf;
+
+  /* Texte */
+  --color-ink: #1d1b18;
+  --color-ink-2: #625c53;
+  --color-ink-3: #9a9388;
+
+  /* Marque : cobalt */
+  --color-brand: #2d55d8;
+  --color-brand-hover: #2446b8;
+  --color-brand-soft: #e9eefc;
+  --color-brand-ink: #1b3a9e;
+
+  /* Accent energie : orange */
+  --color-accent: #ff7a2f;
+  --color-accent-hover: #f26a1e;
+  --color-accent-soft: #fff0e5;
+  --color-accent-ink: #b2400a;
+
+  /* Etats */
+  --color-success: #1f9d55;
+  --color-success-soft: #e6f6ec;
+  --color-success-ink: #14683a;
+  --color-warn: #f2b600;
+  --color-warn-soft: #fff7d6;
+  --color-warn-ink: #7a5a00;
+  --color-danger: #d93025;
+  --color-danger-soft: #fdecea;
+  --color-danger-ink: #a8231a;
+
+  /* Mer (Touche-Coule, arbitres) */
+  --color-sea: #1b6fb8;
+  --color-sea-hover: #155c9a;
+  --color-sea-soft: #e3f1fb;
+  --color-sea-ink: #0f4c80;
+
+  --shadow-card: 0 1px 2px rgba(29, 27, 24, 0.05), 0 6px 20px -10px rgba(29, 27, 24, 0.14);
+  --shadow-pop: 0 24px 60px -20px rgba(29, 27, 24, 0.35);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
+  background: var(--color-paper);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }

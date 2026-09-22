@@ -4,6 +4,7 @@ import { useState } from "react";
 import { QUALITY_LEVELS, type QualityCode } from "@/lib/wod-engines/core/quality";
 import type { SelfEvalCriterion } from "@/lib/wod-engines/core/self-eval";
 import { SelfEvalGrid } from "../SelfEvalGrid";
+import { cx, ui } from "@/lib/ui";
 
 export type ResultRow = {
   rank: number;
@@ -56,59 +57,61 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
     { id: "self", label: "Auto-éval" },
   ];
 
+  const stat = "font-display text-2xl font-extrabold tabular-nums";
+
   return (
     <div>
       {mine && (
-        <div className="bg-white border-2 border-slate-900 rounded-2xl p-4 mb-4 grid grid-cols-3 gap-2 text-center">
+        <div className={`${ui.card} border-brand/40 p-4 mb-4 grid grid-cols-3 gap-2 text-center`}>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Rang</div>
-            <div className="text-2xl font-black">{mine.done || ended ? `${mine.rank}e` : "—"}</div>
+            <div className={ui.eyebrow}>Rang</div>
+            <div className={cx(stat, "text-brand")}>{mine.done || ended ? `${mine.rank}e` : "—"}</div>
           </div>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{columns.laps}</div>
-            <div className="text-2xl font-black">{mine.laps}<span className="text-sm text-slate-400">/{mine.lapsTotal}</span></div>
+            <div className={ui.eyebrow}>{columns.laps}</div>
+            <div className={stat}>{mine.laps}<span className="text-sm text-ink-3 font-sans">/{mine.lapsTotal}</span></div>
           </div>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{mine.time ? columns.time : columns.reps}</div>
-            <div className="text-2xl font-black">{mine.time ?? mine.reps}</div>
+            <div className={ui.eyebrow}>{mine.time ? columns.time : columns.reps}</div>
+            <div className={stat}>{mine.time ?? mine.reps}</div>
           </div>
         </div>
       )}
 
-      <div className="flex gap-1 bg-slate-200 rounded-xl p-1 mb-4">
+      <div className={`${ui.segmented} w-full mb-4`}>
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 relative text-sm font-black py-2 rounded-lg transition-colors ${tab === t.id ? "bg-white text-slate-900 shadow" : "text-slate-500"}`}
+            className={cx("flex-1 relative text-sm font-bold py-2 rounded-lg transition", tab === t.id ? ui.segOn : ui.segOff)}
           >
             {t.label}
-            {t.id === "self" && todo && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500" />}
+            {t.id === "self" && todo && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-accent" />}
           </button>
         ))}
       </div>
 
       {tab === "results" && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
-          {!ended && <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 border-b border-amber-100">WOD en cours : classement provisoire (encodé par le greffier).</p>}
+        <div className={`${ui.card} overflow-x-auto`}>
+          {!ended && <p className="text-xs text-warn-ink bg-warn-soft px-3 py-2 border-b border-warn/30">WOD en cours : classement provisoire (encodé par le greffier).</p>}
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b-2 border-slate-900 text-left">
-                <th className="p-2">#</th>
-                <th className="p-2">Équipe</th>
-                <th className="p-2">{columns.laps}</th>
-                <th className="p-2">{columns.time}</th>
-                <th className="p-2">{columns.reps}</th>
-                <th className="p-2">{columns.cards}</th>
+              <tr>
+                <th className={ui.th}>#</th>
+                <th className={ui.th}>Équipe</th>
+                <th className={ui.th}>{columns.laps}</th>
+                <th className={ui.th}>{columns.time}</th>
+                <th className={ui.th}>{columns.reps}</th>
+                <th className={ui.th}>{columns.cards}</th>
               </tr>
             </thead>
             <tbody>
               {results.map((r) => (
-                <tr key={r.teamId} className={`border-b border-slate-100 ${r.mine ? "bg-emerald-50 font-black" : "odd:bg-slate-50"}`}>
+                <tr key={r.teamId} className={cx("border-b border-line/70", r.mine ? "bg-brand-soft font-extrabold" : "odd:bg-paper/60")}>
                   <td className="p-2">{r.done || ended ? r.rank : "—"}</td>
                   <td className="p-2">{r.teamName}{r.mine ? " ★" : ""}</td>
                   <td className="p-2">{r.laps}/{r.lapsTotal}</td>
-                  <td className="p-2">{r.time ? `🏁 ${r.time}` : "—"}{r.late ? <span className="text-xs text-slate-400"> +{r.late}</span> : null}</td>
+                  <td className="p-2 tabular-nums">{r.time ? `🏁 ${r.time}` : "—"}{r.late ? <span className="text-xs text-ink-3"> +{r.late}</span> : null}</td>
                   <td className="p-2">{r.reps}</td>
                   <td className="p-2">{r.cards || ""}</td>
                 </tr>
@@ -120,27 +123,27 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
 
       {tab === "referees" && (
         <div>
-          <p className="text-xs text-slate-500 mb-3">
-            Ce que les arbitres ont observé sur <b>{myTeamName}</b>, exercice par exercice (reps comptées et qualité d'exécution).
+          <p className={`${ui.hint} mb-3`}>
+            Ce que les arbitres ont observé sur <b className="text-ink">{myTeamName}</b>, exercice par exercice (reps comptées et qualité d&apos;exécution).
           </p>
           {refereeEvals.length === 0 ? (
-            <p className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-500">Aucun arbitre n'a encore évalué ton équipe.</p>
+            <p className={`${ui.cardPad} ${ui.muted}`}>Aucun arbitre n&apos;a encore évalué ton équipe.</p>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className={`${ui.card} overflow-hidden`}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b-2 border-slate-900 text-left">
-                    <th className="p-2">Exercice</th>
-                    <th className="p-2">Reps vues</th>
-                    <th className="p-2">Qualité</th>
+                  <tr>
+                    <th className={ui.th}>Exercice</th>
+                    <th className={ui.th}>Reps vues</th>
+                    <th className={ui.th}>Qualité</th>
                   </tr>
                 </thead>
                 <tbody>
                   {refereeEvals.map((e, i) => {
                     const level = QUALITY_LEVELS.find((l) => l.code === e.quality);
                     return (
-                      <tr key={i} className="border-b border-slate-100 odd:bg-slate-50">
-                        <td className="p-2"><span className="text-slate-400">{e.exerciseNumber}.</span> {e.exerciseLabel}</td>
+                      <tr key={i} className={ui.tr}>
+                        <td className="p-2"><span className="text-ink-3">{e.exerciseNumber}.</span> {e.exerciseLabel}</td>
                         <td className="p-2 font-bold">{e.reps}</td>
                         <td className="p-2">
                           {level ? (
@@ -148,7 +151,7 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
                           ) : (
                             "—"
                           )}
-                          {level && <span className="text-xs text-slate-400"> {level.label}</span>}
+                          {level && <span className="text-xs text-ink-3"> {level.label}</span>}
                         </td>
                       </tr>
                     );
@@ -161,9 +164,9 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
       )}
 
       {tab === "self" && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <h2 className="font-black mb-1">Auto-évaluation – Cycle Hyrox</h2>
-          <p className="text-xs text-slate-500 mb-4">Éducation Physique et Sportive · une case par critère.</p>
+        <div className={ui.cardPad}>
+          <h2 className={`${ui.h2} mb-1`}>Auto-évaluation – Cycle Hyrox</h2>
+          <p className={`${ui.hint} mb-4`}>Éducation Physique et Sportive · une case par critère.</p>
           <SelfEvalGrid
             sessionId={sessionId}
             criteria={criteria}
