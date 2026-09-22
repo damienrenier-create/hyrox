@@ -30,7 +30,7 @@ export function RefereeRequestsPopup({ sessionId, initial }: { sessionId: string
       } catch {
         // reseau : on retentera au prochain tick
       }
-    }, 5000);
+    }, 8000);
     return () => clearInterval(t);
   }, [sessionId, router]);
 

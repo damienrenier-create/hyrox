@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
@@ -14,6 +14,8 @@ import { startRaceAction, togglePauseAction } from "./race-actions";
 import { finishRaceAction } from "./actions";
 import { ffColorAction, ffFinisherAction, ffPenaltyAction, ffResetColorsAction, ffSettingsAction, ffTapAction, ffUndoAction } from "./ff-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
+import { greffierPulseAction } from "@/lib/pulse";
+import { usePulse } from "../_components/usePulse";
 import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { ArbitrageTab } from "./ArbitrageTab";
@@ -61,13 +63,9 @@ export function FeteForaineClient({
     return () => clearInterval(t);
   }, [phase, isPaused]);
 
-  useEffect(() => {
-    if (phase !== "run") return;
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible" && !openTeamId && !pending) router.refresh();
-    }, 5000);
-    return () => clearInterval(t);
-  }, [phase, openTeamId, pending, router]);
+  // Meme « pouls » que le greffier Pyramide : quelques compteurs, et rendu complet seulement si ca a change.
+  const pulse = useCallback(() => greffierPulseAction(sessionId), [sessionId]);
+  usePulse(pulse, 10000, phase !== "post" && !openTeamId && !pending);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;

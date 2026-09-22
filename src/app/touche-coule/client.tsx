@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
 import { broadcastShot } from "@/lib/firebase/firebase-sync";
 import { submitEvaluationAction, unlockFleetAction } from "./actions";
+import { refereePulseAction } from "@/lib/pulse";
+import { usePulse } from "../_components/usePulse";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
@@ -13,7 +15,7 @@ import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
 import { displayPseudo } from "@/lib/staff-names";
 
-const REFRESH_MS = 5000;
+const REFRESH_MS = 6000;
 
 const key = (c: Cell) => `${c.teamId}_${c.exerciseId}`;
 
@@ -58,13 +60,10 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
 
   const removeEffect = useCallback((id: string) => setEffects((fx) => fx.filter((f) => f.id !== id)), []);
 
-  // Rafraichissement automatique (remplace Firebase) : uniquement onglet visible et hors modale.
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible" && !target && !pending) router.refresh();
-    }, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [router, target, pending]);
+  // Rafraichissement econome : on interroge un « pouls » (nombre de tirs + fin du WOD) et on ne refabrique
+  // la page QUE s'il a change. Hors modale, onglet visible uniquement. Voir src/lib/pulse.ts.
+  const pulse = useCallback(() => refereePulseAction(sessionId), [sessionId]);
+  usePulse(pulse, REFRESH_MS, !target && !pending);
 
   // Alerte + secousse + explosion SUR la case quand un de MES bateaux vient d'etre touche.
   // Les degats arrivent par le rafraichissement serveur (5 s) : on compare la liste des cases touchees.

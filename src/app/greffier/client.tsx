@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useMemo, useRef } from "react";
+import { useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   RaceSettings,
@@ -46,6 +46,8 @@ import {
   setTeamEndAction,
 } from "./race-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
+import { greffierPulseAction } from "@/lib/pulse";
+import { usePulse } from "../_components/usePulse";
 import { finishRaceAction } from "./actions";
 import { Brand } from "../_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
@@ -287,14 +289,11 @@ export function GreffierClient({
     return () => clearInterval(t);
   }, [phase, isPaused]);
 
-  // Rafraichissement automatique des donnees (tours/cartes saisis depuis un autre appareil, ecran projete).
-  useEffect(() => {
-    if (phase !== "run") return;
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible" && !openTeamId && !pending) router.refresh();
-    }, 5000);
-    return () => clearInterval(t);
-  }, [phase, openTeamId, pending, router]);
+  // Rafraichissement econome : on interroge un « pouls » (compteurs de tours, cartes, evaluations, arbitres)
+  // et on ne refabrique la page QUE s'il a change — au lieu de la reconstruire toutes les 5 s pour rien.
+  // Actif meme avant le depart : les equipes et les arbitres bougent aussi depuis un autre appareil.
+  const pulse = useCallback(() => greffierPulseAction(sessionId), [sessionId]);
+  usePulse(pulse, 10000, phase !== "post" && !openTeamId && !settingsOpen && !pending);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;

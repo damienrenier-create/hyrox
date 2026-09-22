@@ -29,18 +29,24 @@ export async function refereePulseAction(sessionId: string): Promise<Pulse> {
   return `${shots}|${session?.raceEndedAt ? 1 : 0}`;
 }
 
-// Ecran greffier : tours, cartes, evaluations, composition des equipes et arbitres.
+// Ecran greffier : tours, cartes, evaluations, arbitres, composition des equipes (encodage depuis un
+// deuxieme appareil) et etat de la course. Environ 7 requetes de comptage, contre ~30 pour un rendu complet.
 export async function greffierPulseAction(sessionId: string): Promise<Pulse> {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "GREFFIER", "ADMIN"].includes(user.role)) return "";
-  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
-  const [laps, cards, evals, refs] = await Promise.all([
+  const [rs, teams] = await Promise.all([
+    db.orm.public.RaceState.where({ sessionId }).first(),
+    db.orm.public.Team.where({ sessionId }).all(),
+  ]);
+  const teamIds = teams.map((t) => t.id);
+  const [laps, cards, evals, refs, members] = await Promise.all([
     rs ? count(() => db.orm.public.Lap.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     rs ? count(() => db.orm.public.YellowCard.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     count(() => db.orm.public.Evaluation.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
     count(() => db.orm.public.SessionReferee.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
+    teamIds.length ? count(() => db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
   ]);
-  return `${laps}|${cards}|${evals}|${refs}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}`;
+  return `${laps}|${cards}|${evals}|${refs}|${members}|${teams.length}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}`;
 }
 
 // Espace eleve en attente d'autorisation d'arbitrage : seul son propre statut compte.

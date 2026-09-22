@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { REFEREE_REASONS } from "@/lib/session-roles";
 import { cancelRefereeRequestAction, requestRefereeAction } from "./referee-actions";
+import { myRefereeStatusPulseAction } from "@/lib/pulse";
+import { usePulse } from "../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 
 type Props = {
@@ -20,14 +22,9 @@ export function RefereeRequest({ sessionId, status, note, inTeam }: Props) {
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  // En attente : on re-verifie toutes les 5 s (le greffier accepte depuis l'ecran projete).
-  useEffect(() => {
-    if (status !== "PENDING") return;
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
-    }, 5000);
-    return () => clearInterval(t);
-  }, [status, router]);
+  // En attente : on interroge SON statut (une requete) et on ne recharge la page que s'il a change.
+  const pulse = useCallback(() => myRefereeStatusPulseAction(sessionId), [sessionId]);
+  usePulse(pulse, 6000, status === "PENDING");
 
   function send() {
     if (!reason) return;
