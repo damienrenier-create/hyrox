@@ -1,37 +1,44 @@
 import { db } from "@/lib/db";
 import type { SessionPayload } from "@/lib/auth";
+import type { RefereeStatus } from "@/lib/session-roles";
 
 export type RefereeAccess = {
   allowed: boolean;
   reason: string | null;
-  isEncodedReferee: boolean;
+  status: RefereeStatus | null; // null = aucune demande / aucun encodage
+  note: string | null;
   teamId: string | null;
   teamName: string | null;
 };
 
 // Qui peut arbitrer (Touche-Coule) sur une seance ?
 // - profs / greffier : toujours.
-// - eleve encode comme arbitre par le greffier : oui (meme s'il est aussi dans une equipe = cas DNF/blessure ;
-//   il ne pourra alors pas evaluer sa propre equipe).
-// - eleve dans une equipe et PAS encode arbitre : non (il participe).
-// - eleve ni dans une equipe ni encode : oui (arbitre libre, comme avant).
+// - eleve : uniquement s'il est inscrit arbitre avec le statut APPROVED (encode par le greffier, ou demande
+//   de l'eleve acceptee par le greffier/un admin). S'il est aussi dans une equipe (DNF, blessure...), il ne
+//   pourra pas evaluer sa propre equipe.
 export async function refereeAccess(sessionId: string, user: SessionPayload): Promise<RefereeAccess> {
-  if (user.role !== "STUDENT") return { allowed: true, reason: null, isEncodedReferee: false, teamId: null, teamName: null };
+  if (user.role !== "STUDENT") return { allowed: true, reason: null, status: "APPROVED", note: null, teamId: null, teamName: null };
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const memberships = await db.orm.public.TeamMember.where({ userId: user.id }).all();
   const myTeam = teams.find((t) => memberships.some((m) => m.teamId === t.id)) ?? null;
-  const refereeRow = await db.orm.public.SessionReferee.where({ sessionId, userId: user.id }).first();
-  const isEncodedReferee = !!refereeRow;
+  const row = await db.orm.public.SessionReferee.where({ sessionId, userId: user.id }).first();
+  const status = (row?.status as RefereeStatus | undefined) ?? null;
+  const base = { note: row?.note ?? null, teamId: myTeam?.id ?? null, teamName: myTeam?.name ?? null };
 
-  if (myTeam && !isEncodedReferee) {
-    return {
-      allowed: false,
-      reason: `Tu participes au WOD dans ${myTeam.name}. Si tu arrêtes (DNF, blessure…), demande au greffier de t'inscrire comme arbitre.`,
-      isEncodedReferee: false,
-      teamId: myTeam.id,
-      teamName: myTeam.name,
-    };
+  if (status === "APPROVED") return { allowed: true, reason: null, status, ...base };
+  if (status === "PENDING") {
+    return { allowed: false, status, reason: "Ta demande d'arbitrage est en attente : le greffier (ou un prof) doit l'accepter.", ...base };
   }
-  return { allowed: true, reason: null, isEncodedReferee, teamId: myTeam?.id ?? null, teamName: myTeam?.name ?? null };
+  if (status === "REFUSED") {
+    return { allowed: false, status, reason: "Ta demande d'arbitrage a été refusée. Tu peux en refaire une si la situation change.", ...base };
+  }
+  return {
+    allowed: false,
+    status: null,
+    reason: myTeam
+      ? `Tu participes au WOD dans ${myTeam.name}. Si tu arrêtes (blessure, abandon…), demande l'autorisation d'arbitrer.`
+      : "Pour arbitrer, demande l'autorisation au greffier (ou à un prof) en indiquant pourquoi tu ne joues pas.",
+    ...base,
+  };
 }

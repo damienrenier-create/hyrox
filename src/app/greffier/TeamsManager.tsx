@@ -11,11 +11,12 @@ import {
   setSessionClassesAction,
   type StudentHit,
 } from "./team-actions";
-import { MAX_CLASSES, REFEREE_NOTES } from "@/lib/session-roles";
+import { decideRefereeAction } from "./referee-decisions";
+import { MAX_CLASSES, REFEREE_REASONS } from "@/lib/session-roles";
 
 export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
-export type RefereeView = TeamMemberView & { note: string | null; teamName: string | null };
+export type RefereeView = TeamMemberView & { note: string | null; status: string; teamName: string | null };
 
 type Props = {
   sessionId: string;
@@ -27,8 +28,8 @@ type Props = {
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
-// (saisie intelligente restreinte a ces classes), 3) arbitres — modifiable pendant tout le WOD.
-// Tout est persiste par identifiant permanent, jamais par nom.
+// (saisie intelligente restreinte a ces classes), 3) arbitres (motif obligatoire) — modifiable pendant tout
+// le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 export function TeamsManager({ sessionId, teams, classes, allClasses, referees, phase }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
@@ -38,9 +39,11 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
 
   const assigned = new Map<string, string>(); // studentId -> teamName
   teams.forEach((t) => t.members.forEach((m) => assigned.set(m.id, t.name)));
-  const refereeIds = new Set(referees.map((r) => r.id));
+  const approvedIds = new Set(referees.filter((r) => r.status === "APPROVED").map((r) => r.id));
+  const statusOfId = new Map(referees.map((r) => [r.id, r.status]));
   const totalMembers = assigned.size;
   const filledTeams = teams.filter((t) => t.members.length > 0).length;
+  const pendingCount = referees.filter((r) => r.status === "PENDING").length;
 
   function toggleClass(c: string) {
     const next = classes.includes(c) ? classes.filter((x) => x !== c) : [...classes, c];
@@ -70,9 +73,24 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
       router.refresh();
     });
   }
+  function decide(userId: string, decision: "APPROVED" | "REFUSED") {
+    setError("");
+    startTransition(async () => {
+      const res = await decideRefereeAction(sessionId, userId, decision);
+      if ("error" in res) setError(res.error);
+      router.refresh();
+    });
+  }
 
   const active = teams.find((t) => t.id === activeTeamId) ?? null;
   const activeIndex = active ? teams.findIndex((t) => t.id === active.id) : -1;
+
+  const statusBadge = (r: RefereeView) =>
+    r.status === "PENDING" ? (
+      <span className="ml-2 text-[10px] font-bold text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded">en attente</span>
+    ) : r.status === "REFUSED" ? (
+      <span className="ml-2 text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">refusé</span>
+    ) : null;
 
   return (
     <div className="space-y-6">
@@ -127,7 +145,7 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
                   {team.members.map((m) => (
                     <li key={m.id} className="truncate">
                       {m.firstName} {m.lastName} <span className="text-slate-400">· {m.className ?? "?"}</span>
-                      {refereeIds.has(m.id) && <span className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1 rounded">arbitre</span>}
+                      {approvedIds.has(m.id) && <span className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1 rounded">arbitre</span>}
                     </li>
                   ))}
                 </ul>
@@ -140,12 +158,14 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
       {/* 3. Arbitres */}
       <section className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h3 className="font-black">3 · Arbitres <span className="text-slate-400 font-normal text-sm">({referees.length})</span></h3>
+          <h3 className="font-black">
+            3 · Arbitres <span className="text-slate-400 font-normal text-sm">({approvedIds.size} autorisé{approvedIds.size > 1 ? "s" : ""}{pendingCount ? ` · ${pendingCount} en attente` : ""})</span>
+          </h3>
           <button onClick={() => { setRefereeOpen(true); setError(""); }} className="bg-[#062230] text-amber-300 text-sm font-black px-3 py-2 rounded-lg">+ Ajouter un arbitre</button>
         </div>
         <p className="text-xs text-slate-500 mb-3">
-          Modifiable pendant tout le WOD{phase === "run" ? " (course en cours)" : ""} : un participant qui abandonne (DNF, blessure) garde ses résultats d'équipe et accède au Touché-Coulé.
-          Les élèves connectés qui ne sont dans aucune équipe peuvent aussi arbitrer librement.
+          Modifiable pendant tout le WOD{phase === "run" ? " (course en cours)" : ""}. Un élève n'arbitre que s'il est autorisé ici (motif obligatoire) ; ses demandes arrivent aussi en popup.
+          Un participant basculé arbitre (blessure, abandon) garde ses résultats d'équipe.
         </p>
         {referees.length === 0 ? (
           <p className="text-sm text-slate-400 italic">Aucun arbitre encodé.</p>
@@ -155,10 +175,19 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
               <li key={r.id} className="flex items-center justify-between gap-2 p-2 text-sm">
                 <span className="min-w-0">
                   <span className="font-bold">{r.firstName} {r.lastName}</span> <span className="text-slate-400">· {r.className ?? "?"}</span>
-                  {r.note && r.note !== "Arbitre" && <span className="ml-2 text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">{r.note}</span>}
+                  {r.note && <span className="ml-2 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{r.note}</span>}
+                  {statusBadge(r)}
                   {r.teamName && <span className="block text-[11px] text-slate-500">participait dans {r.teamName} (résultats conservés)</span>}
                 </span>
-                <button onClick={() => removeReferee(r.id)} disabled={pending} className="text-red-600 text-xs font-bold px-2 py-1 rounded bg-red-50 disabled:opacity-50 flex-shrink-0">Retirer</button>
+                <span className="flex gap-1 flex-shrink-0">
+                  {r.status !== "APPROVED" && (
+                    <button onClick={() => decide(r.id, "APPROVED")} disabled={pending} className="text-emerald-800 text-xs font-bold px-2 py-1 rounded bg-emerald-100 disabled:opacity-50">Accepter</button>
+                  )}
+                  {r.status === "PENDING" && (
+                    <button onClick={() => decide(r.id, "REFUSED")} disabled={pending} className="text-red-700 text-xs font-bold px-2 py-1 rounded bg-red-100 disabled:opacity-50">Refuser</button>
+                  )}
+                  <button onClick={() => removeReferee(r.id)} disabled={pending} className="text-red-600 text-xs font-bold px-2 py-1 rounded bg-red-50 disabled:opacity-50">Retirer</button>
+                </span>
               </li>
             ))}
           </ul>
@@ -172,7 +201,7 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
           onClose={() => setActiveTeamId(null)}
           nextLabel={activeIndex >= 0 && activeIndex < teams.length - 1 ? `${teams[activeIndex + 1].name} →` : null}
           onNext={() => activeIndex >= 0 && activeIndex < teams.length - 1 && setActiveTeamId(teams[activeIndex + 1].id)}
-          list={active.members.map((m) => ({ ...m, tag: refereeIds.has(m.id) ? "arbitre" : null }))}
+          list={active.members.map((m) => ({ ...m, tag: approvedIds.has(m.id) ? "arbitre" : null }))}
           onRemove={(id) => removeMember(active.id, id)}
           statusOf={(h) => {
             const t = assigned.get(h.id);
@@ -194,13 +223,15 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
           onClose={() => setRefereeOpen(false)}
           nextLabel={null}
           onNext={() => {}}
-          list={referees.map((r) => ({ ...r, tag: r.note && r.note !== "Arbitre" ? r.note : null }))}
+          list={referees.map((r) => ({ ...r, tag: r.status === "PENDING" ? `en attente · ${r.note ?? ""}` : r.status === "REFUSED" ? "refusé" : r.note }))}
           onRemove={(id) => removeReferee(id)}
           withNote
           statusOf={(h) => {
-            if (refereeIds.has(h.id)) return { disabled: true, label: "déjà arbitre" };
+            if (approvedIds.has(h.id)) return { disabled: true, label: "déjà arbitre" };
+            const st = statusOfId.get(h.id);
             const t = assigned.get(h.id);
-            return { disabled: false, label: t ? `dans ${t} → DNF ?` : null };
+            if (st === "PENDING") return { disabled: false, label: "en attente → accepter" };
+            return { disabled: false, label: t ? `dans ${t}` : null };
           }}
           onPick={async (h, note) => {
             const res = await addRefereeAction(sessionId, h.id, note);
@@ -230,7 +261,7 @@ function StudentPicker({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<StudentHit[]>([]);
-  const [note, setNote] = useState<string>(REFEREE_NOTES[0]);
+  const [note, setNote] = useState<string>(REFEREE_REASONS[0]);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -296,12 +327,15 @@ function StudentPicker({
         </ul>
 
         {withNote && (
-          <div className="flex gap-1 mb-2">
-            {REFEREE_NOTES.map((n) => (
-              <button key={n} onClick={() => setNote(n)} className={`flex-1 text-xs font-bold py-2 rounded-lg border-2 ${note === n ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500"}`}>
-                {n}
-              </button>
-            ))}
+          <div className="mb-2">
+            <p className="text-xs font-bold text-slate-600 mb-1">Motif (obligatoire)</p>
+            <div className="flex flex-wrap gap-1">
+              {REFEREE_REASONS.map((n) => (
+                <button key={n} onClick={() => setNote(n)} className={`text-xs font-bold px-2.5 py-1.5 rounded-full border-2 ${note === n ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500"}`}>
+                  {n}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

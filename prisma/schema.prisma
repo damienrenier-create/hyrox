@@ -142,7 +142,10 @@ model SessionReferee {
   sessionId String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
-  note      String?
+  note      String?  // motif : Blessé(e) / Abandon (DNF) / Pas de tenue / Sanctionné(e) / Autre
+  status    String   @default("APPROVED") // PENDING (demande de l'eleve) | APPROVED | REFUSED
+  decidedBy String?  // pseudo/nom de qui a tranche (greffier, admin) — encodage direct = APPROVED d'office
+  decidedAt DateTime?
   createdAt DateTime @default(now())
 
   @@unique([sessionId, userId])

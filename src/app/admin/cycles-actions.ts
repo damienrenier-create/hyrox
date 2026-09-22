@@ -175,6 +175,19 @@ export async function openSessionAction(formData: FormData) {
   done(`Séance « ${session.label} » ouverte pour ${classes.length ? classes.join(", ") : "toutes les classes"} (${hours} h).`);
 }
 
+// Un prof (DAMZER ou coach) tranche une demande d'arbitrage depuis la console.
+export async function decideRefereeFormAction(formData: FormData) {
+  const user = await getSession();
+  if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) throw new Error("Accès refusé.");
+  const sessionId = str(formData, "sessionId");
+  const userId = str(formData, "userId");
+  const decision = str(formData, "decision") === "REFUSED" ? "REFUSED" : "APPROVED";
+  const row = await db.orm.public.SessionReferee.where({ sessionId, userId }).first();
+  if (!row) fail("Demande introuvable.");
+  await db.orm.public.SessionReferee.where({ id: row.id }).update({ status: decision, decidedBy: user.name, decidedAt: Temporal.Now.instant() });
+  done(decision === "APPROVED" ? "Arbitre autorisé." : "Demande refusée.");
+}
+
 export async function closeSessionAction(formData: FormData) {
   await requireMaster();
   await db.orm.public.Session.where({ id: str(formData, "id") }).update({ isActive: false });

@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { MAX_CLASSES, REFEREE_NOTES, readSessionClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
 
 async function requireGreffier() {
   const user = await getSession();
@@ -80,19 +80,20 @@ export async function removeTeamMemberAction(teamId: string, userId: string): Pr
 
 // ===== Arbitres encodes par le greffier (pendant tout le WOD : DNF, blessure...) =====
 
+// Encodage direct par le greffier = autorise d'office (APPROVED). Motif obligatoire.
 export async function addRefereeAction(sessionId: string, userId: string, note?: string): Promise<{ error: string } | { ok: true }> {
-  await requireGreffier();
+  const who = await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) return { error: "Séance introuvable." };
   const student = await db.orm.public.User.where({ id: userId }).first();
   if (!student || student.role !== "STUDENT") return { error: "Élève introuvable." };
-  const cleanNote = note && (REFEREE_NOTES as readonly string[]).includes(note) ? note : null;
+  if (!note || !(REFEREE_REASONS as readonly string[]).includes(note)) return { error: "Indique le motif (blessé, abandon, pas de tenue…)." };
   const existing = await db.orm.public.SessionReferee.where({ sessionId, userId }).first();
   if (existing) {
-    if (existing.note !== cleanNote) await db.orm.public.SessionReferee.where({ id: existing.id }).update({ note: cleanNote });
+    await db.orm.public.SessionReferee.where({ id: existing.id }).update({ note, status: "APPROVED", decidedBy: who.name, decidedAt: Temporal.Now.instant() });
     return { ok: true };
   }
-  await db.orm.public.SessionReferee.create({ sessionId, userId, note: cleanNote });
+  await db.orm.public.SessionReferee.create({ sessionId, userId, note, status: "APPROVED", decidedBy: who.name, decidedAt: Temporal.Now.instant() });
   return { ok: true };
 }
 

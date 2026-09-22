@@ -9,6 +9,7 @@ import { ensureRaceStateAction } from "./race-actions";
 import { getSessionClasses } from "./team-actions";
 import { GreffierClient, type SessionOption } from "./client";
 import type { RefereeView, TeamWithMembers } from "./TeamsManager";
+import type { PendingRequest } from "./referee-decisions";
 
 export default async function GreffierPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
@@ -71,8 +72,11 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const referees: RefereeView[] = [];
   for (const r of refereeRows) {
     const u = await db.orm.public.User.where({ id: r.userId }).first();
-    if (u) referees.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, note: r.note ?? null, teamName: teamOfStudent.get(u.id) ?? null });
+    if (u) referees.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, note: r.note ?? null, status: r.status, teamName: teamOfStudent.get(u.id) ?? null });
   }
+  const pendingRequests: PendingRequest[] = referees
+    .filter((r) => r.status === "PENDING")
+    .map((r) => ({ userId: r.id, name: `${r.firstName} ${r.lastName}`.trim(), className: r.className, note: r.note, teamName: r.teamName, since: 0 }));
 
   const classes = await getSessionClasses(session.id);
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
@@ -87,6 +91,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       classes={classes}
       allClasses={allClasses}
       referees={referees}
+      pendingRequests={pendingRequests}
     />
   );
 }

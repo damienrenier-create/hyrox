@@ -4,7 +4,9 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sessionsForStudent, wodLabel, fmtDate } from "@/lib/student-sessions";
 import { openSessionsForStudent, toMs } from "@/lib/scheduling";
+import { refereeAccess } from "@/lib/referee-access";
 import { LogoutButton } from "./LogoutButton";
+import { RefereeRequest } from "./RefereeRequest";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -20,10 +22,9 @@ export default async function ElevePage() {
   const cards = [];
   for (const s of openSessions) {
     const membership = mine.find((r) => r.sessionId === s.id) ?? null;
-    const refereeRow = await db.orm.public.SessionReferee.where({ sessionId: s.id, userId: user.id }).first();
-    // Participant non inscrit arbitre par le greffier -> pas d'arbitrage (DNF/blessure = demander au greffier).
-    const canReferee = s.refereeMode && (!membership || !!refereeRow);
-    cards.push({ s, membership, refereeRow, canReferee });
+    // Arbitrage uniquement si autorise (encode par le greffier, ou demande acceptee) : voir referee-access.ts
+    const access = await refereeAccess(s.id, user);
+    cards.push({ s, membership, access });
   }
 
   return (
@@ -45,7 +46,7 @@ export default async function ElevePage() {
             </p>
           ) : (
             <div className="space-y-3">
-              {cards.map(({ s, membership, refereeRow, canReferee }) => (
+              {cards.map(({ s, membership, access }) => (
                 <div key={s.id} className="bg-white border-2 border-slate-900 rounded-2xl p-4">
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div>
@@ -60,14 +61,14 @@ export default async function ElevePage() {
                       {membership && (
                         <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">{membership.teamName}</span>
                       )}
-                      {refereeRow && (
-                        <span className="text-[11px] font-bold bg-[#062230] text-amber-300 px-2 py-1 rounded-full">🏴‍☠️ arbitre{refereeRow.note && refereeRow.note !== "Arbitre" ? ` · ${refereeRow.note}` : ""}</span>
+                      {access.status === "APPROVED" && (
+                        <span className="text-[11px] font-bold bg-[#062230] text-amber-300 px-2 py-1 rounded-full">🏴‍☠️ arbitre{access.note ? ` · ${access.note}` : ""}</span>
                       )}
                     </div>
                   </div>
                   <p className="text-sm text-slate-600 mb-3">
-                    {refereeRow
-                      ? "Le greffier t'a inscrit comme arbitre sur ce WOD."
+                    {access.status === "APPROVED"
+                      ? "Tu es autorisé à arbitrer sur ce WOD."
                       : membership
                         ? "Tu es participant sur ce WOD."
                         : "Quel est ton rôle sur ce WOD ?"}
@@ -75,16 +76,18 @@ export default async function ElevePage() {
                   <div className="grid grid-cols-2 gap-2">
                     {!s.refereeMode ? (
                       <div className="bg-slate-100 text-slate-400 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d'arbitrage sur ce WOD</div>
-                    ) : canReferee ? (
+                    ) : access.allowed ? (
                       <Link href={`/touche-coule?session=${s.id}`} className="bg-[#062230] text-amber-300 font-black text-center rounded-xl py-4 px-2 leading-tight">
                         🏴‍☠️ Arbitre
                         <span className="block text-[11px] font-normal text-amber-100/70 mt-1">Touché-Coulé</span>
                       </Link>
                     ) : (
-                      <div className="bg-slate-100 text-slate-500 rounded-xl py-3 px-3 text-xs leading-snug">
-                        <span className="font-black text-slate-700 block mb-1">🏴‍☠️ Arbitre</span>
-                        Tu participes dans {membership?.teamName}. Si tu arrêtes (DNF, blessure…), demande au greffier de t'inscrire comme arbitre.
-                      </div>
+                      <RefereeRequest
+                        sessionId={s.id}
+                        status={access.status === "PENDING" || access.status === "REFUSED" ? access.status : null}
+                        note={access.note}
+                        inTeam={membership?.teamName ?? null}
+                      />
                     )}
                     {membership ? (
                       <Link href={`/eleve/${s.id}`} className="bg-emerald-600 text-white font-black text-center rounded-xl py-4 px-2 leading-tight">

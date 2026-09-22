@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.sessionReferee.decidedAt",
+    "label": "Add column \"decidedAt\" to \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "decidedAt",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"decidedAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "decidedAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"decidedAt\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\" ADD COLUMN \"decidedAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"decidedAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "decidedAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.sessionReferee.decidedBy",
+    "label": "Add column \"decidedBy\" to \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "decidedBy",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"decidedBy\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "decidedBy"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"decidedBy\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\" ADD COLUMN \"decidedBy\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"decidedBy\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "decidedBy"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.sessionReferee.status",
+    "label": "Add column \"status\" to \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "status",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"status\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "status"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"status\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\" ADD COLUMN \"status\" text DEFAULT 'APPROVED' NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"status\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "sessionReferee",
+          "status"
+        ]
+      }
+    ]
+  }
+]

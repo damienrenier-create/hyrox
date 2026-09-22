@@ -8,7 +8,7 @@ import { ensureAutoSessions, listOpenSessions, fmtMin, WEEKDAYS, toMs, brusselsN
 import { readSessionClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import {
-  addPlanAction, addSlotAction, closeSessionAction, createCycleAction, deleteCycleAction, deletePlanAction,
+  addPlanAction, addSlotAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
   deleteSlotAction, openSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
 } from "./cycles-actions";
 
@@ -46,6 +46,16 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const engines = listWodEngines();
   const engineName = (id: string) => engines.find((e) => e.id === id)?.name ?? wodLabel(id);
   const now = brusselsNow();
+
+  // Demandes d'arbitrage en attente sur les seances ouvertes (un prof peut trancher a la place du greffier).
+  const pendingRequests: { sessionId: string; sessionLabel: string; userId: string; name: string; className: string | null; note: string | null }[] = [];
+  for (const s of open) {
+    const rows = await db.orm.public.SessionReferee.where({ sessionId: s.id, status: "PENDING" }).all();
+    for (const r of rows) {
+      const u = await db.orm.public.User.where({ id: r.userId }).first();
+      if (u) pendingRequests.push({ sessionId: s.id, sessionLabel: s.label ?? wodLabel(s.wodType), userId: u.id, name: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim(), className: u.className ?? null, note: r.note ?? null });
+    }
+  }
 
   const slotsByClass = new Map<string, typeof slots>();
   for (const s of slots) {
@@ -113,6 +123,36 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             </ul>
           )}
         </section>
+
+        {pendingRequests.length > 0 && (
+          <section className={`${card} border-amber-700`}>
+            <h2 className="text-lg font-bold mb-3">🏴‍☠️ Demandes d'arbitrage en attente <span className="text-slate-500 text-sm">({pendingRequests.length})</span></h2>
+            <ul className="space-y-2">
+              {pendingRequests.map((r) => (
+                <li key={`${r.sessionId}_${r.userId}`} className="bg-slate-950 border border-amber-900 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm">
+                    <span className="font-bold">{r.name}</span> <span className="text-slate-500">· {r.className ?? "?"} · {r.sessionLabel}</span>
+                    <span className="block text-xs text-amber-300">Motif : {r.note ?? "—"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <form action={decideRefereeFormAction}>
+                      <input type="hidden" name="sessionId" value={r.sessionId} />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <input type="hidden" name="decision" value="APPROVED" />
+                      <button type="submit" className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-slate-950`}>Accepter</button>
+                    </form>
+                    <form action={decideRefereeFormAction}>
+                      <input type="hidden" name="sessionId" value={r.sessionId} />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <input type="hidden" name="decision" value="REFUSED" />
+                      <button type="submit" className={btnDanger}>Refuser</button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* ===== Ouverture manuelle ===== */}
         <section className={card}>

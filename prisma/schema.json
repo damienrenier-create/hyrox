@@ -1822,6 +1822,20 @@
                   "kind": "scalar"
                 }
               },
+              "decidedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "decidedBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -1837,6 +1851,13 @@
                 }
               },
               "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -1890,6 +1911,12 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
+                "decidedAt": {
+                  "column": "decidedAt"
+                },
+                "decidedBy": {
+                  "column": "decidedBy"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -1898,6 +1925,9 @@
                 },
                 "sessionId": {
                   "column": "sessionId"
+                },
+                "status": {
+                  "column": "status"
                 },
                 "userId": {
                   "column": "userId"
@@ -3878,6 +3908,16 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "decidedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "decidedBy": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3890,6 +3930,15 @@
                 },
                 "sessionId": {
                   "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "APPROVED"
+                  },
                   "nativeType": "text",
                   "nullable": false
                 },
@@ -4527,7 +4576,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d6a3b053608629407e645bf915a9cd6647ef82a224a6e066970236627fb54e3c"
+    "storageHash": "511442e7708747f7e4e0561a9318b1553d55a1318f5b0edf45439e56c2662006"
   },
   "execution": {
     "executionHash": "87d6d0c502a5f731a8654883f399b93079e848aa77e2c540fcc747a96fc0a698",

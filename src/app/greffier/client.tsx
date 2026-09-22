@@ -27,6 +27,8 @@ import {
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import type { RaceContextBundle } from "@/lib/race-context";
 import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
+import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
+import type { PendingRequest } from "./referee-decisions";
 import {
   startRaceAction,
   togglePauseAction,
@@ -62,7 +64,7 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
 export type SessionOption = { id: string; label: string; classes: string[]; open: boolean };
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees,
+  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -72,6 +74,7 @@ export function GreffierClient({
   classes: string[];
   allClasses: string[];
   referees: RefereeView[];
+  pendingRequests: PendingRequest[];
 }) {
   const router = useRouter();
   const { ctx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
@@ -226,6 +229,7 @@ export function GreffierClient({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 font-sans">
+      <RefereeRequestsPopup sessionId={sessionId} initial={pendingRequests} />
       <header className="sticky top-0 z-20 bg-white border-b-4 border-slate-900 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-6">
