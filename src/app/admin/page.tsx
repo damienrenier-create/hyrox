@@ -80,6 +80,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
             <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
+            <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>
             <Link href="/greffier" className={btn.smGhost}>Greffier</Link>
             <Link href="/touche-coule" className={btn.smSea}>Touché-Coulé</Link>
           </nav>

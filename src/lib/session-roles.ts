@@ -7,6 +7,10 @@ export type RefereeReason = (typeof REFEREE_REASONS)[number];
 export const REFEREE_STATUSES = ["PENDING", "APPROVED", "REFUSED"] as const;
 export type RefereeStatus = (typeof REFEREE_STATUSES)[number];
 
+// Phrase a taper en toutes lettres avant un effacement definitif (page /admin/nettoyage).
+// C'est le « mot de passe » du grand menage : rien ne part tant qu'elle n'est pas saisie exactement.
+export const CLEANUP_PHRASE = "EFFACER LES TESTS";
+
 export function readSessionClasses(settings: unknown): string[] {
   const s = settings as { classes?: unknown } | null;
   return Array.isArray(s?.classes) ? (s!.classes as unknown[]).filter((c): c is string => typeof c === "string") : [];
