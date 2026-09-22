@@ -24,7 +24,10 @@ export type BoardShip = {
 };
 export type MarkerKind = "hit" | "miss" | "target" | "selected" | "wreck";
 export type SeaTile = "sea" | "sea-foam";
-export type BoardMarker = { teamId: string; exerciseId: string; kind: MarkerKind };
+// `own` = cette case est a MOI (un de mes bateaux encaisse, ou mon navire est coule ici). Le sprite d'impact
+// est le meme qu'on tape ou qu'on encaisse : sans ce drapeau, l'eleve ne peut pas savoir si l'epave est la
+// sienne ou celle d'un adversaire. Il est rendu par un liseré rouge sur la case, lisible d'un coup d'oeil.
+export type BoardMarker = { teamId: string; exerciseId: string; kind: MarkerKind; own?: boolean };
 export type BoardHighlight = { teamId: string; exerciseId: string } | null;
 
 // Position d'une case DANS LE CORPS du plateau (hors etiquettes) : le corps est un conteneur relatif
@@ -134,7 +137,7 @@ export function Board({
   const bodyH = GAP + teams.length * (CELL + GAP);
   const tIndex = new Map(teams.map((t, i) => [t.id, i] as const));
   const eIndex = new Map(exercises.map((e, i) => [e.id, i] as const));
-  const markerAt = new Map(markers.map((m) => [`${m.teamId}_${m.exerciseId}`, m.kind] as const));
+  const markerAt = new Map(markers.map((m) => [`${m.teamId}_${m.exerciseId}`, m] as const));
   const hlTeam = highlight?.teamId ?? null;
   const hlEx = highlight?.exerciseId ?? null;
 
@@ -257,7 +260,11 @@ export function Board({
           {teams.map((team, ti) =>
             exercises.map((ex, ei) => {
               const { left, top } = cellPos(ti, ei);
-              const kind = markerAt.get(`${team.id}_${ex.id}`);
+              const marker = markerAt.get(`${team.id}_${ex.id}`);
+              const kind = marker?.kind;
+              // Case a moi qui encaisse : liseré rouge et fond rouge, pour la distinguer d'un coup porte
+              // a un adversaire, qui utilise pourtant le meme sprite d'impact.
+              const ownHit = marker?.own && (marker.kind === "hit" || marker.kind === "wreck");
               const disabled = isCellDisabled?.(team, ex) ?? false;
               const inLine = team.id === hlTeam || ex.id === hlEx;
               const isHl = team.id === hlTeam && ex.id === hlEx;
@@ -272,7 +279,7 @@ export function Board({
                   onClick={() => onCellClick?.(team, ex)}
                   className={`absolute rounded-md border flex items-center justify-center transition-colors ${
                     isHl ? "ring-4 ring-accent border-accent bg-accent/40" : inLine ? "border-accent/70 bg-white/15" : "border-white/40 bg-white/10 hover:bg-white/35"
-                  } ${kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""} ${cellExtraClass?.(team, ex) ?? ""}`}
+                  } ${kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""} ${ownHit ? "ring-2 ring-danger border-danger bg-danger/35" : ""} ${cellExtraClass?.(team, ex) ?? ""}`}
                   style={{ left, top, width: CELL, height: CELL, zIndex: kind || isHl ? 6 : 2 }}
                   aria-label={`${team.name} · ${ex.label}`}
                 >
