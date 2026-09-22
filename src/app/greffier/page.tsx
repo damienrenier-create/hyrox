@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { buildRaceContext } from "@/lib/race-context";
 import { buildBoardData } from "@/lib/referee-board";
+import { buildFFBundle } from "@/lib/fete-foraine-context";
+import { exercisesFor } from "@/lib/session-exercises";
+import { FeteForaineClient } from "./ff-client";
 import { ensureAutoSessions, listOpenSessions } from "@/lib/scheduling";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
@@ -49,7 +52,6 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   }
 
   await ensureRaceStateAction(session.id);
-  const bundle = await buildRaceContext(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
   const board = session.refereeMode ? await buildBoardData(session.id) : null;
 
@@ -84,6 +86,27 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const classes = await getSessionClasses(session.id);
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
 
+  // Chaque seance-type a son greffier : Fete Foraine (ateliers + corde + Finisher) ou Pyramide (tours).
+  if (session.wodType === "FETE_FORAINE") {
+    const ffBundle = await buildFFBundle(session.id);
+    return (
+      <FeteForaineClient
+        sessionId={session.id}
+        sessionLabel={session.label ?? wodLabel(session.wodType)}
+        sessionOptions={options}
+        bundle={ffBundle}
+        teamsWithMembers={teamsWithMembers}
+        classes={classes}
+        allClasses={allClasses}
+        referees={referees}
+        pendingRequests={pendingRequests}
+        board={board}
+        exercisesAll={exercisesFor(session)}
+      />
+    );
+  }
+
+  const bundle = await buildRaceContext(session.id);
   return (
     <GreffierClient
       sessionId={session.id}

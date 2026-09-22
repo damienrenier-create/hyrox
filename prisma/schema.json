@@ -64,6 +64,10 @@
       "model": "Shot",
       "namespace": "public"
     },
+    "stationEvent": {
+      "model": "StationEvent",
+      "namespace": "public"
+    },
     "team": {
       "model": "Team",
       "namespace": "public"
@@ -176,6 +180,10 @@
               {
                 "name": "TOUCHE_COULE_HYROX",
                 "value": "TOUCHE_COULE_HYROX"
+              },
+              {
+                "name": "FETE_FORAINE",
+                "value": "FETE_FORAINE"
               }
             ]
           }
@@ -1751,6 +1759,21 @@
                   "namespace": "public"
                 }
               },
+              "stationEvents": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "StationEvent",
+                  "namespace": "public"
+                }
+              },
               "teams": {
                 "cardinality": "1:N",
                 "on": {
@@ -2083,8 +2106,93 @@
               "table": "shot"
             }
           },
+          "StationEvent": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "stationId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "teamId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "stationId": {
+                  "column": "stationId"
+                },
+                "teamId": {
+                  "column": "teamId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "stationEvent"
+            }
+          },
           "Team": {
             "fields": {
+              "color": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "endExerciseId": {
                 "nullable": true,
                 "type": {
@@ -2108,6 +2216,13 @@
               },
               "order": {
                 "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "penalties": {
+                "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
                   "kind": "scalar"
@@ -2193,6 +2308,9 @@
             },
             "storage": {
               "fields": {
+                "color": {
+                  "column": "color"
+                },
                 "endExerciseId": {
                   "column": "endExerciseId"
                 },
@@ -2204,6 +2322,9 @@
                 },
                 "order": {
                   "column": "order"
+                },
+                "penalties": {
+                  "column": "penalties"
                 },
                 "sessionId": {
                   "column": "sessionId"
@@ -2218,6 +2339,13 @@
           },
           "TeamMember": {
             "fields": {
+              "finisherPoints": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -2276,6 +2404,9 @@
             },
             "storage": {
               "fields": {
+                "finisherPoints": {
+                  "column": "finisherPoints"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -2835,8 +2966,8 @@
             "cyclePlan": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX')",
-                  "name": "cyclePlan_wodType_check_b588abc4",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE')",
+                  "name": "cyclePlan_wodType_check_686f9918",
                   "prefix": "cyclePlan_wodType_check"
                 }
               ],
@@ -3738,8 +3869,8 @@
             "session": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX')",
-                  "name": "session_wodType_check_b588abc4",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE')",
+                  "name": "session_wodType_check_686f9918",
                   "prefix": "session_wodType_check"
                 }
               ],
@@ -4167,8 +4298,81 @@
                 }
               ]
             },
+            "stationEvent": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "stationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "teamId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "stationEvent"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "stationEvent_sessionId_idx_29f415d4",
+                  "prefix": "stationEvent_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "team": {
               "columns": {
+                "color": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "endExerciseId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -4188,6 +4392,15 @@
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": true
+                },
+                "penalties": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
                 },
                 "sessionId": {
                   "codecId": "pg/text@1",
@@ -4238,6 +4451,15 @@
             },
             "teamMember": {
               "columns": {
+                "finisherPoints": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -4567,7 +4789,8 @@
               "values": [
                 "PYRAMIDE_CLASSIQUE",
                 "RELAIS_SPRINT",
-                "TOUCHE_COULE_HYROX"
+                "TOUCHE_COULE_HYROX",
+                "FETE_FORAINE"
               ]
             }
           }
@@ -4576,10 +4799,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "511442e7708747f7e4e0561a9318b1553d55a1318f5b0edf45439e56c2662006"
+    "storageHash": "81a7488538ec96c975a60b9fdb1783236a2f2e0148183680cbd5f0c0c85d910e"
   },
   "execution": {
-    "executionHash": "87d6d0c502a5f731a8654883f399b93079e848aa77e2c540fcc747a96fc0a698",
+    "executionHash": "057abf8c3e4e61889a74c80befaa687257c9824a4284fcad223955d8de81364b",
     "mutations": {
       "defaults": [
         {
@@ -4745,6 +4968,17 @@
             "column": "id",
             "namespace": "public",
             "table": "shot"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "stationEvent"
           }
         },
         {

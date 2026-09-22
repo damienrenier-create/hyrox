@@ -1,0 +1,416 @@
+[
+  {
+    "id": "dropCheckConstraint.cyclePlan.cyclePlan_wodType_check_b588abc4",
+    "label": "Drop check constraint \"cyclePlan_wodType_check_b588abc4\" on \"cyclePlan\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_b588abc4",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_b588abc4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"cyclePlan_wodType_check_b588abc4\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" DROP CONSTRAINT \"cyclePlan_wodType_check_b588abc4\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_b588abc4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_b588abc4",
+    "label": "Drop check constraint \"session_wodType_check_b588abc4\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_b588abc4",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_b588abc4\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_b588abc4\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_b588abc4\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_b588abc4\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_b588abc4",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.stationEvent",
+    "label": "Create table \"stationEvent\"",
+    "summary": "Creates table \"stationEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "stationEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"stationEvent\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"stationEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"stationEvent\"",
+        "sql": "CREATE TABLE \"public\".\"stationEvent\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"stationId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"stationEvent\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"stationEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.team.color",
+    "label": "Add column \"color\" to \"team\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "color",
+        "table": "team"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"color\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "color"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"color\"",
+        "sql": "ALTER TABLE \"public\".\"team\" ADD COLUMN \"color\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"color\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "color"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.team.penalties",
+    "label": "Add column \"penalties\" to \"team\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "penalties",
+        "table": "team"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"penalties\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "penalties"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"penalties\"",
+        "sql": "ALTER TABLE \"public\".\"team\" ADD COLUMN \"penalties\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"penalties\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "team",
+          "penalties"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.teamMember.finisherPoints",
+    "label": "Add column \"finisherPoints\" to \"teamMember\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "finisherPoints",
+        "table": "teamMember"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"finisherPoints\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "teamMember",
+          "finisherPoints"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"finisherPoints\"",
+        "sql": "ALTER TABLE \"public\".\"teamMember\" ADD COLUMN \"finisherPoints\" int4 DEFAULT 0 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"finisherPoints\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "teamMember",
+          "finisherPoints"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.cyclePlan.cyclePlan_wodType_check_686f9918",
+    "label": "Add check constraint \"cyclePlan_wodType_check_686f9918\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_686f9918",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_686f9918\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_686f9918",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"cyclePlan_wodType_check_686f9918\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" ADD CONSTRAINT \"cyclePlan_wodType_check_686f9918\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_686f9918\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_686f9918",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_686f9918",
+    "label": "Add check constraint \"session_wodType_check_686f9918\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_686f9918",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_686f9918\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_686f9918",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_686f9918\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_686f9918\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_686f9918\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_686f9918",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.stationEvent.stationEvent_sessionId_idx_29f415d4",
+    "label": "Create index \"stationEvent_sessionId_idx_29f415d4\" on \"stationEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "stationEvent_sessionId_idx_29f415d4",
+        "table": "stationEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"stationEvent_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"stationEvent_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"stationEvent_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"stationEvent_sessionId_idx_29f415d4\" ON \"public\".\"stationEvent\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"stationEvent_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"stationEvent_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.stationEvent.stationEvent_sessionId_fkey",
+    "label": "Add foreign key \"stationEvent_sessionId_fkey\" on \"stationEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "stationEvent_sessionId_fkey",
+        "table": "stationEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"stationEvent_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "stationEvent_sessionId_fkey",
+          "public",
+          "\"public\".\"stationEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"stationEvent_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"stationEvent\"\nADD CONSTRAINT \"stationEvent_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"stationEvent_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "stationEvent_sessionId_fkey",
+          "public",
+          "\"public\".\"stationEvent\""
+        ]
+      }
+    ]
+  }
+]

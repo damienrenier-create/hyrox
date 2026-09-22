@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
-import { buildRaceContext } from "@/lib/race-context";
-import { standings, total, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
+import { buildSessionStandings } from "@/lib/session-standings";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { readSessionClasses } from "@/lib/session-roles";
@@ -68,11 +67,8 @@ export async function buildConsultation(f: ConsultationFilters): Promise<{ rows:
 
   const rows: ConsultationRow[] = [];
   for (const s of sessions) {
-    const bundle = await buildRaceContext(s.id);
-    const ended = !!s.raceEndedAt;
-    const T = total(bundle.ctx.settings);
-    const st = standings(bundle.ctx, ended);
-    const rankOf = new Map(st.map((x, i) => [x.team.id, { rank: i + 1, s: x }]));
+    const stand = await buildSessionStandings(s);
+    const rankOf = new Map(stand.rows.map((r) => [r.teamId, r]));
 
     const teams = await db.orm.public.Team.where({ sessionId: s.id }).all();
     const evals = await db.orm.public.Evaluation.where({ sessionId: s.id }).all();
@@ -131,11 +127,11 @@ export async function buildConsultation(f: ConsultationFilters): Promise<{ rows:
         refereeNote: ref?.note ?? null,
         teamName: team?.name ?? null,
         rank: r ? r.rank : null,
-        laps: r ? Math.min(r.s.n, T) : null,
-        lapsTotal: teamId ? T : null,
-        time: r && r.s.done ? fmt(r.s.finishAt) : null,
-        reps: r ? r.s.reps : null,
-        cards: r ? r.s.yellowCards : null,
+        laps: r ? r.laps : null,
+        lapsTotal: r ? r.lapsTotal : null,
+        time: r && r.done ? r.time : null,
+        reps: r ? r.reps : null,
+        cards: r ? r.cards : null,
         evalCount: tevals.length,
         evalMedianReps: repsSorted.length ? repsSorted[Math.floor((repsSorted.length - 1) / 2)] : null,
         evalQualities: tevals.map((e) => qualityCodeFromValue(e.note) ?? "?").join(","),

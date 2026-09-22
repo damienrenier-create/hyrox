@@ -14,11 +14,12 @@ type Props = {
   exercises: ExerciseRow[]; // deja tries par number
   numTeams: number;
   onClose: () => void;
+  hidePyramid?: boolean; // seances sans pyramide (Fete Foraine) : equipes + exercices seulement
 };
 
 // Reglages de la seance par le greffier, AVANT le depart (verrouilles ensuite cote serveur) :
 // nombre d'equipes (crop de la carte), pyramide, temps, departs autorises, ordre/libelles des exercices.
-export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercises: initialExercises, numTeams: initialTeams, onClose }: Props) {
+export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercises: initialExercises, numTeams: initialTeams, onClose, hidePyramid = false }: Props) {
   const router = useRouter();
   const [teams, setTeams] = useState(initialTeams);
   const [s, setS] = useState<RaceSettings>(settings);
@@ -55,8 +56,10 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
         const r = await setTeamCountAction(sessionId, teams);
         if ("error" in r) return setError(r.error);
       }
-      const r1 = await updateRaceSettingsAction(sessionId, { ...s, noStartExerciseIds: [...noStart] });
-      if ("error" in r1) return setError(r1.error);
+      if (!hidePyramid) {
+        const r1 = await updateRaceSettingsAction(sessionId, { ...s, noStartExerciseIds: [...noStart] });
+        if ("error" in r1) return setError(r1.error);
+      }
       const r2 = await updateExercisesAction(sessionId, exercises.map((e, i) => ({ id: e.id, label: e.label, number: i + 1 })));
       if ("error" in r2) return setError(r2.error);
       router.refresh();
@@ -83,6 +86,7 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
             {teams < initialTeams && <p className="text-[11px] text-amber-700 mt-1">⚠️ La carte sera croppée : équipes {teams + 1}→{initialTeams} et flottes qui débordent supprimées.</p>}
           </section>
 
+          {!hidePyramid && (<>
           <section>
             <h4 className="font-black text-sm mb-2">Pyramide</h4>
             <div className="grid grid-cols-3 gap-2">
@@ -122,6 +126,7 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
               })}
             </div>
           </section>
+          </>)}
 
           <section className="sm:col-span-2">
             <h4 className="font-black text-sm mb-2">Exercices (nom et ordre)</h4>

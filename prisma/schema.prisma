@@ -13,6 +13,7 @@ enum WodTemplate {
   PYRAMIDE_CLASSIQUE = "PYRAMIDE_CLASSIQUE"
   RELAIS_SPRINT = "RELAIS_SPRINT"
   TOUCHE_COULE_HYROX = "TOUCHE_COULE_HYROX"
+  FETE_FORAINE = "FETE_FORAINE"
 }
 
 enum Visibility {
@@ -132,6 +133,7 @@ model Session {
   raceState       RaceState?
   selfEvaluations SelfEvaluation[]
   referees        SessionReferee[]
+  stationEvents   StationEvent[]
 }
 
 // Arbitres encodes par le greffier pour une seance, modifiable pendant tout le WOD :
@@ -158,6 +160,8 @@ model Team {
   order           Int?         // position stable de l'equipe dans la grille (pour les bateaux verticaux)
   startExerciseId String?      // depart pyramide (override du round-robin par defaut)
   endExerciseId   String?      // dernier exercice termine (saisi apres la fin, pour une equipe non arrivee)
+  color           String?      // Fete Foraine : macro-equipe jaune/vert/bleu/rouge (null = couleur par defaut selon l'ordre)
+  penalties       Int          @default(0) // Fete Foraine : 1 penalite = 1 point (unite de temps)
   sessionId       String
   session         Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -167,14 +171,27 @@ model Team {
 }
 
 model TeamMember {
-  id     String @id @default(uuid())
-  teamId String
-  userId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String @id @default(uuid())
+  teamId         String
+  userId         String
+  finisherPoints Int    @default(0) // Fete Foraine : points Finisher du coureur
+  team           Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+// Fete Foraine : pointages du greffier (corde = repetable, exN = un seul, "fin" = Fin du WOD).
+model StationEvent {
+  id        String   @id @default(uuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  teamId    String
+  stationId String
+  at        DateTime @default(now())
+
+  @@index([sessionId])
 }
 
 // Auto-evaluation d'un eleve participant, ouverte 24h apres la fin de son equipe / du WOD.

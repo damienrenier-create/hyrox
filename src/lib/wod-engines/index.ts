@@ -1,9 +1,11 @@
 import { WodTemplate } from "./core/types";
 import { PyramideClassique } from "./templates/pyramide";
+import { FeteForaine } from "./templates/fete-foraine";
 
 const templates: Record<string, WodTemplate> = {
   [PyramideClassique.id]: PyramideClassique,
-  // Add future templates here
+  [FeteForaine.id]: FeteForaine,
+  // Prochaines seances du cycle Hyrox (AMRAP, EMOM, Cindy, Intro, Eval) et autres cycles : ajouter ici.
 };
 
 export function getWodEngine(id: string): WodTemplate {

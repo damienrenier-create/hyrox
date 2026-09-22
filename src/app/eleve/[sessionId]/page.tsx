@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildRaceContext, teamFinishedAtMs } from "@/lib/race-context";
-import { standings, total, finishAt, startOf, fmt, timeline } from "@/lib/wod-engines/templates/pyramide-engine";
+import { buildSessionStandings } from "@/lib/session-standings";
 import { exercisesFor } from "@/lib/session-exercises";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
@@ -33,29 +32,19 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
     if (u) teammates.push(`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
   }
 
-  const bundle = await buildRaceContext(sessionId);
-  const { ctx, teamNames, exerciseLabels } = bundle;
+  // Classement (Pyramide = tours, Fete Foraine = ateliers/score), meme calcul que le greffier.
+  const stand = await buildSessionStandings(session);
   const ended = !!session.raceEndedAt;
-  const T = total(ctx.settings);
-  const tl = timeline(ctx);
-  const st = standings(ctx, ended);
-  const results: ResultRow[] = st.map((s, i) => ({
-    rank: i + 1,
-    teamId: s.team.id,
-    teamName: teamNames[s.team.id] ?? s.team.id,
-    laps: Math.min(s.n, T),
-    lapsTotal: T,
-    time: s.done ? fmt(s.finishAt) : null,
-    late: tl.late[s.team.id] != null ? fmt(tl.late[s.team.id]) : null,
-    start: exerciseLabels[startOf(ctx, s.team).id] ?? "",
-    reps: s.reps,
-    cards: s.yellowCards,
-    mine: s.team.id === myTeam.id,
-  }));
+  const results: ResultRow[] = stand.rows.map((r) => ({ ...r, mine: r.teamId === myTeam.id }));
 
   // Evaluations donnees par les arbitres sur MON equipe (anonymes pour l'eleve).
+  const exercises = exercisesFor(session);
   const exerciseNumber: Record<string, number> = {};
-  for (const e of exercisesFor(session)) exerciseNumber[e.id] = e.number;
+  const exerciseLabels: Record<string, string> = {};
+  for (const e of exercises) {
+    exerciseNumber[e.id] = e.number;
+    exerciseLabels[e.id] = e.label;
+  }
   const evals = await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
   const refereeEvals: RefereeEvalRow[] = evals
     .map((e) => ({
@@ -69,7 +58,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
     .sort((a, b) => a.exerciseNumber - b.exerciseNumber || a.at - b.at);
 
   // Fenetre d'auto-evaluation : 24h a partir de l'arrivee de l'equipe (sinon de la fin officielle du WOD).
-  const finishedAt = teamFinishedAtMs(bundle, finishAt(ctx, myTeam.id));
+  const finishedAt = stand.finishedAtMs[myTeam.id] ?? null;
   const raceEndedAtMs = session.raceEndedAt ? new Date(String(session.raceEndedAt)).getTime() : null;
   const win = selfEvalWindow(finishedAt, raceEndedAtMs);
   const existing = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: user.id }).first();
@@ -92,6 +81,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
           sessionId={sessionId}
           ended={ended}
           myTeamName={myTeam.name}
+          columns={stand.columns}
           results={results}
           refereeEvals={refereeEvals}
           criteria={SELF_EVAL_CRITERIA}

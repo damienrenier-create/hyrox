@@ -16,8 +16,11 @@ export type ResultRow = {
   start: string;
   reps: number;
   cards: number;
+  done: boolean;
   mine: boolean;
 };
+
+export type ResultColumns = { laps: string; time: string; reps: string; cards: string; start: string };
 
 export type RefereeEvalRow = {
   exerciseId: string;
@@ -34,6 +37,7 @@ type Props = {
   sessionId: string;
   ended: boolean;
   myTeamName: string;
+  columns: ResultColumns;
   results: ResultRow[];
   refereeEvals: RefereeEvalRow[];
   criteria: SelfEvalCriterion[];
@@ -41,7 +45,7 @@ type Props = {
   selfEval: { initial: Record<string, string> | null; state: "open" | "notYet" | "expired"; closesAt: number | null; submittedAt: number | null };
 };
 
-export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, criteria, instruction, selfEval }: Props) {
+export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -58,14 +62,14 @@ export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, c
         <div className="bg-white border-2 border-slate-900 rounded-2xl p-4 mb-4 grid grid-cols-3 gap-2 text-center">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Rang</div>
-            <div className="text-2xl font-black">{mine.time ? `${mine.rank}e` : ended ? `${mine.rank}e` : "—"}</div>
+            <div className="text-2xl font-black">{mine.done || ended ? `${mine.rank}e` : "—"}</div>
           </div>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tours</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{columns.laps}</div>
             <div className="text-2xl font-black">{mine.laps}<span className="text-sm text-slate-400">/{mine.lapsTotal}</span></div>
           </div>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{mine.time ? "Temps" : "Reps"}</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{mine.time ? columns.time : columns.reps}</div>
             <div className="text-2xl font-black">{mine.time ?? mine.reps}</div>
           </div>
         </div>
@@ -92,16 +96,16 @@ export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, c
               <tr className="border-b-2 border-slate-900 text-left">
                 <th className="p-2">#</th>
                 <th className="p-2">Équipe</th>
-                <th className="p-2">Tours</th>
-                <th className="p-2">Temps</th>
-                <th className="p-2">Reps</th>
-                <th className="p-2">🟨</th>
+                <th className="p-2">{columns.laps}</th>
+                <th className="p-2">{columns.time}</th>
+                <th className="p-2">{columns.reps}</th>
+                <th className="p-2">{columns.cards}</th>
               </tr>
             </thead>
             <tbody>
               {results.map((r) => (
                 <tr key={r.teamId} className={`border-b border-slate-100 ${r.mine ? "bg-emerald-50 font-black" : "odd:bg-slate-50"}`}>
-                  <td className="p-2">{r.rank}</td>
+                  <td className="p-2">{r.done || ended ? r.rank : "—"}</td>
                   <td className="p-2">{r.teamName}{r.mine ? " ★" : ""}</td>
                   <td className="p-2">{r.laps}/{r.lapsTotal}</td>
                   <td className="p-2">{r.time ? `🏁 ${r.time}` : "—"}{r.late ? <span className="text-xs text-slate-400"> +{r.late}</span> : null}</td>
