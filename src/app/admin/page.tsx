@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { generateGhostFleetsAction } from "../touche-coule/actions";
 import { listWodEngines } from "@/lib/wod-engines";
-import { ensureAutoSessions, listOpenSessions, upcomingSessions, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
+import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
 import { readSessionClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import {
   addPlanAction, addSlotAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
-  deleteSlotAction, openSessionAction, prepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
+  deleteSlotAction, openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
@@ -36,6 +36,10 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   await ensureAutoSessions();
   const open = await listOpenSessions();
   const upcoming = await upcomingSessions(10);
+  // Seances DEJA creees en attente de leur heure (a distinguer des simples creneaux recurrents).
+  const scheduled = (await db.orm.public.Session.where({ isActive: true }).all())
+    .filter((s) => isScheduled(s))
+    .sort((a, b) => toMs(a.opensAt) - toMs(b.opensAt));
   const cycles = await db.orm.public.Cycle.where({}).orderBy((c) => c.order.asc()).all();
   const current = cycles.find((c) => c.isCurrent) ?? null;
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
@@ -125,22 +129,57 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           )}
         </section>
 
-        {/* ===== Seances programmees : les 10 prochains creneaux, pour anticiper equipes et reglages ===== */}
+        {/* ===== Seances DEJA preparees (creees, en attente de leur heure) ===== */}
+        {scheduled.length > 0 && (
+          <section className={`${card} border-success/40`}>
+            <h2 className={`${ui.h2} mb-1`}>Séances préparées <span className="text-ink-3 text-sm font-sans font-normal">({scheduled.length})</span></h2>
+            <p className={`${ui.hint} mb-3`}>
+              Déjà créées : tu peux y encoder les équipes et régler le WOD dès maintenant. Elles restent invisibles des
+              élèves jusqu&apos;à leur heure d&apos;ouverture, puis s&apos;ouvrent toutes seules.
+            </p>
+            <ul className="space-y-2">
+              {scheduled.map((s) => (
+                <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
+                  <div className="min-w-0">
+                    <div className="font-bold">
+                      {s.label ?? wodLabel(s.wodType)}
+                      <span className="text-ink-3 font-normal"> · ouvre {fmtDay(s.opensAt)} à {fmtTime(s.opensAt)}</span>
+                      {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>🏴‍☠️ Touché-Coulé</span>}
+                    </div>
+                    <div className="text-xs text-ink-2">
+                      {readSessionClasses(s.settings).join(", ") || "toutes classes"}
+                      {s.closesAt && <> · ferme à {fmtTime(s.closesAt)}</>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Préparer les équipes</Link>
+                    <form action={unprepareSessionAction}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <button type="submit" className={btn.smDanger}>Annuler</button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* ===== Creneaux RECURRENTS a venir : rien n'existe tant qu'on n'a pas appuye sur Preparer ===== */}
         <section className={card}>
-          <h2 className={`${ui.h2} mb-1`}>Séances programmées <span className="text-ink-3 text-sm font-sans font-normal">({upcoming.length})</span></h2>
+          <h2 className={`${ui.h2} mb-1`}>Prochains créneaux <span className="text-ink-3 text-sm font-sans font-normal">({upcoming.length})</span></h2>
           <p className={`${ui.hint} mb-3`}>
-            Les 10 prochains créneaux de la séance de la semaine, du plus proche au plus lointain. « Préparer » crée la
-            séance dès maintenant pour encoder les équipes et régler le WOD à l&apos;avance : elle reste invisible des
-            élèves jusqu&apos;à l&apos;heure du créneau, puis s&apos;ouvre toute seule.
+            Ce ne sont pas des séances : c&apos;est ton horaire de classe, <b>qui revient chaque semaine</b>. Rien n&apos;est
+            créé tant que tu n&apos;as pas appuyé sur « Préparer » — et « Préparer » ne crée <b>que cette date-là</b>.
+            Le jour venu, une séance s&apos;ouvre de toute façon automatiquement, préparée ou non.
           </p>
           {upcoming.length === 0 ? (
             <p className={ui.muted}>
-              Aucune séance programmée. Il faut un cycle en cours, une séance de la semaine, et des créneaux horaires de classe (plus bas).
+              Aucun créneau à venir. Il faut un cycle en cours, une séance de la semaine, et des créneaux horaires de classe (plus bas).
             </p>
           ) : (
             <ul className="space-y-2">
               {upcoming.map((u) => (
-                <li key={u.slotKey} className="bg-paper border border-line rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                <li key={u.slotKey} className={cx("bg-paper border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3", u.sessionId ? "border-success/50" : "border-line")}>
                   <div className="min-w-0 flex items-center gap-3">
                     <div className="text-center flex-shrink-0 w-16">
                       <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[u.weekday]?.slice(0, 3)}</div>
@@ -155,16 +194,15 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       </div>
                       <div className="text-xs text-ink-3">
                         {u.classes.length ? u.classes.join(", ") : "aucune classe"} · {u.numTeams} équipes
-                        {u.sessionId && <span className="text-success-ink font-bold"> · préparée</span>}
                       </div>
                     </div>
                   </div>
                   {u.sessionId ? (
-                    <Link href={`/greffier?session=${u.sessionId}`} className={btn.smPrimary}>Ouvrir le greffier</Link>
+                    <span className={`${ui.chip} ${ui.chipOk}`}>✓ déjà préparée</span>
                   ) : (
                     <form action={prepareSessionAction}>
                       <input type="hidden" name="slotKey" value={u.slotKey} />
-                      <button type="submit" className={btn.smGhost}>Préparer</button>
+                      <button type="submit" className={btn.smGhost}>Préparer cette date</button>
                     </form>
                   )}
                 </li>
@@ -205,7 +243,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
 
         {/* ===== Ouverture manuelle ===== */}
         <section className={card}>
-          <h2 className={`${ui.h2} mb-1`}>Ouvrir une séance maintenant</h2>
+          <h2 className={`${ui.h2} mb-1`}>Ouvrir ou programmer une séance</h2>
           <p className={`${ui.hint} mb-4`}>Pour une ou plusieurs classes (max {MAX_CLASSES}). Le greffier peut encore ajuster les classes, les équipes et les arbitres avant le départ.</p>
           <form action={openSessionAction} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="text-sm">
@@ -252,7 +290,31 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
               <input type="checkbox" name="refereeMode" defaultChecked className="w-5 h-5 accent-brand" />
               Activer le Touché-Coulé (arbitrage par les élèves)
             </label>
-            <button type="submit" className={`${btn.lgPrimary} sm:col-span-2`}>Ouvrir la séance</button>
+
+            {/* Calendrier : une date precise au lieu de « tout de suite ». UNE seule seance, pas de repetition. */}
+            <fieldset className={`${ui.inset} p-3 sm:col-span-2`}>
+              <legend className={fieldLabel}>Ou programmer pour une date précise (facultatif)</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <label className="text-xs">
+                  <span className="block text-ink-2 mb-0.5">Jour</span>
+                  <input type="date" name="day" min={new Date().toISOString().slice(0, 10)} className={input} />
+                </label>
+                <label className="text-xs">
+                  <span className="block text-ink-2 mb-0.5">De</span>
+                  <input type="time" name="from" defaultValue="08:00" className={input} />
+                </label>
+                <label className="text-xs">
+                  <span className="block text-ink-2 mb-0.5">À</span>
+                  <input type="time" name="to" defaultValue="09:40" className={input} />
+                </label>
+              </div>
+              <p className={`${ui.hint} mt-2`}>
+                Jour rempli = la séance est <b>créée maintenant mais invisible des élèves</b> jusqu&apos;à cette heure-là,
+                et tu es envoyé au greffier pour préparer les équipes. Jour vide = elle s&apos;ouvre tout de suite.
+              </p>
+            </fieldset>
+
+            <button type="submit" className={`${btn.lgPrimary} sm:col-span-2`}>Ouvrir ou programmer la séance</button>
           </form>
         </section>
 

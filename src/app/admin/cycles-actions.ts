@@ -144,6 +144,22 @@ export async function openSessionAction(formData: FormData) {
   const hours = Math.min(12, Math.max(1, int(formData, "hours", 3)));
   if (classes.length > MAX_CLASSES) fail(`Maximum ${MAX_CLASSES} classes.`);
 
+  // Calendrier : si une date est choisie, la seance est PROGRAMMEE (invisible des eleves jusqu'a l'heure)
+  // au lieu d'etre ouverte tout de suite. Aucune repetition : une seule seance, a cette date-la.
+  const day = str(formData, "day"); // AAAA-MM-JJ
+  const from = parseHHMM(str(formData, "from") || "");
+  const to = parseHHMM(str(formData, "to") || "");
+  let opensAt: ReturnType<typeof instantAtBrussels> | null = null;
+  let closesAtPlanned: ReturnType<typeof instantAtBrussels> | null = null;
+  if (day) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) fail("Date invalide.");
+    if (from === null || to === null) fail("Indique l'heure de début et de fin pour programmer une séance.");
+    if (to <= from) fail("L'heure de fin doit être après le début.");
+    opensAt = instantAtBrussels(day, from);
+    closesAtPlanned = instantAtBrussels(day, to);
+    if (Date.parse(opensAt.toString()) < Date.now() - 60_000) fail("Cette date est déjà passée.");
+  }
+
   let wodType = str(formData, "wodType") || "PYRAMIDE_CLASSIQUE";
   let label = str(formData, "label");
   let numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", 24)));
@@ -169,9 +185,13 @@ export async function openSessionAction(formData: FormData) {
     refereeMode,
     cycleId,
     planId: planId || null,
-    closesAt: Temporal.Now.instant().add({ hours }),
+    opensAt,
+    closesAt: closesAtPlanned ?? Temporal.Now.instant().add({ hours }),
     autoOpened: false,
   });
+  if (opensAt) {
+    redirect(`/greffier?session=${session.id}`);
+  }
   done(`Séance « ${session.label} » ouverte pour ${classes.length ? classes.join(", ") : "toutes les classes"} (${hours} h).`);
 }
 
@@ -213,6 +233,33 @@ export async function prepareSessionAction(formData: FormData) {
     autoOpened: true,
   });
   redirect(`/greffier?session=${session.id}`);
+}
+
+// Annule une preparation : seulement si rien n'a encore ete fait dessus (aucun eleve, aucune evaluation).
+export async function unprepareSessionAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  const session = await db.orm.public.Session.where({ id }).first();
+  if (!session) fail("Séance introuvable.");
+  if (!session.opensAt) fail("Cette séance est déjà ouverte : utilise « Fermer ».");
+  if (await db.orm.public.Evaluation.where({ sessionId: id }).first()) fail("Cette séance a déjà des évaluations.");
+
+  const teams = await db.orm.public.Team.where({ sessionId: id }).all();
+  const teamIds = teams.map((t) => t.id);
+  const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
+  if (members.length) fail(`${members.length} élève(s) y sont déjà encodés : retire-les d'abord ou garde la séance.`);
+
+  for (const f of await db.orm.public.RefereeFleet.where({ sessionId: id }).all()) await db.orm.public.RefereeFleet.where({ id: f.id }).delete();
+  for (const p of await db.orm.public.BoatPlacement.where({ sessionId: id }).all()) await db.orm.public.BoatPlacement.where({ id: p.id }).delete();
+  for (const r of await db.orm.public.SessionReferee.where({ sessionId: id }).all()) await db.orm.public.SessionReferee.where({ id: r.id }).delete();
+  const rs = await db.orm.public.RaceState.where({ sessionId: id }).first();
+  if (rs) {
+    for (const p of await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()) await db.orm.public.RacePause.where({ id: p.id }).delete();
+    await db.orm.public.RaceState.where({ id: rs.id }).delete();
+  }
+  for (const t of teams) await db.orm.public.Team.where({ id: t.id }).delete();
+  await db.orm.public.Session.where({ id }).delete();
+  done("Préparation annulée.");
 }
 
 export async function closeSessionAction(formData: FormData) {
