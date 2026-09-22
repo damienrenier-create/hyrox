@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { placeShipAction, deleteShipAction, lockFleetAction, reuseLastFleetAction, randomFleetAction, type ReusableFleet } from "./actions";
 import { fleetFor } from "@/lib/wod-engines/core/fleet";
@@ -47,6 +47,18 @@ export function FleetPlacement({
 }) {
   const router = useRouter();
   const [ships, setShips] = useState<BoardShip[]>(initialShips);
+
+  // `useState` ignore sa valeur initiale aux rendus suivants : apres un `router.refresh()`, le serveur
+  // renvoyait bien les navires mais la grille restait vide, et « Verrouiller ma flotte » restait grise.
+  // On resynchronise donc quand la liste DU SERVEUR change vraiment, sans ecraser un ajout local.
+  const serverSig = initialShips.map((s) => s.id).sort().join(",");
+  const lastServerSig = useRef(serverSig);
+  useEffect(() => {
+    if (lastServerSig.current === serverSig) return;
+    lastServerSig.current = serverSig;
+    setShips(initialShips);
+  }, [serverSig, initialShips]);
+
   const [firstTap, setFirstTap] = useState<{ teamId: string; exerciseId: string } | null>(null);
   const [chosen, setChosen] = useState<number | null>(null); // taille choisie dans l'inventaire (facultatif)
   const [error, setError] = useState("");
@@ -141,6 +153,8 @@ export function FleetPlacement({
     });
   }
 
+  // Les deux placements en lot affichent les navires renvoyes par le serveur tout de suite, sans attendre
+  // le rechargement : l'eleve voit sa flotte apparaitre au tap et peut verrouiller dans la foulee.
   function handleReuse() {
     setError("");
     startTransition(async () => {
@@ -149,6 +163,9 @@ export function FleetPlacement({
         setError(res.error);
         return;
       }
+      setShips((prev) => [...prev, ...res.ships]);
+      setFirstTap(null);
+      setChosen(null);
       router.refresh();
     });
   }
@@ -161,6 +178,9 @@ export function FleetPlacement({
         setError(res.error);
         return;
       }
+      setShips((prev) => [...prev, ...res.ships]);
+      setFirstTap(null);
+      setChosen(null);
       router.refresh();
     });
   }

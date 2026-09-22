@@ -61,6 +61,11 @@ export type PlaceShipResult =
   | { error: string }
   | { ok: true; shipId: string; size: number; orientation: Orientation; direction: Direction; startTeamId: string; startExerciseId: string };
 
+// Navires renvoyes par les placements en lot (hasard, reprise). L'ecran les affiche directement au lieu
+// d'attendre un rechargement : un `router.refresh()` seul ne remplace PAS un etat React deja initialise.
+export type PlacedShip = { id: string; size: number; orientation: Orientation; direction: Direction; startTeamId: string; startExerciseId: string };
+export type BulkFleetResult = { error: string } | { ok: true; placed: number; ships: PlacedShip[] };
+
 // Placement en deux touches : premiere case = poupe, derniere case = proue.
 // La taille est deduite de la distance ; la direction (sens de la proue) est conservee pour l'affichage.
 export async function placeShipAction(
@@ -190,7 +195,7 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
 }
 
 // Tire une flotte complete au hasard (eleves : un tap au lieu de huit placements).
-export async function randomFleetAction(sessionId: string): Promise<{ error: string } | { ok: true; placed: number }> {
+export async function randomFleetAction(sessionId: string): Promise<BulkFleetResult> {
   const { evaluator, teams, exercises } = await loadContext(sessionId);
 
   const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -211,23 +216,27 @@ export async function randomFleetAction(sessionId: string): Promise<{ error: str
     return { error: "Impossible de placer la flotte au hasard sur cette grille." };
   }
 
+  const created: PlacedShip[] = [];
   await db.transaction(async (tx) => {
     const fleet = current ?? (await tx.orm.public.RefereeFleet.create({ sessionId, refereeId: evaluator.id, slot: 0, status: "PLACING" }));
     for (const s of ships) {
+      const direction: Direction =
+        s.orientation === "horizontal" ? (Math.random() < 0.5 ? "right" : "left") : Math.random() < 0.5 ? "down" : "up";
       const ship = await tx.orm.public.RefereeShip.create({
         fleetId: fleet.id,
         size: s.size,
         orientation: s.orientation,
-        direction: s.orientation === "horizontal" ? (Math.random() < 0.5 ? "right" : "left") : Math.random() < 0.5 ? "down" : "up",
+        direction,
         startTeamId: s.startTeamId,
         startExerciseId: s.startExerciseId,
       });
       for (const c of s.cells) {
         await tx.orm.public.BoatPlacement.create({ sessionId, teamId: c.teamId, exerciseId: c.exerciseId, ownerId: evaluator.id, shipId: ship.id });
       }
+      created.push({ id: ship.id, size: s.size, orientation: s.orientation, direction, startTeamId: s.startTeamId, startExerciseId: s.startExerciseId });
     }
   });
-  return { ok: true, placed: ships.length };
+  return { ok: true, placed: created.length, ships: created };
 }
 
 // Deverrouille sa flotte pour deplacer des navires. Interdit des qu'une de ses cases a ete visee :
@@ -289,7 +298,7 @@ export async function lastFleetAction(sessionId: string): Promise<ReusableFleet 
 }
 
 // Rejoue cette flotte sur la seance en cours : memes positions (par index), un seul geste au lieu de huit.
-export async function reuseLastFleetAction(sessionId: string): Promise<{ error: string } | { ok: true; placed: number }> {
+export async function reuseLastFleetAction(sessionId: string): Promise<BulkFleetResult> {
   const { evaluator, session, teams, exercises } = await loadContext(sessionId);
 
   const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -325,6 +334,7 @@ export async function reuseLastFleetAction(sessionId: string): Promise<{ error: 
     planned.push({ size: s.size, orientation: s.orientation as Orientation, direction: s.direction ?? null, startTeamId: teams[ti].id, startExerciseId: exercises[ei].id, cells });
   }
 
+  const created: PlacedShip[] = [];
   await db.transaction(async (tx) => {
     const fleet = current ?? (await tx.orm.public.RefereeFleet.create({ sessionId, refereeId: evaluator.id, slot: 0, status: "PLACING" }));
     for (const p of planned) {
@@ -339,10 +349,11 @@ export async function reuseLastFleetAction(sessionId: string): Promise<{ error: 
       for (const c of p.cells) {
         await tx.orm.public.BoatPlacement.create({ sessionId, teamId: c.teamId, exerciseId: c.exerciseId, ownerId: evaluator.id, shipId: ship.id });
       }
+      created.push({ id: ship.id, size: p.size, orientation: p.orientation, direction: (p.direction as Direction) ?? null, startTeamId: p.startTeamId, startExerciseId: p.startExerciseId });
     }
   });
 
-  return { ok: true, placed: planned.length };
+  return { ok: true, placed: created.length, ships: created };
 }
 
 // ===== Phase 4-5 : évaluation (reps + qualité) -> tir, atomique, verifie serveur =====
