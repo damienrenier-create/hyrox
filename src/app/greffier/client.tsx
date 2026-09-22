@@ -117,8 +117,80 @@ const PYR_STYLES = `
 .pyr .cell.t5 .reps{text-shadow:0 0 10px rgba(189,244,255,.9)}
 .pyr .cell .tile.hit{background:#FFC93C !important;color:#0E1A26;text-shadow:none}
 @keyframes pyr-sheen{from{background-position:130% 0}to{background-position:-130% 0}}
-@media (prefers-reduced-motion: reduce){.pyr .cell.t5 .tile::after{animation:none;background-position:50% 0}}
+@keyframes pyr-blink{0%,100%{opacity:1}50%{opacity:.25}}
+.pyr-blink{animation:pyr-blink .9s steps(1,end) infinite}
+@media (prefers-reduced-motion: reduce){.pyr .cell.t5 .tile::after{animation:none;background-position:50% 0}.pyr-blink{animation:none}}
+
+/* Classement en tete, sous la grille : port de #leaders du fichier d'origine. */
+.ld{margin-top:12px}
+.ld ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.ld li{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:#fff;border:1px solid #E6EBEF}
+.ld li.done{background:#EEF9F1;border-color:#BFE3CA}
+.ld .rank{font:800 13px/1 inherit;width:18px;text-align:center;opacity:.75}
+.ld .who{font-size:12px;color:#5C6B78;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.ld .team{font-weight:800;font-size:13px;white-space:nowrap}
+.ld .val{margin-left:auto;font-weight:800;font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ld .y{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;color:#6B5600}
 `;
+
+// ===== Score final (bareme de Sartay) =====
+// temps du WOD (ou jusqu'a l'arret) + 1 min par carte jaune − 1 s par rep + temps supplementaire eventuel
+// − un bonus par medaille selon le RANG inscrit dedans : 1re = −5 s, 2e = −4 s … 5e = −1 s.
+export const MEDAL_BONUS_S = [0, 5, 4, 3, 2, 1]; // index = rang sur le tour (0 = hors top 5)
+
+export type FinalScore = {
+  teamId: string;
+  baseMs: number; // temps du WOD
+  cardsMs: number;
+  repsMs: number;
+  lateMs: number;
+  medalMs: number;
+  medalCount: number;
+  totalMs: number;
+  done: boolean;
+};
+
+export function finalScores(
+  ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext,
+  tl: ReturnType<typeof timeline>,
+  ord: Record<string, { pos: number; at: number }[]>,
+  final: boolean
+): FinalScore[] {
+  return standings(ctx, final)
+    .map((s) => {
+      const fa = finishAt(ctx, s.team.id);
+      const baseMs = fa ?? tl.end; // pas arrivee : on compte jusqu'a l'arret du WOD
+      const cardsMs = s.yellowCards * 60000;
+      const repsMs = totalReps(ctx, s.team) * 1000;
+      const lateMs = tl.late[s.team.id] ?? 0;
+      const mine = (ord[s.team.id] ?? []).filter(Boolean);
+      let medalMs = 0;
+      let medalCount = 0;
+      for (const m of mine) {
+        medalCount++;
+        medalMs += (MEDAL_BONUS_S[m.pos] ?? 0) * 1000;
+      }
+      return {
+        teamId: s.team.id,
+        baseMs,
+        cardsMs,
+        repsMs,
+        lateMs,
+        medalMs,
+        medalCount,
+        totalMs: baseMs + cardsMs - repsMs + lateMs - medalMs,
+        done: s.done,
+      };
+    })
+    .sort((a, b) => a.totalMs - b.totalMs); // le plus petit temps gagne
+}
+
+// Temps signe court (le score peut devenir negatif si l'equipe a beaucoup de reps et de medailles).
+function fmtSigned(ms: number): string {
+  const neg = ms < 0;
+  const s = Math.round(Math.abs(ms) / 1000);
+  return `${neg ? "−" : ""}${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
 
 // medalsHtml() du fichier d'origine : groupes par palier, eclat croissant, rang inscrit pour les 5 premieres.
 function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?: { pos: number; at: number }[] }) {
@@ -207,7 +279,7 @@ export function GreffierClient({
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
   // Avant le depart et sans aucun eleve encode, on ouvre directement sur la preparation des equipes.
-  const [view, setView] = useState<"grid" | "results" | "teams" | "arbitrage">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
+  const [view, setView] = useState<"grid" | "results" | "score" | "teams" | "arbitrage">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -400,6 +472,13 @@ export function GreffierClient({
 
   const rest = tl.end - liveMs;
   const overtime = phase === "run" && rest <= 0;
+  // Le compte a rebours ne s'affiche qu'une fois qu'une equipe est arrivee (la fin se rapproche alors a
+  // chaque arrivee) OU dans les 3 dernieres minutes. Avant, il n'apporte rien et stresse pour rien.
+  const URGENT_MS = 3 * 60000;
+  const LAST_MS = 60000;
+  const showCountdown = phase === "post" || overtime || tl.count > 0 || rest <= URGENT_MS;
+  const urgent = phase === "run" && !overtime && rest <= URGENT_MS;
+  const lastMinute = phase === "run" && !overtime && rest <= LAST_MS;
   const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
 
   return (
@@ -438,12 +517,18 @@ export function GreffierClient({
               {fmt(liveMs)}
             </p>
             {phase !== "pre" && (
-              <div className={cx("border rounded-xl px-3 py-1.5 text-right min-w-[130px]", overtime ? "border-danger bg-danger-soft" : "border-line bg-paper")}>
+              <div
+                className={cx(
+                  "border rounded-xl px-3 py-1.5 text-right min-w-[130px]",
+                  overtime || urgent ? "border-danger bg-danger-soft" : "border-line bg-paper",
+                  lastMinute && "pyr-blink"
+                )}
+              >
                 <div className={ui.eyebrow}>
-                  {phase === "post" ? "WOD" : overtime ? "Temps supp." : tl.count ? "Fin dans" : "Temps limite"}
+                  {phase === "post" ? "WOD" : overtime ? "Temps supp." : showCountdown ? "Fin dans" : "Temps limite"}
                 </div>
-                <div className={cx("font-display text-2xl font-extrabold leading-tight tabular-nums", overtime ? "text-danger" : "text-ink")}>
-                  {phase === "post" ? "terminé" : overtime ? `−${fmtUp(-rest)}` : fmtDown(rest)}
+                <div className={cx("font-display text-2xl font-extrabold leading-tight tabular-nums", overtime || urgent ? "text-danger" : "text-ink")}>
+                  {phase === "post" ? "terminé" : overtime ? `−${fmtUp(-rest)}` : showCountdown ? fmtDown(rest) : `${ctx.settings.capMin} min`}
                 </div>
                 <div className="text-[11px] text-ink-2">{finishedCount}/{ctx.teams.length} arrivées</div>
               </div>
@@ -483,6 +568,7 @@ export function GreffierClient({
         <div className={`${ui.segmented} mt-3 flex-wrap`}>
           <button onClick={() => setView("grid")} className={tabBtn(view === "grid")}>Grille</button>
           <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Résultats</button>
+          <button onClick={() => setView("score")} className={tabBtn(view === "score")}>Score final</button>
           <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
             Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
             {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
@@ -554,9 +640,45 @@ export function GreffierClient({
                 </div>
               );
             })}
+            {/* Classement « En tête » sous la grille (drawLeaders du fichier d'origine) */}
+            {phase !== "pre" && (
+              <section className="ld col-span-full">
+                <h3 className={`${ui.eyebrow} mb-1`}>{phase === "post" ? "Classement final" : "En tête"}</h3>
+                {(() => {
+                  const arr = standings(ctx, phase === "post").filter((e) => lapsOf(ctx, e.team.id) > 0);
+                  if (!arr.length) return <p className={ui.hint}>Le classement apparaît au premier tour validé.</p>;
+                  return (
+                    <ol>
+                      {arr.slice(0, 5).map((e, i) => {
+                        const n = lapsOf(ctx, e.team.id);
+                        const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
+                        const who = (membersByTeam.get(e.team.id) ?? []).map((x) => x.firstName).join(", ");
+                        const val = e.done
+                          ? `🏁 ${fmt(e.finishAt)}${tl.late[e.team.id] != null ? ` (+${fmt(tl.late[e.team.id])})` : ""}`
+                          : phase === "post"
+                            ? `${e.reps} reps${e.known ? "" : " ?"}`
+                            : `${n}/${T}`;
+                        return (
+                          <motion.li key={e.team.id} layout className={e.done ? "done" : undefined}>
+                            <span className="rank">{i + 1}</span>
+                            {n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
+                            <span className="team">{teamNames[e.team.id] ?? e.team.id}</span>
+                            {who && <span className="who">{who}</span>}
+                            {e.yellowCards > 0 && <span className="y"><span className="yc" />{e.yellowCards}</span>}
+                            <span className="val">{val}</span>
+                          </motion.li>
+                        );
+                      })}
+                    </ol>
+                  );
+                })()}
+              </section>
+            )}
           </div>
         ) : view === "results" ? (
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} membersByTeam={membersByTeam} />
+        ) : view === "score" ? (
+          <ScoreTable ctx={ctx} phase={phase} teamNames={teamNames} tl={tl} ord={ord} membersByTeam={membersByTeam} />
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (
@@ -646,6 +768,72 @@ function ResultsTable({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Score final : le detail du calcul est visible colonne par colonne, pour que le bareme soit verifiable.
+function ScoreTable({
+  ctx, phase, teamNames, tl, ord, membersByTeam,
+}: {
+  ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext;
+  phase: "pre" | "run" | "post";
+  teamNames: Record<string, string>;
+  tl: ReturnType<typeof timeline>;
+  ord: Record<string, { pos: number; at: number }[]>;
+  membersByTeam: Map<string, TeamMemberView[]>;
+}) {
+  const rows = finalScores(ctx, tl, ord, phase === "post");
+  return (
+    <div className="space-y-3">
+      <p className={ui.hint}>
+        Score = temps du WOD (ou jusqu&apos;à l&apos;arrêt) <b>+ 1 min</b> par carte jaune <b>− 1 s</b> par répétition
+        <b> + le temps supplémentaire</b> éventuel <b>− le bonus des médailles</b> (1<sup>re</sup> équipe d&apos;un tour : −5 s,
+        2<sup>e</sup> : −4 s, 3<sup>e</sup> : −3 s, 4<sup>e</sup> : −2 s, 5<sup>e</sup> : −1 s). Le plus petit score gagne.
+        {phase !== "post" && " Provisoire tant que la course n'est pas terminée."}
+      </p>
+      <div className={`${ui.card} overflow-auto`}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th className={ui.th}>#</th>
+              <th className={ui.th}>Participants</th>
+              <th className={ui.th}>Temps WOD</th>
+              <th className={ui.th}>🟨 +</th>
+              <th className={ui.th}>Reps −</th>
+              <th className={ui.th}>Temps sup. +</th>
+              <th className={ui.th}>Médailles −</th>
+              <th className={ui.th}>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const members = membersByTeam.get(r.teamId) ?? [];
+              return (
+                <motion.tr key={r.teamId} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className={ui.tr}>
+                  <td className="p-2 font-display font-bold">{i + 1}</td>
+                  <td className="p-2">
+                    {members.length ? (
+                      <>
+                        <div className="font-bold leading-tight">{members.map((m) => `${m.firstName} ${m.lastName}`).join(" · ")}</div>
+                        <div className="text-[11px] text-ink-3">{teamNames[r.teamId] ?? r.teamId}</div>
+                      </>
+                    ) : (
+                      <span className="font-bold text-ink-3">{teamNames[r.teamId] ?? r.teamId}</span>
+                    )}
+                  </td>
+                  <td className="p-2 tabular-nums">{r.done ? `🏁 ${fmt(r.baseMs)}` : fmt(r.baseMs)}</td>
+                  <td className="p-2 tabular-nums">{r.cardsMs ? `+${fmt(r.cardsMs)}` : ""}</td>
+                  <td className="p-2 tabular-nums text-success-ink">{r.repsMs ? `−${fmt(r.repsMs)}` : ""}</td>
+                  <td className="p-2 tabular-nums text-danger-ink">{r.lateMs ? `+${fmt(r.lateMs)}` : ""}</td>
+                  <td className="p-2 tabular-nums text-success-ink">{r.medalMs ? `−${fmt(r.medalMs)} (${r.medalCount})` : ""}</td>
+                  <td className="p-2 font-display font-extrabold tabular-nums">{fmtSigned(r.totalMs)}</td>
+                </motion.tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
