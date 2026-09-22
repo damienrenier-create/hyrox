@@ -18,7 +18,7 @@ import { ui } from "@/lib/ui";
 
 export default async function GreffierPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
-  if (!evaluator || !["MASTER_ADMIN", "GREFFIER"].includes(evaluator.role)) {
+  if (!evaluator || !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(evaluator.role)) {
     redirect("/");
   }
 

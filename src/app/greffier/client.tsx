@@ -122,6 +122,24 @@ const PYR_STYLES = `
 .pyr-blink{animation:pyr-blink .9s steps(1,end) infinite}
 @media (prefers-reduced-motion: reduce){.pyr .cell.t5 .tile::after{animation:none;background-position:50% 0}.pyr-blink{animation:none}}
 
+/* Piste « course de chevaux » : 7 couloirs, une seule bande au-dessus de la grille. */
+.hr{margin:0 0 10px;background:#fff;border:1px solid #E6EBEF;border-radius:12px;padding:6px 8px}
+.hr-track{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.hr-slot{position:relative;border-radius:9px;background:#F4F7F9;border:1px solid #E6EBEF;min-height:48px;padding:15px 4px 4px;
+  display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start;justify-content:center}
+.hr-slot.win{background:linear-gradient(160deg,#FFF8DE,#FFE9A8);border-color:#E8C65A}
+.hr-slot.lastslot{background:#FBEEF0;border-color:#F0CFD5}
+.hr-num{position:absolute;top:3px;left:6px;font:800 9px/1 inherit;color:#8FA0AE;letter-spacing:.06em;text-transform:uppercase}
+.hr-car{display:inline-flex;align-items:center;gap:4px;background:#16344E;color:#fff;border-radius:8px;padding:3px 7px;font:800 12px/1.2 inherit;white-space:nowrap}
+.hr-car .v{opacity:.7;font-weight:700;font-size:10px}
+.hr-dot{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:7px;background:#16344E;color:#fff;font:800 11px/1 inherit}
+.hr-fin{display:flex;align-items:center;gap:5px;margin-top:5px;padding-top:5px;border-top:1px dashed #E6EBEF;overflow-x:auto}
+.hr-flag{font-size:13px;flex:none}
+.hr-none{font-size:11px;color:#8FA0AE}
+.hr-f{display:inline-flex;align-items:center;gap:5px;background:#EEF9F1;border:1px solid #BFE3CA;border-radius:999px;padding:2px 9px;font:800 11px/1.4 inherit;white-space:nowrap;flex:none}
+.hr-f .r{width:14px;height:14px;border-radius:50%;background:#2E7D4F;color:#fff;font:800 9px/14px inherit;text-align:center;flex:none}
+.hr-f .t{font-weight:700;opacity:.7;font-variant-numeric:tabular-nums}
+
 /* Classement en tete, sous la grille : port de #leaders du fichier d'origine. */
 .ld{margin-top:12px}
 .ld.top{margin-top:0;margin-bottom:10px}
@@ -219,6 +237,92 @@ function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?:
     groups.push(<span key={i} className="trio">{items}</span>);
   }
   return <span className="medals" aria-label={`${n} médaille${n > 1 ? "s" : ""}`}>{groups}</span>;
+}
+
+// ===== Piste « course de chevaux » =====
+// Sept couloirs, de gauche a droite : 1 = le dernier, 2 = le peloton, 3 a 7 = les cinq de tete (7 = leader).
+// Au depart tout le monde est dans le peloton. Une equipe qui termine quitte la piste et rejoint la ligne
+// d'arrivee, en dessous, dans l'ordre d'arrivee. Remplace le classement vertical, qui mangeait l'ecran.
+type PyrCtx = import("@/lib/wod-engines/templates/pyramide-engine").RaceContext;
+const teamNum = (label: string | undefined) => (label ?? "").match(/\d+/)?.[0] ?? "?";
+const SPRING = { type: "spring" as const, stiffness: 280, damping: 30 };
+
+function RaceStrip({
+  ctx, phase, tl, teamNames, T,
+}: {
+  ctx: PyrCtx;
+  phase: "pre" | "run" | "post";
+  tl: ReturnType<typeof timeline>;
+  teamNames: Record<string, string>;
+  T: number;
+}) {
+  const all = standings(ctx, phase === "post");
+  const finished = all.filter((e) => e.done).sort((a, b) => (a.finishAt ?? 0) - (b.finishAt ?? 0));
+  const racing = all.filter((e) => !e.done);
+  const started = phase !== "pre";
+  const lapsE = (e: Standing) => lapsOf(ctx, e.team.id);
+
+  // Les cinq de tete : uniquement des equipes qui ont valide au moins un tour, sinon tout le monde serait
+  // classe des le coup d'envoi alors que personne n'a encore bouge.
+  const head = started ? racing.filter((e) => lapsE(e) > 0).slice(0, 5) : [];
+  const headIds = new Set(head.map((e) => e.team.id));
+  const rest = racing.filter((e) => !headIds.has(e.team.id));
+  // Le dernier ne descend que s'il est STRICTEMENT derriere : pas de bonnet d'ane sur une egalite.
+  const last =
+    started && rest.length >= 2 && lapsE(rest[rest.length - 1]) < lapsE(rest[rest.length - 2])
+      ? rest[rest.length - 1]
+      : null;
+  const pack = last ? rest.slice(0, -1) : rest;
+  const inSlot = (i: number): Standing[] =>
+    i === 1 ? (last ? [last] : []) : i === 2 ? pack : head[7 - i] ? [head[7 - i]] : [];
+
+  const car = (e: Standing, tiny: boolean) => {
+    const n = lapsE(e);
+    const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
+    return (
+      <motion.span
+        key={e.team.id}
+        layoutId={`car_${e.team.id}`}
+        transition={SPRING}
+        className={tiny ? "hr-dot" : "hr-car"}
+        title={`${teamNames[e.team.id] ?? ""} · ${n}/${T} tours`}
+      >
+        {!tiny && n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
+        <b>{teamNum(teamNames[e.team.id])}</b>
+        {!tiny && <span className="v">{n}/{T}</span>}
+      </motion.span>
+    );
+  };
+
+  return (
+    <section className="hr col-span-full">
+      <div className="hr-track">
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div key={i} className={cx("hr-slot", i === 7 && "win", i === 1 && "lastslot")}>
+            <span className="hr-num">{i === 1 ? "dernier" : i === 2 ? "peloton" : ordinal(8 - i)}</span>
+            {inSlot(i).map((e) => car(e, i === 2))}
+          </div>
+        ))}
+      </div>
+      <div className="hr-fin">
+        <span className="hr-flag">🏁</span>
+        {finished.length === 0 ? (
+          <span className="hr-none">{started ? "Personne n'est encore arrivé" : "Tout le monde sur la ligne de départ"}</span>
+        ) : (
+          finished.map((e, i) => (
+            <motion.span key={e.team.id} layoutId={`car_${e.team.id}`} transition={SPRING} className="hr-f">
+              <b className="r">{i + 1}</b>
+              {teamNames[e.team.id] ?? e.team.id}
+              <span className="t">
+                {fmt(e.finishAt)}
+                {tl.late[e.team.id] != null ? ` +${fmt(tl.late[e.team.id])}` : ""}
+              </span>
+            </motion.span>
+          ))
+        )}
+      </div>
+    </section>
+  );
 }
 
 export type SessionOption = { id: string; label: string; classes: string[]; open: boolean; dateMs: number };
@@ -571,40 +675,8 @@ export function GreffierClient({
         {view === "grid" ? (
           <div className="pyr">
             <style>{PYR_STYLES}</style>
-            {/* Classement EN TETE, AU-DESSUS de la grille : c'est ce que la classe regarde en premier. */}
-            {phase !== "pre" && (
-              <section className="ld top col-span-full">
-                <h3 className={`${ui.eyebrow} mb-1`}>{phase === "post" ? "Classement final" : "En tête"}</h3>
-                {(() => {
-                  const arr = standings(ctx, phase === "post").filter((e) => lapsOf(ctx, e.team.id) > 0);
-                  if (!arr.length) return <p className={ui.hint}>Le classement apparaît au premier tour validé.</p>;
-                  return (
-                    <ol>
-                      {arr.slice(0, 5).map((e, i) => {
-                        const n = lapsOf(ctx, e.team.id);
-                        const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
-                        const who = (membersByTeam.get(e.team.id) ?? []).map((x) => x.firstName).join(", ");
-                        const val = e.done
-                          ? `🏁 ${fmt(e.finishAt)}${tl.late[e.team.id] != null ? ` (+${fmt(tl.late[e.team.id])})` : ""}`
-                          : phase === "post"
-                            ? `${e.reps} reps${e.known ? "" : " ?"}`
-                            : `${n}/${T}`;
-                        return (
-                          <motion.li key={e.team.id} layout className={e.done ? "done" : undefined}>
-                            <span className="rank">{i + 1}</span>
-                            {n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
-                            <span className="team">{teamNames[e.team.id] ?? e.team.id}</span>
-                            {who && <span className="who">{who}</span>}
-                            {e.yellowCards > 0 && <span className="y"><span className="yc" />{e.yellowCards}</span>}
-                            <span className="val">{val}</span>
-                          </motion.li>
-                        );
-                      })}
-                    </ol>
-                  );
-                })()}
-              </section>
-            )}
+            {/* Piste « course de chevaux » : 7 couloirs, compacte, au-dessus de la grille. */}
+            <RaceStrip ctx={ctx} phase={phase} tl={tl} teamNames={teamNames} T={T} />
             {ctx.teams.map((team) => {
               const n = lapsOf(ctx, team.id);
               const fa = finishAt(ctx, team.id);

@@ -55,9 +55,8 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   // Redirection selon le rôle. Les coachs (ADMIN) tombaient dans le `redirect` final et atterrissaient
   // sur le Touché-Coulé, qui leur generait aussitot une flotte : ils entraient dans le jeu en se
   // connectant. Leur ecran, c'est la consultation.
-  if (role === "MASTER_ADMIN") redirect("/admin");
+  if (role === "MASTER_ADMIN" || role === "ADMIN") redirect("/admin");
   if (role === "GREFFIER") redirect("/greffier");
-  if (role === "ADMIN") redirect("/admin/resultats");
   redirect("/touche-coule");
 }
 

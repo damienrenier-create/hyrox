@@ -22,8 +22,8 @@ export async function proxy(request: NextRequest) {
     try {
       const session = await decrypt(sessionCookie);
 
-      // Le greffier est accessible par le MASTER_ADMIN (Toi) et le GREFFIER
-      if (pathname.startsWith("/greffier") && !["MASTER_ADMIN", "GREFFIER"].includes(session.role as string)) {
+      // Le greffier est accessible par DAMZER, les coachs (ADMIN) et le compte GREFFIER
+      if (pathname.startsWith("/greffier") && !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(session.role as string)) {
         return NextResponse.redirect(new URL("/touche-coule", request.url));
       }
       

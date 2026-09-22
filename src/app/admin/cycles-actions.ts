@@ -8,9 +8,18 @@ import { openSession, parseHHMM, upcomingSessions, currentCycleAndPlan, instantA
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { getWodEngine } from "@/lib/wod-engines";
 
+// Les coachs (ADMIN) tiennent la console comme DAMZER : ouvrir, preparer, fermer une seance, gerer
+// cycles, seances-types et creneaux. Ce qu'ils ne peuvent PAS faire, c'est supprimer : toute action
+// destructrice garde `requireMaster`.
+async function requireStaff() {
+  const user = await getSession();
+  if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) throw new Error("Accès refusé.");
+  return user;
+}
+
 async function requireMaster() {
   const user = await getSession();
-  if (!user || user.role !== "MASTER_ADMIN") throw new Error("Accès refusé.");
+  if (!user || user.role !== "MASTER_ADMIN") throw new Error("Accès refusé (réservé à DAMZER).");
   return user;
 }
 
@@ -40,7 +49,7 @@ const defaultTeamsOf = (wodType: string) => {
 // ===== Cycles =====
 
 export async function createCycleAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const name = str(formData, "name");
   if (!name) fail("Nom du cycle requis.");
   const all = await db.orm.public.Cycle.where({}).all();
@@ -49,7 +58,7 @@ export async function createCycleAction(formData: FormData) {
 }
 
 export async function renameCycleAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const id = str(formData, "id");
   const name = str(formData, "name");
   if (!name) fail("Nom requis.");
@@ -58,7 +67,7 @@ export async function renameCycleAction(formData: FormData) {
 }
 
 export async function setCurrentCycleAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const id = str(formData, "id");
   const all = await db.orm.public.Cycle.where({}).all();
   for (const c of all) if (c.isCurrent) await db.orm.public.Cycle.where({ id: c.id }).update({ isCurrent: false });
@@ -77,7 +86,7 @@ export async function deleteCycleAction(formData: FormData) {
 // ===== Seances-types d'un cycle =====
 
 export async function addPlanAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const cycleId = str(formData, "cycleId");
   const wodType = str(formData, "wodType");
   const label = str(formData, "label");
@@ -103,7 +112,7 @@ export async function addPlanAction(formData: FormData) {
 }
 
 export async function setCurrentPlanAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const id = str(formData, "id");
   const plan = await db.orm.public.CyclePlan.where({ id }).first();
   if (!plan) fail("Séance-type introuvable.");
@@ -124,7 +133,7 @@ export async function deletePlanAction(formData: FormData) {
 // ===== Horaires des classes =====
 
 export async function addSlotAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const className = str(formData, "className");
   const weekday = int(formData, "weekday", 0);
   const startMin = parseHHMM(str(formData, "start"));
@@ -146,7 +155,7 @@ export async function deleteSlotAction(formData: FormData) {
 // ===== Ouverture / fermeture manuelle =====
 
 export async function openSessionAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const planId = str(formData, "planId");
   const classes = formData.getAll("classes").map(String).filter(Boolean);
   const hours = Math.min(12, Math.max(1, int(formData, "hours", 3)));
@@ -220,7 +229,7 @@ export async function decideRefereeFormAction(formData: FormData) {
 // modifiables dans le greffier) mais reste invisible des eleves jusqu'a `opensAt`. Le slotKey est le meme que
 // celui de l'ouverture automatique : le creneau venu, aucune seance en double n'est creee.
 export async function prepareSessionAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   const slotKey = str(formData, "slotKey");
   const upcoming = await upcomingSessions(30);
   const slot = upcoming.find((u) => u.slotKey === slotKey);
@@ -271,7 +280,7 @@ export async function unprepareSessionAction(formData: FormData) {
 }
 
 export async function closeSessionAction(formData: FormData) {
-  await requireMaster();
+  await requireStaff();
   await db.orm.public.Session.where({ id: str(formData, "id") }).update({ isActive: false });
   done("Séance fermée.");
 }

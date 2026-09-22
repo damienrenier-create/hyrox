@@ -28,9 +28,11 @@ const fieldLabel = ui.label;
 
 export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ ok?: string; msg?: string }> }) {
   const user = await getSession();
-  if (!user || user.role !== "MASTER_ADMIN") {
+  if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) {
     redirect("/");
   }
+  // Un coach voit et pilote tout, mais aucune suppression ne lui est proposee.
+  const canDelete = user.role === "MASTER_ADMIN";
   const { ok, msg } = await searchParams;
 
   await ensureAutoSessions();
@@ -80,7 +82,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
             <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
-            <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>
+            {canDelete && <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>}
             <Link href="/greffier" className={btn.smGhost}>Greffier</Link>
             <Link href="/touche-coule" className={btn.smSea}>Touché-Coulé</Link>
           </nav>
@@ -192,10 +194,12 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Préparer les équipes</Link>
-                    <form action={unprepareSessionAction}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button type="submit" className={btn.smDanger}>Annuler</button>
-                    </form>
+                    {canDelete && (
+                      <form action={unprepareSessionAction}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <button type="submit" className={btn.smDanger}>Annuler</button>
+                      </form>
+                    )}
                   </div>
                 </li>
               ))}
@@ -383,10 +387,12 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                             <button type="submit" className={btn.smGhost}>Séance de la semaine</button>
                           </form>
                         )}
-                        <form action={deletePlanAction}>
-                          <input type="hidden" name="id" value={p.id} />
-                          <button type="submit" className={btn.smDanger}>✕</button>
-                        </form>
+                        {canDelete && (
+                          <form action={deletePlanAction}>
+                            <input type="hidden" name="id" value={p.id} />
+                            <button type="submit" className={btn.smDanger}>✕</button>
+                          </form>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -435,10 +441,12 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     {list.map((s) => (
                       <li key={s.id} className="flex items-center justify-between text-xs text-ink-2">
                         <span>{WEEKDAYS[s.weekday]} {fmtMin(s.startMin)}–{fmtMin(s.endMin)}</span>
-                        <form action={deleteSlotAction}>
-                          <input type="hidden" name="id" value={s.id} />
-                          <button type="submit" className="text-danger font-bold px-2 hover:bg-danger-soft rounded">✕</button>
-                        </form>
+                        {canDelete && (
+                          <form action={deleteSlotAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <button type="submit" className="text-danger font-bold px-2 hover:bg-danger-soft rounded">✕</button>
+                          </form>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -493,10 +501,12 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                         <button type="submit" className={btn.smPrimary}>Activer</button>
                       </form>
                     )}
-                    <form action={deleteCycleAction}>
-                      <input type="hidden" name="id" value={c.id} />
-                      <button type="submit" className={btn.smDanger}>✕</button>
-                    </form>
+                    {canDelete && (
+                      <form action={deleteCycleAction}>
+                        <input type="hidden" name="id" value={c.id} />
+                        <button type="submit" className={btn.smDanger}>✕</button>
+                      </form>
+                    )}
                   </div>
                 </li>
               ))}
