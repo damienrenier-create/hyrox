@@ -64,6 +64,48 @@ model User {
   refereeOf       SessionReferee[]
 }
 
+// Cycle pedagogique (Hyrox, Volley...) : cree/nomme par DAMZER dans la console. Un seul cycle "en cours".
+model Cycle {
+  id        String      @id @default(uuid())
+  name      String
+  order     Int         @default(0)
+  isCurrent Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  plans    CyclePlan[]
+  sessions Session[]
+}
+
+// Seance-type planifiee dans un cycle (Pyramide, Fete Foraine...). isCurrent = "la seance de la semaine",
+// celle qui s'ouvre automatiquement pour une classe pendant son creneau horaire.
+model CyclePlan {
+  id          String      @id @default(uuid())
+  cycle       Cycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  cycleId     String
+  wodType     WodTemplate
+  label       String
+  order       Int         @default(0)
+  isCurrent   Boolean     @default(false)
+  numTeams    Int         @default(24)
+  refereeMode Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  sessions Session[]
+
+  @@index([cycleId])
+}
+
+// Creneau horaire d'une classe (heure de Bruxelles) : weekday 1=lundi..5=vendredi, minutes depuis minuit.
+model ClassSlot {
+  id        String @id @default(uuid())
+  className String
+  weekday   Int
+  startMin  Int
+  endMin    Int
+
+  @@index([className])
+}
+
 model Session {
   id          String      @id @default(uuid())
   wodType     WodTemplate
@@ -72,6 +114,15 @@ model Session {
   settings    Json?
   raceEndedAt DateTime?
   createdAt   DateTime    @default(now())
+  // Rattachement au cycle / a la seance-type, ouverture manuelle ou automatique (voir src/lib/scheduling.ts)
+  cycle       Cycle?      @relation(fields: [cycleId], references: [id])
+  cycleId     String?
+  plan        CyclePlan?  @relation(fields: [planId], references: [id])
+  planId      String?
+  label       String?
+  slotKey     String?     @unique // "<date>_<planId>_<start>_<end>" : une seule ouverture auto par creneau
+  closesAt    DateTime?   // fin d'ouverture (fin du creneau, ou duree fixee a l'ouverture manuelle)
+  autoOpened  Boolean     @default(false)
 
   teams           Team[]
   evaluations     Evaluation[]

@@ -9,14 +9,24 @@ import { submitSelfEvaluationAction } from "./actions";
 type Props = {
   sessionId: string;
   criteria: SelfEvalCriterion[];
+  instruction: string;
   initial: Record<string, string> | null;
   state: "open" | "notYet" | "expired";
   closesAt: number | null;
   submittedAt: number | null;
 };
 
-// Grille d'auto-evaluation : une ligne par critere, une seule case selectionnee par ligne (tap).
-export function SelfEvalGrid({ sessionId, criteria, initial, state, closesAt, submittedAt }: Props) {
+// Couleurs de la grille papier (TI rouge -> E bleu), version mobile : une carte par niveau, on touche pour cocher.
+const LEVEL_STYLE: Record<QualityCode, { idle: string; on: string }> = {
+  TI: { idle: "bg-red-50 border-red-100", on: "bg-red-600 border-red-700 text-white" },
+  I: { idle: "bg-orange-50 border-orange-100", on: "bg-orange-500 border-orange-600 text-white" },
+  S: { idle: "bg-yellow-50 border-yellow-100", on: "bg-yellow-400 border-yellow-500 text-slate-900" },
+  B: { idle: "bg-lime-50 border-lime-100", on: "bg-lime-600 border-lime-700 text-white" },
+  TB: { idle: "bg-emerald-50 border-emerald-100", on: "bg-emerald-600 border-emerald-700 text-white" },
+  E: { idle: "bg-sky-50 border-sky-100", on: "bg-sky-600 border-sky-700 text-white" },
+};
+
+export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state, closesAt, submittedAt }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, QualityCode>>(() => {
     const out: Record<string, QualityCode> = {};
@@ -28,6 +38,7 @@ export function SelfEvalGrid({ sessionId, criteria, initial, state, closesAt, su
 
   const editable = state === "open";
   const complete = criteria.every((c) => !!answers[c.id]);
+  const fmt = (ms: number) => new Date(ms).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" });
 
   function submit() {
     setMessage(null);
@@ -50,67 +61,54 @@ export function SelfEvalGrid({ sessionId, criteria, initial, state, closesAt, su
       )}
       {state === "expired" && (
         <p className="bg-slate-100 border border-slate-200 text-slate-600 text-sm rounded-lg p-3 mb-4">
-          🔒 Le délai de 24 h est écoulé. {initial ? "Voici ce que tu avais répondu." : "Tu n'as pas rempli ton auto-évaluation."}
+          🔒 Le délai de 24 h est écoulé. {initial ? "Voici ce que tu avais coché." : "Tu n'as pas rempli ton auto-évaluation."}
         </p>
       )}
-      {state === "open" && closesAt && (
+      {state === "open" && (
         <p className="text-xs text-slate-500 mb-3">
-          Ouverte jusqu'au {new Date(closesAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}.
-          {submittedAt && <> Dernier envoi : {new Date(submittedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}.</>}
+          {closesAt && <>Ouverte jusqu'au {fmt(closesAt)}.</>}
+          {submittedAt && <> Dernier envoi : {fmt(submittedAt)}.</>}
         </p>
       )}
 
-      <div className="overflow-x-auto -mx-4 px-4">
-        <table className="w-full min-w-[520px] border-separate border-spacing-y-2">
-          <thead>
-            <tr>
-              <th className="text-left text-xs font-bold text-slate-500 pb-1">Critère</th>
-              {QUALITY_LEVELS.map((l) => (
-                <th key={l.code} className="text-center text-xs font-black text-slate-700 pb-1 w-14" title={l.label}>
-                  {l.code}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {criteria.map((c) => (
-              <tr key={c.id}>
-                <td className="pr-3 align-middle">
-                  <div className="font-bold text-sm leading-tight">{c.label}</div>
-                  {c.hint && <div className="text-[11px] text-slate-500 leading-tight">{c.hint}</div>}
-                </td>
+      <p className="text-sm italic text-slate-700 mb-4"><b>Consigne :</b> {instruction}</p>
+
+      <div className="space-y-5">
+        {criteria.map((c, idx) => {
+          const chosen = answers[c.id];
+          return (
+            <section key={c.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <header className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-900 text-white">
+                <h3 className="font-black text-sm">{idx + 1}. {c.label}</h3>
+                <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${chosen ? "bg-white text-slate-900" : "bg-slate-700 text-slate-300"}`}>
+                  {chosen ? QUALITY_LEVELS.find((l) => l.code === chosen)?.label : "à cocher"}
+                </span>
+              </header>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2">
                 {QUALITY_LEVELS.map((l) => {
-                  const selected = answers[c.id] === l.code;
+                  const selected = chosen === l.code;
+                  const style = LEVEL_STYLE[l.code];
                   return (
-                    <td key={l.code} className="text-center align-middle">
-                      <button
-                        type="button"
-                        disabled={!editable || pending}
-                        aria-pressed={selected}
-                        onClick={() => setAnswers((a) => ({ ...a, [c.id]: l.code }))}
-                        className={`w-12 h-12 rounded-xl border-2 font-black text-sm transition-all ${
-                          selected
-                            ? "bg-slate-900 border-slate-900 text-white shadow"
-                            : editable
-                              ? "bg-white border-slate-200 text-slate-300 hover:border-slate-500"
-                              : "bg-slate-50 border-slate-100 text-slate-200"
-                        }`}
-                      >
-                        {selected ? l.code : "·"}
-                      </button>
-                    </td>
+                    <button
+                      key={l.code}
+                      type="button"
+                      disabled={!editable || pending}
+                      aria-pressed={selected}
+                      onClick={() => setAnswers((a) => ({ ...a, [c.id]: l.code }))}
+                      className={`text-left rounded-lg border-2 px-3 py-2 transition-all flex gap-2 items-start ${selected ? `${style.on} shadow-md scale-[1.01]` : `${style.idle} ${editable ? "hover:border-slate-400" : "opacity-60"}`}`}
+                    >
+                      <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[11px] font-black ${selected ? "bg-white text-slate-900 border-white" : "border-slate-400 text-transparent"}`}>✓</span>
+                      <span className="min-w-0">
+                        <span className="block text-[11px] font-black uppercase tracking-wide opacity-80">{l.label} · {l.code}</span>
+                        <span className="block text-xs leading-snug">{c.levels[l.code].replace(" [~]", "")}</span>
+                      </span>
+                    </button>
                   );
                 })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-slate-500">
-        {QUALITY_LEVELS.map((l) => (
-          <span key={l.code}><b>{l.code}</b> = {l.label}</span>
-        ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
 
       {message && (
@@ -126,7 +124,11 @@ export function SelfEvalGrid({ sessionId, criteria, initial, state, closesAt, su
           {pending ? "…" : initial ? "Mettre à jour mon auto-évaluation" : "Envoyer mon auto-évaluation"}
         </button>
       )}
-      {editable && !complete && <p className="text-xs text-slate-500 mt-2 text-center">Choisis une case par ligne pour pouvoir envoyer.</p>}
+      {editable && !complete && (
+        <p className="text-xs text-slate-500 mt-2 text-center">
+          Encore {criteria.filter((c) => !answers[c.id]).length} ligne(s) à cocher pour pouvoir envoyer.
+        </p>
+      )}
     </div>
   );
 }

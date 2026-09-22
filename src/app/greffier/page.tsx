@@ -2,29 +2,48 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { buildRaceContext } from "@/lib/race-context";
+import { ensureAutoSessions, listOpenSessions } from "@/lib/scheduling";
+import { readSessionClasses } from "@/lib/session-roles";
+import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
 import { getSessionClasses } from "./team-actions";
-import { GreffierClient } from "./client";
+import { GreffierClient, type SessionOption } from "./client";
 import type { RefereeView, TeamWithMembers } from "./TeamsManager";
 
-export default async function GreffierPage() {
+export default async function GreffierPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
   if (!evaluator || !["MASTER_ADMIN", "GREFFIER"].includes(evaluator.role)) {
     redirect("/");
   }
 
-  // Pas de filtre isActive : le greffier doit pouvoir revoir les resultats finaux juste apres
-  // avoir clos la course, meme si l'admin en a ouvert une autre entre-temps.
-  const session = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).first();
+  // Ouverture automatique des seances des classes en creneau, puis choix de la seance :
+  // ?session=, sinon la seance ouverte la plus recente, sinon la derniere seance (relecture des resultats).
+  await ensureAutoSessions();
+  const open = await listOpenSessions();
+  const { session: requested } = await searchParams;
+  let session = requested ? await db.orm.public.Session.where({ id: requested }).first() : null;
+  if (!session) session = open[0] ?? null;
+  if (!session) session = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).first();
 
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-cyan-50 font-mono text-center">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Aucune session</h1>
+          <h1 className="text-2xl font-bold mb-2">Aucune séance</h1>
+          <p className="text-slate-400 text-sm">DAMZER doit ouvrir une séance (ou définir un cycle avec les horaires des classes).</p>
         </div>
       </div>
     );
+  }
+
+  const options: SessionOption[] = open.map((s) => ({
+    id: s.id,
+    label: s.label ?? wodLabel(s.wodType),
+    classes: readSessionClasses(s.settings),
+    open: true,
+  }));
+  if (!options.some((o) => o.id === session!.id)) {
+    options.push({ id: session.id, label: session.label ?? wodLabel(session.wodType), classes: readSessionClasses(session.settings), open: false });
   }
 
   await ensureRaceStateAction(session.id);
@@ -61,6 +80,8 @@ export default async function GreffierPage() {
   return (
     <GreffierClient
       sessionId={session.id}
+      sessionLabel={session.label ?? wodLabel(session.wodType)}
+      sessionOptions={options}
       bundle={bundle}
       teamsWithMembers={teamsWithMembers}
       classes={classes}

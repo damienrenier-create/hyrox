@@ -8,6 +8,18 @@
       "model": "BoatPlacement",
       "namespace": "public"
     },
+    "classSlot": {
+      "model": "ClassSlot",
+      "namespace": "public"
+    },
+    "cycle": {
+      "model": "Cycle",
+      "namespace": "public"
+    },
+    "cyclePlan": {
+      "model": "CyclePlan",
+      "namespace": "public"
+    },
     "evaluation": {
       "model": "Evaluation",
       "namespace": "public"
@@ -281,6 +293,298 @@
               },
               "namespaceId": "public",
               "table": "boatPlacement"
+            }
+          },
+          "ClassSlot": {
+            "fields": {
+              "className": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "endMin": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startMin": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "weekday": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "className": {
+                  "column": "className"
+                },
+                "endMin": {
+                  "column": "endMin"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "startMin": {
+                  "column": "startMin"
+                },
+                "weekday": {
+                  "column": "weekday"
+                }
+              },
+              "namespaceId": "public",
+              "table": "classSlot"
+            }
+          },
+          "Cycle": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isCurrent": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "plans": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "cycleId"
+                  ]
+                },
+                "to": {
+                  "model": "CyclePlan",
+                  "namespace": "public"
+                }
+              },
+              "sessions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "cycleId"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isCurrent": {
+                  "column": "isCurrent"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "order": {
+                  "column": "order"
+                }
+              },
+              "namespaceId": "public",
+              "table": "cycle"
+            }
+          },
+          "CyclePlan": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "cycleId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isCurrent": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "label": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "numTeams": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "refereeMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "wodType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WodTemplate",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              }
+            },
+            "relations": {
+              "cycle": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "cycleId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Cycle",
+                  "namespace": "public"
+                }
+              },
+              "sessions": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "planId"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "cycleId": {
+                  "column": "cycleId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isCurrent": {
+                  "column": "isCurrent"
+                },
+                "label": {
+                  "column": "label"
+                },
+                "numTeams": {
+                  "column": "numTeams"
+                },
+                "order": {
+                  "column": "order"
+                },
+                "refereeMode": {
+                  "column": "refereeMode"
+                },
+                "wodType": {
+                  "column": "wodType"
+                }
+              },
+              "namespaceId": "public",
+              "table": "cyclePlan"
             }
           },
           "Evaluation": {
@@ -1210,10 +1514,31 @@
           },
           "Session": {
             "fields": {
+              "autoOpened": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "closesAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "cycleId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -1228,6 +1553,20 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "label": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "planId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -1249,6 +1588,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "slotKey": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -1282,6 +1628,22 @@
                   "namespace": "public"
                 }
               },
+              "cycle": {
+                "cardinality": "N:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "cycleId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Cycle",
+                  "namespace": "public"
+                }
+              },
               "evaluations": {
                 "cardinality": "1:N",
                 "on": {
@@ -1294,6 +1656,22 @@
                 },
                 "to": {
                   "model": "Evaluation",
+                  "namespace": "public"
+                }
+              },
+              "plan": {
+                "cardinality": "N:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "planId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "CyclePlan",
                   "namespace": "public"
                 }
               },
@@ -1391,14 +1769,29 @@
             },
             "storage": {
               "fields": {
+                "autoOpened": {
+                  "column": "autoOpened"
+                },
+                "closesAt": {
+                  "column": "closesAt"
+                },
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "cycleId": {
+                  "column": "cycleId"
                 },
                 "id": {
                   "column": "id"
                 },
                 "isActive": {
                   "column": "isActive"
+                },
+                "label": {
+                  "column": "label"
+                },
+                "planId": {
+                  "column": "planId"
                 },
                 "raceEndedAt": {
                   "column": "raceEndedAt"
@@ -1408,6 +1801,9 @@
                 },
                 "settings": {
                   "column": "settings"
+                },
+                "slotKey": {
+                  "column": "slotKey"
                 },
                 "wodType": {
                   "column": "wodType"
@@ -2311,6 +2707,218 @@
               },
               "uniques": []
             },
+            "classSlot": {
+              "columns": {
+                "className": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "endMin": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startMin": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "weekday": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "className"
+                  ],
+                  "name": "classSlot_className_idx_f1738847",
+                  "prefix": "classSlot_className_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "cycle": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "isCurrent": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "cyclePlan": {
+              "checks": [
+                {
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX')",
+                  "name": "cyclePlan_wodType_check_b588abc4",
+                  "prefix": "cyclePlan_wodType_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "cycleId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "isCurrent": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "label": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "numTeams": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 24
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "refereeMode": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "wodType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WodTemplate",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "cycleId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "cyclePlan"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "cycle"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "cycleId"
+                  ],
+                  "name": "cyclePlan_cycleId_idx_75f87b79",
+                  "prefix": "cyclePlan_cycleId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "evaluation": {
               "columns": {
                 "createdAt": {
@@ -3106,6 +3714,20 @@
                 }
               ],
               "columns": {
+                "autoOpened": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "closesAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -3114,6 +3736,11 @@
                   },
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "cycleId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "id": {
                   "codecId": "pg/text@1",
@@ -3128,6 +3755,16 @@
                   },
                   "nativeType": "bool",
                   "nullable": false
+                },
+                "label": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "planId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "raceEndedAt": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -3148,6 +3785,11 @@
                   "nativeType": "json",
                   "nullable": true
                 },
+                "slotKey": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "wodType": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3160,14 +3802,70 @@
                   }
                 }
               },
-              "foreignKeys": [],
-              "indexes": [],
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "cycleId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "cycle"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "planId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "cyclePlan"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "cycleId"
+                  ],
+                  "name": "session_cycleId_idx_75f87b79",
+                  "prefix": "session_cycleId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "planId"
+                  ],
+                  "name": "session_planId_idx_5b32079a",
+                  "prefix": "session_planId_idx",
+                  "unique": false
+                }
+              ],
               "primaryKey": {
                 "columns": [
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "slotKey"
+                  ]
+                }
+              ]
             },
             "sessionReferee": {
               "columns": {
@@ -3829,10 +4527,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0525ecf171f20550f8439aec2acc538057d961047da27532deceaf77f4c25ce6"
+    "storageHash": "d6a3b053608629407e645bf915a9cd6647ef82a224a6e066970236627fb54e3c"
   },
   "execution": {
-    "executionHash": "199ab1a9fe9ac02207bedd4942eb03a015b5b1ff3988860d8f6812d6e21e1acc",
+    "executionHash": "87d6d0c502a5f731a8654883f399b93079e848aa77e2c540fcc747a96fc0a698",
     "mutations": {
       "defaults": [
         {
@@ -3844,6 +4542,39 @@
             "column": "id",
             "namespace": "public",
             "table": "boatPlacement"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "classSlot"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "cycle"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "cyclePlan"
           }
         },
         {

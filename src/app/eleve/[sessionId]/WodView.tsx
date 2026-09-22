@@ -37,10 +37,11 @@ type Props = {
   results: ResultRow[];
   refereeEvals: RefereeEvalRow[];
   criteria: SelfEvalCriterion[];
+  instruction: string;
   selfEval: { initial: Record<string, string> | null; state: "open" | "notYet" | "expired"; closesAt: number | null; submittedAt: number | null };
 };
 
-export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, criteria, selfEval }: Props) {
+export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, criteria, instruction, selfEval }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -157,11 +158,12 @@ export function WodView({ sessionId, ended, myTeamName, results, refereeEvals, c
 
       {tab === "self" && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <h2 className="font-black mb-1">Mon auto-évaluation</h2>
-          <p className="text-xs text-slate-500 mb-4">Pour chaque ligne, touche la case qui correspond à ce que tu penses avoir fait.</p>
+          <h2 className="font-black mb-1">Auto-évaluation – Cycle Hyrox</h2>
+          <p className="text-xs text-slate-500 mb-4">Éducation Physique et Sportive · une case par critère.</p>
           <SelfEvalGrid
             sessionId={sessionId}
             criteria={criteria}
+            instruction={instruction}
             initial={selfEval.initial}
             state={selfEval.state}
             closesAt={selfEval.closesAt}

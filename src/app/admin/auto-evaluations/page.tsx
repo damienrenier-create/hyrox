@@ -64,7 +64,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
         <select name="session" defaultValue={session?.id ?? ""} className="bg-slate-900 border border-cyan-800 rounded p-2 text-sm">
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
-              {wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · active" : ""}{s.raceEndedAt ? " · terminée" : ""}
+              {s.label ?? wodLabel(s.wodType)} · {fmtDate(s.createdAt)}{s.isActive ? " · ouverte" : ""}{s.raceEndedAt ? " · terminée" : ""}
             </option>
           ))}
         </select>
@@ -86,7 +86,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                   <th className="p-2">Élève</th>
                   <th className="p-2">Équipe</th>
                   {SELF_EVAL_CRITERIA.map((c) => (
-                    <th key={c.id} className="p-2 text-center" title={c.hint}>{c.label}</th>
+                    <th key={c.id} className="p-2 text-center">{c.label}</th>
                   ))}
                   <th className="p-2">Envoyé</th>
                 </tr>

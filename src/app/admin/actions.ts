@@ -1,39 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { redirect } from "next/navigation";
 
-export async function createSessionAction(formData: FormData) {
-  const numTeamsRaw = formData.get("numTeams");
-  const numTeams = numTeamsRaw ? parseInt(numTeamsRaw as string, 10) : 24;
-  const refereeMode = formData.get("refereeMode") === "on";
-
-  // 1. Fermer l'ancienne session
-  await db.orm.public.Session.where({ isActive: true }).update({ isActive: false });
-
-  await db.transaction(async (tx) => {
-    const newSession = await tx.orm.public.Session.create({
-      wodType: "PYRAMIDE_CLASSIQUE",
-      isActive: true,
-      refereeMode,
-      settings: {
-        numTeams
-      }
-    });
-
-    const teams = Array.from({ length: numTeams }).map((_, i) => ({
-      name: `Équipe ${i + 1}`,
-      order: i + 1,
-      sessionId: newSession.id,
-    }));
-
-    for (const team of teams) {
-      await tx.orm.public.Team.create(team);
-    }
-  });
-
-  redirect("/greffier");
-}
+// La creation/ouverture de seance vit dans cycles-actions.ts (openSessionAction) et src/lib/scheduling.ts.
 
 export type ImportUserPayload = {
   firstName: string;

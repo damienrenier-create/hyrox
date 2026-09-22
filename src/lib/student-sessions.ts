@@ -39,7 +39,7 @@ export async function sessionsForStudent(userId: string): Promise<StudentSession
     rows.push({
       sessionId: session.id,
       wodType: session.wodType,
-      label: wodLabel(session.wodType),
+      label: session.label ?? wodLabel(session.wodType),
       createdAt: String(session.createdAt),
       teamId: team.id,
       teamName: team.name,

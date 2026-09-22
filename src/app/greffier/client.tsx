@@ -59,10 +59,14 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
   return <span className="flex flex-wrap max-w-[64px]">{dots}</span>;
 }
 
+export type SessionOption = { id: string; label: string; classes: string[]; open: boolean };
+
 export function GreffierClient({
-  sessionId, bundle, teamsWithMembers, classes, allClasses, referees,
+  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees,
 }: {
   sessionId: string;
+  sessionLabel: string;
+  sessionOptions: SessionOption[];
   bundle: RaceContextBundle;
   teamsWithMembers: TeamWithMembers[];
   classes: string[];
@@ -225,6 +229,27 @@ export function GreffierClient({
       <header className="sticky top-0 z-20 bg-white border-b-4 border-slate-900 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-6">
+            <div>
+              {sessionOptions.length > 1 ? (
+                <select
+                  value={sessionId}
+                  onChange={(e) => router.push(`/greffier?session=${e.target.value}`)}
+                  className="text-sm font-black bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 max-w-[260px]"
+                >
+                  {sessionOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? "" : " (fermée)"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm font-black leading-tight">
+                  {sessionLabel}
+                  {classes.length > 0 && <span className="text-slate-500 font-bold"> · {classes.join(", ")}</span>}
+                  {sessionOptions[0] && !sessionOptions[0].open && <span className="text-slate-400 font-normal"> (fermée)</span>}
+                </p>
+              )}
+            </div>
             <p className={`text-[3rem] font-black leading-none tracking-tight ${phase === "pre" ? "text-slate-300" : isPaused ? "text-amber-500" : "text-slate-900"}`}>
               {fmt(liveMs)}
             </p>

@@ -14,5 +14,10 @@ export function getWodEngine(id: string): WodTemplate {
   return engine;
 }
 
+// Seances-types disponibles pour la console (seuls les moteurs reellement codes sont proposes).
+export function listWodEngines(): { id: string; name: string }[] {
+  return Object.values(templates).map((t) => ({ id: t.id, name: (t as { name?: string }).name ?? t.id }));
+}
+
 export * from "./core/types";
 export { PyramideClassique };

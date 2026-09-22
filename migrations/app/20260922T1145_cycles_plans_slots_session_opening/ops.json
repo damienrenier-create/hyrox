@@ -1,0 +1,695 @@
+[
+  {
+    "id": "table.classSlot",
+    "label": "Create table \"classSlot\"",
+    "summary": "Creates table \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"classSlot\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"classSlot\"",
+        "sql": "CREATE TABLE \"public\".\"classSlot\" (\n  \"className\" text NOT NULL,\n  \"endMin\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"startMin\" int4 NOT NULL,\n  \"weekday\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"classSlot\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.cycle",
+    "label": "Create table \"cycle\"",
+    "summary": "Creates table \"cycle\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "cycle"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"cycle\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cycle\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"cycle\"",
+        "sql": "CREATE TABLE \"public\".\"cycle\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isCurrent\" bool DEFAULT false NOT NULL,\n  \"name\" text NOT NULL,\n  \"order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"cycle\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cycle\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.cyclePlan",
+    "label": "Create table \"cyclePlan\"",
+    "summary": "Creates table \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"cyclePlan\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"cyclePlan\"",
+        "sql": "CREATE TABLE \"public\".\"cyclePlan\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"cycleId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"isCurrent\" bool DEFAULT false NOT NULL,\n  \"label\" text NOT NULL,\n  \"numTeams\" int4 DEFAULT 24 NOT NULL,\n  \"order\" int4 DEFAULT 0 NOT NULL,\n  \"refereeMode\" bool DEFAULT true NOT NULL,\n  \"wodType\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"cyclePlan_wodType_check_b588abc4\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"cyclePlan\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.autoOpened",
+    "label": "Add column \"autoOpened\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "autoOpened",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"autoOpened\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "autoOpened"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"autoOpened\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"autoOpened\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"autoOpened\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "autoOpened"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.closesAt",
+    "label": "Add column \"closesAt\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "closesAt",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"closesAt\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "closesAt"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"closesAt\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"closesAt\" timestamptz"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"closesAt\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "closesAt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.cycleId",
+    "label": "Add column \"cycleId\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "cycleId",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"cycleId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "cycleId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"cycleId\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"cycleId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"cycleId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "cycleId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.label",
+    "label": "Add column \"label\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "label",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"label\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "label"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"label\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"label\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"label\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "label"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.planId",
+    "label": "Add column \"planId\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "planId",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"planId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "planId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"planId\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"planId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"planId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "planId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.slotKey",
+    "label": "Add column \"slotKey\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "slotKey",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"slotKey\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "slotKey"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"slotKey\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"slotKey\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"slotKey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "slotKey"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.session.session_slotKey_key",
+    "label": "Add unique constraint on \"session\" (slotKey)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "session_slotKey_key",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_slotKey_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_slotKey_key",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"session_slotKey_key\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_slotKey_key\" UNIQUE (\"slotKey\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_slotKey_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_slotKey_key",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.classSlot.classSlot_className_idx_f1738847",
+    "label": "Create index \"classSlot_className_idx_f1738847\" on \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "classSlot_className_idx_f1738847",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"classSlot_className_idx_f1738847\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot_className_idx_f1738847\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"classSlot_className_idx_f1738847\"",
+        "sql": "CREATE INDEX \"classSlot_className_idx_f1738847\" ON \"public\".\"classSlot\" (\"className\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"classSlot_className_idx_f1738847\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot_className_idx_f1738847\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.cyclePlan.cyclePlan_cycleId_idx_75f87b79",
+    "label": "Create index \"cyclePlan_cycleId_idx_75f87b79\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "cyclePlan_cycleId_idx_75f87b79",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"cyclePlan_cycleId_idx_75f87b79\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cyclePlan_cycleId_idx_75f87b79\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"cyclePlan_cycleId_idx_75f87b79\"",
+        "sql": "CREATE INDEX \"cyclePlan_cycleId_idx_75f87b79\" ON \"public\".\"cyclePlan\" (\"cycleId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"cyclePlan_cycleId_idx_75f87b79\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"cyclePlan_cycleId_idx_75f87b79\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.session.session_cycleId_idx_75f87b79",
+    "label": "Create index \"session_cycleId_idx_75f87b79\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "session_cycleId_idx_75f87b79",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"session_cycleId_idx_75f87b79\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_cycleId_idx_75f87b79\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"session_cycleId_idx_75f87b79\"",
+        "sql": "CREATE INDEX \"session_cycleId_idx_75f87b79\" ON \"public\".\"session\" (\"cycleId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"session_cycleId_idx_75f87b79\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_cycleId_idx_75f87b79\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.session.session_planId_idx_5b32079a",
+    "label": "Create index \"session_planId_idx_5b32079a\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "session_planId_idx_5b32079a",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"session_planId_idx_5b32079a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_planId_idx_5b32079a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"session_planId_idx_5b32079a\"",
+        "sql": "CREATE INDEX \"session_planId_idx_5b32079a\" ON \"public\".\"session\" (\"planId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"session_planId_idx_5b32079a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"session_planId_idx_5b32079a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.cyclePlan.cyclePlan_cycleId_fkey",
+    "label": "Add foreign key \"cyclePlan_cycleId_fkey\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "cyclePlan_cycleId_fkey",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"cyclePlan_cycleId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_cycleId_fkey",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"cyclePlan_cycleId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\"\nADD CONSTRAINT \"cyclePlan_cycleId_fkey\"\nFOREIGN KEY (\"cycleId\")\nREFERENCES \"public\".\"cycle\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"cyclePlan_cycleId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_cycleId_fkey",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.session.session_cycleId_fkey",
+    "label": "Add foreign key \"session_cycleId_fkey\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "session_cycleId_fkey",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"session_cycleId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_cycleId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"session_cycleId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"session\"\nADD CONSTRAINT \"session_cycleId_fkey\"\nFOREIGN KEY (\"cycleId\")\nREFERENCES \"public\".\"cycle\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"session_cycleId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_cycleId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.session.session_planId_fkey",
+    "label": "Add foreign key \"session_planId_fkey\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "session_planId_fkey",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"session_planId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_planId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"session_planId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"session\"\nADD CONSTRAINT \"session_planId_fkey\"\nFOREIGN KEY (\"planId\")\nREFERENCES \"public\".\"cyclePlan\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"session_planId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_planId_fkey",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  }
+]

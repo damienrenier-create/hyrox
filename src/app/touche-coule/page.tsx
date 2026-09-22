@@ -4,22 +4,31 @@ import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
 import { computeRefereeScore } from "@/lib/wod-engines/core/pirate-score";
 import { refereeAccess } from "@/lib/referee-access";
+import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
 import type { BoardShip } from "./Board";
 
-export default async function ToucheCoulePage() {
+export default async function ToucheCoulePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
   if (!evaluator) {
     redirect("/");
   }
 
-  // Pas de filtre isActive : la fin du WOD ne coupe pas l'acces au Touché-Coulé (§28) — elle ne fait
-  // que faire basculer les tirs suivants en POST_WOD (voir touche-coule/actions.ts).
-  const session = await db.orm.public.Session
-    .where({ refereeMode: true })
-    .orderBy((s) => s.createdAt.desc())
-    .first();
+  // Choix de la seance : ?session=, sinon une seance OUVERTE avec arbitrage (celle de la classe de l'eleve),
+  // sinon la plus recente avec arbitrage. Pas de filtre isActive sur le repli : la fin du WOD ne coupe pas
+  // l'acces au Touché-Coulé (§28) — elle ne fait que basculer les tirs suivants en POST_WOD.
+  const { session: requested } = await searchParams;
+  let session = requested ? await db.orm.public.Session.where({ id: requested, refereeMode: true }).first() : null;
+  if (!session) {
+    const open = evaluator.role === "STUDENT"
+      ? await openSessionsForStudent(evaluator.id, evaluator.className ?? null)
+      : await listOpenSessions();
+    session = open.find((s) => s.refereeMode) ?? null;
+  }
+  if (!session) {
+    session = await db.orm.public.Session.where({ refereeMode: true }).orderBy((s) => s.createdAt.desc()).first();
+  }
 
   if (!session) {
     return (

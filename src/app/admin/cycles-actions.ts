@@ -1,0 +1,182 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { getSession } from "@/lib/auth";
+import { openSession, parseHHMM } from "@/lib/scheduling";
+import { MAX_CLASSES } from "@/lib/session-roles";
+import { getWodEngine } from "@/lib/wod-engines";
+
+async function requireMaster() {
+  const user = await getSession();
+  if (!user || user.role !== "MASTER_ADMIN") throw new Error("Accès refusé.");
+  return user;
+}
+
+function fail(msg: string): never {
+  redirect(`/admin?msg=${encodeURIComponent(msg)}`);
+}
+
+function done(msg?: string): never {
+  revalidatePath("/admin");
+  redirect(msg ? `/admin?ok=${encodeURIComponent(msg)}` : "/admin");
+}
+
+const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+const int = (fd: FormData, k: string, def: number) => {
+  const n = parseInt(str(fd, k), 10);
+  return Number.isFinite(n) ? n : def;
+};
+
+// ===== Cycles =====
+
+export async function createCycleAction(formData: FormData) {
+  await requireMaster();
+  const name = str(formData, "name");
+  if (!name) fail("Nom du cycle requis.");
+  const all = await db.orm.public.Cycle.where({}).all();
+  const cycle = await db.orm.public.Cycle.create({ name, order: all.length + 1, isCurrent: all.length === 0 });
+  done(`Cycle « ${cycle.name} » créé.`);
+}
+
+export async function renameCycleAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  const name = str(formData, "name");
+  if (!name) fail("Nom requis.");
+  await db.orm.public.Cycle.where({ id }).update({ name });
+  done();
+}
+
+export async function setCurrentCycleAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  const all = await db.orm.public.Cycle.where({}).all();
+  for (const c of all) if (c.isCurrent) await db.orm.public.Cycle.where({ id: c.id }).update({ isCurrent: false });
+  await db.orm.public.Cycle.where({ id }).update({ isCurrent: true });
+  done();
+}
+
+export async function deleteCycleAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  if (await db.orm.public.Session.where({ cycleId: id }).first()) fail("Ce cycle a déjà des séances : il ne peut pas être supprimé.");
+  await db.orm.public.Cycle.where({ id }).delete(); // cascade sur les seances-types
+  done("Cycle supprimé.");
+}
+
+// ===== Seances-types d'un cycle =====
+
+export async function addPlanAction(formData: FormData) {
+  await requireMaster();
+  const cycleId = str(formData, "cycleId");
+  const wodType = str(formData, "wodType");
+  const label = str(formData, "label");
+  const numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", 24)));
+  const refereeMode = formData.get("refereeMode") === "on";
+  if (!label) fail("Nom de la séance requis.");
+  try {
+    getWodEngine(wodType);
+  } catch {
+    fail("Type de séance inconnu.");
+  }
+  const existing = await db.orm.public.CyclePlan.where({ cycleId }).all();
+  await db.orm.public.CyclePlan.create({
+    cycleId,
+    wodType: wodType as "PYRAMIDE_CLASSIQUE",
+    label,
+    order: existing.length + 1,
+    isCurrent: existing.length === 0,
+    numTeams,
+    refereeMode,
+  });
+  done(`Séance « ${label} » ajoutée au cycle.`);
+}
+
+export async function setCurrentPlanAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  const plan = await db.orm.public.CyclePlan.where({ id }).first();
+  if (!plan) fail("Séance-type introuvable.");
+  const siblings = await db.orm.public.CyclePlan.where({ cycleId: plan.cycleId }).all();
+  for (const p of siblings) if (p.isCurrent) await db.orm.public.CyclePlan.where({ id: p.id }).update({ isCurrent: false });
+  await db.orm.public.CyclePlan.where({ id }).update({ isCurrent: true });
+  done(`« ${plan.label} » est maintenant la séance de la semaine.`);
+}
+
+export async function deletePlanAction(formData: FormData) {
+  await requireMaster();
+  const id = str(formData, "id");
+  if (await db.orm.public.Session.where({ planId: id }).first()) fail("Cette séance-type a déjà été jouée : elle ne peut pas être supprimée.");
+  await db.orm.public.CyclePlan.where({ id }).delete();
+  done();
+}
+
+// ===== Horaires des classes =====
+
+export async function addSlotAction(formData: FormData) {
+  await requireMaster();
+  const className = str(formData, "className");
+  const weekday = int(formData, "weekday", 0);
+  const startMin = parseHHMM(str(formData, "start"));
+  const endMin = parseHHMM(str(formData, "end"));
+  if (!className) fail("Classe requise.");
+  if (weekday < 1 || weekday > 5) fail("Jour invalide (lundi à vendredi).");
+  if (startMin === null || endMin === null) fail("Heures invalides (format HH:MM).");
+  if (endMin <= startMin) fail("L'heure de fin doit être après le début.");
+  await db.orm.public.ClassSlot.create({ className, weekday, startMin, endMin });
+  done();
+}
+
+export async function deleteSlotAction(formData: FormData) {
+  await requireMaster();
+  await db.orm.public.ClassSlot.where({ id: str(formData, "id") }).delete();
+  done();
+}
+
+// ===== Ouverture / fermeture manuelle =====
+
+export async function openSessionAction(formData: FormData) {
+  await requireMaster();
+  const planId = str(formData, "planId");
+  const classes = formData.getAll("classes").map(String).filter(Boolean);
+  const hours = Math.min(12, Math.max(1, int(formData, "hours", 3)));
+  if (classes.length > MAX_CLASSES) fail(`Maximum ${MAX_CLASSES} classes.`);
+
+  let wodType = str(formData, "wodType") || "PYRAMIDE_CLASSIQUE";
+  let label = str(formData, "label");
+  let numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", 24)));
+  let refereeMode = formData.get("refereeMode") === "on";
+  let cycleId: string | null = null;
+
+  if (planId) {
+    const plan = await db.orm.public.CyclePlan.where({ id: planId }).first();
+    if (!plan) fail("Séance-type introuvable.");
+    wodType = plan.wodType;
+    label = label || plan.label;
+    numTeams = int(formData, "numTeams", plan.numTeams);
+    refereeMode = formData.has("refereeModeSet") ? refereeMode : plan.refereeMode;
+    cycleId = plan.cycleId;
+  }
+  if (!label) label = "WOD Pyramide";
+
+  const session = await openSession({
+    wodType,
+    label,
+    classes,
+    numTeams,
+    refereeMode,
+    cycleId,
+    planId: planId || null,
+    closesAt: Temporal.Now.instant().add({ hours }),
+    autoOpened: false,
+  });
+  done(`Séance « ${session.label} » ouverte pour ${classes.length ? classes.join(", ") : "toutes les classes"} (${hours} h).`);
+}
+
+export async function closeSessionAction(formData: FormData) {
+  await requireMaster();
+  await db.orm.public.Session.where({ id: str(formData, "id") }).update({ isActive: false });
+  done("Séance fermée.");
+}
