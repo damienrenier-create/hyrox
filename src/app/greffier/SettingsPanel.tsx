@@ -73,7 +73,7 @@ export function SettingsPanel({ sessionId, settings, noStartExerciseIds, exercis
 
   return (
     <div className={ui.backdrop} onClick={onClose}>
-      <div className={`${ui.sheet} sm:max-w-2xl max-h-[90vh]`} onClick={(e) => e.stopPropagation()}>
+      <div className={`${ui.sheet} sm:max-w-2xl max-h-[90dvh]`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-1">
           <h3 className={ui.h2}>⚙️ Réglages de la séance</h3>
           <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>

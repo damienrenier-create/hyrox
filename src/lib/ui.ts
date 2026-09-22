@@ -67,7 +67,7 @@ export const ui = {
   tr: "border-b border-line/70 odd:bg-paper/60",
 
   backdrop: "fixed inset-0 z-30 bg-ink/35 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-4",
-  sheet: "bg-card rounded-t-3xl sm:rounded-3xl p-5 w-full max-h-[85vh] overflow-auto shadow-pop",
+  sheet: "bg-card rounded-t-3xl sm:rounded-3xl p-5 w-full max-h-[85dvh] overflow-auto shadow-pop",
   close: "w-8 h-8 rounded-full bg-paper text-ink-2 hover:bg-line font-bold flex items-center justify-center",
 } as const;
 

@@ -316,19 +316,6 @@ function StudentPicker({
           </div>
         </div>
 
-        <ul className="mb-4 divide-y divide-line border border-line rounded-xl">
-          {list.length === 0 && <li className="p-2 text-sm text-ink-3 italic">Personne pour l&apos;instant.</li>}
-          {list.map((m) => (
-            <li key={m.id} className="flex items-center justify-between p-2 text-sm">
-              <span>
-                <span className="font-bold">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
-                {m.tag && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{m.tag}</span>}
-              </span>
-              <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
-            </li>
-          ))}
-        </ul>
-
         {withNote && (
           <div className="mb-3">
             <p className={ui.label}>Motif (obligatoire)</p>
@@ -342,11 +329,17 @@ function StudentPicker({
           </div>
         )}
 
+        {/* La saisie vient EN PREMIER : sur mobile, le clavier prend la moitie de l'ecran et le champ doit
+            rester en haut de la feuille (recentre au focus par securite). */}
         <label className={ui.label}>Ajouter un élève</label>
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={(e) => {
+            const el = e.currentTarget;
+            setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+          }}
           placeholder="Prénom ou nom…"
           autoCapitalize="off"
           autoCorrect="off"
@@ -375,6 +368,20 @@ function StudentPicker({
           </ul>
         )}
         {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Aucun élève trouvé.</p>}
+
+        <p className={`${ui.label} mt-4`}>Déjà dans {title.startsWith("Ajouter") ? "la liste" : title}</p>
+        <ul className="divide-y divide-line border border-line rounded-xl">
+          {list.length === 0 && <li className="p-2 text-sm text-ink-3 italic">Personne pour l&apos;instant.</li>}
+          {list.map((m) => (
+            <li key={m.id} className="flex items-center justify-between p-2 text-sm">
+              <span>
+                <span className="font-bold">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
+                {m.tag && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{m.tag}</span>}
+              </span>
+              <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

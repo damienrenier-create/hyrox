@@ -28,6 +28,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Le clavier virtuel REDUIT la fenetre (Android Chrome ne le fait pas par defaut) : les feuilles du bas
+  // (equipes, reglages, tir) et leurs champs de saisie restent visibles au-dessus du clavier.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
