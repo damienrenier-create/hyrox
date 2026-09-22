@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // Geometrie du plateau (px). Toutes les positions sont calculees a partir des INDEX d'equipe/exercice,
 // mais chaque case reste identifiee par (teamId, exerciseId) : l'index ne sert qu'a dessiner.
@@ -141,10 +141,53 @@ export function Board({
   // Fond des en-tetes : opaque et sombre, pour rester lisibles quand la grille defile dessous.
   const headerBg = "rgba(6, 34, 48, 0.94)";
 
+  // Zoom : la grille Pyramide fait ~596 px de large, un telephone en fait 360. On choisit au premier rendu
+  // le plus grand zoom qui fait tenir TOUTE la largeur (jusqu'a 55 %), et l'arbitre ajuste avec − / +.
+  // `zoom` (et non `transform`) : le conteneur defilant est recalcule et les en-tetes collants continuent de coller.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [needsZoom, setNeedsZoom] = useState(false);
+  const autoDone = useRef(false);
+  useEffect(() => {
+    if (autoDone.current) return;
+    const avail = wrapRef.current?.clientWidth ?? 0;
+    if (avail <= 0) return;
+    const full = LABEL_W + bodyW;
+    autoDone.current = true;
+    if (full > avail) {
+      setNeedsZoom(true);
+      setZoom(Math.max(0.55, Math.floor((avail / full) * 100) / 100));
+    }
+  }, [bodyW]);
+
   return (
-    <div className="overflow-auto pb-2 rounded-2xl border-2 border-sea/40 shadow-card" style={{ maxHeight, WebkitOverflowScrolling: "touch" }}>
+    <div ref={wrapRef}>
+      {needsZoom && (
+        <div className="flex items-center justify-end gap-1 mb-1">
+          <span className="text-[10px] text-ink-3 mr-auto">Toute la grille tient à l&apos;écran — zoome pour viser plus large.</span>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.15) * 100) / 100))}
+            className="w-9 h-9 rounded-lg bg-card border border-line font-black text-ink shadow-card active:scale-95"
+            aria-label="Dézoomer la grille"
+          >
+            −
+          </button>
+          <span className="text-[11px] text-ink-2 tabular-nums w-10 text-center font-bold">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(1.4, Math.round((z + 0.15) * 100) / 100))}
+            className="w-9 h-9 rounded-lg bg-card border border-line font-black text-ink shadow-card active:scale-95"
+            aria-label="Zoomer la grille"
+          >
+            +
+          </button>
+        </div>
+      )}
+      <div className="overflow-auto pb-2 rounded-2xl border-2 border-sea/40 shadow-card" style={{ maxHeight, WebkitOverflowScrolling: "touch" }}>
       <div
         style={{
+          zoom,
           display: "grid",
           gridTemplateColumns: `${LABEL_W}px ${bodyW}px`,
           gridTemplateRows: `${HEADER_H}px ${bodyH}px`,
@@ -246,6 +289,7 @@ export function Board({
 
           {overlay}
         </div>
+      </div>
       </div>
     </div>
   );
