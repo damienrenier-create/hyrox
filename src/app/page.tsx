@@ -57,6 +57,9 @@ function AdminLogin() {
           type="text"
           name="name"
           required
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
         />
       </div>
@@ -65,6 +68,9 @@ function AdminLogin() {
         <input
           type="password"
           name="password"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
         />
       </div>

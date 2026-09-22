@@ -9,7 +9,7 @@ export type LoginState = { error: string } | undefined;
 
 export async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const rawName = formData.get("name") as string;
-  const password = formData.get("password") as string;
+  const password = ((formData.get("password") as string) || "").trim();
 
   if (!rawName) return { error: "Le nom est requis." };
   const name = rawName.trim().toUpperCase();
