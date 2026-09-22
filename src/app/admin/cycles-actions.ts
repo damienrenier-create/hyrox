@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { openSession, parseHHMM } from "@/lib/scheduling";
+import { openSession, parseHHMM, upcomingSessions, currentCycleAndPlan, instantAtBrussels } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { getWodEngine } from "@/lib/wod-engines";
 
@@ -186,6 +186,33 @@ export async function decideRefereeFormAction(formData: FormData) {
   if (!row) fail("Demande introuvable.");
   await db.orm.public.SessionReferee.where({ id: row.id }).update({ status: decision, decidedBy: user.name, decidedAt: Temporal.Now.instant() });
   done(decision === "APPROVED" ? "Arbitre autorisé." : "Demande refusée.");
+}
+
+// Prepare une seance programmee AVANT son creneau : elle est creee des maintenant (equipes vides, reglages
+// modifiables dans le greffier) mais reste invisible des eleves jusqu'a `opensAt`. Le slotKey est le meme que
+// celui de l'ouverture automatique : le creneau venu, aucune seance en double n'est creee.
+export async function prepareSessionAction(formData: FormData) {
+  await requireMaster();
+  const slotKey = str(formData, "slotKey");
+  const upcoming = await upcomingSessions(30);
+  const slot = upcoming.find((u) => u.slotKey === slotKey);
+  if (!slot) fail("Créneau introuvable (l'horaire ou la séance de la semaine a changé).");
+  if (slot.sessionId) fail("Cette séance est déjà préparée.");
+
+  const session = await openSession({
+    wodType: slot.wodType,
+    label: slot.planLabel,
+    classes: slot.classes,
+    numTeams: slot.numTeams,
+    refereeMode: slot.refereeMode,
+    cycleId: (await currentCycleAndPlan()).cycle?.id ?? null,
+    planId: slot.planId,
+    opensAt: instantAtBrussels(slot.dateKey, slot.startMin),
+    closesAt: instantAtBrussels(slot.dateKey, slot.endMin),
+    slotKey: slot.slotKey,
+    autoOpened: true,
+  });
+  redirect(`/greffier?session=${session.id}`);
 }
 
 export async function closeSessionAction(formData: FormData) {

@@ -122,6 +122,7 @@ model Session {
   planId      String?
   label       String?
   slotKey     String?     @unique // "<date>_<planId>_<start>_<end>" : une seule ouverture auto par creneau
+  opensAt     DateTime?   // seance PREPAREE a l'avance : invisible des eleves jusqu'a cette heure
   closesAt    DateTime?   // fin d'ouverture (fin du creneau, ou duree fixee a l'ouverture manuelle)
   autoOpened  Boolean     @default(false)
 

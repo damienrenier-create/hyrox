@@ -37,10 +37,18 @@ export function instantAtBrussels(dateKey: string, minutes: number): Instant {
     .toInstant();
 }
 
-type SessionRow = { id: string; isActive: boolean; closesAt: unknown | null };
+type SessionRow = { id: string; isActive: boolean; opensAt?: unknown | null; closesAt: unknown | null };
 
+// Une seance PREPAREE a l'avance (opensAt dans le futur) n'est pas encore ouverte : les eleves ne la voient
+// pas, mais DAMZER et le greffier peuvent deja la configurer via /greffier?session=<id>.
 export function isSessionOpen(s: SessionRow, nowMs = Date.now()): boolean {
-  return s.isActive && (!s.closesAt || nowMs < toMs(s.closesAt));
+  if (!s.isActive) return false;
+  if (s.opensAt && nowMs < toMs(s.opensAt)) return false;
+  return !s.closesAt || nowMs < toMs(s.closesAt);
+}
+
+export function isScheduled(s: SessionRow, nowMs = Date.now()): boolean {
+  return s.isActive && !!s.opensAt && nowMs < toMs(s.opensAt);
 }
 
 // Seances ouvertes maintenant. Les seances dont la fenetre est depassee sont fermees (isActive=false) au passage :
@@ -51,9 +59,80 @@ export async function listOpenSessions() {
   const open = [];
   for (const s of active) {
     if (isSessionOpen(s, now)) open.push(s);
-    else await db.orm.public.Session.where({ id: s.id }).update({ isActive: false });
+    else if (!isScheduled(s, now)) await db.orm.public.Session.where({ id: s.id }).update({ isActive: false });
   }
   return open;
+}
+
+export type UpcomingSlot = {
+  slotKey: string;
+  dateKey: string; // AAAA-MM-JJ (Bruxelles)
+  weekday: number;
+  startMin: number;
+  endMin: number;
+  startsAtMs: number;
+  classes: string[];
+  planId: string;
+  planLabel: string;
+  wodType: string;
+  numTeams: number;
+  refereeMode: boolean;
+  sessionId: string | null; // deja preparee ?
+};
+
+// Les prochains creneaux de classe (lundi-vendredi) pour la seance de la semaine du cycle en cours,
+// dans l'ordre chronologique. Meme regroupement que l'ouverture automatique : deux classes sur le meme
+// creneau = une seule seance. Sert a anticiper (preparer les equipes et les reglages avant l'heure).
+export async function upcomingSessions(limit = 10, daysAhead = 21): Promise<UpcomingSlot[]> {
+  const { cycle, plan } = await currentCycleAndPlan();
+  if (!cycle || !plan) return [];
+  const slots = await db.orm.public.ClassSlot.where({}).all();
+  if (!slots.length) return [];
+
+  const now = brusselsNow();
+  const today = Temporal.Now.zonedDateTimeISO(TZ);
+  const out: UpcomingSlot[] = [];
+
+  for (let d = 0; d < daysAhead && out.length < limit * 3; d++) {
+    const day = today.add({ days: d });
+    const weekday = day.dayOfWeek;
+    if (weekday > 5) continue;
+    const dateKey = day.toPlainDate().toString();
+
+    const groups = new Map<string, { startMin: number; endMin: number; classes: Set<string> }>();
+    for (const s of slots.filter((s) => s.weekday === weekday)) {
+      if (d === 0 && s.endMin <= now.minutes) continue; // creneau deja passe aujourd'hui
+      const key = `${s.startMin}_${s.endMin}`;
+      if (!groups.has(key)) groups.set(key, { startMin: s.startMin, endMin: s.endMin, classes: new Set() });
+      groups.get(key)!.classes.add(s.className);
+    }
+
+    for (const g of groups.values()) {
+      out.push({
+        slotKey: `${dateKey}_${plan.id}_${g.startMin}_${g.endMin}`,
+        dateKey,
+        weekday,
+        startMin: g.startMin,
+        endMin: g.endMin,
+        startsAtMs: toMs(instantAtBrussels(dateKey, g.startMin).toString()),
+        classes: [...g.classes].sort().slice(0, 5),
+        planId: plan.id,
+        planLabel: plan.label,
+        wodType: plan.wodType,
+        numTeams: plan.numTeams,
+        refereeMode: plan.refereeMode,
+        sessionId: null,
+      });
+    }
+  }
+
+  out.sort((a, b) => a.startsAtMs - b.startsAtMs);
+  const top = out.slice(0, limit);
+  for (const u of top) {
+    const existing = await db.orm.public.Session.where({ slotKey: u.slotKey }).first();
+    u.sessionId = existing?.id ?? null;
+  }
+  return top;
 }
 
 export type OpenSessionInput = {
@@ -64,6 +143,7 @@ export type OpenSessionInput = {
   refereeMode: boolean;
   cycleId?: string | null;
   planId?: string | null;
+  opensAt?: Instant | null; // seance preparee : pas visible des eleves avant cette heure
   closesAt?: Instant | null;
   slotKey?: string | null;
   autoOpened?: boolean;
@@ -84,6 +164,7 @@ export async function openSession(input: OpenSessionInput) {
       planId: input.planId ?? null,
       label: input.label,
       slotKey: input.slotKey ?? null,
+      opensAt: input.opensAt ?? null,
       closesAt: input.closesAt ?? null,
       autoOpened: input.autoOpened ?? false,
     });

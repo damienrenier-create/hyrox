@@ -1571,6 +1571,13 @@
                   "kind": "scalar"
                 }
               },
+              "opensAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
               "planId": {
                 "nullable": true,
                 "type": {
@@ -1812,6 +1819,9 @@
                 },
                 "label": {
                   "column": "label"
+                },
+                "opensAt": {
+                  "column": "opensAt"
                 },
                 "planId": {
                   "column": "planId"
@@ -3922,6 +3932,11 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "opensAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "planId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -4807,7 +4822,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "78cfb4ed7cbaef6830d133c0d792b1b3197b70f0f9224cd26f11525bb7552b16"
+    "storageHash": "e4123148b359b337ab53aae7038cb945dd712252256961367fa22d67fa115857"
   },
   "execution": {
     "executionHash": "057abf8c3e4e61889a74c80befaa687257c9824a4284fcad223955d8de81364b",

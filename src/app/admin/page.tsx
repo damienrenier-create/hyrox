@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { generateGhostFleetsAction } from "../touche-coule/actions";
 import { listWodEngines } from "@/lib/wod-engines";
-import { ensureAutoSessions, listOpenSessions, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
+import { ensureAutoSessions, listOpenSessions, upcomingSessions, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
 import { readSessionClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import {
   addPlanAction, addSlotAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
-  deleteSlotAction, openSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
+  deleteSlotAction, openSessionAction, prepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
@@ -35,6 +35,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
 
   await ensureAutoSessions();
   const open = await listOpenSessions();
+  const upcoming = await upcomingSessions(10);
   const cycles = await db.orm.public.Cycle.where({}).orderBy((c) => c.order.asc()).all();
   const current = cycles.find((c) => c.isCurrent) ?? null;
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
@@ -120,6 +121,54 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </section>
+
+        {/* ===== Seances programmees : les 10 prochains creneaux, pour anticiper equipes et reglages ===== */}
+        <section className={card}>
+          <h2 className={`${ui.h2} mb-1`}>Séances programmées <span className="text-ink-3 text-sm font-sans font-normal">({upcoming.length})</span></h2>
+          <p className={`${ui.hint} mb-3`}>
+            Les 10 prochains créneaux de la séance de la semaine, du plus proche au plus lointain. « Préparer » crée la
+            séance dès maintenant pour encoder les équipes et régler le WOD à l&apos;avance : elle reste invisible des
+            élèves jusqu&apos;à l&apos;heure du créneau, puis s&apos;ouvre toute seule.
+          </p>
+          {upcoming.length === 0 ? (
+            <p className={ui.muted}>
+              Aucune séance programmée. Il faut un cycle en cours, une séance de la semaine, et des créneaux horaires de classe (plus bas).
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {upcoming.map((u) => (
+                <li key={u.slotKey} className="bg-paper border border-line rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex items-center gap-3">
+                    <div className="text-center flex-shrink-0 w-16">
+                      <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[u.weekday]?.slice(0, 3)}</div>
+                      <div className="font-display font-extrabold text-xl leading-none">{u.dateKey.slice(8)}/{u.dateKey.slice(5, 7)}</div>
+                      <div className="text-[11px] text-ink-3 tabular-nums">{fmtMin(u.startMin)}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold">
+                        {u.planLabel}
+                        <span className="text-ink-3 font-normal"> · {fmtMin(u.startMin)}–{fmtMin(u.endMin)}</span>
+                        {u.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>Touché-Coulé</span>}
+                      </div>
+                      <div className="text-xs text-ink-3">
+                        {u.classes.length ? u.classes.join(", ") : "aucune classe"} · {u.numTeams} équipes
+                        {u.sessionId && <span className="text-success-ink font-bold"> · préparée</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {u.sessionId ? (
+                    <Link href={`/greffier?session=${u.sessionId}`} className={btn.smPrimary}>Ouvrir le greffier</Link>
+                  ) : (
+                    <form action={prepareSessionAction}>
+                      <input type="hidden" name="slotKey" value={u.slotKey} />
+                      <button type="submit" className={btn.smGhost}>Préparer</button>
+                    </form>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
         </section>
