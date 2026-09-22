@@ -76,7 +76,14 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
         title="Résultats"
         wide
         back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined}
-        right={<ExportCsvButton csv={csv} filename={`hyrox-resultats-${new Date().toISOString().slice(0, 10)}.csv`} />}
+        right={
+          <nav className="flex flex-wrap items-center gap-2">
+            {/* Sans ces liens, un coach qui arrive ici n'a aucun moyen d'aller ailleurs. */}
+            <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
+            <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
+            <ExportCsvButton csv={csv} filename={`reps-resultats-${new Date().toISOString().slice(0, 10)}.csv`} />
+          </nav>
+        }
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-6 space-y-4">

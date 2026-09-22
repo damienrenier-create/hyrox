@@ -19,8 +19,8 @@ const display = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "HYROX WOD · EPS",
-  description: "Séances Hyrox du cours d'éducation physique : greffier, arbitrage Touché-Coulé, résultats et auto-évaluation.",
+  title: "REPS · EPS",
+  description: "Séances du cours d'éducation physique : greffier, arbitrage Touché-Coulé, résultats et auto-évaluation.",
 };
 
 export const viewport: Viewport = {

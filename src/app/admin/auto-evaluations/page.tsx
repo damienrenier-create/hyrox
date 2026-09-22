@@ -45,7 +45,16 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
 
   return (
     <div className={ui.page}>
-      <TopBar title="Auto-évaluations" back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined} />
+      <TopBar
+        title="Auto-évaluations"
+        back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined}
+        right={
+          <nav className="flex flex-wrap items-center gap-2">
+            <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
+            <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
+          </nav>
+        }
+      />
 
       <main className={`${ui.container} py-6 space-y-4`}>
         {/* ===== Filtres (une seule soumission, tout en parametres d'URL) ===== */}
