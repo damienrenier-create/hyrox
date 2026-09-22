@@ -38,3 +38,68 @@ export async function setTeamCount(sessionId: string, n: number): Promise<{ erro
   const { movedShips } = await reconcileFleets(sessionId);
   return { ok: true, removedTeams, movedShips };
 }
+
+// Suppression d'UNE equipe precise (le greffier s'est trompe, une equipe ne s'est pas presentee...).
+// Tout ce qui lui appartient part avec elle : membres, tours, cartes jaunes, evaluations recues,
+// tirs qui la visaient, bateaux poses sur sa ligne. Les equipes suivantes ne sont pas renumerotees
+// (« Équipe 7 » reste « Équipe 7 »), mais la carte du Touche-Coule retrecit d'une ligne, donc les
+// navires hors champ sont re-poses ailleurs par reconcileFleets.
+export type DeleteTeamCount = { members: number; laps: number; cards: number; evaluations: number; shots: number; placements: number };
+
+export async function teamDeletionPreview(teamId: string): Promise<{ error: string } | { ok: true; name: string; counts: DeleteTeamCount }> {
+  const team = await db.orm.public.Team.where({ id: teamId }).first();
+  if (!team) return { error: "Équipe introuvable." };
+  const rs = await db.orm.public.RaceState.where({ sessionId: team.sessionId }).first();
+  const [members, evaluations, shots, placements] = await Promise.all([
+    db.orm.public.TeamMember.where({ teamId }).all(),
+    db.orm.public.Evaluation.where({ teamId }).all(),
+    db.orm.public.Shot.where({ sessionId: team.sessionId, targetTeamId: teamId }).all(),
+    db.orm.public.BoatPlacement.where({ sessionId: team.sessionId, teamId }).all(),
+  ]);
+  const [laps, cards] = rs
+    ? await Promise.all([
+        db.orm.public.Lap.where({ raceStateId: rs.id, teamId }).all(),
+        db.orm.public.YellowCard.where({ raceStateId: rs.id, teamId }).all(),
+      ])
+    : [[], []];
+  return {
+    ok: true,
+    name: team.name,
+    counts: { members: members.length, laps: laps.length, cards: cards.length, evaluations: evaluations.length, shots: shots.length, placements: placements.length },
+  };
+}
+
+export async function deleteTeam(teamId: string): Promise<{ error: string } | { ok: true; name: string; counts: DeleteTeamCount; movedShips: number; remaining: number }> {
+  const pre = await teamDeletionPreview(teamId);
+  if ("error" in pre) return pre;
+  const team = (await db.orm.public.Team.where({ id: teamId }).first())!;
+  const sessionId = team.sessionId;
+
+  // Ordre impose par les cles etrangeres : le tir pointe vers l'evaluation, donc il part en premier.
+  for (const s of await db.orm.public.Shot.where({ sessionId, targetTeamId: teamId }).all()) {
+    await db.orm.public.Shot.where({ id: s.id }).delete();
+  }
+  for (const e of await db.orm.public.Evaluation.where({ teamId }).all()) {
+    await db.orm.public.Evaluation.where({ id: e.id }).delete();
+  }
+  for (const p of await db.orm.public.BoatPlacement.where({ sessionId, teamId }).all()) {
+    await db.orm.public.BoatPlacement.where({ id: p.id }).delete();
+  }
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (rs) {
+    for (const l of await db.orm.public.Lap.where({ raceStateId: rs.id, teamId }).all()) {
+      await db.orm.public.Lap.where({ id: l.id }).delete();
+    }
+    for (const c of await db.orm.public.YellowCard.where({ raceStateId: rs.id, teamId }).all()) {
+      await db.orm.public.YellowCard.where({ id: c.id }).delete();
+    }
+  }
+  await db.orm.public.Team.where({ id: teamId }).delete(); // cascade membres et scores
+
+  const remaining = (await db.orm.public.Team.where({ sessionId }).all()).length;
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  const prev = (session?.settings as Record<string, unknown> | null) ?? {};
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, numTeams: remaining } });
+  const { movedShips } = await reconcileFleets(sessionId);
+  return { ok: true, name: pre.name, counts: pre.counts, movedShips, remaining };
+}

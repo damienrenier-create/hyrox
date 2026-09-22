@@ -9,6 +9,8 @@ import {
   removeTeamMemberAction,
   searchAllStudentsAction,
   setSessionClassesAction,
+  teamDeletionPreviewAction,
+  deleteTeamAction,
   type StudentHit,
 } from "./team-actions";
 import { decideRefereeAction } from "./referee-decisions";
@@ -40,6 +42,9 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
   const [refereeOpen, setRefereeOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  // Suppression d'une equipe : deux confirmations, la premiere montrant ce qui va disparaitre.
+  const [del, setDel] = useState<{ id: string; name: string; counts: Record<string, number> } | null>(null);
+  const [delStage, setDelStage] = useState<1 | 2>(1);
 
   // Etat LOCAL mis a jour au tap (ajout / retrait / decision) : l'ecran ne depend plus du re-rendu serveur
   // de toute la page greffier (des dizaines de requetes), qui n'est relance qu'en arriere-plan, groupe.
@@ -53,6 +58,29 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
     refreshTimer.current = setTimeout(() => router.refresh(), 2000);
   }
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
+
+  function askDelete(teamId: string) {
+    setError("");
+    startTransition(async () => {
+      const res = await teamDeletionPreviewAction(teamId);
+      if ("error" in res) { setError(res.error); return; }
+      setDel({ id: teamId, name: res.name, counts: res.counts as unknown as Record<string, number> });
+      setDelStage(1);
+    });
+  }
+
+  function confirmDelete() {
+    if (!del) return;
+    const id = del.id;
+    startTransition(async () => {
+      const res = await deleteTeamAction(id);
+      if ("error" in res) { setError(res.error); setDel(null); return; }
+      setTeams((ts) => ts.filter((t) => t.id !== id));
+      if (activeTeamId === id) setActiveTeamId(null);
+      setDel(null);
+      router.refresh();
+    });
+  }
 
   const assigned = new Map<string, string>(); // studentId -> teamName
   teams.forEach((t) => t.members.forEach((m) => assigned.set(m.id, t.name)));
@@ -153,15 +181,30 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
           {teams.map((team) => (
-            <button
+            <div
               key={team.id}
+              role="button"
+              tabIndex={0}
               onClick={() => { setActiveTeamId(team.id); setError(""); }}
-              className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
+              onKeyDown={(e) => { if (e.key === "Enter") { setActiveTeamId(team.id); setError(""); } }}
+              className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card cursor-pointer", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
-              <div className="flex justify-between items-center mb-1">
+              <div className="flex justify-between items-center gap-2 mb-1">
                 <span className="font-display font-bold text-lg">{team.name}</span>
-                <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
-                  {team.members.length} élève{team.members.length > 1 ? "s" : ""}
+                <span className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
+                    {team.members.length} élève{team.members.length > 1 ? "s" : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); askDelete(team.id); }}
+                    disabled={pending}
+                    title={`Supprimer ${team.name}`}
+                    aria-label={`Supprimer ${team.name}`}
+                    className="w-6 h-6 rounded-full text-ink-3 hover:bg-danger-soft hover:text-danger-ink font-bold leading-none flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
                 </span>
               </div>
               {/* L'ecran est projete : l'atelier de depart doit se lire depuis le fond de la salle. */}
@@ -183,7 +226,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
                   ))}
                 </ul>
               )}
-            </button>
+            </div>
           ))}
         </div>
       </section>
@@ -279,6 +322,54 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
             return null;
           }}
         />
+      )}
+
+      {/* Double confirmation : on montre d'abord ce qui va disparaitre, puis on redemande. */}
+      {del && (
+        <div className={ui.backdrop} onClick={() => setDel(null)}>
+          <div className={`${ui.sheet} sm:max-w-md`} onClick={(e) => e.stopPropagation()}>
+            <h3 className={`${ui.h2} mb-1`}>Supprimer {del.name} ?</h3>
+            {delStage === 1 ? (
+              <>
+                <p className={`${ui.hint} mb-3`}>Cette suppression est définitive. Voici ce qui part avec l&apos;équipe.</p>
+                <ul className="space-y-1 mb-4">
+                  {([
+                    ["élèves dans l'équipe", del.counts.members],
+                    ["tours validés", del.counts.laps],
+                    ["cartes jaunes", del.counts.cards],
+                    ["évaluations reçues", del.counts.evaluations],
+                    ["tirs qui la visaient", del.counts.shots],
+                    ["cases de bateaux sur sa ligne", del.counts.placements],
+                  ] as [string, number][]).map(([label, n]) => (
+                    <li key={label} className={`${ui.inset} px-3 py-1.5 flex justify-between text-sm`}>
+                      <span className="text-ink-2">{label}</span>
+                      <b className={n > 0 ? "text-danger-ink" : "text-ink-3"}>{n}</b>
+                    </li>
+                  ))}
+                </ul>
+                <p className={`${ui.hint} mb-3`}>
+                  Les autres équipes gardent leur numéro. Les bateaux qui se retrouvent hors carte sont replacés automatiquement.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setDel(null)} className={btn.ghost}>Annuler</button>
+                  <button onClick={() => setDelStage(2)} className={btn.danger}>Continuer</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className={`${ui.alertErr} mb-4`}>
+                  Dernière vérification : <b>{del.name}</b> et tout son contenu vont être effacés. Il n&apos;y a pas de retour en arrière.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setDelStage(1)} disabled={pending} className={btn.ghost}>Revenir</button>
+                  <button onClick={confirmDelete} disabled={pending} className={btn.lgDanger}>
+                    {pending ? "…" : "Supprimer définitivement"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

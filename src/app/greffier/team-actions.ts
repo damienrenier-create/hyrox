@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
+import { deleteTeam, teamDeletionPreview } from "@/lib/team-count";
 
 async function requireGreffier() {
   const user = await getSession();
@@ -115,4 +116,16 @@ export async function removeRefereeAction(sessionId: string, userId: string): Pr
 export async function getSessionClasses(sessionId: string): Promise<string[]> {
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   return readSessionClasses(session?.settings);
+}
+
+// ===== Suppression d'une equipe (double confirmation cote ecran) =====
+
+export async function teamDeletionPreviewAction(teamId: string) {
+  await requireGreffier();
+  return teamDeletionPreview(teamId);
+}
+
+export async function deleteTeamAction(teamId: string) {
+  await requireGreffier();
+  return deleteTeam(teamId);
 }
