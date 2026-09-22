@@ -36,6 +36,7 @@ export function ArbitrageTab({ board }: { board: BoardData }) {
         <div className="px-3 py-2 text-xs text-ink-2 border-b border-line flex flex-wrap gap-3">
           <span><b className="text-ink">{board.evaluationsCount}</b> évaluation(s) · <b className="text-ink">{board.shots.length}</b> tir(s) · <b className="text-ink">{board.referees.length}</b> arbitre(s)</span>
           <span>Case = reps médianes <b>×nb d&apos;évals</b> + pastilles de qualité (TI→E). 💥 touché · 🌊 à l&apos;eau</span>
+          <span>💎 vue par un prof ou un coach · ⭐ vue seulement par des élèves · case vide = personne</span>
         </div>
         <table className="text-xs border-collapse">
           <thead>
@@ -59,8 +60,12 @@ export function ArbitrageTab({ board }: { board: BoardData }) {
                     <td key={e.id} className="p-0.5 border border-line/70 align-top min-w-[52px] h-[44px]">
                       {c ? (
                         <motion.div key={c.count} initial={{ scale: 1.15, backgroundColor: "#fff0e5" }} animate={{ scale: 1, backgroundColor: "#ffffff00" }} className="rounded px-1 py-0.5 leading-tight">
-                          <div className="font-display font-extrabold text-sm text-ink">
-                            {c.medianReps}<span className="text-[9px] text-ink-3 font-sans font-bold"> ×{c.count}</span>
+                          <div className="font-display font-extrabold text-sm text-ink flex items-center justify-center gap-1">
+                            {/* Le diamant du coach masque l'etoile des eleves : une case vue par un adulte est arbitree. */}
+                            <span className="text-[11px] leading-none" title={c.byStaff ? "Évaluée par un prof ou un coach" : "Évaluée seulement par des élèves"}>
+                              {c.byStaff ? "💎" : "⭐"}
+                            </span>
+                            {c.medianReps}<span className="text-[9px] text-ink-3 font-sans font-bold">×{c.count}</span>
                           </div>
                           <div className="flex flex-wrap gap-[2px]">
                             {c.notes.map((n, i) => (

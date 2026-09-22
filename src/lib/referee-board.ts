@@ -21,7 +21,13 @@ export type BoardShipData = {
 
 export type ShotData = { teamId: string; exerciseId: string; refereeId: string; hit: boolean; sunk: boolean; phase: string; at: number };
 
-export type CellSummary = { teamId: string; exerciseId: string; count: number; reps: number[]; notes: number[]; medianReps: number | null };
+// `byStaff` / `byStudent` : QUI a evalue la case. Un diamant si un prof ou un coach est passe, une etoile
+// si seuls des eleves l'ont fait. C'est la lecture de couverture du greffier : on voit d'un coup d'oeil
+// ce qui a ete vu par un adulte, ce qui ne l'a ete que par des eleves, et ce que personne n'a evalue.
+export type CellSummary = {
+  teamId: string; exerciseId: string; count: number; reps: number[]; notes: number[]; medianReps: number | null;
+  byStaff: boolean; byStudent: boolean;
+};
 
 export type RefereeRow = {
   refereeId: string;
@@ -65,12 +71,13 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const rawShots = (await db.orm.public.Shot.where({ sessionId }).all()).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   const evaluations = await db.orm.public.Evaluation.where({ sessionId }).all();
 
-  // Noms (jamais les pseudos de connexion : voir src/lib/staff-names.ts)
-  const userIds = new Set<string>([...fleets.map((f) => f.refereeId), ...rawShots.map((s) => s.refereeId)]);
-  const userById = new Map<string, { name: string; className: string | null }>();
-  for (const id of userIds) {
-    const u = await db.orm.public.User.where({ id }).first();
-    if (u) userById.set(id, { name: displayName(u), className: u.className ?? null });
+  // Noms (jamais les pseudos de connexion : voir src/lib/staff-names.ts) et role, en UNE requete groupee.
+  const userIds = [...new Set<string>([...fleets.map((f) => f.refereeId), ...rawShots.map((s) => s.refereeId), ...evaluations.map((e) => e.evaluatorId)])];
+  const userById = new Map<string, { name: string; className: string | null; role: string }>();
+  if (userIds.length) {
+    for (const u of await db.orm.public.User.where((x) => x.id.in(userIds)).all()) {
+      userById.set(u.id, { name: displayName(u), className: u.className ?? null, role: String(u.role) });
+    }
   }
 
   // Navires + cases. Calques par arbitre : une case peut porter plusieurs navires (de flottes differentes).
@@ -183,11 +190,14 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const cellMap = new Map<string, CellSummary>();
   for (const e of evaluations) {
     const key = `${e.teamId}_${e.exerciseId}`;
-    if (!cellMap.has(key)) cellMap.set(key, { teamId: e.teamId, exerciseId: e.exerciseId, count: 0, reps: [], notes: [], medianReps: null });
+    if (!cellMap.has(key)) cellMap.set(key, { teamId: e.teamId, exerciseId: e.exerciseId, count: 0, reps: [], notes: [], medianReps: null, byStaff: false, byStudent: false });
     const c = cellMap.get(key)!;
     c.count++;
     c.reps.push(e.repsObserved);
     c.notes.push(e.note);
+    // Le prof qui joue avec sa propre flotte reste un adulte : c'est bien son ROLE qui decide.
+    if (userById.get(e.evaluatorId)?.role === "STUDENT") c.byStudent = true;
+    else c.byStaff = true;
   }
   for (const c of cellMap.values()) {
     const sorted = [...c.reps].sort((a, b) => a - b);
