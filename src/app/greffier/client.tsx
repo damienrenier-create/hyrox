@@ -27,12 +27,16 @@ import {
   fmtDown,
   fmtUp,
   Standing,
+  MEDAL_BONUS_S,
+  finalScores,
+  type FinalScore,
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import type { RaceContextBundle } from "@/lib/race-context";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type TeamMemberView } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { SettingsPanel } from "./SettingsPanel";
 import { ArbitrageTab } from "./ArbitrageTab";
+import { RecordsTab } from "./RecordsTab";
 import type { BoardData } from "@/lib/referee-board";
 import { motion } from "framer-motion";
 import type { PendingRequest } from "./referee-decisions";
@@ -153,58 +157,6 @@ const PYR_STYLES = `
 .ld .y{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;color:#6B5600}
 `;
 
-// ===== Score final (bareme de Sartay) =====
-// temps du WOD (ou jusqu'a l'arret) + 1 min par carte jaune − 1 s par rep + temps supplementaire eventuel
-// − un bonus par medaille selon le RANG inscrit dedans : 1re = −10 s, 2e = −8 s, 3e = −6 s, 4e = −4 s, 5e = −2 s.
-// Bareme double le 23/09 : recompenser plus nettement l'equipe qui boucle un tour la premiere.
-export const MEDAL_BONUS_S = [0, 10, 8, 6, 4, 2]; // index = rang sur le tour (0 = hors top 5)
-
-export type FinalScore = {
-  teamId: string;
-  baseMs: number; // temps du WOD
-  cardsMs: number;
-  repsMs: number;
-  lateMs: number;
-  medalMs: number;
-  medalCount: number;
-  totalMs: number;
-  done: boolean;
-};
-
-export function finalScores(
-  ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext,
-  tl: ReturnType<typeof timeline>,
-  ord: Record<string, { pos: number; at: number }[]>,
-  final: boolean
-): FinalScore[] {
-  return standings(ctx, final)
-    .map((s) => {
-      const fa = finishAt(ctx, s.team.id);
-      const baseMs = fa ?? tl.end; // pas arrivee : on compte jusqu'a l'arret du WOD
-      const cardsMs = s.yellowCards * 60000;
-      const repsMs = totalReps(ctx, s.team) * 1000;
-      const lateMs = tl.late[s.team.id] ?? 0;
-      const mine = (ord[s.team.id] ?? []).filter(Boolean);
-      let medalMs = 0;
-      let medalCount = 0;
-      for (const m of mine) {
-        medalCount++;
-        medalMs += (MEDAL_BONUS_S[m.pos] ?? 0) * 1000;
-      }
-      return {
-        teamId: s.team.id,
-        baseMs,
-        cardsMs,
-        repsMs,
-        lateMs,
-        medalMs,
-        medalCount,
-        totalMs: baseMs + cardsMs - repsMs + lateMs - medalMs,
-        done: s.done,
-      };
-    })
-    .sort((a, b) => a.totalMs - b.totalMs); // le plus petit temps gagne
-}
 
 // Temps signe court (le score peut devenir negatif si l'equipe a beaucoup de reps et de medailles).
 function fmtSigned(ms: number): string {
@@ -410,7 +362,7 @@ export function GreffierClient({
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
   // Avant le depart et sans aucun eleve encode, on ouvre directement sur la preparation des equipes.
-  const [view, setView] = useState<"grid" | "results" | "score" | "teams" | "arbitrage">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
+  const [view, setView] = useState<"grid" | "results" | "score" | "records" | "teams" | "arbitrage">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -737,6 +689,8 @@ export function GreffierClient({
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} membersByTeam={membersByTeam} />
         ) : view === "score" ? (
           <ScoreTable ctx={ctx} phase={phase} teamNames={teamNames} tl={tl} ord={ord} membersByTeam={membersByTeam} />
+        ) : view === "records" ? (
+          <RecordsTab />
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (
@@ -752,6 +706,7 @@ export function GreffierClient({
             <button onClick={() => setView("grid")} className={tabBtn(view === "grid")}>Grille</button>
             <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Résultats</button>
             <button onClick={() => setView("score")} className={tabBtn(view === "score")}>Score final</button>
+            <button onClick={() => setView("records")} className={tabBtn(view === "records")}>🏆 Records</button>
             <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
               Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
               {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}

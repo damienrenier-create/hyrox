@@ -342,3 +342,56 @@ export function fmtUp(ms: number): string {
   const r = s % 60;
   return `${m}:${r < 10 ? "0" : ""}${r}`;
 }
+
+// ===== Score final (bareme de Sartay) =====
+// temps du WOD (ou jusqu'a l'arret) + 1 min par carte jaune − 1 s par rep + temps supplementaire eventuel
+// − un bonus par medaille selon le RANG inscrit dedans : 1re = −10 s, 2e = −8 s, 3e = −6 s, 4e = −4 s, 5e = −2 s.
+// Bareme double le 23/09 : recompenser plus nettement l'equipe qui boucle un tour la premiere.
+export const MEDAL_BONUS_S = [0, 10, 8, 6, 4, 2]; // index = rang sur le tour (0 = hors top 5)
+
+export type FinalScore = {
+  teamId: string;
+  baseMs: number; // temps du WOD
+  cardsMs: number;
+  repsMs: number;
+  lateMs: number;
+  medalMs: number;
+  medalCount: number;
+  totalMs: number;
+  done: boolean;
+};
+
+export function finalScores(
+  ctx: RaceContext,
+  tl: Timeline,
+  ord: Record<string, { pos: number; at: number }[]>,
+  final: boolean
+): FinalScore[] {
+  return standings(ctx, final)
+    .map((s) => {
+      const fa = finishAt(ctx, s.team.id);
+      const baseMs = fa ?? tl.end; // pas arrivee : on compte jusqu'a l'arret du WOD
+      const cardsMs = s.yellowCards * 60000;
+      const repsMs = totalReps(ctx, s.team) * 1000;
+      const lateMs = tl.late[s.team.id] ?? 0;
+      const mine = (ord[s.team.id] ?? []).filter(Boolean);
+      let medalMs = 0;
+      let medalCount = 0;
+      for (const m of mine) {
+        medalCount++;
+        medalMs += (MEDAL_BONUS_S[m.pos] ?? 0) * 1000;
+      }
+      return {
+        teamId: s.team.id,
+        baseMs,
+        cardsMs,
+        repsMs,
+        lateMs,
+        medalMs,
+        medalCount,
+        totalMs: baseMs + cardsMs - repsMs + lateMs - medalMs,
+        done: s.done,
+      };
+    })
+    .sort((a, b) => a.totalMs - b.totalMs); // le plus petit temps gagne
+}
