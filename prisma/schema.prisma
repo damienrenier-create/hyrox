@@ -352,6 +352,9 @@ model Shot {
   phase            ShotPhase
   createdAt        DateTime  @default(now())
 
+  // Un arbitre n'evalue qu'une seule fois une case (equipe x atelier) d'une seance : regle de jeu,
+  // garantie ici pour qu'un double-tap ou deux appareils ne puissent pas creer deux tirs.
+  @@unique([sessionId, refereeId, targetTeamId, targetExerciseId])
   @@index([sessionId, targetTeamId, targetExerciseId])
   @@index([refereeId])
 }

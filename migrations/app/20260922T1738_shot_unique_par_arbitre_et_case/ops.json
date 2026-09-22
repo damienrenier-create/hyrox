@@ -1,0 +1,44 @@
+[
+  {
+    "id": "unique.shot.shot_sessionId_refereeId_targetTeamId_targetExerciseId_key",
+    "label": "Add unique constraint on \"shot\" (sessionId, refereeId, targetTeamId, targetExerciseId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "shot_sessionId_refereeId_targetTeamId_targetExerciseId_key",
+        "table": "shot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"shot_sessionId_refereeId_targetTeamId_targetExerciseId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_sessionId_refereeId_targetTeamId_targetExerciseId_key",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"shot_sessionId_refereeId_targetTeamId_targetExerciseId_key\"",
+        "sql": "ALTER TABLE \"public\".\"shot\" ADD CONSTRAINT \"shot_sessionId_refereeId_targetTeamId_targetExerciseId_key\" UNIQUE (\"sessionId\", \"refereeId\", \"targetTeamId\", \"targetExerciseId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"shot_sessionId_refereeId_targetTeamId_targetExerciseId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "shot_sessionId_refereeId_targetTeamId_targetExerciseId_key",
+          "public",
+          "\"public\".\"shot\""
+        ]
+      }
+    ]
+  }
+]

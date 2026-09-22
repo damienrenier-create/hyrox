@@ -199,6 +199,17 @@ export async function submitEvaluationAction(
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
   if (!VALID_NOTES.includes(note)) return { error: "Appréciation invalide." };
 
+  // Une seule evaluation par case et par arbitre : sinon on pourrait marteler une case ou un bateau
+  // est connu pour encaisser des points, et chaque tap polluerait les reps de l'equipe.
+  // La contrainte @@unique sur Shot fait foi ; ce test sert a rendre un message lisible.
+  const alreadyShot = await db.orm.public.Shot.where({
+    sessionId,
+    refereeId: evaluator.id,
+    targetTeamId,
+    targetExerciseId,
+  }).first();
+  if (alreadyShot) return { error: "Tu as déjà évalué cette case : une seule évaluation par équipe et par atelier." };
+
   // Prérequis absolu (§9-10) : flotte placée ET verrouillée, verifie cote serveur.
   const fleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
   if (!fleet || fleet.status !== "LOCKED") {

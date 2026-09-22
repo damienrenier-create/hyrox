@@ -39,7 +39,6 @@ type Props = {
 export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
-  const isBlocked = (teamId: string, exerciseId: string) => myCellSet.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
   const tIndex = useMemo(() => new Map(teams.map((t, i) => [t.id, i] as const)), [teams]);
   const eIndex = useMemo(() => new Map(exercises.map((e, i) => [e.id, i] as const)), [exercises]);
 
@@ -132,6 +131,11 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   // Ordre = priorite d'affichage (la derniere entree gagne sur une meme case) :
   // mes tirs < degats encaisses < epaves des navires coules < case actuellement visee.
   const shots = [...myShots, ...localShots];
+  // Une case deja evaluee par moi est definitivement fermee (une seule evaluation par equipe et par
+  // atelier), au meme titre que ma propre flotte et ma propre equipe.
+  const myShotCells = new Set(shots.map(key));
+  const isBlocked = (teamId: string, exerciseId: string) =>
+    myCellSet.has(`${teamId}_${exerciseId}`) || myShotCells.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
   const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
   damagedCells.forEach((c) => markers.push({ ...c, kind: "hit" }));
   wreckCells.forEach((c) => markers.push({ ...c, kind: "wreck" }));
@@ -202,7 +206,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
           )}
         </AnimatePresence>
         <p className="text-[11px] text-ink-2 px-1 mb-1">
-          Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.
+          Touche une case (équipe × exercice) pour évaluer, puis tirer. Une case ne s&apos;évalue qu&apos;une seule fois. Tes bateaux sont affichés, les autres restent cachés.
           {ownTeam && <> <span className="text-accent-ink font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
         </p>
         <Board
@@ -215,7 +219,13 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             setTarget({ teamId: team.id, exerciseId: ex.id });
           }}
           isCellDisabled={(team, ex) => isBlocked(team.id, ex.id)}
-          cellExtraClass={(team, ex) => (team.id === ownTeam?.id ? "cursor-not-allowed opacity-40" : myCellSet.has(`${team.id}_${ex.id}`) ? "cursor-not-allowed" : "")}
+          cellExtraClass={(team, ex) =>
+            team.id === ownTeam?.id
+              ? "cursor-not-allowed opacity-40"
+              : isBlocked(team.id, ex.id)
+                ? "cursor-not-allowed"
+                : ""
+          }
           overlay={<BoardEffectsLayer effects={effects} tIndex={tIndex} eIndex={eIndex} onDone={removeEffect} />}
         />
       </main>

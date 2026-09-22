@@ -7,6 +7,22 @@ import crypto from "crypto";
 
 export type LoginState = { error: string } | undefined;
 
+// Le prof importe depuis la liste des eleves (ligne PROF) : c'est cette ligne qui porte les flottes fantomes.
+const PROF_USER_NAME = "Damien Renier";
+
+// Les comptes pseudo + mot de passe doivent pointer sur une VRAIE ligne User : flottes, tirs et evaluations
+// portent tous une cle etrangere vers User.id. Un identifiant invente faisait echouer toute ecriture
+// (erreur serveur au placement d'un bateau) et changeait a chaque connexion.
+async function resolveStaffUser(pseudo: string, role: SessionPayload["role"]): Promise<string> {
+  const names = pseudo === "DAMZER" ? [PROF_USER_NAME, pseudo] : [pseudo];
+  for (const name of names) {
+    const found = await db.orm.public.User.where({ name }).first();
+    if (found) return found.id;
+  }
+  const created = await db.orm.public.User.create({ name: pseudo, role: role === "STUDENT" ? "ADMIN" : role });
+  return created.id;
+}
+
 export async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const rawName = formData.get("name") as string;
   const password = ((formData.get("password") as string) || "").trim();
@@ -28,19 +44,13 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
     role = "GREFFIER";
     if (password !== "greffe") return { error: "Mot de passe incorrect." };
   } else {
-    // Étudiant : on garde la casse originale pour l'affichage
-    role = "STUDENT";
+    // Ce formulaire est reserve aux comptes pseudo + mot de passe. Un eleve passe par
+    // classe -> recherche -> PIN (studentLoginAction), seul chemin qui donne son vrai identifiant.
+    return { error: "Pseudo inconnu. Les élèves se connectent avec leur classe et leur code PIN." };
   }
 
-  // Créer la session JWT
-  await login(
-    {
-      id: `user_${Date.now()}`,
-      role,
-      name: role === "STUDENT" ? rawName.trim() : name,
-    },
-    remember
-  );
+  // Créer la session JWT sur le VRAI identifiant en base (stable d'une connexion a l'autre).
+  await login({ id: await resolveStaffUser(name, role), role, name }, remember);
 
   // Redirection selon le rôle
   if (role === "MASTER_ADMIN") redirect("/admin");

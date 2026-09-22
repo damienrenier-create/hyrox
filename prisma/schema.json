@@ -4295,6 +4295,14 @@
                   "columns": [
                     "evaluationId"
                   ]
+                },
+                {
+                  "columns": [
+                    "sessionId",
+                    "refereeId",
+                    "targetTeamId",
+                    "targetExerciseId"
+                  ]
                 }
               ]
             },
@@ -4799,7 +4807,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "81a7488538ec96c975a60b9fdb1783236a2f2e0148183680cbd5f0c0c85d910e"
+    "storageHash": "78cfb4ed7cbaef6830d133c0d792b1b3197b70f0f9224cd26f11525bb7552b16"
   },
   "execution": {
     "executionHash": "057abf8c3e4e61889a74c80befaa687257c9824a4284fcad223955d8de81364b",
