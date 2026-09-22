@@ -70,6 +70,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           <h1 className="text-2xl sm:text-3xl font-black text-cyan-400 uppercase tracking-widest">Console DAMZER</h1>
           <nav className="flex flex-wrap gap-2 text-sm">
             <Link href="/admin/auto-evaluations" className={btnGhost}>Auto-évaluations</Link>
+            <Link href="/admin/carte" className={btnGhost}>Carte 🏴‍☠️</Link>
             <Link href="/greffier" className={btnGhost}>Greffier</Link>
             <Link href="/touche-coule" className={btnGhost}>Touché-Coulé</Link>
           </nav>

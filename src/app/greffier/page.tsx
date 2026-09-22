@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { buildRaceContext } from "@/lib/race-context";
+import { buildBoardData } from "@/lib/referee-board";
 import { ensureAutoSessions, listOpenSessions } from "@/lib/scheduling";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
@@ -49,6 +50,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   await ensureRaceStateAction(session.id);
   const bundle = await buildRaceContext(session.id);
+  // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
+  const board = session.refereeMode ? await buildBoardData(session.id) : null;
 
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
   const rawTeams = await db.orm.public.Team.where({ sessionId: session.id }).all();
@@ -92,6 +95,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       allClasses={allClasses}
       referees={referees}
       pendingRequests={pendingRequests}
+      board={board}
     />
   );
 }

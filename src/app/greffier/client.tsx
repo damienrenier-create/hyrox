@@ -29,6 +29,9 @@ import type { RaceContextBundle } from "@/lib/race-context";
 import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { SettingsPanel } from "./SettingsPanel";
+import { ArbitrageTab } from "./ArbitrageTab";
+import type { BoardData } from "@/lib/referee-board";
+import { motion } from "framer-motion";
 import type { PendingRequest } from "./referee-decisions";
 import {
   startRaceAction,
@@ -65,7 +68,7 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
 export type SessionOption = { id: string; label: string; classes: string[]; open: boolean };
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests,
+  sessionId, sessionLabel, sessionOptions, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -76,6 +79,7 @@ export function GreffierClient({
   allClasses: string[];
   referees: RefereeView[];
   pendingRequests: PendingRequest[];
+  board: BoardData | null;
 }) {
   const router = useRouter();
   const { ctx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
@@ -89,7 +93,7 @@ export function GreffierClient({
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
   // Avant le depart et sans aucun eleve encode, on ouvre directement sur la preparation des equipes.
-  const [view, setView] = useState<"grid" | "results" | "teams">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
+  const [view, setView] = useState<"grid" | "results" | "teams" | "arbitrage">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -309,6 +313,11 @@ export function GreffierClient({
             Équipes &amp; arbitres <span className={`ml-1 text-[10px] px-1.5 rounded-full ${memberCount ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>{memberCount}</span>
             {referees.length > 0 && <span className="ml-1 text-[10px] px-1.5 rounded-full bg-[#062230] text-amber-300">🏴‍☠️ {referees.length}</span>}
           </button>
+          {board && (
+            <button onClick={() => setView("arbitrage")} className={`text-sm font-bold px-3 py-1 rounded ${view === "arbitrage" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
+              Arbitrage <span className="ml-1 text-[10px] px-1.5 rounded-full bg-amber-400 text-amber-950">{board.evaluationsCount}</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -357,6 +366,8 @@ export function GreffierClient({
           </div>
         ) : view === "results" ? (
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} />
+        ) : view === "arbitrage" && board ? (
+          <ArbitrageTab board={board} />
         ) : (
           <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} />
         )}
@@ -417,7 +428,7 @@ function ResultsTable({
         </thead>
         <tbody>
           {st.map((s, i) => (
-            <tr key={s.team.id} className="border-b border-slate-100 odd:bg-slate-50">
+            <motion.tr key={s.team.id} layout transition={{ type: "spring", stiffness: 350, damping: 30 }} className="border-b border-slate-100 odd:bg-slate-50">
               <td className="p-2">{i + 1}</td>
               <td className="p-2 font-bold">{teamNames[s.team.id] ?? s.team.id}</td>
               <td className="p-2">{Math.min(s.n, T)} / {T}</td>
@@ -426,7 +437,7 @@ function ResultsTable({
               <td className="p-2">{exerciseLabels[startOf(ctx, s.team).id]}</td>
               <td className="p-2 font-bold">{s.reps}</td>
               <td className="p-2">{s.yellowCards}</td>
-            </tr>
+            </motion.tr>
           ))}
         </tbody>
       </table>

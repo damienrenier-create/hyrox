@@ -2,7 +2,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
-import { computeRefereeScore } from "@/lib/wod-engines/core/pirate-score";
+import { buildBoardData } from "@/lib/referee-board";
 import { refereeAccess } from "@/lib/referee-access";
 import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
 import { FleetPlacement } from "./FleetPlacement";
@@ -102,7 +102,10 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     }));
   const hitsOnMyFleet = allShots.filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`)).length;
 
-  const myScore = await computeRefereeScore(session.id, evaluator.id);
+  // Classement pirate (meme calcul pour tous : greffier, carte admin, arbitres).
+  const board = await buildBoardData(session.id);
+  const myScore = board.referees.find((r) => r.refereeId === evaluator.id)?.score ?? 0;
+  const leaderboard = board.referees.map((r) => ({ refereeId: r.refereeId, name: r.name, score: r.score, hits: r.hits, sunk: r.sunk, intact: r.intact }));
 
   return (
     <ToucheCouleClient
@@ -117,6 +120,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       raceEnded={!!session.raceEndedAt}
       myScore={myScore}
       ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
+      leaderboard={leaderboard}
     />
   );
 }

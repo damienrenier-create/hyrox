@@ -89,6 +89,7 @@ export function Board({
   isCellDisabled,
   cellExtraClass,
   animateShips,
+  overlay,
 }: {
   teams: BoardTeam[];
   exercises: BoardExercise[];
@@ -98,6 +99,7 @@ export function Board({
   isCellDisabled?: (team: BoardTeam, exercise: BoardExercise) => boolean;
   cellExtraClass?: (team: BoardTeam, exercise: BoardExercise) => string;
   animateShips?: boolean;
+  overlay?: ReactNode; // calque d'animations (effets de tir), positionne dans le repere du plateau
 }) {
   const width = LABEL_W + GAP + exercises.length * (CELL + GAP);
   const height = HEADER_H + GAP + teams.length * (CELL + GAP);
@@ -171,6 +173,8 @@ export function Board({
           if (ti === undefined || ei === undefined) return null;
           return <ShipSprite key={ship.id} ship={ship} tIdx={ti} eIdx={ei} animate={animateShips} />;
         })}
+
+        {overlay}
       </div>
     </div>
   );

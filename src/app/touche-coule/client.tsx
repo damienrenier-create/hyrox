@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { broadcastShot } from "@/lib/firebase/firebase-sync";
 import { submitEvaluationAction } from "./actions";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
+import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
 
 const REFRESH_MS = 5000;
 
@@ -25,12 +26,15 @@ type Props = {
   raceEnded: boolean;
   myScore: number;
   ownTeam?: { id: string; name: string } | null; // arbitre issu d'une equipe (DNF...) : ne peut pas evaluer sa propre equipe
+  leaderboard: LeaderboardRow[];
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore, ownTeam = null }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore, ownTeam = null, leaderboard }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
   const isBlocked = (teamId: string, exerciseId: string) => myCellSet.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
+  const tIndex = useMemo(() => new Map(teams.map((t, i) => [t.id, i] as const)), [teams]);
+  const eIndex = useMemo(() => new Map(exercises.map((e, i) => [e.id, i] as const)), [exercises]);
 
   const [target, setTarget] = useState<{ teamId: string; exerciseId: string } | null>(null);
   const [reps, setReps] = useState<string>("");
@@ -40,6 +44,11 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   const [pending, startTransition] = useTransition();
   const [score, setScore] = useState(myScore);
   const [localShots, setLocalShots] = useState<Shot[]>([]);
+  const [effects, setEffects] = useState<BoardEffect[]>([]);
+  const [shake, setShake] = useState(false);
+  const [showBoard, setShowBoard] = useState(false);
+
+  const removeEffect = useCallback((id: string) => setEffects((fx) => fx.filter((f) => f.id !== id)), []);
 
   // Rafraichissement automatique (remplace Firebase) : uniquement onglet visible et hors modale.
   useEffect(() => {
@@ -49,11 +58,15 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
     return () => clearInterval(t);
   }, [router, target, pending]);
 
-  // Alerte quand un de MES bateaux vient d'etre touche (detecte via le compteur serveur).
+  // Alerte + secousse quand un de MES bateaux vient d'etre touche (detecte via le compteur serveur).
   const prevHits = useRef(hitsOnMyFleet);
   useEffect(() => {
     if (hitsOnMyFleet > prevHits.current) {
       showToast("💥 Un de tes bateaux vient d'être touché !", "alert");
+      setShake(true);
+      const t = setTimeout(() => setShake(false), 500);
+      prevHits.current = hitsOnMyFleet;
+      return () => clearTimeout(t);
     }
     prevHits.current = hitsOnMyFleet;
   }, [hitsOnMyFleet]);
@@ -87,11 +100,12 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       const coord = `${t.teamId}_${t.exerciseId}`;
       void broadcastShot(sessionId, coord, evaluator, r, n, res.hits); // diffusion live, jamais bloquante
       const hit = res.hits.length > 0;
+      const sunk = res.hits.some((h) => h.sunk);
       setLocalShots((prev) => [...prev, { teamId: t.teamId, exerciseId: t.exerciseId, hit }]);
+      setEffects((fx) => [...fx, { id: `${Date.now()}_${coord}`, teamId: t.teamId, exerciseId: t.exerciseId, kind: hit ? (sunk ? "sunk" : "hit") : "splash" }]);
       if (hit) {
-        const sunk = res.hits.some((h) => h.sunk);
         setScore((s) => s + 1 + (sunk ? 3 : 0));
-        showToast(sunk ? "💥 Bateau coulé !" : "💥 Touché !", "hit");
+        showToast(sunk ? "☠️ Bateau coulé !" : "💥 Touché !", "hit");
       } else {
         showToast("🌊 À l'eau !", "miss");
       }
@@ -105,9 +119,11 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   const shots = [...myShots, ...localShots];
   const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
   if (target) markers.push({ teamId: target.teamId, exerciseId: target.exerciseId, kind: "target" });
+  const myRank = leaderboard.findIndex((r) => r.refereeId === evaluator.id) + 1;
 
   return (
-    <div className="min-h-[100dvh] text-amber-50 font-sans flex flex-col relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0d3b4f_0%,_#062230_55%,_#03141c_100%)]">
+    <div className={`min-h-[100dvh] text-amber-50 font-sans flex flex-col relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0d3b4f_0%,_#062230_55%,_#03141c_100%)] ${shake ? "tc-shake" : ""}`}>
+      <style>{EFFECT_STYLES}</style>
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -141,7 +157,10 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="px-3 py-1 bg-amber-900/30 rounded text-xs font-bold border border-amber-700 text-amber-300">🏆 {score} pts</div>
+          <button onClick={() => setShowBoard((v) => !v)} className="px-2 py-1 rounded text-xs font-bold border border-amber-700/60 text-amber-200/80" title="Classement des arbitres">
+            {myRank ? `#${myRank}` : "—"}
+          </button>
+          <ScoreBadge score={score} />
           <div className={`px-3 py-1 rounded text-xs font-bold border ${raceEnded ? "bg-slate-800 border-slate-600 text-slate-300" : "bg-emerald-900/40 border-emerald-700 text-emerald-300"}`}>
             {raceEnded ? "POST-WOD" : "EN COURS"}
           </div>
@@ -149,6 +168,16 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       </header>
 
       <main className="flex-1 p-2 relative z-10 overflow-auto flex flex-col">
+        <AnimatePresence>
+          {showBoard && (
+            <motion.section initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
+              <div className="bg-black/30 border border-amber-800/40 rounded-xl p-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-1">Classement des arbitres</div>
+                {leaderboard.length === 0 ? <p className="text-xs text-amber-100/60">Personne n'a encore verrouillé sa flotte.</p> : <RefereeLeaderboard rows={leaderboard} meId={evaluator.id} compact />}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
         <p className="text-[11px] text-amber-100/60 px-1 mb-1">
           Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.
           {ownTeam && <> <span className="text-amber-300 font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
@@ -164,6 +193,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
           }}
           isCellDisabled={(team, ex) => isBlocked(team.id, ex.id)}
           cellExtraClass={(team, ex) => (team.id === ownTeam?.id ? "cursor-not-allowed opacity-40" : myCellSet.has(`${team.id}_${ex.id}`) ? "cursor-not-allowed" : "")}
+          overlay={<BoardEffectsLayer effects={effects} tIndex={tIndex} eIndex={eIndex} onDone={removeEffect} />}
         />
       </main>
 
