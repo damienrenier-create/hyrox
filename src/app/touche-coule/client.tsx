@@ -137,6 +137,14 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
   const myShotCells = new Set(shots.map(key));
   const isBlocked = (teamId: string, exerciseId: string) =>
     myCellSet.has(`${teamId}_${exerciseId}`) || myShotCells.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
+  // Sur mobile il n'y a pas de curseur : sans ce message, un tap sur une case fermee ne dit rien du tout
+  // et l'eleve croit que l'ecran a plante. On nomme donc toujours la raison du refus.
+  const blockedReason = (teamId: string, exerciseId: string): string | null => {
+    if (teamId === ownTeam?.id) return `⛔ Ton équipe (${ownTeam.name})`;
+    if (myCellSet.has(`${teamId}_${exerciseId}`)) return "⚓ Un de tes bateaux";
+    if (myShotCells.has(`${teamId}_${exerciseId}`)) return "✓ Déjà évaluée";
+    return null;
+  };
   const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
   damagedCells.forEach((c) => markers.push({ ...c, kind: "hit" }));
   wreckCells.forEach((c) => markers.push({ ...c, kind: "wreck" }));
@@ -235,7 +243,12 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
           ships={myShips}
           markers={markers}
           onCellClick={(team, ex) => {
-            if (pending || isBlocked(team.id, ex.id)) return;
+            if (pending) return;
+            const why = blockedReason(team.id, ex.id);
+            if (why) {
+              showToast(why, "alert");
+              return;
+            }
             setTarget({ teamId: team.id, exerciseId: ex.id });
           }}
           isCellDisabled={(team, ex) => isBlocked(team.id, ex.id)}

@@ -265,7 +265,10 @@ export function Board({
                 <button
                   key={`${team.id}_${ex.id}`}
                   type="button"
-                  disabled={disabled}
+                  // `aria-disabled` plutot que `disabled` : un bouton natif desactive n'emet aucun clic,
+                  // donc un tap sur une case fermee ne disait RIEN sur mobile (pas de curseur pour aider).
+                  // La case reste inerte, mais l'ecran peut expliquer pourquoi elle l'est.
+                  aria-disabled={disabled || undefined}
                   onClick={() => onCellClick?.(team, ex)}
                   className={`absolute rounded-md border flex items-center justify-center transition-colors ${
                     isHl ? "ring-4 ring-accent border-accent bg-accent/40" : inLine ? "border-accent/70 bg-white/15" : "border-white/40 bg-white/10 hover:bg-white/35"
