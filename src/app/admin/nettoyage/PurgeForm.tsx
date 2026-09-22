@@ -97,8 +97,10 @@ export function PurgeForm({ rows, pinCount, reliabilityCount }: { rows: PurgeRow
 
       {risky.length > 0 && (
         <p className={ui.alertWarn}>
-          ⚠️ {risky.length} séance{risky.length > 1 ? "s" : ""} cochée{risky.length > 1 ? "s" : ""} alors qu&apos;elle{risky.length > 1 ? "s" : ""} n&apos;a{risky.length > 1 ? "" : ""}
-          {" "}pas encore eu lieu : {risky.map((r) => r.label).join(", ")}.
+          {risky.length > 1
+            ? `⚠️ ${risky.length} séances protégées sont cochées : `
+            : "⚠️ Une séance protégée est cochée : "}
+          {risky.map((r) => r.label).join(", ")}. Décoche-la si tu ne veux pas la perdre.
         </p>
       )}
 
