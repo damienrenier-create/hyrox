@@ -17,14 +17,15 @@ export default async function CartePage({ searchParams }: { searchParams: Promis
   const session = (requested ? sessions.find((s) => s.id === requested) : null) ?? sessions[0] ?? null;
   const board = session ? await buildBoardData(session.id) : null;
 
+  // Dernier tir connu par case. On garde les identifiants tels quels : les reconstruire en coupant
+  // la cle sur "_" casserait des qu'un moteur utiliserait un id d'exercice contenant un souligne.
   const markers: BoardMarker[] = [];
   if (board) {
-    const last = new Map<string, "hit" | "miss">();
-    for (const s of board.shots) last.set(`${s.teamId}_${s.exerciseId}`, s.hit ? "hit" : "miss");
-    for (const [k, kind] of last) {
-      const [teamId, exerciseId] = k.split("_");
-      markers.push({ teamId, exerciseId, kind });
+    const last = new Map<string, BoardMarker>();
+    for (const s of board.shots) {
+      last.set(`${s.teamId}_${s.exerciseId}`, { teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" });
     }
+    markers.push(...last.values());
   }
 
   return (
