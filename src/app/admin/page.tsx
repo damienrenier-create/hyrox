@@ -36,10 +36,13 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   await ensureAutoSessions();
   const open = await listOpenSessions();
   const upcoming = await upcomingSessions(10);
+  const allSessions = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all();
   // Seances DEJA creees en attente de leur heure (a distinguer des simples creneaux recurrents).
-  const scheduled = (await db.orm.public.Session.where({ isActive: true }).all())
-    .filter((s) => isScheduled(s))
-    .sort((a, b) => toMs(a.opensAt) - toMs(b.opensAt));
+  const scheduled = allSessions.filter((s) => s.isActive && isScheduled(s)).sort((a, b) => toMs(a.opensAt) - toMs(b.opensAt));
+  // Raccourci vers les 3 dernieres seances ecoulees (ni ouvertes, ni programmees) : relecture rapide.
+  const openIds = new Set(open.map((s) => s.id));
+  const scheduledIds = new Set(scheduled.map((s) => s.id));
+  const past = allSessions.filter((s) => !openIds.has(s.id) && !scheduledIds.has(s.id)).slice(0, 3);
   const cycles = await db.orm.public.Cycle.where({}).orderBy((c) => c.order.asc()).all();
   const current = cycles.find((c) => c.isCurrent) ?? null;
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
@@ -128,6 +131,41 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             </ul>
           )}
         </section>
+
+        {/* ===== Raccourci : les 3 dernieres seances ecoulees ===== */}
+        {past.length > 0 && (
+          <section className={card}>
+            <h2 className={`${ui.h2} mb-1`}>3 dernières séances</h2>
+            <p className={`${ui.hint} mb-3`}>Relecture rapide : résultats du greffier, auto-évaluations, carte du Touché-Coulé.</p>
+            <ul className="space-y-2">
+              {past.map((s) => {
+                const classes = readSessionClasses(s.settings);
+                return (
+                  <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
+                    <div className="min-w-0">
+                      <div className="font-bold">
+                        {s.label ?? wodLabel(s.wodType)}
+                        <span className="text-ink-3 font-normal"> · {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}</span>
+                        {s.raceEndedAt ? (
+                          <span className={`${ui.chip} ${ui.chipOk} ml-2`}>WOD terminé</span>
+                        ) : (
+                          <span className={`${ui.chip} ${ui.chipMuted} ml-2`}>non terminé</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-ink-2">{classes.length ? classes.join(", ") : "toutes classes"} · {engineName(s.wodType)}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Résultats</Link>
+                      <Link href={`/admin/resultats?session=${s.id}`} className={btn.smGhost}>Consultation</Link>
+                      <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
+                      {s.refereeMode && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {/* ===== Seances DEJA preparees (creees, en attente de leur heure) ===== */}
         {scheduled.length > 0 && (
