@@ -26,7 +26,7 @@ import {
   Standing,
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import type { RaceContextBundle } from "@/lib/race-context";
-import { TeamsManager, type TeamWithMembers } from "./TeamsManager";
+import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
 import {
   startRaceAction,
   togglePauseAction,
@@ -59,18 +59,28 @@ function MedalDots({ settings, n }: { settings: RaceSettings; n: number }) {
   return <span className="flex flex-wrap max-w-[64px]">{dots}</span>;
 }
 
-export function GreffierClient({ sessionId, bundle, teamsWithMembers }: { sessionId: string; bundle: RaceContextBundle; teamsWithMembers: TeamWithMembers[] }) {
+export function GreffierClient({
+  sessionId, bundle, teamsWithMembers, classes, allClasses, referees,
+}: {
+  sessionId: string;
+  bundle: RaceContextBundle;
+  teamsWithMembers: TeamWithMembers[];
+  classes: string[];
+  allClasses: string[];
+  referees: RefereeView[];
+}) {
   const router = useRouter();
   const { ctx, startedAtMs, endedAtMs, pauses, teamNames, exerciseLabels } = bundle;
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
-  const [view, setView] = useState<"grid" | "results" | "teams">("grid");
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
 
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
+  // Avant le depart et sans aucun eleve encode, on ouvre directement sur la preparation des equipes.
+  const [view, setView] = useState<"grid" | "results" | "teams">(phase === "pre" && memberCount === 0 ? "teams" : "grid");
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -260,7 +270,8 @@ export function GreffierClient({ sessionId, bundle, teamsWithMembers }: { sessio
           <button onClick={() => setView("grid")} className={`text-sm font-bold px-3 py-1 rounded ${view === "grid" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Grille</button>
           <button onClick={() => setView("results")} className={`text-sm font-bold px-3 py-1 rounded ${view === "results" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>Résultats</button>
           <button onClick={() => setView("teams")} className={`text-sm font-bold px-3 py-1 rounded ${view === "teams" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>
-            Équipes <span className={`ml-1 text-[10px] px-1.5 rounded-full ${memberCount ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>{memberCount}</span>
+            Équipes &amp; arbitres <span className={`ml-1 text-[10px] px-1.5 rounded-full ${memberCount ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>{memberCount}</span>
+            {referees.length > 0 && <span className="ml-1 text-[10px] px-1.5 rounded-full bg-[#062230] text-amber-300">🏴‍☠️ {referees.length}</span>}
           </button>
         </div>
       </header>
@@ -311,7 +322,7 @@ export function GreffierClient({ sessionId, bundle, teamsWithMembers }: { sessio
         ) : view === "results" ? (
           <ResultsTable ctx={ctx} phase={phase} teamNames={teamNames} exerciseLabels={exerciseLabels} tl={tl} />
         ) : (
-          <TeamsManager teams={teamsWithMembers} />
+          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} />
         )}
       </main>
 

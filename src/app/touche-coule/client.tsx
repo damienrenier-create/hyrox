@@ -24,11 +24,13 @@ type Props = {
   hitsOnMyFleet: number;
   raceEnded: boolean;
   myScore: number;
+  ownTeam?: { id: string; name: string } | null; // arbitre issu d'une equipe (DNF...) : ne peut pas evaluer sa propre equipe
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore, ownTeam = null }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
+  const isBlocked = (teamId: string, exerciseId: string) => myCellSet.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
 
   const [target, setTarget] = useState<{ teamId: string; exerciseId: string } | null>(null);
   const [reps, setReps] = useState<string>("");
@@ -147,18 +149,21 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       </header>
 
       <main className="flex-1 p-2 relative z-10 overflow-auto flex flex-col">
-        <p className="text-[11px] text-amber-100/60 px-1 mb-1">Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.</p>
+        <p className="text-[11px] text-amber-100/60 px-1 mb-1">
+          Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.
+          {ownTeam && <> <span className="text-amber-300 font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
+        </p>
         <Board
           teams={teams}
           exercises={exercises}
           ships={myShips}
           markers={markers}
           onCellClick={(team, ex) => {
-            if (pending || myCellSet.has(`${team.id}_${ex.id}`)) return;
+            if (pending || isBlocked(team.id, ex.id)) return;
             setTarget({ teamId: team.id, exerciseId: ex.id });
           }}
-          isCellDisabled={(team, ex) => myCellSet.has(`${team.id}_${ex.id}`)}
-          cellExtraClass={(team, ex) => (myCellSet.has(`${team.id}_${ex.id}`) ? "cursor-not-allowed" : "")}
+          isCellDisabled={(team, ex) => isBlocked(team.id, ex.id)}
+          cellExtraClass={(team, ex) => (team.id === ownTeam?.id ? "cursor-not-allowed opacity-40" : myCellSet.has(`${team.id}_${ex.id}`) ? "cursor-not-allowed" : "")}
         />
       </main>
 

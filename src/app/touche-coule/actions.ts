@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { getWodEngine } from "@/lib/wod-engines";
 import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/wod-engines/core/fleet";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
+import { refereeAccess } from "@/lib/referee-access";
 
 export type Direction = "right" | "left" | "down" | "up";
 
@@ -16,12 +17,16 @@ async function loadContext(sessionId: string) {
   const session = await db.orm.public.Session.where({ id: sessionId, refereeMode: true }).first();
   if (!session) throw new Error("Session introuvable ou arbitrage désactivé pour cette séance.");
 
+  // Un participant (encode dans une equipe) n'arbitre pas, sauf si le greffier l'a inscrit comme arbitre (DNF...).
+  const access = await refereeAccess(sessionId, evaluator);
+  if (!access.allowed) throw new Error(access.reason ?? "Accès à l'arbitrage refusé.");
+
   const teams = (await db.orm.public.Team.where({ sessionId }).all()) as { id: string; order: number | null }[];
   teams.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const exercises = [...getWodEngine(session.wodType).exercises].sort((a, b) => a.number - b.number);
 
-  return { evaluator, session, teams, exercises };
+  return { evaluator, session, teams, exercises, access };
 }
 
 // Inventaire restant = flotte de reference moins les tailles deja posees (multiset).
@@ -182,10 +187,12 @@ export async function submitEvaluationAction(
   reps: number,
   note: number
 ): Promise<EvaluationResult> {
-  const { evaluator, session, teams, exercises } = await loadContext(sessionId);
+  const { evaluator, session, teams, exercises, access } = await loadContext(sessionId);
 
   if (!teams.some((t) => t.id === targetTeamId)) return { error: "Équipe invalide pour cette séance." };
   if (!exercises.some((e) => e.id === targetExerciseId)) return { error: "Exercice invalide pour cette séance." };
+  // Un arbitre issu d'une equipe (DNF, blessure) n'evalue jamais sa propre equipe.
+  if (access.teamId === targetTeamId) return { error: `Tu ne peux pas arbitrer ta propre équipe (${access.teamName}).` };
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
   if (!VALID_NOTES.includes(note)) return { error: "Appréciation invalide." };
 

@@ -61,6 +61,7 @@ model User {
   refereeFleets   RefereeFleet[]
   shotsFired      Shot[]
   selfEvaluations SelfEvaluation[]
+  refereeOf       SessionReferee[]
 }
 
 model Session {
@@ -79,6 +80,22 @@ model Session {
   shots           Shot[]
   raceState       RaceState?
   selfEvaluations SelfEvaluation[]
+  referees        SessionReferee[]
+}
+
+// Arbitres encodes par le greffier pour une seance, modifiable pendant tout le WOD :
+// un participant qui abandonne (DNF, blessure...) garde ses resultats d'equipe et devient arbitre.
+model SessionReferee {
+  id        String   @id @default(uuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([userId])
 }
 
 model Team {

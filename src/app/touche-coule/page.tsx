@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
 import { computeRefereeScore } from "@/lib/wod-engines/core/pirate-score";
+import { refereeAccess } from "@/lib/referee-access";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
 import type { BoardShip } from "./Board";
@@ -26,6 +27,21 @@ export default async function ToucheCoulePage() {
         <div>
           <h1 className="text-2xl font-bold mb-2">Aucune séance d'arbitrage active</h1>
           <p className="text-slate-400">Attendez que l'admin lance une séance avec le Touché-Coulé activé.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Participant encode dans une equipe et pas inscrit arbitre par le greffier -> pas d'arbitrage.
+  const access = await refereeAccess(session.id, evaluator);
+  if (!access.allowed) {
+    return (
+      <div className="min-h-[100dvh] bg-[#062230] flex items-center justify-center p-6 text-amber-50 text-center">
+        <div className="max-w-sm">
+          <div className="text-5xl mb-3">💪</div>
+          <h1 className="text-xl font-black text-amber-300 mb-2">Tu es participant sur ce WOD</h1>
+          <p className="text-sm text-amber-100/80 mb-6">{access.reason}</p>
+          <a href="/eleve" className="inline-block bg-amber-400 text-slate-950 font-black px-5 py-3 rounded-xl">← Mon espace</a>
         </div>
       </div>
     );
@@ -91,6 +107,7 @@ export default async function ToucheCoulePage() {
       hitsOnMyFleet={hitsOnMyFleet}
       raceEnded={!!session.raceEndedAt}
       myScore={myScore}
+      ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
     />
   );
 }

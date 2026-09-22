@@ -1,0 +1,245 @@
+[
+  {
+    "id": "table.sessionReferee",
+    "label": "Create table \"sessionReferee\"",
+    "summary": "Creates table \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"sessionReferee\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"sessionReferee\"",
+        "sql": "CREATE TABLE \"public\".\"sessionReferee\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"note\" text,\n  \"sessionId\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"sessionReferee\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.sessionReferee.sessionReferee_sessionId_userId_key",
+    "label": "Add unique constraint on \"sessionReferee\" (sessionId, userId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "sessionReferee_sessionId_userId_key",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"sessionReferee_sessionId_userId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_sessionId_userId_key",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"sessionReferee_sessionId_userId_key\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\" ADD CONSTRAINT \"sessionReferee_sessionId_userId_key\" UNIQUE (\"sessionId\", \"userId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"sessionReferee_sessionId_userId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_sessionId_userId_key",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.sessionReferee.sessionReferee_sessionId_idx_29f415d4",
+    "label": "Create index \"sessionReferee_sessionId_idx_29f415d4\" on \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "sessionReferee_sessionId_idx_29f415d4",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"sessionReferee_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"sessionReferee_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"sessionReferee_sessionId_idx_29f415d4\" ON \"public\".\"sessionReferee\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"sessionReferee_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.sessionReferee.sessionReferee_userId_idx_a489d58a",
+    "label": "Create index \"sessionReferee_userId_idx_a489d58a\" on \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "sessionReferee_userId_idx_a489d58a",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"sessionReferee_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"sessionReferee_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"sessionReferee_userId_idx_a489d58a\" ON \"public\".\"sessionReferee\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"sessionReferee_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"sessionReferee_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.sessionReferee.sessionReferee_sessionId_fkey",
+    "label": "Add foreign key \"sessionReferee_sessionId_fkey\" on \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "sessionReferee_sessionId_fkey",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"sessionReferee_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_sessionId_fkey",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"sessionReferee_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\"\nADD CONSTRAINT \"sessionReferee_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"sessionReferee_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_sessionId_fkey",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.sessionReferee.sessionReferee_userId_fkey",
+    "label": "Add foreign key \"sessionReferee_userId_fkey\" on \"sessionReferee\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "sessionReferee_userId_fkey",
+        "table": "sessionReferee"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"sessionReferee_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_userId_fkey",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"sessionReferee_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"sessionReferee\"\nADD CONSTRAINT \"sessionReferee_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"user\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"sessionReferee_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "sessionReferee_userId_fkey",
+          "public",
+          "\"public\".\"sessionReferee\""
+        ]
+      }
+    ]
+  }
+]

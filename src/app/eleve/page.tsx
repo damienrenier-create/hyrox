@@ -16,6 +16,9 @@ export default async function ElevePage() {
   ]);
   const currentMembership = current ? mine.find((r) => r.sessionId === current.id) ?? null : null;
   const history = mine.filter((r) => !current || r.sessionId !== current.id);
+  const refereeRow = current ? await db.orm.public.SessionReferee.where({ sessionId: current.id, userId: user.id }).first() : null;
+  // Participant non inscrit arbitre par le greffier -> pas d'arbitrage (DNF/blessure = demander au greffier).
+  const canReferee = !!current?.refereeMode && (!currentMembership || !!refereeRow);
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 text-slate-900 font-sans">
@@ -39,19 +42,35 @@ export default async function ElevePage() {
                   <div className="font-black text-lg">{wodLabel(current.wodType)}</div>
                   <div className="text-xs text-slate-500">{fmtDate(current.createdAt)}{current.raceEndedAt ? " · terminé" : " · ouvert"}</div>
                 </div>
-                {currentMembership && (
-                  <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">{currentMembership.teamName}</span>
-                )}
+                <div className="flex flex-col items-end gap-1">
+                  {currentMembership && (
+                    <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">{currentMembership.teamName}</span>
+                  )}
+                  {refereeRow && (
+                    <span className="text-[11px] font-bold bg-[#062230] text-amber-300 px-2 py-1 rounded-full">🏴‍☠️ arbitre{refereeRow.note && refereeRow.note !== "Arbitre" ? ` · ${refereeRow.note}` : ""}</span>
+                  )}
+                </div>
               </div>
-              <p className="text-sm text-slate-600 mb-3">Quel est ton rôle sur ce WOD ?</p>
+              <p className="text-sm text-slate-600 mb-3">
+                {refereeRow
+                  ? "Le greffier t'a inscrit comme arbitre sur ce WOD."
+                  : currentMembership
+                    ? "Tu es participant sur ce WOD."
+                    : "Quel est ton rôle sur ce WOD ?"}
+              </p>
               <div className="grid grid-cols-2 gap-2">
-                {current.refereeMode ? (
+                {!current.refereeMode ? (
+                  <div className="bg-slate-100 text-slate-400 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d'arbitrage sur ce WOD</div>
+                ) : canReferee ? (
                   <Link href="/touche-coule" className="bg-[#062230] text-amber-300 font-black text-center rounded-xl py-4 px-2 leading-tight">
                     🏴‍☠️ Arbitre
                     <span className="block text-[11px] font-normal text-amber-100/70 mt-1">Touché-Coulé</span>
                   </Link>
                 ) : (
-                  <div className="bg-slate-100 text-slate-400 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d'arbitrage sur ce WOD</div>
+                  <div className="bg-slate-100 text-slate-500 rounded-xl py-3 px-3 text-xs leading-snug">
+                    <span className="font-black text-slate-700 block mb-1">🏴‍☠️ Arbitre</span>
+                    Tu participes dans {currentMembership?.teamName}. Si tu arrêtes (DNF, blessure…), demande au greffier de t'inscrire comme arbitre.
+                  </div>
                 )}
                 {currentMembership ? (
                   <Link href={`/eleve/${current.id}`} className="bg-emerald-600 text-white font-black text-center rounded-xl py-4 px-2 leading-tight">

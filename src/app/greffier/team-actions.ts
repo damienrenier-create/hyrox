@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { MAX_CLASSES, REFEREE_NOTES, readSessionClasses } from "@/lib/session-roles";
 
 async function requireGreffier() {
   const user = await getSession();
@@ -11,13 +12,32 @@ async function requireGreffier() {
 
 export type StudentHit = { id: string; firstName: string; lastName: string; className: string | null };
 
-// Recherche dans TOUTE la base eleves (toutes classes) : prefixe du prenom, du nom, ou "prenom nom".
-export async function searchAllStudentsAction(query: string): Promise<StudentHit[]> {
+// ===== Classes participantes (max 5), stockees dans Session.settings.classes =====
+
+export async function setSessionClassesAction(sessionId: string, classes: string[]): Promise<{ error: string } | { ok: true; classes: string[] }> {
+  await requireGreffier();
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) return { error: "Séance introuvable." };
+  const unique = [...new Set(classes.map((c) => c.trim()).filter(Boolean))];
+  if (unique.length > MAX_CLASSES) return { error: `Maximum ${MAX_CLASSES} classes par séance.` };
+  const known = new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter(Boolean));
+  const bad = unique.find((c) => !known.has(c));
+  if (bad) return { error: `Classe inconnue : ${bad}.` };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, classes: unique } });
+  return { ok: true, classes: unique };
+}
+
+// ===== Recherche d'eleves (prefixe prenom / nom / "prenom nom"), restreinte aux classes choisies si fournies =====
+
+export async function searchAllStudentsAction(query: string, classes: string[] = []): Promise<StudentHit[]> {
   await requireGreffier();
   const q = query.trim().toLowerCase();
   if (q.length < 1) return [];
+  const allowed = new Set(classes);
   const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
   return students
+    .filter((s) => allowed.size === 0 || (s.className && allowed.has(s.className)))
     .filter((s) => {
       const first = (s.firstName ?? "").toLowerCase();
       const last = (s.lastName ?? "").toLowerCase();
@@ -28,7 +48,8 @@ export async function searchAllStudentsAction(query: string): Promise<StudentHit
     .map((s) => ({ id: s.id, firstName: s.firstName ?? "", lastName: s.lastName ?? "", className: s.className ?? null }));
 }
 
-// Un eleve ne peut etre que dans UNE equipe par seance ; l'appartenance est persistee par identifiant.
+// ===== Membres d'equipe : un eleve = une seule equipe par seance, persiste par identifiant =====
+
 export async function addTeamMemberAction(teamId: string, userId: string): Promise<{ error: string } | { ok: true }> {
   await requireGreffier();
   const team = await db.orm.public.Team.where({ id: teamId }).first();
@@ -55,4 +76,34 @@ export async function removeTeamMemberAction(teamId: string, userId: string): Pr
   const members = await db.orm.public.TeamMember.where({ teamId, userId }).all();
   for (const m of members) await db.orm.public.TeamMember.where({ id: m.id }).delete();
   return { ok: true };
+}
+
+// ===== Arbitres encodes par le greffier (pendant tout le WOD : DNF, blessure...) =====
+
+export async function addRefereeAction(sessionId: string, userId: string, note?: string): Promise<{ error: string } | { ok: true }> {
+  await requireGreffier();
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) return { error: "Séance introuvable." };
+  const student = await db.orm.public.User.where({ id: userId }).first();
+  if (!student || student.role !== "STUDENT") return { error: "Élève introuvable." };
+  const cleanNote = note && (REFEREE_NOTES as readonly string[]).includes(note) ? note : null;
+  const existing = await db.orm.public.SessionReferee.where({ sessionId, userId }).first();
+  if (existing) {
+    if (existing.note !== cleanNote) await db.orm.public.SessionReferee.where({ id: existing.id }).update({ note: cleanNote });
+    return { ok: true };
+  }
+  await db.orm.public.SessionReferee.create({ sessionId, userId, note: cleanNote });
+  return { ok: true };
+}
+
+export async function removeRefereeAction(sessionId: string, userId: string): Promise<{ ok: true }> {
+  await requireGreffier();
+  const rows = await db.orm.public.SessionReferee.where({ sessionId, userId }).all();
+  for (const r of rows) await db.orm.public.SessionReferee.where({ id: r.id }).delete();
+  return { ok: true };
+}
+
+export async function getSessionClasses(sessionId: string): Promise<string[]> {
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  return readSessionClasses(session?.settings);
 }

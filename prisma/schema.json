@@ -44,6 +44,10 @@
       "model": "Session",
       "namespace": "public"
     },
+    "sessionReferee": {
+      "model": "SessionReferee",
+      "namespace": "public"
+    },
     "shot": {
       "model": "Shot",
       "namespace": "public"
@@ -1324,6 +1328,21 @@
                   "namespace": "public"
                 }
               },
+              "referees": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "SessionReferee",
+                  "namespace": "public"
+                }
+              },
               "selfEvaluations": {
                 "cardinality": "1:N",
                 "on": {
@@ -1396,6 +1415,100 @@
               },
               "namespaceId": "public",
               "table": "session"
+            }
+          },
+          "SessionReferee": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "note": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "userId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "userId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "note": {
+                  "column": "note"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "userId": {
+                  "column": "userId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "sessionReferee"
             }
           },
           "Shot": {
@@ -1891,6 +2004,21 @@
                 },
                 "to": {
                   "model": "RefereeFleet",
+                  "namespace": "public"
+                }
+              },
+              "refereeOf": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "userId"
+                  ]
+                },
+                "to": {
+                  "model": "SessionReferee",
                   "namespace": "public"
                 }
               },
@@ -3041,6 +3169,106 @@
               },
               "uniques": []
             },
+            "sessionReferee": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "note": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "userId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "sessionReferee"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "userId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "sessionReferee"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "sessionReferee_sessionId_idx_29f415d4",
+                  "prefix": "sessionReferee_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "userId"
+                  ],
+                  "name": "sessionReferee_userId_idx_a489d58a",
+                  "prefix": "sessionReferee_userId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId",
+                    "userId"
+                  ]
+                }
+              ]
+            },
             "shot": {
               "checks": [
                 {
@@ -3601,10 +3829,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "30b14a3453eba066a44081461bded368c9814e5741b7b785f652e4f1d80e2bf7"
+    "storageHash": "0525ecf171f20550f8439aec2acc538057d961047da27532deceaf77f4c25ce6"
   },
   "execution": {
-    "executionHash": "dff0cfb452e16b926ccf41d71cad07a6ecc434082a13298fc6be41dbf320bfd6",
+    "executionHash": "199ab1a9fe9ac02207bedd4942eb03a015b5b1ff3988860d8f6812d6e21e1acc",
     "mutations": {
       "defaults": [
         {
@@ -3715,6 +3943,17 @@
             "column": "id",
             "namespace": "public",
             "table": "session"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "sessionReferee"
           }
         },
         {
