@@ -71,6 +71,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           <nav className="flex flex-wrap gap-2 text-sm">
             <Link href="/admin/auto-evaluations" className={btnGhost}>Auto-évaluations</Link>
             <Link href="/admin/carte" className={btnGhost}>Carte 🏴‍☠️</Link>
+            <Link href="/admin/resultats" className={btnGhost}>Résultats</Link>
             <Link href="/greffier" className={btnGhost}>Greffier</Link>
             <Link href="/touche-coule" className={btnGhost}>Touché-Coulé</Link>
           </nav>
