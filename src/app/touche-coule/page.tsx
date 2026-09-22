@@ -86,7 +86,8 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
 
   const myShipIds = new Set(rawShips.map((s) => s.id));
   const allPlacements = await db.orm.public.BoatPlacement.where({ sessionId: session.id }).all();
-  const occupiedCells = new Set(allPlacements.filter((p) => p.shipId).map((p) => `${p.teamId}_${p.exerciseId}`));
+  // Cibles possibles = cases portant au moins un navire qui n'est pas a moi (calques par arbitre).
+  const occupiedCells = new Set(allPlacements.filter((p) => p.shipId && !myShipIds.has(p.shipId)).map((p) => `${p.teamId}_${p.exerciseId}`));
   const myCells = allPlacements
     .filter((p) => p.shipId && myShipIds.has(p.shipId))
     .map((p) => `${p.teamId}_${p.exerciseId}`);

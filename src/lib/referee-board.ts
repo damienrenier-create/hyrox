@@ -73,13 +73,14 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
     if (u) userById.set(id, { name: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.name, className: u.className ?? null, ghost: u.name === GHOST_USER_NAME });
   }
 
-  // Navires + cases
-  const shipIdByCell = new Map<string, string>();
+  // Navires + cases. Calques par arbitre : une case peut porter plusieurs navires (de flottes differentes).
+  const shipsByCell = new Map<string, string[]>();
   const cellsByShip = new Map<string, string[]>();
   placements.forEach((p) => {
     if (!p.shipId) return;
     const coord = `${p.teamId}_${p.exerciseId}`;
-    shipIdByCell.set(coord, p.shipId);
+    if (!shipsByCell.has(coord)) shipsByCell.set(coord, []);
+    shipsByCell.get(coord)!.push(p.shipId);
     if (!cellsByShip.has(p.shipId)) cellsByShip.set(p.shipId, []);
     cellsByShip.get(p.shipId)!.push(coord);
   });
@@ -106,21 +107,23 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
     }
   }
 
-  // Tirs, dans l'ordre : touche / coule / a l'eau, et score par tireur
+  // Tirs, dans l'ordre : touche / coule / a l'eau, et score par tireur (+1 par navire touche, +3 par navire coule).
+  // Un tir touche TOUS les navires de la case sauf ceux du tireur (qui ne peut de toute facon pas viser ses cases).
   const hitByShip = new Map<string, Set<string>>();
   const stats = new Map<string, { hits: number; sunk: number; misses: number }>();
-  const bump = (id: string, k: "hits" | "sunk" | "misses") => {
+  const bump = (id: string, k: "hits" | "sunk" | "misses", n = 1) => {
     const s = stats.get(id) ?? { hits: 0, sunk: 0, misses: 0 };
-    s[k]++;
+    s[k] += n;
     stats.set(id, s);
   };
+  const ownerOfShip = (shipId: string) => fleetOfShip.get(shipId)?.refereeId;
   const shots: ShotData[] = [];
   for (const shot of rawShots) {
     const coord = `${shot.targetTeamId}_${shot.targetExerciseId}`;
-    const shipId = shipIdByCell.get(coord);
+    const targets = (shipsByCell.get(coord) ?? []).filter((id) => ownerOfShip(id) !== shot.refereeId);
     let hit = false;
     let sunk = false;
-    if (shipId) {
+    for (const shipId of targets) {
       hit = true;
       const cells = cellsByShip.get(shipId) ?? [];
       const before = hitByShip.get(shipId) ?? new Set<string>();
@@ -129,12 +132,13 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
       after.add(coord);
       hitByShip.set(shipId, after);
       const isSunkNow = cells.every((c) => after.has(c));
-      sunk = isSunkNow && !wasSunk;
       bump(shot.refereeId, "hits");
-      if (sunk) bump(shot.refereeId, "sunk");
-    } else {
-      bump(shot.refereeId, "misses");
+      if (isSunkNow && !wasSunk) {
+        sunk = true;
+        bump(shot.refereeId, "sunk");
+      }
     }
+    if (!hit) bump(shot.refereeId, "misses");
     shots.push({ teamId: shot.targetTeamId, exerciseId: shot.targetExerciseId, refereeId: shot.refereeId, hit, sunk, phase: shot.phase, at: new Date(String(shot.createdAt)).getTime() });
   }
   for (const s of ships) {

@@ -1,13 +1,21 @@
 export type Orientation = "horizontal" | "vertical";
 export type Cell = { teamId: string; exerciseId: string };
 
-// Composition de la flotte de reference : 3x1, 2x2, 1x3, 1x4, 1x5 (8 navires, 19 cases).
-// Valable pour la grille Hyrox actuelle (12 exercices fixes, 15 a 25 equipes).
-// Point unique a adapter si une grille de forme tres differente apparait avec un futur cycle/seance.
+// Composition de la flotte de reference : 3x1, 2x2, 1x3, 1x4, 1x5 (8 navires, 19 cases) — grille Pyramide 24x12.
 const REFERENCE_FLEET: readonly number[] = [5, 4, 3, 2, 2, 1, 1, 1];
+const MAX_FLEET_SHARE = 0.35; // une flotte n'occupe jamais plus de 35 % des cases de la grille
 
+// La grille = equipes x ateliers de la seance en cours chez le greffier (Pyramide 24x12, Fete Foraine ~20x7,
+// petite classe 8x7...). La flotte s'y adapte : aucun navire plus long que la plus grande dimension, et on retire
+// les plus grands navires tant que la flotte depasse 35 % de la grille. Source unique : serveur ET client.
 export function fleetFor(rows: number, cols: number): readonly number[] {
-  return REFERENCE_FLEET;
+  const maxLen = Math.max(1, rows, cols);
+  const cells = Math.max(1, rows * cols);
+  const budget = Math.max(3, Math.floor(cells * MAX_FLEET_SHARE));
+  let fleet = REFERENCE_FLEET.filter((s) => s <= maxLen); // trie decroissant conserve
+  const total = (f: readonly number[]) => f.reduce((a, b) => a + b, 0);
+  while (fleet.length > 1 && total(fleet) > budget) fleet = fleet.slice(1); // on sacrifie le plus grand d'abord
+  return fleet.length ? fleet : [1];
 }
 
 export function computeCells(
@@ -41,15 +49,16 @@ export type GhostShip = {
   cells: Cell[];
 };
 
-// Placement aleatoire complet et valide (sans chevauchement) pour une flotte fantome.
-// alreadyOccupied doit contenir toutes les cases deja prises par n'importe quelle autre flotte de la session.
+// Placement aleatoire complet et valide d'une flotte fantome (jamais de chevauchement a l'interieur de la flotte).
+// `avoid` = cases des autres flottes qu'on PREFERE eviter (pour etaler les cibles) ; si la grille est trop pleine,
+// l'appelant peut rappeler sans `avoid` : les calques par arbitre autorisent le chevauchement entre flottes.
 export function generateRandomFleet(
   teams: { id: string }[],
   exercises: { id: string }[],
-  alreadyOccupied: Set<string> = new Set()
+  avoid: Set<string> = new Set()
 ): GhostShip[] {
   const spec = fleetFor(teams.length, exercises.length);
-  const occupied = new Set(alreadyOccupied);
+  const occupied = new Set(avoid);
   const ships: GhostShip[] = [];
 
   for (const size of spec) {

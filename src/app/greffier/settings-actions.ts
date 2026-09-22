@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { getWodEngine } from "@/lib/wod-engines";
 import { setTeamCount } from "@/lib/team-count";
+import { exercisesFor } from "@/lib/session-exercises";
 
 type Result = { error: string } | { ok: true };
 
@@ -60,6 +61,15 @@ export async function updateExercisesAction(sessionId: string, list: ExerciseInp
   }
   const numbers = [...list.map((e) => e.number)].sort((a, b) => a - b);
   if (numbers.some((n, i) => n !== i + 1)) return { error: "L'ordre doit numéroter les exercices de 1 à n." };
+
+  // Les navires du Touche-Coule sont poses sur des colonnes : des qu'une flotte existe, l'ORDRE est fige
+  // (un navire de 3 cases doit rester sur 3 colonnes contigues) ; renommer reste possible.
+  const hasFleet = !!(await db.orm.public.RefereeFleet.where({ sessionId }).first());
+  if (hasFleet) {
+    const currentOrder = exercisesFor(session).map((e) => e.id).join("|");
+    const newOrder = [...list].sort((a, b) => a.number - b.number).map((e) => e.id).join("|");
+    if (currentOrder !== newOrder) return { error: "Des flottes d'arbitres sont déjà placées : l'ordre des exercices est verrouillé (tu peux encore les renommer)." };
+  }
   const overrides: Record<string, { label: string; number: number }> = {};
   for (const e of list) {
     const label = e.label.trim().slice(0, 40);

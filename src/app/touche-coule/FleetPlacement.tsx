@@ -3,12 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { placeShipAction, deleteShipAction, lockFleetAction } from "./actions";
+import { fleetFor } from "@/lib/wod-engines/core/fleet";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 
-const FLEET = [5, 4, 3, 2, 2, 1, 1, 1];
-
-function remainingSizes(placed: number[]): number[] {
-  const rest = [...FLEET];
+// Meme flotte que le serveur : adaptee a la grille equipes x ateliers de la seance en cours.
+function remainingSizes(spec: readonly number[], placed: number[]): number[] {
+  const rest = [...spec];
   for (const s of placed) {
     const i = rest.indexOf(s);
     if (i !== -1) rest.splice(i, 1);
@@ -46,7 +46,8 @@ export function FleetPlacement({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const remaining = remainingSizes(ships.map((s) => s.size));
+  const spec = fleetFor(teams.length, exercises.length);
+  const remaining = remainingSizes(spec, ships.map((s) => s.size));
   const done = remaining.length === 0;
 
   const shipByCell = new Map<string, BoardShip>();
@@ -123,7 +124,9 @@ export function FleetPlacement({
         <h1 className="text-xl font-black text-amber-300 uppercase tracking-widest drop-shadow-[0_0_6px_rgba(217,180,80,0.4)]">
           Place ta flotte 🏴‍☠️
         </h1>
-        <p className="text-sm text-amber-200/60">{evaluator.name}</p>
+        <p className="text-sm text-amber-200/60">
+          {evaluator.name} · grille {teams.length} équipes × {exercises.length} ateliers · flotte de {spec.length} navires ({spec.reduce((a, b) => a + b, 0)} cases)
+        </p>
       </header>
 
       <div className="relative z-10 mb-3 bg-[#0a2a38]/80 border border-amber-800/40 p-3 rounded-xl backdrop-blur-sm space-y-2">

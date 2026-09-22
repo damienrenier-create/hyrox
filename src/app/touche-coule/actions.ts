@@ -95,10 +95,13 @@ export async function placeShipAction(
   const cells = computeCells(teams, exercises, size, orientation, startTeamId, startExerciseId);
   if (!cells) return { error: "Ce placement dépasse la grille." };
 
+  // Calques par arbitre : seul le chevauchement avec SA propre flotte est interdit. Les flottes des autres
+  // restent invisibles (aucun refus ne doit reveler ou elles sont) et la capacite ne depend plus du nombre d'arbitres.
+  const myShipIds = new Set(placedShips.map((s) => s.id));
   const allPlacements = await db.orm.public.BoatPlacement.where({ sessionId }).all();
-  const occupied = new Set(allPlacements.map((p) => `${p.teamId}_${p.exerciseId}`));
-  if (cells.some((c) => occupied.has(`${c.teamId}_${c.exerciseId}`))) {
-    return { error: "Un autre navire occupe déjà une de ces cases." };
+  const mine = new Set(allPlacements.filter((p) => p.shipId && myShipIds.has(p.shipId)).map((p) => `${p.teamId}_${p.exerciseId}`));
+  if (cells.some((c) => mine.has(`${c.teamId}_${c.exerciseId}`))) {
+    return { error: "Un de tes navires occupe déjà une de ces cases." };
   }
 
   let shipId = "";
@@ -287,6 +290,8 @@ export async function generateGhostFleetsAction(
   const existingGhostFleets = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: ghost.id }).all();
   const usedSlots = new Set(existingGhostFleets.map((f) => f.slot));
 
+  // On prefere etaler les fantomes sur des cases libres ; si la grille est petite (peu d'equipes / d'ateliers),
+  // on accepte le chevauchement avec les autres flottes (calques par arbitre).
   const allPlacements = await db.orm.public.BoatPlacement.where({ sessionId }).all();
   const occupied = new Set(allPlacements.map((p) => `${p.teamId}_${p.exerciseId}`));
 
@@ -298,7 +303,12 @@ export async function generateGhostFleetsAction(
       continue;
     }
 
-    const ships = generateRandomFleet(teams, exercises, occupied);
+    let ships;
+    try {
+      ships = generateRandomFleet(teams, exercises, occupied);
+    } catch {
+      ships = generateRandomFleet(teams, exercises);
+    }
 
     await db.transaction(async (tx) => {
       const fleet = await tx.orm.public.RefereeFleet.create({
