@@ -14,7 +14,10 @@ import { btn, cx, ui } from "@/lib/ui";
 
 const REFRESH_MS = 5000;
 
-type Shot = { teamId: string; exerciseId: string; hit: boolean };
+const key = (c: Cell) => `${c.teamId}_${c.exerciseId}`;
+
+type Cell = { teamId: string; exerciseId: string };
+type Shot = Cell & { hit: boolean };
 
 type Props = {
   evaluator: SessionPayload;
@@ -25,13 +28,15 @@ type Props = {
   myCells: string[]; // "teamId_exerciseId" des cases de MA flotte (verrouillee en amont)
   myShots: Shot[];
   hitsOnMyFleet: number;
+  damagedCells: Cell[]; // cases de MA flotte deja touchees par les autres
+  wreckCells: Cell[]; // cases des navires coules (reveles a tout le monde)
   raceEnded: boolean;
   myScore: number;
   ownTeam?: { id: string; name: string } | null; // arbitre issu d'une equipe (DNF...) : ne peut pas evaluer sa propre equipe
   leaderboard: LeaderboardRow[];
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore, ownTeam = null, leaderboard }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
   const isBlocked = (teamId: string, exerciseId: string) => myCellSet.has(`${teamId}_${exerciseId}`) || teamId === ownTeam?.id;
@@ -60,18 +65,20 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
     return () => clearInterval(t);
   }, [router, target, pending]);
 
-  // Alerte + secousse quand un de MES bateaux vient d'etre touche (detecte via le compteur serveur).
-  const prevHits = useRef(hitsOnMyFleet);
+  // Alerte + secousse + explosion SUR la case quand un de MES bateaux vient d'etre touche.
+  // Les degats arrivent par le rafraichissement serveur (5 s) : on compare la liste des cases touchees.
+  const prevDamaged = useRef(damagedCells.map(key));
   useEffect(() => {
-    if (hitsOnMyFleet > prevHits.current) {
-      showToast("💥 Un de tes bateaux vient d'être touché !", "alert");
-      setShake(true);
-      const t = setTimeout(() => setShake(false), 500);
-      prevHits.current = hitsOnMyFleet;
-      return () => clearTimeout(t);
-    }
-    prevHits.current = hitsOnMyFleet;
-  }, [hitsOnMyFleet]);
+    const before = new Set(prevDamaged.current);
+    const fresh = damagedCells.filter((c) => !before.has(key(c)));
+    prevDamaged.current = damagedCells.map(key);
+    if (!fresh.length) return;
+    setEffects((fx) => [...fx, ...fresh.map((c) => ({ id: `dmg_${Date.now()}_${key(c)}`, ...c, kind: "hit" as const }))]);
+    showToast(`💥 ${fresh.length > 1 ? "Tes bateaux encaissent" : "Un de tes bateaux vient d'être touché"} !`, "alert");
+    setShake(true);
+    const t = setTimeout(() => setShake(false), 500);
+    return () => clearTimeout(t);
+  }, [damagedCells]);
 
   useEffect(() => {
     setScore(myScore);
@@ -102,12 +109,16 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
       const coord = `${t.teamId}_${t.exerciseId}`;
       void broadcastShot(sessionId, coord, evaluator, r, n, res.hits); // diffusion live, jamais bloquante
       const hit = res.hits.length > 0;
-      const sunk = res.hits.some((h) => h.sunk);
+      const sunkCount = res.hits.filter((h) => h.sunk).length;
+      const sunk = sunkCount > 0;
       setLocalShots((prev) => [...prev, { teamId: t.teamId, exerciseId: t.exerciseId, hit }]);
       setEffects((fx) => [...fx, { id: `${Date.now()}_${coord}`, teamId: t.teamId, exerciseId: t.exerciseId, kind: hit ? (sunk ? "sunk" : "hit") : "splash" }]);
       if (hit) {
-        setScore((s) => s + 1 + (sunk ? 3 : 0));
-        showToast(sunk ? "☠️ Bateau coulé !" : "💥 Touché !", "hit");
+        // Les flottes se superposent (calques par arbitre) : un seul tir peut toucher plusieurs navires.
+        // Meme bareme que le serveur (+1 par navire touche, +3 par navire coule), sinon le score saute
+        // au rafraichissement suivant.
+        setScore((s) => s + res.hits.length + 3 * sunkCount);
+        showToast(sunk ? (sunkCount > 1 ? `☠️ ${sunkCount} bateaux coulés !` : "☠️ Bateau coulé !") : res.hits.length > 1 ? `💥 ${res.hits.length} bateaux touchés !` : "💥 Touché !", "hit");
       } else {
         showToast("🌊 À l'eau !", "miss");
       }
@@ -118,8 +129,12 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
     });
   };
 
+  // Ordre = priorite d'affichage (la derniere entree gagne sur une meme case) :
+  // mes tirs < degats encaisses < epaves des navires coules < case actuellement visee.
   const shots = [...myShots, ...localShots];
   const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
+  damagedCells.forEach((c) => markers.push({ ...c, kind: "hit" }));
+  wreckCells.forEach((c) => markers.push({ ...c, kind: "wreck" }));
   if (target) markers.push({ teamId: target.teamId, exerciseId: target.exerciseId, kind: "target" });
   const myRank = leaderboard.findIndex((r) => r.refereeId === evaluator.id) + 1;
 
@@ -164,6 +179,11 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             {myRank ? `#${myRank}` : "—"}
           </button>
           <ScoreBadge score={score} />
+          {hitsOnMyFleet > 0 && (
+            <div className={cx(ui.chip, "py-1", ui.chipErr)} title="Cases de ta flotte touchées">
+              💥 {hitsOnMyFleet}
+            </div>
+          )}
           <div className={cx(ui.chip, "py-1", raceEnded ? ui.chipMuted : ui.chipOk)}>
             {raceEnded ? "POST-WOD" : "EN COURS"}
           </div>

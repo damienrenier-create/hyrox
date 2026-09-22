@@ -22,7 +22,8 @@ export type BoardShip = {
   ghost?: boolean;
   dimmed?: boolean;
 };
-export type MarkerKind = "hit" | "miss" | "target" | "selected";
+export type MarkerKind = "hit" | "miss" | "target" | "selected" | "wreck";
+export type SeaTile = "sea" | "sea-foam";
 export type BoardMarker = { teamId: string; exerciseId: string; kind: MarkerKind };
 
 export function cellPos(tIdx: number, eIdx: number) {
@@ -47,6 +48,7 @@ const MARKER_ICON: Record<MarkerKind, ReactNode> = {
   hit: <MarkerSprite name="fx-hit" />,
   miss: <MarkerSprite name="fx-miss" />,
   target: <MarkerSprite name="fx-target" />,
+  wreck: <MarkerSprite name="fx-wreck" />,
   selected: <span className="text-[11px] text-accent font-black drop-shadow">⚓</span>,
 };
 
@@ -104,6 +106,7 @@ export function Board({
   cellExtraClass,
   animateShips,
   overlay,
+  tile = "sea",
 }: {
   teams: BoardTeam[];
   exercises: BoardExercise[];
@@ -114,6 +117,7 @@ export function Board({
   cellExtraClass?: (team: BoardTeam, exercise: BoardExercise) => string;
   animateShips?: boolean;
   overlay?: ReactNode; // calque d'animations (effets de tir), positionne dans le repere du plateau
+  tile?: SeaTile; // mer agitee au placement, mer calme en arbitrage (lisibilite des marqueurs)
 }) {
   const width = LABEL_W + GAP + exercises.length * (CELL + GAP);
   const height = HEADER_H + GAP + teams.length * (CELL + GAP);
@@ -125,7 +129,7 @@ export function Board({
     <div className="overflow-auto pb-6">
       <div
         className="relative rounded-2xl border-2 border-sea/40 shadow-card"
-        style={{ width, height, backgroundImage: "url(/sprites/sea.jpg)", backgroundSize: "256px", imageRendering: "pixelated" }}
+        style={{ width, height, backgroundImage: `url(/sprites/${tile}.jpg)`, backgroundSize: "256px", imageRendering: "pixelated" }}
       >
         {/* En-tetes exercices */}
         {exercises.map((ex, i) => (
@@ -156,7 +160,8 @@ export function Board({
           </div>
         ))}
 
-        {/* Cases */}
+        {/* Cases. Une case marquee passe AU-DESSUS des navires (z 5) : sinon l'impact sur un de mes
+            propres bateaux serait masque par le sprite du bateau. */}
         {teams.map((team, ti) =>
           exercises.map((ex, ei) => {
             const { left, top } = cellPos(ti, ei);
@@ -171,10 +176,10 @@ export function Board({
                 className={`absolute rounded-md border border-white/40 bg-white/10 hover:bg-white/35 flex items-center justify-center transition-colors ${
                   kind === "selected" ? "ring-2 ring-accent bg-white/30" : ""
                 } ${cellExtraClass?.(team, ex) ?? ""}`}
-                style={{ left, top, width: CELL, height: CELL, zIndex: 2 }}
+                style={{ left, top, width: CELL, height: CELL, zIndex: kind ? 6 : 2 }}
                 aria-label={`${team.name} · ${ex.label}`}
               >
-                <span style={{ position: "relative", zIndex: 8 }}>{kind ? MARKER_ICON[kind] : null}</span>
+                <span>{kind ? MARKER_ICON[kind] : null}</span>
               </button>
             );
           })

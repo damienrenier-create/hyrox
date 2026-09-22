@@ -78,7 +78,9 @@ export function ScoreBadge({ score }: { score: number }) {
   useEffect(() => {
     const d = score - prev.current;
     prev.current = score;
-    if (d > 0) {
+    if (d !== 0) {
+      // Le score peut baisser : chaque case encore intacte de sa flotte vaut 1 point, donc
+      // encaisser un tir coute un point. On le montre plutot que de laisser le chiffre glisser.
       setDelta({ id: Date.now(), value: d });
       const t = setTimeout(() => setDelta(null), 1200);
       return () => clearTimeout(t);
@@ -100,12 +102,15 @@ export function ScoreBadge({ score }: { score: number }) {
           <motion.span
             key={delta.id}
             initial={{ y: 0, opacity: 1, scale: 0.8 }}
-            animate={{ y: -28, opacity: 0, scale: 1.4 }}
+            animate={{ y: delta.value > 0 ? -28 : 28, opacity: 0, scale: 1.4 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.1, ease: "easeOut" }}
-            className="absolute -top-1 right-0 text-accent-ink font-display font-extrabold text-base pointer-events-none"
+            className={cx(
+              "absolute -top-1 right-0 font-display font-extrabold text-base pointer-events-none",
+              delta.value > 0 ? "text-accent-ink" : "text-danger-ink"
+            )}
           >
-            +{delta.value}
+            {delta.value > 0 ? `+${delta.value}` : delta.value}
           </motion.span>
         )}
       </AnimatePresence>

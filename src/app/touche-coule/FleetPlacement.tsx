@@ -222,6 +222,7 @@ export function FleetPlacement({
           onCellClick={handleCell}
           cellExtraClass={(team, ex) => (validTargets.has(`${team.id}_${ex.id}`) ? "ring-2 ring-accent bg-accent/30" : "")}
           animateShips
+          tile="sea-foam"
         />
       </div>
     </div>

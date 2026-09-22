@@ -104,10 +104,22 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       hit: occupiedCells.has(`${s.targetTeamId}_${s.targetExerciseId}`),
     }));
   const hitsOnMyFleet = allShots.filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`)).length;
+  // Cases de MA flotte deja touchees : l'arbitre doit voir OU il encaisse, pas seulement un compteur.
+  const damagedCells = allShots
+    .filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`))
+    .map((s) => ({ teamId: s.targetTeamId, exerciseId: s.targetExerciseId }));
 
   // Classement pirate (meme calcul pour tous : greffier, carte admin, arbitres).
   const board = await buildBoardData(session.id);
   const myScore = board.referees.find((r) => r.refereeId === evaluator.id)?.score ?? 0;
+
+  // Un navire coule est revele a tout le monde (regle classique de la bataille navale) : ses cases
+  // portent une epave. Tant qu'il flotte, la flotte adverse reste invisible.
+  const sunkShipIds = new Set(board.ships.filter((s) => s.sunk).map((s) => s.id));
+  const wreckCells = allPlacements
+    .filter((p) => p.shipId && sunkShipIds.has(p.shipId))
+    .map((p) => ({ teamId: p.teamId, exerciseId: p.exerciseId }));
+  const myShipsWithState: BoardShip[] = myShips.map((s) => ({ ...s, dimmed: sunkShipIds.has(s.id) }));
   const leaderboard = board.referees.map((r) => ({ refereeId: r.refereeId, name: r.name, score: r.score, hits: r.hits, sunk: r.sunk, intact: r.intact }));
 
   return (
@@ -116,10 +128,12 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       sessionId={session.id}
       teams={teams}
       exercises={exercises}
-      myShips={myShips}
+      myShips={myShipsWithState}
       myCells={myCells}
       myShots={myShots}
       hitsOnMyFleet={hitsOnMyFleet}
+      damagedCells={damagedCells}
+      wreckCells={wreckCells}
       raceEnded={!!session.raceEndedAt}
       myScore={myScore}
       ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
