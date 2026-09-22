@@ -8,7 +8,7 @@ import { buildPyramideRecords, type RecordFilters, type RecordsResult } from "@/
 export async function pyramideRecordsAction(filters: RecordFilters): Promise<RecordsResult> {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(user.role)) {
-    return { boards: [], years: [], teamsScanned: 0, sessionsScanned: 0 };
+    return { boards: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
   }
   return buildPyramideRecords(filters);
 }

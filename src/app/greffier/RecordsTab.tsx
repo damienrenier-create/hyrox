@@ -20,15 +20,15 @@ const LABELS: Record<TeamSex | "", string> = {
 // tant que l'onglet n'est pas ouvert.
 export function RecordsTab() {
   const [sex, setSex] = useState<TeamSex | "">("");
-  const [year, setYear] = useState<number | null>(null);
+  const [grade, setGrade] = useState<number | null>(null);
   const [data, setData] = useState<RecordsResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    startTransition(async () => setData(await pyramideRecordsAction({ sex, year })));
-  }, [sex, year]);
+    startTransition(async () => setData(await pyramideRecordsAction({ sex, grade })));
+  }, [sex, grade]);
 
-  const years = data?.years ?? [];
+  const grades = data?.grades ?? [];
 
   return (
     <div className="space-y-4">
@@ -42,13 +42,13 @@ export function RecordsTab() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={ui.eyebrow}>Année</span>
-          <button type="button" onClick={() => setYear(null)} className={cx(ui.pill, year === null ? ui.pillOn : ui.pillOff)}>
+          <span className={ui.eyebrow}>Année scolaire</span>
+          <button type="button" onClick={() => setGrade(null)} className={cx(ui.pill, grade === null ? ui.pillOn : ui.pillOff)}>
             Toutes
           </button>
-          {years.map((y) => (
-            <button key={y} type="button" onClick={() => setYear(y)} className={cx(ui.pill, year === y ? ui.pillOn : ui.pillOff)}>
-              {y}
+          {grades.map((g) => (
+            <button key={g} type="button" onClick={() => setGrade(g)} className={cx(ui.pill, grade === g ? ui.pillOn : ui.pillOff)}>
+              {g === 1 ? "1res" : `${g}es`}
             </button>
           ))}
         </div>
@@ -102,7 +102,7 @@ export function RecordsTab() {
       </div>
 
       {!data && pending && <p className={ui.muted}>Lecture de toutes les séances Pyramide…</p>}
-      <button type="button" onClick={() => startTransition(async () => setData(await pyramideRecordsAction({ sex, year })))} disabled={pending} className={btn.smGhost}>
+      <button type="button" onClick={() => startTransition(async () => setData(await pyramideRecordsAction({ sex, grade })))} disabled={pending} className={btn.smGhost}>
         ↻ Recalculer
       </button>
     </div>

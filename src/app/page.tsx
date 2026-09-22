@@ -6,6 +6,8 @@ import {
   listClassesAction,
   searchStudentsAction,
   studentLoginAction,
+  firstLoginAction,
+  verifyBirthDateAction,
   StudentMatch,
 } from "./actions";
 import { Brand } from "./_components/Brand";
@@ -104,6 +106,10 @@ function StudentLogin() {
   const [selected, setSelected] = useState<StudentMatch | null>(null);
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
+  // Premiere connexion en trois temps : date de naissance verifiee, engagement sur l'honneur, code PIN.
+  const [first, setFirst] = useState<"dob" | "oath" | "pin">("dob");
+  const [dob, setDob] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -127,8 +133,21 @@ function StudentLogin() {
     setSelected(s);
     setPin("");
     setPinConfirm("");
+    setDob("");
+    setAgreed(false);
+    setFirst("dob");
     setError("");
     setStep("pin");
+  }
+
+  function checkBirthDate() {
+    if (!selected || !dob) return;
+    setError("");
+    startTransition(async () => {
+      const res = await verifyBirthDateAction(selected.id, dob);
+      if ("error" in res) setError(res.error);
+      else setFirst("oath");
+    });
   }
 
   function submitPin() {
@@ -139,7 +158,9 @@ function StudentLogin() {
     }
     setError("");
     startTransition(async () => {
-      const res = await studentLoginAction(selected.id, pin, remember);
+      const res = selected.hasPin
+        ? await studentLoginAction(selected.id, pin, remember)
+        : await firstLoginAction(selected.id, dob, agreed, pin, remember);
       if (res && "error" in res) setError(res.error);
     });
   }
@@ -237,14 +258,51 @@ function StudentLogin() {
                 className={pinInput}
               />
             </>
+          ) : first === "dob" ? (
+            <>
+              <p className={`${ui.alertInfo} mb-3`}>Première connexion. Commence par confirmer ta date de naissance.</p>
+              <label className={ui.label}>Ta date de naissance</label>
+              <input
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                onFocus={scrollIntoViewOnFocus}
+                autoFocus
+                className={`${ui.input} py-3 text-center text-lg`}
+              />
+              {error && <p className={`${ui.alertErr} mt-3`}>{error}</p>}
+              <button onClick={checkBirthDate} disabled={pending || !dob} className={`${btn.lgPrimary} w-full mt-4`}>
+                {pending ? "…" : "Vérifier"}
+              </button>
+            </>
+          ) : first === "oath" ? (
+            <>
+              <div className={`${ui.alertWarn} mb-3 text-sm leading-snug`}>
+                <b className="block mb-1">⚠️ Avant d&apos;aller plus loin</b>
+                Ce compte portera tes résultats, tes arbitrages et tes auto-évaluations toute l&apos;année. Se
+                connecter à la place de quelqu&apos;un d&apos;autre est une usurpation d&apos;identité et sera
+                <b> lourdement sanctionné</b>.
+              </div>
+              <label className="flex items-start gap-3 text-sm text-ink cursor-pointer">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className={`${ui.check} mt-0.5`} />
+                <span>
+                  Je confirme que je suis bien <b>{selected.firstName} {selected.lastName}</b> et j&apos;ai compris
+                  que toute usurpation sera sanctionnée.
+                </span>
+              </label>
+              {error && <p className={`${ui.alertErr} mt-3`}>{error}</p>}
+              <button onClick={() => { setError(""); setFirst("pin"); }} disabled={!agreed} className={`${btn.lgPrimary} w-full mt-4`}>
+                Continuer
+              </button>
+            </>
           ) : (
             <>
-              <p className={`${ui.alertInfo} mb-3`}>Première connexion — crée un code PIN à 4 chiffres que tu garderas pour la suite.</p>
+              <p className={`${ui.alertOk} mb-3`}>✅ C&apos;est bien toi. Choisis un code PIN de 4 à 8 chiffres, que tu garderas toute l&apos;année.</p>
               <label className={ui.label}>Nouveau code PIN</label>
               <input
                 type="password"
                 inputMode="numeric"
-                maxLength={6}
+                maxLength={8}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                 onFocus={scrollIntoViewOnFocus}
@@ -255,7 +313,7 @@ function StudentLogin() {
               <input
                 type="password"
                 inputMode="numeric"
-                maxLength={6}
+                maxLength={8}
                 value={pinConfirm}
                 onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ""))}
                 onFocus={scrollIntoViewOnFocus}
@@ -264,16 +322,20 @@ function StudentLogin() {
             </>
           )}
 
-          <label className="flex items-center gap-2 text-sm text-ink-2 mt-4">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className={ui.check} />
-            Se souvenir de moi (30 jours)
-          </label>
+          {(selected.hasPin || first === "pin") && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-ink-2 mt-4">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className={ui.check} />
+                Se souvenir de moi (30 jours)
+              </label>
 
-          {error && <p className={`${ui.alertErr} mt-3`}>{error}</p>}
+              {error && <p className={`${ui.alertErr} mt-3`}>{error}</p>}
 
-          <button onClick={submitPin} disabled={pending || pin.length < 4} className={`${btn.lgPrimary} w-full mt-4`}>
-            {pending ? "…" : "Entrer"}
-          </button>
+              <button onClick={submitPin} disabled={pending || pin.length < 4} className={`${btn.lgPrimary} w-full mt-4`}>
+                {pending ? "…" : "Entrer"}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

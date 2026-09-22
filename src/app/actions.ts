@@ -87,26 +87,67 @@ function hashPin(pin: string, salt: string) {
   return crypto.scryptSync(pin, salt, 32).toString("hex");
 }
 
+// La date est stockee a minuit UTC : comparer les dix premiers caracteres evite tout decalage de fuseau.
+function birthMatches(stored: unknown, given: string): boolean {
+  if (!stored || !/^\d{4}-\d{2}-\d{2}$/.test(given)) return false;
+  return String(stored).slice(0, 10) === given;
+}
+
+// Premiere connexion, etape 1 : l'eleve prouve que c'est bien lui en donnant sa date de naissance.
+// Rien n'est cree ici, et la verification est refaite a l'ecriture du code PIN : le client n'est
+// jamais cru sur parole.
+export async function verifyBirthDateAction(studentId: string, birthDate: string): Promise<{ error: string } | { ok: true }> {
+  const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  if (!user) return { error: "Élève introuvable." };
+  if (user.pinCode) return { error: "Tu as déjà un code PIN : entre-le pour te connecter." };
+  if (!user.dateOfBirth) return { error: "Ta date de naissance n'est pas enregistrée. Préviens ton professeur." };
+  if (!birthMatches(user.dateOfBirth, birthDate)) {
+    return { error: "Cette date de naissance ne correspond pas à ce nom. Vérifie, ou préviens ton professeur." };
+  }
+  return { ok: true };
+}
+
+// Premiere connexion, etape finale : date de naissance + case cochee + code PIN choisi.
+export async function firstLoginAction(
+  studentId: string,
+  birthDate: string,
+  confirmed: boolean,
+  pin: string,
+  remember = false
+): Promise<{ error: string } | void> {
+  if (!confirmed) return { error: "Tu dois cocher la case pour confirmer que c'est bien toi." };
+  if (!/^\d{4,8}$/.test(pin)) return { error: "Le code PIN doit contenir 4 à 8 chiffres." };
+
+  const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  if (!user) return { error: "Élève introuvable." };
+  if (user.pinCode) return { error: "Tu as déjà un code PIN : entre-le pour te connecter." };
+  if (!birthMatches(user.dateOfBirth, birthDate)) {
+    return { error: "Cette date de naissance ne correspond pas à ce nom." };
+  }
+
+  const salt = crypto.randomBytes(16).toString("hex");
+  await db.orm.public.User.where({ id: user.id }).update({ pinCode: `${salt}:${hashPin(pin, salt)}` });
+  await login({ id: user.id, role: "STUDENT", name: user.name, className: user.className ?? undefined }, remember);
+  redirect("/eleve");
+}
+
+// Connexions suivantes : le code PIN seul. Ne cree PLUS de code au vol — un premier acces passe
+// obligatoirement par la date de naissance et l'engagement sur l'honneur.
 export async function studentLoginAction(
   studentId: string,
   pin: string,
   remember = false
 ): Promise<{ error: string } | void> {
-  if (!/^\d{4,6}$/.test(pin)) {
-    return { error: "Le code PIN doit contenir 4 à 6 chiffres." };
+  if (!/^\d{4,8}$/.test(pin)) {
+    return { error: "Le code PIN doit contenir 4 à 8 chiffres." };
   }
 
   const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
   if (!user) return { error: "Élève introuvable." };
+  if (!user.pinCode) return { error: "Première connexion : passe par ta date de naissance." };
 
-  if (!user.pinCode) {
-    // Première connexion : on enregistre ce code comme code personnel.
-    const salt = crypto.randomBytes(16).toString("hex");
-    await db.orm.public.User.where({ id: user.id }).update({ pinCode: `${salt}:${hashPin(pin, salt)}` });
-  } else {
-    const [salt, hash] = user.pinCode.split(":");
-    if (hashPin(pin, salt) !== hash) return { error: "Code PIN incorrect." };
-  }
+  const [salt, hash] = user.pinCode.split(":");
+  if (hashPin(pin, salt) !== hash) return { error: "Code PIN incorrect." };
 
   await login(
     {

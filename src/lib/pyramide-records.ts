@@ -26,8 +26,15 @@ export type RecordEntry = {
 };
 
 export type RecordBoard = { id: string; title: string; hint: string; rows: RecordEntry[] };
-export type RecordFilters = { sex?: TeamSex | ""; year?: number | null };
-export type RecordsResult = { boards: RecordBoard[]; years: number[]; teamsScanned: number; sessionsScanned: number };
+// « annee » = le degre scolaire (1re a 6e), lu sur le premier chiffre du nom de classe (« 5GTb » -> 5).
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null };
+export type RecordsResult = { boards: RecordBoard[]; grades: number[]; teamsScanned: number; sessionsScanned: number };
+
+export function gradeOf(className: string | null | undefined): number | null {
+  const m = (className ?? "").match(/\d/);
+  const n = m ? Number(m[0]) : NaN;
+  return Number.isFinite(n) && n >= 1 && n <= 7 ? n : null;
+}
 
 const fmtMs = (ms: number) => {
   const s = Math.round(ms / 1000);
@@ -47,15 +54,15 @@ type Row = {
   apexLapMs: number | null;
   lastLapMs: number | null; // seulement si l'equipe a boucle TOUS les tours
   apexReps: number;
+  grade: number | null; // degre de l'equipe (null si ses membres melangent plusieurs degres)
 };
 
 export async function buildPyramideRecords(f: RecordFilters = {}): Promise<RecordsResult> {
   const sessions = (await db.orm.public.Session.where({ wodType: "PYRAMIDE_CLASSIQUE" }).all()).sort(
     (a, b) => toMs(b.createdAt) - toMs(a.createdAt)
   );
-  const years = [...new Set(sessions.map((s) => new Date(toMs(s.createdAt)).getFullYear()))].sort((a, b) => b - a);
-  const kept = f.year ? sessions.filter((s) => new Date(toMs(s.createdAt)).getFullYear() === f.year) : sessions;
-  if (!kept.length) return { boards: emptyBoards(), years, teamsScanned: 0, sessionsScanned: 0 };
+  const kept = sessions;
+  if (!kept.length) return { boards: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
 
   const ids = kept.map((s) => s.id);
   const [raceStates, allTeams] = await Promise.all([
@@ -148,6 +155,10 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
           sessionLabel,
           dateMs,
         },
+        grade: (() => {
+          const gs = new Set(mem.map((u) => gradeOf(u!.className)).filter((g): g is number => g !== null));
+          return gs.size === 1 ? [...gs][0] : null;
+        })(),
         medals1: (ord[t.id] ?? []).filter((m) => m && m.pos === 1).length,
         cards: cardsOf(ctx, t.id),
         finishMs: finishAt(ctx, t.id),
@@ -161,7 +172,9 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     }
   }
 
-  const pool = f.sex ? rows.filter((r) => r.base.sex === f.sex) : rows;
+  const grades = [...new Set(rows.map((r) => r.grade).filter((g): g is number => g !== null))].sort((a, b) => a - b);
+  let pool = f.sex ? rows.filter((r) => r.base.sex === f.sex) : rows;
+  if (f.grade) pool = pool.filter((r) => r.grade === f.grade);
   const apexReps = pool[0]?.apexReps ?? rows[0]?.apexReps ?? 0;
 
   const top = (
@@ -190,9 +203,6 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     top("lastLap", "🏁 Le dernier tour le plus rapide", "le sprint final, équipes arrivées au bout", (r) => r.lastLapMs, true, (v) => fmtMs(v)),
   ];
 
-  return { boards, years, teamsScanned: pool.length, sessionsScanned };
+  return { boards, grades, teamsScanned: pool.length, sessionsScanned };
 }
 
-function emptyBoards(): RecordBoard[] {
-  return [];
-}
