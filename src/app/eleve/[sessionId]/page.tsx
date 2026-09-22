@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildRaceContext, teamFinishedAtMs } from "@/lib/race-context";
 import { standings, total, finishAt, startOf, fmt, timeline } from "@/lib/wod-engines/templates/pyramide-engine";
-import { getWodEngine } from "@/lib/wod-engines";
+import { exercisesFor } from "@/lib/session-exercises";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
@@ -55,7 +55,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
 
   // Evaluations donnees par les arbitres sur MON equipe (anonymes pour l'eleve).
   const exerciseNumber: Record<string, number> = {};
-  for (const e of getWodEngine(session.wodType).exercises) exerciseNumber[e.id] = e.number;
+  for (const e of exercisesFor(session)) exerciseNumber[e.id] = e.number;
   const evals = await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
   const refereeEvals: RefereeEvalRow[] = evals
     .map((e) => ({

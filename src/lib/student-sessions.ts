@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getWodEngine } from "@/lib/wod-engines";
+import { exercisesFor } from "@/lib/session-exercises";
 
 export const WOD_LABELS: Record<string, string> = {
   PYRAMIDE_CLASSIQUE: "WOD Pyramide",
@@ -50,8 +50,8 @@ export async function sessionsForStudent(userId: string): Promise<StudentSession
   return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export function exerciseLabelsFor(wodType: string): Record<string, string> {
+export function exerciseLabelsFor(session: { wodType: string; settings?: unknown }): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const e of getWodEngine(wodType).exercises) out[e.id] = e.label;
+  for (const e of exercisesFor(session)) out[e.id] = e.label;
   return out;
 }

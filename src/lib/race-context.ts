@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getWodEngine } from "@/lib/wod-engines";
+import { exercisesFor } from "@/lib/session-exercises";
 import { elapsed, RaceContext } from "@/lib/wod-engines/templates/pyramide-engine";
 
 function toMs(v: unknown): number {
@@ -25,7 +25,7 @@ export async function buildRaceContext(sessionId: string): Promise<RaceContextBu
 
   const rawTeams = await db.orm.public.Team.where({ sessionId }).all();
   const teams = rawTeams.map((t) => ({ id: t.id, order: t.order ?? 0 })).sort((a, b) => a.order - b.order);
-  const sortedExercises = [...getWodEngine(session.wodType).exercises].sort((a, b) => a.number - b.number);
+  const sortedExercises = exercisesFor(session);
   const exercises = sortedExercises.map((e) => ({ id: e.id, number: e.number }));
   const exerciseLabels: Record<string, string> = {};
   sortedExercises.forEach((e) => { exerciseLabels[e.id] = e.label; });

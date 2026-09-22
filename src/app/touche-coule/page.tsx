@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getWodEngine } from "@/lib/wod-engines";
+import { exercisesFor } from "@/lib/session-exercises";
 import { computeRefereeScore } from "@/lib/wod-engines/core/pirate-score";
 import { refereeAccess } from "@/lib/referee-access";
 import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
@@ -63,9 +63,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     .map((t) => ({ id: t.id, name: t.name, order: t.order ?? 0 }))
     .sort((a, b) => a.order - b.order);
 
-  const exercises = [...getWodEngine(session.wodType).exercises]
-    .sort((a, b) => a.number - b.number)
-    .map((e) => ({ id: e.id, label: e.label }));
+  const exercises = exercisesFor(session).map((e) => ({ id: e.id, label: e.label }));
 
   const fleet = await db.orm.public.RefereeFleet.where({
     sessionId: session.id,

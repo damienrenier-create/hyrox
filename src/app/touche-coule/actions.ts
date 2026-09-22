@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { getWodEngine } from "@/lib/wod-engines";
+import { exercisesFor } from "@/lib/session-exercises";
 import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/wod-engines/core/fleet";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 import { refereeAccess } from "@/lib/referee-access";
@@ -24,7 +24,7 @@ async function loadContext(sessionId: string) {
   const teams = (await db.orm.public.Team.where({ sessionId }).all()) as { id: string; order: number | null }[];
   teams.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  const exercises = [...getWodEngine(session.wodType).exercises].sort((a, b) => a.number - b.number);
+  const exercises = exercisesFor(session);
 
   return { evaluator, session, teams, exercises, access };
 }
@@ -277,7 +277,7 @@ export async function generateGhostFleetsAction(
 
   const teams = (await db.orm.public.Team.where({ sessionId }).all()) as { id: string; order: number | null }[];
   teams.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const exercises = [...getWodEngine(session.wodType).exercises].sort((a, b) => a.number - b.number);
+  const exercises = exercisesFor(session);
 
   const ghost = await db.orm.public.User.where({ name: GHOST_USER_NAME }).first();
   if (!ghost) {

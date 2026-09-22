@@ -28,6 +28,7 @@ import {
 import type { RaceContextBundle } from "@/lib/race-context";
 import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
+import { SettingsPanel } from "./SettingsPanel";
 import type { PendingRequest } from "./referee-decisions";
 import {
   startRaceAction,
@@ -82,6 +83,7 @@ export function GreffierClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
 
   const isPaused = pauses.some((p) => p.to === null);
@@ -271,9 +273,14 @@ export function GreffierClient({
           </div>
           <div className="flex gap-2 flex-wrap">
             {phase === "pre" && (
-              <button onClick={handleStart} disabled={pending} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-6 py-3 rounded-xl disabled:opacity-50">
-                Début de course
-              </button>
+              <>
+                <button onClick={() => setSettingsOpen(true)} disabled={pending} className="bg-slate-200 hover:bg-slate-300 px-4 py-3 rounded-xl font-bold disabled:opacity-50">
+                  ⚙️ Réglages
+                </button>
+                <button onClick={handleStart} disabled={pending} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-6 py-3 rounded-xl disabled:opacity-50">
+                  Début de course
+                </button>
+              </>
             )}
             {phase === "run" && (
               <>
@@ -354,6 +361,17 @@ export function GreffierClient({
           <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} />
         )}
       </main>
+
+      {settingsOpen && (
+        <SettingsPanel
+          sessionId={sessionId}
+          settings={ctx.settings}
+          noStartExerciseIds={[...ctx.noStartExerciseIds]}
+          exercises={ctx.exercises.map((e) => ({ id: e.id, number: e.number, label: exerciseLabels[e.id] ?? e.id }))}
+          numTeams={ctx.teams.length}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {openTeamId && (
         <TeamPanel
