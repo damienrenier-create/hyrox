@@ -137,8 +137,9 @@ const PYR_STYLES = `
 
 // ===== Score final (bareme de Sartay) =====
 // temps du WOD (ou jusqu'a l'arret) + 1 min par carte jaune − 1 s par rep + temps supplementaire eventuel
-// − un bonus par medaille selon le RANG inscrit dedans : 1re = −5 s, 2e = −4 s … 5e = −1 s.
-export const MEDAL_BONUS_S = [0, 5, 4, 3, 2, 1]; // index = rang sur le tour (0 = hors top 5)
+// − un bonus par medaille selon le RANG inscrit dedans : 1re = −10 s, 2e = −8 s, 3e = −6 s, 4e = −4 s, 5e = −2 s.
+// Bareme double le 23/09 : recompenser plus nettement l'equipe qui boucle un tour la premiere.
+export const MEDAL_BONUS_S = [0, 10, 8, 6, 4, 2]; // index = rang sur le tour (0 = hors top 5)
 
 export type FinalScore = {
   teamId: string;
@@ -785,8 +786,8 @@ function ScoreTable({
     <div className="space-y-3">
       <p className={ui.hint}>
         Score = temps du WOD (ou jusqu&apos;à l&apos;arrêt) <b>+ 1 min</b> par carte jaune <b>− 1 s</b> par répétition
-        <b> + le temps supplémentaire</b> éventuel <b>− le bonus des médailles</b> (1<sup>re</sup> équipe d&apos;un tour : −5 s,
-        2<sup>e</sup> : −4 s, 3<sup>e</sup> : −3 s, 4<sup>e</sup> : −2 s, 5<sup>e</sup> : −1 s). Le plus petit score gagne.
+        <b> + le temps supplémentaire</b> éventuel <b>− le bonus des médailles</b> (1<sup>re</sup> équipe d&apos;un tour : −10 s,
+        2<sup>e</sup> : −8 s, 3<sup>e</sup> : −6 s, 4<sup>e</sup> : −4 s, 5<sup>e</sup> : −2 s). Le plus petit score gagne.
         {phase !== "post" && " Provisoire tant que la course n'est pas terminée."}
       </p>
       <div className={`${ui.card} overflow-auto`}>
