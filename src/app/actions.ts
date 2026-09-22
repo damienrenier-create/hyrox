@@ -10,6 +10,7 @@ export type LoginState = { error: string } | undefined;
 export async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const rawName = formData.get("name") as string;
   const password = ((formData.get("password") as string) || "").trim();
+  const remember = formData.get("remember") === "on";
 
   if (!rawName) return { error: "Le nom est requis." };
   const name = rawName.trim().toUpperCase();
@@ -32,11 +33,14 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   }
 
   // Créer la session JWT
-  await login({
-    id: `user_${Date.now()}`,
-    role,
-    name: role === "STUDENT" ? rawName.trim() : name,
-  });
+  await login(
+    {
+      id: `user_${Date.now()}`,
+      role,
+      name: role === "STUDENT" ? rawName.trim() : name,
+    },
+    remember
+  );
 
   // Redirection selon le rôle
   if (role === "MASTER_ADMIN") redirect("/admin");
@@ -71,7 +75,11 @@ function hashPin(pin: string, salt: string) {
   return crypto.scryptSync(pin, salt, 32).toString("hex");
 }
 
-export async function studentLoginAction(studentId: string, pin: string): Promise<{ error: string } | void> {
+export async function studentLoginAction(
+  studentId: string,
+  pin: string,
+  remember = false
+): Promise<{ error: string } | void> {
   if (!/^\d{4,6}$/.test(pin)) {
     return { error: "Le code PIN doit contenir 4 à 6 chiffres." };
   }
@@ -88,11 +96,14 @@ export async function studentLoginAction(studentId: string, pin: string): Promis
     if (hashPin(pin, salt) !== hash) return { error: "Code PIN incorrect." };
   }
 
-  await login({
-    id: user.id,
-    role: "STUDENT",
-    name: user.name,
-    className: user.className ?? undefined,
-  });
+  await login(
+    {
+      id: user.id,
+      role: "STUDENT",
+      name: user.name,
+      className: user.className ?? undefined,
+    },
+    remember
+  );
   redirect("/touche-coule");
 }

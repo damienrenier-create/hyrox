@@ -76,6 +76,15 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
     return () => clearInterval(t);
   }, [phase, isPaused]);
 
+  // Rafraichissement automatique des donnees (tours/cartes saisis depuis un autre appareil, ecran projete).
+  useEffect(() => {
+    if (phase !== "run") return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible" && !openTeamId && !pending) router.refresh();
+    }, 5000);
+    return () => clearInterval(t);
+  }, [phase, openTeamId, pending, router]);
+
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;
     const ref = phase === "post" ? endedAtMs! : now;

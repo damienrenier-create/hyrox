@@ -924,6 +924,13 @@
                   "kind": "scalar"
                 }
               },
+              "direction": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "fleetId": {
                 "nullable": false,
                 "type": {
@@ -1004,6 +1011,9 @@
               "fields": {
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "direction": {
+                  "column": "direction"
                 },
                 "fleetId": {
                   "column": "fleetId"
@@ -2598,6 +2608,11 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "direction": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "fleetId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3353,7 +3368,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "1d79e4d946eaa3cb14d6e306b0f0fed626dbed67f8d22d8dadc95c30771cc312"
+    "storageHash": "f2fb34c181b3f09f505bde58274900a7cb692cdcacfbe494b5c532f7be462961"
   },
   "execution": {
     "executionHash": "93fead1a290a5ca18737a40a5f0508ed5e314faf419d9e951e51d01541454b0d",

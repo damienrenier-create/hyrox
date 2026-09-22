@@ -170,6 +170,7 @@ model RefereeShip {
   fleetId         String
   size            Int
   orientation     String   // "horizontal" | "vertical"
+  direction       String?  // sens de la proue : "right" | "left" | "down" | "up" (null = ancien placement, proue a droite/en bas)
   startTeamId     String
   startExerciseId String
   createdAt       DateTime @default(now())

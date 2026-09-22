@@ -1,55 +1,69 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
-import { broadcastShot, listenToEvents, listenToRaceStatus } from "@/lib/firebase/firebase-sync";
+import { broadcastShot } from "@/lib/firebase/firebase-sync";
 import { submitEvaluationAction } from "./actions";
+import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 
-type Team = { id: string; name: string };
-type Exercise = { id: string; label: string };
+const REFRESH_MS = 5000;
+
+type Shot = { teamId: string; exerciseId: string; hit: boolean };
 
 type Props = {
   evaluator: SessionPayload;
   sessionId: string;
-  teams: Team[];
-  exercises: Exercise[];
-  myCells: string[]; // "teamId_exerciseId" des cases occupees par MA flotte (placee et verrouillee en amont)
+  teams: BoardTeam[];
+  exercises: BoardExercise[];
+  myShips: BoardShip[];
+  myCells: string[]; // "teamId_exerciseId" des cases de MA flotte (verrouillee en amont)
+  myShots: Shot[];
+  hitsOnMyFleet: number;
+  raceEnded: boolean;
   myScore: number;
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCells, myScore }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, raceEnded, myScore }: Props) {
+  const router = useRouter();
   const myCellSet = new Set(myCells);
 
-  // Modale Tir
   const [target, setTarget] = useState<{ teamId: string; exerciseId: string } | null>(null);
   const [reps, setReps] = useState<string>("");
   const [note, setNote] = useState<number | null>(null);
-
-  const [explosion, setExplosion] = useState<{ coord: string; message: string } | null>(null);
-  const [globalStatus, setGlobalStatus] = useState<"PREPARATION" | "COMBAT" | "TERMINATED">("PREPARATION");
+  const [toast, setToast] = useState<{ message: string; tone: "hit" | "miss" | "alert" } | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const [score, setScore] = useState(myScore);
+  const [localShots, setLocalShots] = useState<Shot[]>([]);
+
+  // Rafraichissement automatique (remplace Firebase) : uniquement onglet visible et hors modale.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible" && !target && !pending) router.refresh();
+    }, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [router, target, pending]);
+
+  // Alerte quand un de MES bateaux vient d'etre touche (detecte via le compteur serveur).
+  const prevHits = useRef(hitsOnMyFleet);
+  useEffect(() => {
+    if (hitsOnMyFleet > prevHits.current) {
+      showToast("💥 Un de tes bateaux vient d'être touché !", "alert");
+    }
+    prevHits.current = hitsOnMyFleet;
+  }, [hitsOnMyFleet]);
 
   useEffect(() => {
-    const unsubscribe = listenToRaceStatus(sessionId, (status) => setGlobalStatus(status as typeof globalStatus));
-    return () => unsubscribe();
-  }, [sessionId]);
+    setScore(myScore);
+    setLocalShots([]);
+  }, [myScore, myShots]);
 
-  useEffect(() => {
-    const unsubscribe = listenToEvents(sessionId, (events) => {
-      const eventKeys = Object.keys(events || {});
-      if (eventKeys.length > 0) {
-        const lastEvent = events[eventKeys[eventKeys.length - 1]];
-        if (lastEvent.type === "BOAT_HIT" && lastEvent.ownerId === evaluator.id) {
-          setExplosion({ coord: lastEvent.coord, message: `💥 Bateau touché par ${lastEvent.shooterName} !` });
-          setTimeout(() => setExplosion(null), 3000);
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, [sessionId, evaluator.id]);
+  function showToast(message: string, tone: "hit" | "miss" | "alert") {
+    setToast({ message, tone });
+    setTimeout(() => setToast(null), 2200);
+  }
 
   const handleKeypad = (num: string) => {
     if (reps.length < 3) setReps((prev) => prev + num);
@@ -69,93 +83,79 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
       }
       const coord = `${t.teamId}_${t.exerciseId}`;
       void broadcastShot(sessionId, coord, evaluator, r, n, res.hits); // diffusion live, jamais bloquante
-      if (res.hits.length > 0) {
+      const hit = res.hits.length > 0;
+      setLocalShots((prev) => [...prev, { teamId: t.teamId, exerciseId: t.exerciseId, hit }]);
+      if (hit) {
         const sunk = res.hits.some((h) => h.sunk);
         setScore((s) => s + 1 + (sunk ? 3 : 0));
-        setExplosion({ coord, message: sunk ? "💥 Bateau coulé !" : "💥 Touché !" });
-        setTimeout(() => setExplosion(null), 2000);
+        showToast(sunk ? "💥 Bateau coulé !" : "💥 Touché !", "hit");
+      } else {
+        showToast("🌊 À l'eau !", "miss");
       }
       setTarget(null);
       setReps("");
       setNote(null);
+      router.refresh();
     });
   };
 
+  const shots = [...myShots, ...localShots];
+  const markers: BoardMarker[] = shots.map((s) => ({ teamId: s.teamId, exerciseId: s.exerciseId, kind: s.hit ? "hit" : "miss" }));
+  if (target) markers.push({ teamId: target.teamId, exerciseId: target.exerciseId, kind: "target" });
+
   return (
     <div className="min-h-[100dvh] text-amber-50 font-sans flex flex-col relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0d3b4f_0%,_#062230_55%,_#03141c_100%)]">
-      <div
-        className="absolute inset-0 pointer-events-none opacity-20"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(115deg, transparent 0 18px, rgba(120,200,220,0.08) 18px 20px), repeating-linear-gradient(65deg, transparent 0 26px, rgba(120,200,220,0.06) 26px 28px)",
-        }}
-      />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] rounded-full border border-cyan-500/20 pointer-events-none opacity-20" />
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-        className="absolute top-1/2 left-1/2 w-[100vw] h-[2px] origin-left bg-gradient-to-r from-cyan-400 to-transparent opacity-20 pointer-events-none"
-      />
-
-      {explosion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-900/50 backdrop-blur-sm pointer-events-none">
+      <AnimatePresence>
+        {toast && (
           <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="text-4xl font-black text-red-100 bg-red-600 p-8 rounded-full shadow-[0_0_50px_rgba(220,38,38,1)]"
+            key={toast.message + toast.tone}
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-x-0 top-24 z-50 flex justify-center pointer-events-none"
           >
-            {explosion.message}
+            <div
+              className={`px-6 py-4 rounded-full text-xl font-black shadow-2xl ${
+                toast.tone === "hit"
+                  ? "bg-red-600 text-red-50 shadow-[0_0_40px_rgba(220,38,38,0.9)]"
+                  : toast.tone === "alert"
+                    ? "bg-amber-500 text-slate-950 shadow-[0_0_40px_rgba(245,158,11,0.9)]"
+                    : "bg-sky-700 text-sky-50 shadow-[0_0_30px_rgba(14,116,144,0.8)]"
+              }`}
+            >
+              {toast.message}
+            </div>
           </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
-      <header className="p-4 relative z-10 border-b border-amber-800/40 bg-[#062230]/80 backdrop-blur-md flex justify-between items-center">
-        <div>
+      <header className="p-4 relative z-10 border-b border-amber-800/40 bg-[#062230]/80 backdrop-blur-md flex justify-between items-center gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-black tracking-widest text-amber-300 uppercase drop-shadow-[0_0_6px_rgba(217,180,80,0.4)]">Touché-Coulé 🏴‍☠️</h1>
-          <div className="text-[10px] text-amber-200/50">Agent: {evaluator.name} | Rôle: {evaluator.role}</div>
+          <div className="text-[10px] text-amber-200/50 truncate">{evaluator.name}</div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1 bg-amber-900/30 rounded text-xs font-bold border border-amber-700 text-amber-300">
-            🏆 {score} pts
-          </div>
-          <div className="px-3 py-1 bg-cyan-900/30 rounded text-xs font-bold border border-cyan-800">
-            {globalStatus === "TERMINATED" ? "POST-WOD" : "COMBAT"}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="px-3 py-1 bg-amber-900/30 rounded text-xs font-bold border border-amber-700 text-amber-300">🏆 {score} pts</div>
+          <div className={`px-3 py-1 rounded text-xs font-bold border ${raceEnded ? "bg-slate-800 border-slate-600 text-slate-300" : "bg-emerald-900/40 border-emerald-700 text-emerald-300"}`}>
+            {raceEnded ? "POST-WOD" : "EN COURS"}
           </div>
         </div>
       </header>
 
       <main className="flex-1 p-2 relative z-10 overflow-auto flex flex-col">
-        <div className="overflow-x-auto pb-8">
-          <div className="flex gap-1 mb-1">
-            <div className="w-16 flex-shrink-0" />
-            {exercises.map((ex) => (
-              <div key={ex.id} className="w-10 text-[8px] text-amber-200/40 text-center uppercase rotate-45 origin-bottom-left h-16">{ex.label}</div>
-            ))}
-          </div>
-
-          {teams.map((team) => (
-            <div key={team.id} className="flex gap-1 mb-1">
-              <div className="w-16 flex-shrink-0 text-[10px] font-bold text-amber-200 truncate pt-2" title={team.name}>{team.name}</div>
-              {exercises.map((ex) => {
-                const coord = `${team.id}_${ex.id}`;
-                const isOwnBoat = myCellSet.has(coord);
-                const canShoot = !isOwnBoat;
-
-                return (
-                  <button
-                    key={coord}
-                    disabled={isOwnBoat}
-                    onClick={() => { if (canShoot) setTarget({ teamId: team.id, exerciseId: ex.id }); }}
-                    className={`w-10 h-10 flex-shrink-0 border border-cyan-900/40 rounded flex items-center justify-center transition-all duration-200 relative overflow-hidden ${isOwnBoat ? "bg-gradient-to-br from-[#8B5A2B] to-[#4A2C10] border-[#3a2208] cursor-not-allowed" : "bg-[#0a2a38]/50 hover:bg-[#0d3b4f]"}`}
-                  >
-                    {target?.teamId === team.id && target?.exerciseId === ex.id && "🎯"}
-                    {isOwnBoat && <span className="text-[9px] opacity-60">🏴‍☠️</span>}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+        <p className="text-[11px] text-amber-100/60 px-1 mb-1">Touche une case (équipe × exercice) pour évaluer, puis tirer. Tes bateaux sont affichés, les autres restent cachés.</p>
+        <Board
+          teams={teams}
+          exercises={exercises}
+          ships={myShips}
+          markers={markers}
+          onCellClick={(team, ex) => {
+            if (pending || myCellSet.has(`${team.id}_${ex.id}`)) return;
+            setTarget({ teamId: team.id, exerciseId: ex.id });
+          }}
+          isCellDisabled={(team, ex) => myCellSet.has(`${team.id}_${ex.id}`)}
+          cellExtraClass={(team, ex) => (myCellSet.has(`${team.id}_${ex.id}`) ? "cursor-not-allowed" : "")}
+        />
       </main>
 
       <AnimatePresence>
@@ -168,7 +168,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
           >
             <div className="flex justify-between items-center mb-4 px-2">
               <div className="text-cyan-300 font-bold text-sm">
-                Cible : <span className="text-white">{teams.find(t => t.id === target.teamId)?.name}</span> / <span className="text-white">{exercises.find(e => e.id === target.exerciseId)?.label}</span>
+                Cible : <span className="text-white">{teams.find((t) => t.id === target.teamId)?.name}</span> / <span className="text-white">{exercises.find((e) => e.id === target.exerciseId)?.label}</span>
               </div>
               <button onClick={() => setTarget(null)} className="text-red-400 text-sm font-black bg-red-900/20 px-3 py-1 rounded-full">X ANNULER</button>
             </div>
@@ -179,7 +179,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
                 <div className="text-4xl font-black text-cyan-400">{reps || "0"}</div>
               </div>
               <div className="flex-[2] grid grid-cols-5 gap-1">
-                {[{l:'TI',v:-1, c:'text-red-500'}, {l:'I',v:0, c:'text-orange-500'}, {l:'S',v:3, c:'text-yellow-500'}, {l:'B',v:4, c:'text-green-400'}, {l:'TB',v:5, c:'text-emerald-400'}].map(n => (
+                {[{ l: "TI", v: -1, c: "text-red-500" }, { l: "I", v: 0, c: "text-orange-500" }, { l: "S", v: 3, c: "text-yellow-500" }, { l: "B", v: 4, c: "text-green-400" }, { l: "TB", v: 5, c: "text-emerald-400" }].map((n) => (
                   <button
                     key={n.l}
                     onClick={() => setNote(n.v)}
@@ -192,7 +192,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
             </div>
 
             <div className="grid grid-cols-4 gap-2 mb-4">
-              {[1,2,3,4,5,6,7,8,9,0].map(num => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
                 <button key={num} onClick={() => handleKeypad(num.toString())} className="bg-slate-800 hover:bg-slate-700 py-3 rounded-xl text-xl font-black text-white shadow-sm transition-colors">{num}</button>
               ))}
               <button onClick={() => setReps("")} className="bg-slate-900 border border-red-900/50 py-3 rounded-xl text-red-500 font-black col-span-2 shadow-sm">EFFACER</button>

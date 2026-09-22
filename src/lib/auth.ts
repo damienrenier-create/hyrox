@@ -11,11 +11,15 @@ export type SessionPayload = {
   className?: string;
 };
 
-export async function encrypt(payload: SessionPayload) {
+const SHORT_SESSION = "24h";
+const LONG_SESSION = "30d";
+const LONG_SESSION_SECONDS = 30 * 24 * 60 * 60;
+
+export async function encrypt(payload: SessionPayload, remember = false) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("24h")
+    .setExpirationTime(remember ? LONG_SESSION : SHORT_SESSION)
     .sign(key);
 }
 
@@ -26,13 +30,15 @@ export async function decrypt(input: string): Promise<SessionPayload> {
   return payload as SessionPayload;
 }
 
-export async function login(payload: SessionPayload) {
-  const session = await encrypt(payload);
+// remember = "se souvenir de moi" : cookie persistant 30 jours au lieu d'une session de 24h
+export async function login(payload: SessionPayload, remember = false) {
+  const session = await encrypt(payload, remember);
   (await cookies()).set("session", session, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
+    ...(remember ? { maxAge: LONG_SESSION_SECONDS } : {}),
   });
 }
 

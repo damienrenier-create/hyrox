@@ -5,6 +5,7 @@ import { getWodEngine } from "@/lib/wod-engines";
 import { computeRefereeScore } from "@/lib/wod-engines/core/pirate-score";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
+import type { BoardShip } from "./Board";
 
 export default async function ToucheCoulePage() {
   const evaluator = await getSession();
@@ -44,31 +45,37 @@ export default async function ToucheCoulePage() {
     refereeId: evaluator.id,
     slot: 0,
   }).first();
-  const ships = fleet ? await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).all() : [];
+  const rawShips = fleet ? await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).all() : [];
+  const myShips: BoardShip[] = rawShips.map((s) => ({
+    id: s.id,
+    size: s.size,
+    orientation: s.orientation as "horizontal" | "vertical",
+    direction: (s.direction as BoardShip["direction"]) ?? null,
+    startTeamId: s.startTeamId,
+    startExerciseId: s.startExerciseId,
+  }));
 
   if (!fleet || fleet.status !== "LOCKED") {
-    return (
-      <FleetPlacement
-        evaluator={evaluator}
-        sessionId={session.id}
-        teams={teams}
-        exercises={exercises}
-        ships={ships.map((s) => ({
-          id: s.id,
-          size: s.size,
-          orientation: s.orientation as "horizontal" | "vertical",
-          startTeamId: s.startTeamId,
-          startExerciseId: s.startExerciseId,
-        }))}
-      />
-    );
+    return <FleetPlacement evaluator={evaluator} sessionId={session.id} teams={teams} exercises={exercises} ships={myShips} />;
   }
 
-  const myShipIds = new Set(ships.map((s) => s.id));
+  const myShipIds = new Set(rawShips.map((s) => s.id));
   const allPlacements = await db.orm.public.BoatPlacement.where({ sessionId: session.id }).all();
+  const occupiedCells = new Set(allPlacements.filter((p) => p.shipId).map((p) => `${p.teamId}_${p.exerciseId}`));
   const myCells = allPlacements
     .filter((p) => p.shipId && myShipIds.has(p.shipId))
     .map((p) => `${p.teamId}_${p.exerciseId}`);
+  const myCellSet = new Set(myCells);
+
+  const allShots = await db.orm.public.Shot.where({ sessionId: session.id }).all();
+  const myShots = allShots
+    .filter((s) => s.refereeId === evaluator.id)
+    .map((s) => ({
+      teamId: s.targetTeamId,
+      exerciseId: s.targetExerciseId,
+      hit: occupiedCells.has(`${s.targetTeamId}_${s.targetExerciseId}`),
+    }));
+  const hitsOnMyFleet = allShots.filter((s) => myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`)).length;
 
   const myScore = await computeRefereeScore(session.id, evaluator.id);
 
@@ -78,7 +85,11 @@ export default async function ToucheCoulePage() {
       sessionId={session.id}
       teams={teams}
       exercises={exercises}
+      myShips={myShips}
       myCells={myCells}
+      myShots={myShots}
+      hitsOnMyFleet={hitsOnMyFleet}
+      raceEnded={!!session.raceEndedAt}
       myScore={myScore}
     />
   );

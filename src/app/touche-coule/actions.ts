@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { getWodEngine } from "@/lib/wod-engines";
 import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/wod-engines/core/fleet";
 
+export type Direction = "right" | "left" | "down" | "up";
+
 async function loadContext(sessionId: string) {
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
@@ -21,25 +23,69 @@ async function loadContext(sessionId: string) {
   return { evaluator, session, teams, exercises };
 }
 
+// Inventaire restant = flotte de reference moins les tailles deja posees (multiset).
+function remainingSizes(spec: readonly number[], placed: number[]): number[] {
+  const rest = [...spec];
+  for (const s of placed) {
+    const i = rest.indexOf(s);
+    if (i !== -1) rest.splice(i, 1);
+  }
+  return rest;
+}
+
+export type PlaceShipResult =
+  | { error: string }
+  | { ok: true; shipId: string; size: number; orientation: Orientation; direction: Direction; startTeamId: string; startExerciseId: string };
+
+// Placement en deux touches : premiere case = poupe, derniere case = proue.
+// La taille est deduite de la distance ; la direction (sens de la proue) est conservee pour l'affichage.
 export async function placeShipAction(
   sessionId: string,
-  orientation: Orientation,
-  startTeamId: string,
-  startExerciseId: string
-): Promise<{ error: string } | { ok: true }> {
+  fromTeamId: string,
+  fromExerciseId: string,
+  toTeamId: string,
+  toExerciseId: string
+): Promise<PlaceShipResult> {
   const { evaluator, teams, exercises } = await loadContext(sessionId);
 
   const existingFleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
   if (existingFleet?.status === "LOCKED") return { error: "Ta flotte est déjà verrouillée." };
 
-  const spec = fleetFor(teams.length, exercises.length);
-  const placedShips = existingFleet
-    ? await db.orm.public.RefereeShip.where({ fleetId: existingFleet.id }).all()
-    : [];
-  const shipIndex = placedShips.length;
-  if (shipIndex >= spec.length) return { error: "Ta flotte est déjà complète." };
-  const size = spec[shipIndex];
+  const tFrom = teams.findIndex((t) => t.id === fromTeamId);
+  const eFrom = exercises.findIndex((e) => e.id === fromExerciseId);
+  const tTo = teams.findIndex((t) => t.id === toTeamId);
+  const eTo = exercises.findIndex((e) => e.id === toExerciseId);
+  if (tFrom === -1 || eFrom === -1 || tTo === -1 || eTo === -1) return { error: "Case inconnue." };
 
+  let orientation: Orientation;
+  let direction: Direction;
+  let size: number;
+  if (tFrom === tTo) {
+    orientation = "horizontal";
+    size = Math.abs(eTo - eFrom) + 1;
+    direction = eTo >= eFrom ? "right" : "left";
+  } else if (eFrom === eTo) {
+    orientation = "vertical";
+    size = Math.abs(tTo - tFrom) + 1;
+    direction = tTo >= tFrom ? "down" : "up";
+  } else {
+    return { error: "Les deux cases doivent être sur la même ligne ou la même colonne (pas de diagonale)." };
+  }
+
+  const spec = fleetFor(teams.length, exercises.length);
+  const placedShips = existingFleet ? await db.orm.public.RefereeShip.where({ fleetId: existingFleet.id }).all() : [];
+  const remaining = remainingSizes(spec, placedShips.map((s) => s.size));
+  if (!remaining.includes(size)) {
+    return {
+      error: remaining.length
+        ? `Aucun navire de ${size} case${size > 1 ? "s" : ""} disponible. Il reste : ${remaining.join(" · ")}.`
+        : "Ta flotte est déjà complète.",
+    };
+  }
+
+  // Point de depart canonique (index le plus petit) : computeCells etend vers la droite / le bas.
+  const startTeamId = teams[Math.min(tFrom, tTo)].id;
+  const startExerciseId = exercises[Math.min(eFrom, eTo)].id;
   const cells = computeCells(teams, exercises, size, orientation, startTeamId, startExerciseId);
   if (!cells) return { error: "Ce placement dépasse la grille." };
 
@@ -49,6 +95,7 @@ export async function placeShipAction(
     return { error: "Un autre navire occupe déjà une de ces cases." };
   }
 
+  let shipId = "";
   await db.transaction(async (tx) => {
     const fleet =
       existingFleet ??
@@ -58,9 +105,11 @@ export async function placeShipAction(
       fleetId: fleet.id,
       size,
       orientation,
+      direction,
       startTeamId,
       startExerciseId,
     });
+    shipId = ship.id;
 
     for (const cell of cells) {
       await tx.orm.public.BoatPlacement.create({
@@ -73,21 +122,22 @@ export async function placeShipAction(
     }
   });
 
-  return { ok: true };
+  return { ok: true, shipId, size, orientation, direction, startTeamId, startExerciseId };
 }
 
-export async function undoLastShipAction(sessionId: string): Promise<{ error: string } | { ok: true }> {
+// Supprime n'importe quel navire de SA flotte tant qu'elle n'est pas verrouillee (la taille revient dans l'inventaire).
+export async function deleteShipAction(sessionId: string, shipId: string): Promise<{ error: string } | { ok: true }> {
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
 
   const fleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
-  if (!fleet || fleet.status === "LOCKED") return { error: "Rien à annuler." };
+  if (!fleet) return { error: "Aucune flotte." };
+  if (fleet.status === "LOCKED") return { error: "Flotte verrouillée : impossible de modifier." };
 
-  const ships = await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).orderBy((s) => s.createdAt.asc()).all();
-  if (!ships.length) return { error: "Rien à annuler." };
+  const ship = await db.orm.public.RefereeShip.where({ id: shipId }).first();
+  if (!ship || ship.fleetId !== fleet.id) return { error: "Ce navire n'est pas dans ta flotte." };
 
-  const last = ships[ships.length - 1];
-  await db.orm.public.RefereeShip.where({ id: last.id }).delete(); // cascade sur BoatPlacement
+  await db.orm.public.RefereeShip.where({ id: ship.id }).delete(); // cascade sur BoatPlacement
   return { ok: true };
 }
 
@@ -100,8 +150,9 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
 
   const spec = fleetFor(teams.length, exercises.length);
   const ships = await db.orm.public.RefereeShip.where({ fleetId: fleet.id }).all();
-  if (ships.length < spec.length) {
-    return { error: `Il manque ${spec.length - ships.length} navire(s) avant de verrouiller.` };
+  const remaining = remainingSizes(spec, ships.map((s) => s.size));
+  if (remaining.length) {
+    return { error: `Il manque encore : ${remaining.join(" · ")} (taille des navires à placer).` };
   }
 
   await db.orm.public.RefereeFleet
@@ -254,6 +305,7 @@ export async function generateGhostFleetsAction(
           fleetId: fleet.id,
           size: s.size,
           orientation: s.orientation,
+          direction: s.orientation === "horizontal" ? (Math.random() < 0.5 ? "right" : "left") : Math.random() < 0.5 ? "down" : "up",
           startTeamId: s.startTeamId,
           startExerciseId: s.startExerciseId,
         });

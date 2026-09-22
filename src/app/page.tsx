@@ -74,6 +74,10 @@ function AdminLogin() {
           className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition-colors"
         />
       </div>
+      <label className="flex items-center gap-2 text-sm text-neutral-400">
+        <input type="checkbox" name="remember" className="w-4 h-4 accent-yellow-500" />
+        Se souvenir de moi (30 jours)
+      </label>
       {state?.error && <p className="text-red-400 text-sm">{state.error}</p>}
       <button
         type="submit"
@@ -99,6 +103,7 @@ function StudentLogin() {
   const [selected, setSelected] = useState<StudentMatch | null>(null);
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -133,7 +138,7 @@ function StudentLogin() {
     }
     setError("");
     startTransition(async () => {
-      const res = await studentLoginAction(selected.id, pin);
+      const res = await studentLoginAction(selected.id, pin, remember);
       if (res && "error" in res) setError(res.error);
     });
   }
@@ -257,6 +262,11 @@ function StudentLogin() {
               />
             </>
           )}
+
+          <label className="flex items-center gap-2 text-sm text-neutral-400 mt-4">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-4 h-4 accent-yellow-500" />
+            Se souvenir de moi (30 jours)
+          </label>
 
           {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 

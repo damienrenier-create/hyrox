@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.refereeShip.direction",
+    "label": "Add column \"direction\" to \"refereeShip\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "direction",
+        "table": "refereeShip"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"direction\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "refereeShip",
+          "direction"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"direction\"",
+        "sql": "ALTER TABLE \"public\".\"refereeShip\" ADD COLUMN \"direction\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"direction\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "refereeShip",
+          "direction"
+        ]
+      }
+    ]
+  }
+]
