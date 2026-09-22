@@ -13,8 +13,8 @@ export default function LoginPage() {
   const [tab, setTab] = useState<"eleve" | "admin">("eleve");
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-8 shadow-2xl">
+    <div className="min-h-[100dvh] bg-neutral-950 flex flex-col items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-8 shadow-2xl my-auto">
         <div className="text-center mb-6">
           <h1 className="text-4xl font-black text-white italic tracking-tighter">
             HYROX <span className="text-yellow-500">WOD</span>
@@ -84,6 +84,10 @@ function AdminLogin() {
       </button>
     </form>
   );
+}
+
+function scrollIntoViewOnFocus(e: React.FocusEvent<HTMLInputElement>) {
+  setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
 }
 
 function StudentLogin() {
@@ -220,6 +224,8 @@ function StudentLogin() {
                 maxLength={6}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                onFocus={scrollIntoViewOnFocus}
+                autoFocus
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl"
               />
             </>
@@ -235,6 +241,8 @@ function StudentLogin() {
                 maxLength={6}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                onFocus={scrollIntoViewOnFocus}
+                autoFocus
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl mb-3"
               />
               <label className="block text-sm font-medium text-neutral-300 mb-2">Confirme le code</label>
@@ -244,6 +252,7 @@ function StudentLogin() {
                 maxLength={6}
                 value={pinConfirm}
                 onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ""))}
+                onFocus={scrollIntoViewOnFocus}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-white outline-none focus:border-yellow-500 tracking-[0.5em] text-center text-xl"
               />
             </>
