@@ -58,35 +58,42 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const board = session.refereeMode ? await buildBoardData(session.id) : null;
 
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
-  const rawTeams = await db.orm.public.Team.where({ sessionId: session.id }).all();
+  // Les eleves sont charges UNE fois (une requete) et les membres de toutes les equipes en parallele :
+  // la page greffier est re-rendue a chaque rafraichissement, elle doit rester legere.
+  const [rawTeams, students, refereeRows, classes] = await Promise.all([
+    db.orm.public.Team.where({ sessionId: session.id }).all(),
+    db.orm.public.User.where({ role: "STUDENT" }).all(),
+    db.orm.public.SessionReferee.where({ sessionId: session.id }).orderBy((r) => r.createdAt.asc()).all(),
+    getSessionClasses(session.id),
+  ]);
+  const studentById = new Map(students.map((u) => [u.id, u]));
+  const sortedTeams = [...rawTeams].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const membersByTeam = await Promise.all(sortedTeams.map((t) => db.orm.public.TeamMember.where({ teamId: t.id }).all()));
   const teamsWithMembers: TeamWithMembers[] = [];
   const teamOfStudent = new Map<string, string>();
-  for (const t of [...rawTeams].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-    const members = await db.orm.public.TeamMember.where({ teamId: t.id }).all();
+  sortedTeams.forEach((t, i) => {
     const views: TeamWithMembers["members"] = [];
-    for (const m of members) {
-      const u = await db.orm.public.User.where({ id: m.userId }).first();
+    for (const m of membersByTeam[i]) {
+      const u = studentById.get(m.userId);
       if (u) {
         views.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null });
         teamOfStudent.set(u.id, t.name);
       }
     }
-    views.sort((a, b) => a.lastName.localeCompare(b.lastName));
+    views.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
     teamsWithMembers.push({ id: t.id, name: t.name, order: t.order ?? 0, members: views });
-  }
+  });
 
-  const refereeRows = await db.orm.public.SessionReferee.where({ sessionId: session.id }).orderBy((r) => r.createdAt.asc()).all();
   const referees: RefereeView[] = [];
   for (const r of refereeRows) {
-    const u = await db.orm.public.User.where({ id: r.userId }).first();
+    const u = studentById.get(r.userId) ?? (await db.orm.public.User.where({ id: r.userId }).first());
     if (u) referees.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, note: r.note ?? null, status: r.status, teamName: teamOfStudent.get(u.id) ?? null });
   }
   const pendingRequests: PendingRequest[] = referees
     .filter((r) => r.status === "PENDING")
     .map((r) => ({ userId: r.id, name: `${r.firstName} ${r.lastName}`.trim(), className: r.className, note: r.note, teamName: r.teamName, since: 0 }));
 
-  const classes = await getSessionClasses(session.id);
-  const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
+  const allClasses = [...new Set(students.map((u) => u.className).filter((c): c is string => !!c))].sort();
 
   // Chaque seance-type a son greffier : Fete Foraine (ateliers + corde + Finisher) ou Pyramide (tours).
   if (session.wodType === "FETE_FORAINE") {

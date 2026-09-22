@@ -50,25 +50,30 @@ export async function searchAllStudentsAction(query: string, classes: string[] =
 
 // ===== Membres d'equipe : un eleve = une seule equipe par seance, persiste par identifiant =====
 
-export async function addTeamMemberAction(teamId: string, userId: string): Promise<{ error: string } | { ok: true }> {
+export type MemberView = { id: string; firstName: string; lastName: string; className: string | null };
+
+// Renvoie la fiche du membre pour que l'ecran se mette a jour SANS re-rendu serveur (le greffier encode
+// vite, une equipe apres l'autre : l'eleve doit apparaitre au tap).
+export async function addTeamMemberAction(teamId: string, userId: string): Promise<{ error: string } | { ok: true; member: MemberView }> {
   await requireGreffier();
   const team = await db.orm.public.Team.where({ id: teamId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const student = await db.orm.public.User.where({ id: userId }).first();
   if (!student || student.role !== "STUDENT") return { error: "Élève introuvable." };
+  const member: MemberView = { id: student.id, firstName: student.firstName ?? "", lastName: student.lastName ?? "", className: student.className ?? null };
 
   const sessionTeams = await db.orm.public.Team.where({ sessionId: team.sessionId }).all();
   const teamIds = new Set(sessionTeams.map((t) => t.id));
   const memberships = await db.orm.public.TeamMember.where({ userId }).all();
   const existing = memberships.find((m) => teamIds.has(m.teamId));
   if (existing) {
-    if (existing.teamId === teamId) return { ok: true };
+    if (existing.teamId === teamId) return { ok: true, member };
     const other = sessionTeams.find((t) => t.id === existing.teamId);
     return { error: `${student.firstName} ${student.lastName} est déjà dans ${other?.name ?? "une autre équipe"}.` };
   }
 
   await db.orm.public.TeamMember.create({ teamId, userId });
-  return { ok: true };
+  return { ok: true, member };
 }
 
 export async function removeTeamMemberAction(teamId: string, userId: string): Promise<{ ok: true }> {
@@ -81,20 +86,23 @@ export async function removeTeamMemberAction(teamId: string, userId: string): Pr
 // ===== Arbitres encodes par le greffier (pendant tout le WOD : DNF, blessure...) =====
 
 // Encodage direct par le greffier = autorise d'office (APPROVED). Motif obligatoire.
-export async function addRefereeAction(sessionId: string, userId: string, note?: string): Promise<{ error: string } | { ok: true }> {
+export type RefereeAdded = MemberView & { note: string | null; status: string };
+
+export async function addRefereeAction(sessionId: string, userId: string, note?: string): Promise<{ error: string } | { ok: true; referee: RefereeAdded }> {
   const who = await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) return { error: "Séance introuvable." };
   const student = await db.orm.public.User.where({ id: userId }).first();
   if (!student || student.role !== "STUDENT") return { error: "Élève introuvable." };
   if (!note || !(REFEREE_REASONS as readonly string[]).includes(note)) return { error: "Indique le motif (blessé, abandon, pas de tenue…)." };
+  const referee: RefereeAdded = { id: student.id, firstName: student.firstName ?? "", lastName: student.lastName ?? "", className: student.className ?? null, note, status: "APPROVED" };
   const existing = await db.orm.public.SessionReferee.where({ sessionId, userId }).first();
   if (existing) {
     await db.orm.public.SessionReferee.where({ id: existing.id }).update({ note, status: "APPROVED", decidedBy: who.name, decidedAt: Temporal.Now.instant() });
-    return { ok: true };
+    return { ok: true, referee };
   }
   await db.orm.public.SessionReferee.create({ sessionId, userId, note, status: "APPROVED", decidedBy: who.name, decidedAt: Temporal.Now.instant() });
-  return { ok: true };
+  return { ok: true, referee };
 }
 
 export async function removeRefereeAction(sessionId: string, userId: string): Promise<{ ok: true }> {

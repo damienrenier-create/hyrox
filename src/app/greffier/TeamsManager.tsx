@@ -31,12 +31,27 @@ type Props = {
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
 // (saisie intelligente restreinte a ces classes), 3) arbitres (motif obligatoire) — modifiable pendant tout
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
-export function TeamsManager({ sessionId, teams, classes, allClasses, referees, phase }: Props) {
+const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+
+  // Etat LOCAL mis a jour au tap (ajout / retrait / decision) : l'ecran ne depend plus du re-rendu serveur
+  // de toute la page greffier (des dizaines de requetes), qui n'est relance qu'en arriere-plan, groupe.
+  const [teams, setTeams] = useState(propTeams);
+  const [referees, setReferees] = useState(propReferees);
+  useEffect(() => setTeams(propTeams), [propTeams]);
+  useEffect(() => setReferees(propReferees), [propReferees]);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function scheduleRefresh() {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => router.refresh(), 2000);
+  }
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
 
   const assigned = new Map<string, string>(); // studentId -> teamName
   teams.forEach((t) => t.members.forEach((m) => assigned.set(m.id, t.name)));
@@ -62,24 +77,31 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
 
   function removeMember(teamId: string, userId: string) {
     setError("");
+    setTeams((ts) => ts.map((t) => (t.id === teamId ? { ...t, members: t.members.filter((m) => m.id !== userId) } : t)));
     startTransition(async () => {
       await removeTeamMemberAction(teamId, userId);
-      router.refresh();
+      scheduleRefresh();
     });
   }
   function removeReferee(userId: string) {
     setError("");
+    setReferees((rs) => rs.filter((r) => r.id !== userId));
     startTransition(async () => {
       await removeRefereeAction(sessionId, userId);
-      router.refresh();
+      scheduleRefresh();
     });
   }
   function decide(userId: string, decision: "APPROVED" | "REFUSED") {
     setError("");
+    setReferees((rs) => rs.map((r) => (r.id === userId ? { ...r, status: decision } : r)));
     startTransition(async () => {
       const res = await decideRefereeAction(sessionId, userId, decision);
-      if ("error" in res) setError(res.error);
-      router.refresh();
+      if ("error" in res) {
+        setError(res.error);
+        router.refresh();
+        return;
+      }
+      scheduleRefresh();
     });
   }
 
@@ -214,7 +236,10 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
           }}
           onPick={async (h) => {
             const res = await addTeamMemberAction(active.id, h.id);
-            return "error" in res ? res.error : null;
+            if ("error" in res) return res.error;
+            setTeams((ts) => ts.map((t) => (t.id === active.id ? { ...t, members: [...t.members.filter((m) => m.id !== res.member.id), res.member].sort(byLastName) } : t)));
+            scheduleRefresh();
+            return null;
           }}
         />
       )}
@@ -238,7 +263,11 @@ export function TeamsManager({ sessionId, teams, classes, allClasses, referees, 
           }}
           onPick={async (h, note) => {
             const res = await addRefereeAction(sessionId, h.id, note);
-            return "error" in res ? res.error : null;
+            if ("error" in res) return res.error;
+            const added: RefereeView = { ...res.referee, teamName: assigned.get(h.id) ?? null };
+            setReferees((rs) => [...rs.filter((r) => r.id !== added.id), added]);
+            scheduleRefresh();
+            return null;
           }}
         />
       )}
@@ -261,7 +290,6 @@ function StudentPicker({
   onPick: (h: StudentHit, note?: string) => Promise<string | null>;
   withNote?: boolean;
 }) {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<StudentHit[]>([]);
   const [note, setNote] = useState<string>(REFEREE_REASONS[0]);
@@ -300,7 +328,6 @@ function StudentPicker({
       }
       setQuery("");
       setHits([]);
-      router.refresh();
       setTimeout(() => inputRef.current?.focus(), 50);
     });
   }
