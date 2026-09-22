@@ -99,10 +99,12 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
     });
   }
 
-  async function handleStart() {
-    await startRaceAction(sessionId);
-    await setRaceStatus(sessionId, "COMBAT");
-    refresh();
+  function handleStart() {
+    run(async () => {
+      const res = await startRaceAction(sessionId);
+      if (!("error" in res)) void setRaceStatus(sessionId, "COMBAT"); // diffusion live, jamais bloquante
+      return res;
+    });
   }
   function handlePause() {
     run(() => togglePauseAction(sessionId));
@@ -122,12 +124,17 @@ export function GreffierClient({ sessionId, bundle }: { sessionId: string; bundl
   function handleUndo() {
     run(() => undoLastAction(sessionId));
   }
-  async function handleFinish() {
+  function handleFinish() {
     if (!confirm("Terminer le WOD ? Les évaluations en cours seront closes (fiabilité calculée) et la séance clôturée.")) return;
-    await setRaceStatus(sessionId, "TERMINATED");
+    setError("");
     startTransition(async () => {
-      await finishRaceAction(sessionId);
-      refresh();
+      try {
+        await finishRaceAction(sessionId);
+        void setRaceStatus(sessionId, "TERMINATED"); // diffusion live, jamais bloquante
+        refresh();
+      } catch (e) {
+        setError("Impossible de terminer la course : " + (e instanceof Error ? e.message : String(e)));
+      }
     });
   }
 

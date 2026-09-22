@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SessionPayload } from "@/lib/auth";
-import { broadcastShot, listenToEvents } from "@/lib/firebase/firebase-sync";
+import { broadcastShot, listenToEvents, listenToRaceStatus } from "@/lib/firebase/firebase-sync";
 import { submitEvaluationAction } from "./actions";
 
 type Team = { id: string; name: string };
@@ -33,15 +33,8 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
   const [score, setScore] = useState(myScore);
 
   useEffect(() => {
-    import("firebase/database").then(({ ref, onValue, getDatabase }) => {
-      const db = getDatabase();
-      const statusRef = ref(db, `sessions/${sessionId}/status`);
-      const unsubscribe = onValue(statusRef, (snapshot) => {
-        const val = snapshot.val();
-        if (val) setGlobalStatus(val);
-      });
-      return () => unsubscribe();
-    });
+    const unsubscribe = listenToRaceStatus(sessionId, (status) => setGlobalStatus(status as typeof globalStatus));
+    return () => unsubscribe();
   }, [sessionId]);
 
   useEffect(() => {
@@ -75,7 +68,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myCe
         return;
       }
       const coord = `${t.teamId}_${t.exerciseId}`;
-      await broadcastShot(sessionId, coord, evaluator, r, n, res.hits);
+      void broadcastShot(sessionId, coord, evaluator, r, n, res.hits); // diffusion live, jamais bloquante
       if (res.hits.length > 0) {
         const sunk = res.hits.some((h) => h.sunk);
         setScore((s) => s + 1 + (sunk ? 3 : 0));
