@@ -2,8 +2,9 @@ import { db } from "@/lib/db";
 import { isScheduled, toMs } from "@/lib/scheduling";
 
 // Remise a zero et nettoyage des donnees de test.
-// Regle absolue : on ne touche JAMAIS a la programmation (cycles, seances-types, creneaux horaires) ni a la
-// liste des eleves. Les suppressions respectent l'ordre des cles etrangeres, et `.delete()` ne supprimant
+// Regle absolue : on ne touche JAMAIS a la liste des eleves. La programmation (cycles, seances-types,
+// creneaux) est gardee par defaut et ne part QUE sur `resetProgramme`, une remise a blanc avant lancement.
+// Les suppressions respectent l'ordre des cles etrangeres, et `.delete()` ne supprimant
 // qu'une ligne a la fois, chaque lot est parcouru.
 
 async function deleteAll<T extends { id: string }>(rows: T[], del: (id: string) => Promise<unknown>) {
@@ -178,14 +179,21 @@ export type PurgeOptions = {
   sessionIds: string[]; // seances a supprimer entierement
   resetPins?: boolean; // remettre les codes PIN a zero (chaque eleve en recreera un a sa prochaine connexion)
   resetReliability?: boolean;
+  resetProgramme?: boolean; // remise a blanc AVANT un lancement : cycles, seances-types et creneaux partent aussi
 };
-export type PurgeResult = { sessions: number; rows: number; pins: number; reliability: number };
+export type PurgeResult = { sessions: number; rows: number; pins: number; reliability: number; cycles: number; plans: number; slots: number };
 
 export async function purge(opts: PurgeOptions): Promise<PurgeResult> {
-  const res: PurgeResult = { sessions: 0, rows: 0, pins: 0, reliability: 0 };
+  const res: PurgeResult = { sessions: 0, rows: 0, pins: 0, reliability: 0, cycles: 0, plans: 0, slots: 0 };
   for (const id of opts.sessionIds) {
     res.rows += await deleteSession(id);
     res.sessions++;
+  }
+  // La programmation part APRES les seances, qui la referencent.
+  if (opts.resetProgramme) {
+    res.plans = await deleteAll(await db.orm.public.CyclePlan.where({}).all(), (id) => db.orm.public.CyclePlan.where({ id }).delete());
+    res.cycles = await deleteAll(await db.orm.public.Cycle.where({}).all(), (id) => db.orm.public.Cycle.where({ id }).delete());
+    res.slots = await deleteAll(await db.orm.public.ClassSlot.where({}).all(), (id) => db.orm.public.ClassSlot.where({ id }).delete());
   }
   if (opts.resetPins) {
     const withPin = (await db.orm.public.User.where({ role: "STUDENT" }).all()).filter((u) => u.pinCode);

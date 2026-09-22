@@ -16,13 +16,16 @@ export type PurgeRow = {
 
 // Grand menage : rien ne part tant que la phrase n'est pas tapee exactement. Les seances programmees
 // ou ouvertes ne sont jamais cochees d'avance — il faut aller les decocher... pardon, les cocher soi-meme.
-export function PurgeForm({ rows, pinCount, reliabilityCount }: { rows: PurgeRow[]; pinCount: number; reliabilityCount: number }) {
+export function PurgeForm({ rows, pinCount, reliabilityCount, programme }: { rows: PurgeRow[]; pinCount: number; reliabilityCount: number; programme: string }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(rows.filter((r) => !r.protectedReason).map((r) => r.id)));
   const [pins, setPins] = useState(true);
   const [rel, setRel] = useState(true);
+  // Jamais coche d'avance : effacer la programmation est une remise a blanc avant un lancement,
+  // pas un menage de fin de test.
+  const [prog, setProg] = useState(false);
   const [phrase, setPhrase] = useState("");
 
-  const ready = phrase.trim().toUpperCase() === CLEANUP_PHRASE && (picked.size > 0 || pins || rel);
+  const ready = phrase.trim().toUpperCase() === CLEANUP_PHRASE && (picked.size > 0 || pins || rel || prog);
   const toggle = (id: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -94,6 +97,23 @@ export function PurgeForm({ rows, pinCount, reliabilityCount }: { rows: PurgeRow
           </span>
         </label>
       </div>
+
+      <label className={cx("flex items-start gap-3 rounded-xl border p-3 cursor-pointer", prog ? "bg-danger-soft border-danger/40" : "bg-paper border-line")}>
+        <input type="checkbox" name="resetProgramme" checked={prog} onChange={(e) => setProg(e.target.checked)} className={`${ui.check} mt-0.5`} />
+        <span>
+          <span className="block font-bold text-sm">🧨 Effacer aussi la programmation <span className="font-normal text-ink-3">({programme})</span></span>
+          <span className={ui.hint}>
+            Remise à blanc avant un lancement : cycles, séances-types et créneaux horaires disparaissent, et plus aucune
+            séance ne s&apos;ouvrira toute seule tant que tu n&apos;auras pas tout ressaisi. Les élèves, eux, restent.
+          </span>
+        </span>
+      </label>
+
+      {prog && (
+        <p className={ui.alertErr}>
+          ⚠️ Avec cette case, l&apos;application repart de zéro : aucun cycle, aucune séance de la semaine, aucun horaire.
+        </p>
+      )}
 
       {risky.length > 0 && (
         <p className={ui.alertWarn}>

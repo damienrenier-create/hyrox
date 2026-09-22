@@ -68,8 +68,11 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
 
         {/* ===== Ce qui ne bouge jamais ===== */}
         <section className={`${ui.cardPad} border-success/40`}>
-          <h2 className={`${ui.h2} mb-1`}>🔒 Jamais supprimé</h2>
-          <p className={`${ui.hint} mb-3`}>Aucun outil de cette page ne touche à ta programmation ni à tes élèves.</p>
+          <h2 className={`${ui.h2} mb-1`}>🔒 Ce qui reste</h2>
+          <p className={`${ui.hint} mb-3`}>
+            Les élèves ne sont JAMAIS supprimés. La programmation est gardée par défaut, sauf si tu coches la remise à
+            blanc tout en bas.
+          </p>
           <ul className="grid sm:grid-cols-2 gap-2 text-sm">
             <li className={`${ui.inset} p-3`}>
               <b>Cycles ({inv.kept.cycles.length})</b>
@@ -81,11 +84,13 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
             </li>
             <li className={`${ui.inset} p-3`}>
               <b>Créneaux horaires ({inv.kept.slots})</b>
-              <span className="block text-ink-2 text-xs">Les ouvertures automatiques continueront exactement pareil.</span>
+              <span className="block text-ink-2 text-xs">Les ouvertures automatiques continueront exactement pareil, sauf remise à blanc.</span>
             </li>
-            <li className={`${ui.inset} p-3`}>
+            <li className={`${ui.inset} p-3 border-success/50`}>
               <b>Élèves ({inv.kept.students})</b>
-              <span className="block text-ink-2 text-xs">Noms, classes et comptes conservés. Seul le code PIN peut être remis à zéro, au choix.</span>
+              <span className="block text-ink-2 text-xs">
+                Noms, classes, dates de naissance et comptes conservés dans tous les cas. Seul le code PIN peut être remis à zéro.
+              </span>
             </li>
           </ul>
         </section>
@@ -157,10 +162,15 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
             auto-évaluations. Les séances <b>programmées</b> ou <b>ouvertes</b> ne sont jamais cochées d&apos;avance : coche-les seulement si tu
             veux vraiment les perdre. Mot de passe du ménage : <b className="text-danger-ink tracking-wider">{CLEANUP_PHRASE}</b>
           </p>
-          {rows.length === 0 && !inv.pinCount && !inv.reliabilityCount ? (
-            <p className={ui.muted}>La base est déjà propre.</p>
+          {rows.length === 0 && !inv.pinCount && !inv.reliabilityCount && !inv.kept.cycles.length && !inv.kept.plans.length && !inv.kept.slots ? (
+            <p className={ui.muted}>La base est déjà vierge : aucune séance, aucun code PIN, aucune programmation.</p>
           ) : (
-            <PurgeForm rows={rows} pinCount={inv.pinCount} reliabilityCount={inv.reliabilityCount} />
+            <PurgeForm
+              rows={rows}
+              pinCount={inv.pinCount}
+              reliabilityCount={inv.reliabilityCount}
+              programme={`${inv.kept.cycles.length} cycle(s), ${inv.kept.plans.length} séance(s)-type, ${inv.kept.slots} créneau(x)`}
+            />
           )}
         </section>
       </main>

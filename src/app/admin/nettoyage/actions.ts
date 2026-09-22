@@ -57,13 +57,17 @@ export async function purgeAction(fd: FormData) {
   const sessionIds = fd.getAll("session").map(String).filter(Boolean);
   const resetPins = fd.get("resetPins") === "on";
   const resetReliability = fd.get("resetReliability") === "on";
-  if (!sessionIds.length && !resetPins && !resetReliability) fail("Rien n'était coché : rien n'a été supprimé.");
+  const resetProgramme = fd.get("resetProgramme") === "on";
+  if (!sessionIds.length && !resetPins && !resetReliability && !resetProgramme) fail("Rien n'était coché : rien n'a été supprimé.");
 
-  const res = await purge({ sessionIds, resetPins, resetReliability });
+  const res = await purge({ sessionIds, resetPins, resetReliability, resetProgramme });
   const bits = [
     res.sessions ? `${res.sessions} séance${res.sessions > 1 ? "s" : ""} supprimée${res.sessions > 1 ? "s" : ""} (${res.rows} lignes)` : "",
     res.pins ? `${res.pins} code${res.pins > 1 ? "s" : ""} PIN remis à zéro` : "",
     res.reliability ? `fiabilité remise à zéro pour ${res.reliability} élève${res.reliability > 1 ? "s" : ""}` : "",
+    res.cycles || res.plans || res.slots
+      ? `programmation effacée (${res.cycles} cycle(s), ${res.plans} séance(s)-type, ${res.slots} créneau(x))`
+      : "",
   ].filter(Boolean);
-  done(`${bits.join(" · ")}. Cycles, séances-types, créneaux horaires et liste des élèves intacts.`);
+  done(`${bits.join(" · ")}. ${resetProgramme ? "L'application est repartie de zéro." : "Cycles, séances-types et créneaux horaires intacts."} La liste des élèves et leurs dates de naissance sont conservées dans tous les cas.`);
 }
