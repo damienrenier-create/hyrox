@@ -233,7 +233,17 @@ export function GreffierClient({
   const tl = useMemo(() => timeline(ctx), [ctx]);
   const ord = useMemo(() => medalOrder(ctx), [ctx]);
   const membersByTeam = useMemo(() => new Map(teamsWithMembers.map((t) => [t.id, t.members])), [teamsWithMembers]);
-  const startByTeam = useMemo(() => Object.fromEntries(ctx.teams.map((t) => [t.id, exerciseLabels[startOf(ctx, t).id] ?? ""])), [ctx, exerciseLabels]);
+  // Atelier de depart de chaque equipe : annonce aux eleves pendant l'encodage (ecran projete).
+  const startByTeam = useMemo(
+    () =>
+      Object.fromEntries(
+        ctx.teams.map((t) => {
+          const st = startOf(ctx, t);
+          return [t.id, { number: st.number, label: exerciseLabels[st.id] ?? "" }];
+        })
+      ),
+    [ctx, exerciseLabels]
+  );
   const finishedCount = useMemo(() => ctx.teams.filter((t) => finishAt(ctx, t.id) !== null).length, [ctx]);
   const T = total(ctx.settings);
 

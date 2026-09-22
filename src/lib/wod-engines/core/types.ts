@@ -30,6 +30,8 @@ export interface WodTemplate {
   id: string;
   name: string;
   exercises: { id: string; label: string; number: number }[];
+  // Ateliers ou PERSONNE ne commence (NOSTART du fichier d'origine) : le round-robin des departs les saute.
+  noStartExerciseIds?: string[];
   
   // Calcul du score à partir de l'état
   calculateScores(

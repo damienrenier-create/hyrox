@@ -18,6 +18,10 @@ export const PyramideClassique: WodTemplate = {
     { id: "ex12", label: "Commando jambes", number: 12 }
   ],
 
+  // « var NOSTART = { "Hélicoptère":1, "Corde à sauter":1 } » du fichier d'origine : personne ne demarre
+  // sur ces deux ateliers, le round-robin des departs les saute (ex5 et ex11).
+  noStartExerciseIds: ["ex5", "ex11"],
+
   calculateScores(teams: TeamState[], startTime: number, unitMs: number, mode: "avg" | "sum"): WodEngineResult {
     const result: WodEngineResult = {
       teamScores: {},

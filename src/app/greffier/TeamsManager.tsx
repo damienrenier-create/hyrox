@@ -26,7 +26,7 @@ type Props = {
   allClasses: string[];
   referees: RefereeView[];
   phase: "pre" | "run" | "post";
-  startByTeam?: Record<string, string>; // Pyramide : atelier de depart de chaque equipe (a annoncer aux eleves)
+  startByTeam?: Record<string, { number: number; label: string }>; // Pyramide : atelier de depart, annonce aux eleves
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -159,21 +159,25 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
               className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
               <div className="flex justify-between items-center mb-1">
-                <span className="font-display font-bold">{team.name}</span>
+                <span className="font-display font-bold text-lg">{team.name}</span>
                 <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
                   {team.members.length} élève{team.members.length > 1 ? "s" : ""}
                 </span>
               </div>
-              {startByTeam?.[team.id] && (
-                <p className="text-xs font-bold text-accent-ink bg-accent/25 rounded-md px-1.5 py-0.5 mb-1 truncate">→ Départ : {startByTeam[team.id]}</p>
+              {/* L'ecran est projete : l'atelier de depart doit se lire depuis le fond de la salle. */}
+              {startByTeam?.[team.id]?.label && (
+                <p className="flex items-baseline gap-1.5 bg-accent/30 border border-accent rounded-lg px-2 py-1 mb-1.5">
+                  <span className="font-display font-extrabold text-xl text-ink tabular-nums">{startByTeam[team.id].number}</span>
+                  <span className="font-bold text-base text-ink truncate">{startByTeam[team.id].label}</span>
+                </p>
               )}
               {team.members.length === 0 ? (
-                <p className="text-xs text-ink-3 italic">Aucun élève encodé</p>
+                <p className="text-sm text-ink-3 italic">Aucun élève encodé</p>
               ) : (
-                <ul className="text-xs text-ink-2 space-y-0.5">
+                <ul className="text-base text-ink-2 space-y-0.5 leading-snug">
                   {team.members.map((m) => (
                     <li key={m.id} className="truncate">
-                      <span className="text-ink">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
+                      <span className="text-ink font-semibold">{m.firstName} {m.lastName}</span>
                       {approvedIds.has(m.id) && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>arbitre</span>}
                     </li>
                   ))}
@@ -225,7 +229,8 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
       {active && (
         <StudentPicker
-          title={startByTeam?.[active.id] ? `${active.name} · départ : ${startByTeam[active.id]}` : active.name}
+          title={active.name}
+          start={startByTeam?.[active.id] ?? null}
           classes={classes}
           onClose={() => setActiveTeamId(null)}
           nextLabel={activeIndex >= 0 && activeIndex < teams.length - 1 ? `${teams[activeIndex + 1].name} →` : null}
@@ -281,9 +286,10 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
 // Modale de saisie intelligente : recherche (prefixe prenom/nom) restreinte aux classes choisies.
 function StudentPicker({
-  title, classes, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote,
+  title, start = null, classes, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote,
 }: {
   title: string;
+  start?: { number: number; label: string } | null; // atelier de depart, annonce en grand aux eleves
   classes: string[];
   onClose: () => void;
   nextLabel: string | null;
@@ -338,14 +344,25 @@ function StudentPicker({
 
   return (
     <div className={ui.backdrop} onClick={onClose}>
-      <div className={`${ui.sheet} sm:max-w-md`} onClick={(e) => e.stopPropagation()}>
+      <div className={`${ui.sheet} sm:max-w-2xl`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3 gap-2">
-          <h3 className={ui.h2}>{title}</h3>
+          <h3 className="font-display font-extrabold text-3xl text-ink">{title}</h3>
           <div className="flex items-center gap-2">
             {nextLabel && <button onClick={onNext} className={btn.smSoft}>{nextLabel}</button>}
             <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
           </div>
         </div>
+
+        {/* Ecran projete : les eleves de l'equipe lisent d'ici leur atelier de depart. */}
+        {start?.label && (
+          <div className="bg-accent border-2 border-accent rounded-2xl px-4 py-3 mb-4 flex items-center gap-4">
+            <div className="font-display font-extrabold text-5xl text-ink tabular-nums leading-none">{start.number}</div>
+            <div className="min-w-0">
+              <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink/70">Vous commencez à l&apos;atelier</div>
+              <div className="font-display font-extrabold text-2xl text-ink leading-tight truncate">{start.label}</div>
+            </div>
+          </div>
+        )}
 
         {withNote && (
           <div className="mb-3">
@@ -400,13 +417,15 @@ function StudentPicker({
         )}
         {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Aucun élève trouvé.</p>}
 
-        <p className={`${ui.label} mt-4`}>Déjà dans {title.startsWith("Ajouter") ? "la liste" : title}</p>
+        <p className={`${ui.label} mt-4`}>Déjà dans {title.startsWith("Ajouter") ? "la liste" : title} ({list.length})</p>
         <ul className="divide-y divide-line border border-line rounded-xl">
-          {list.length === 0 && <li className="p-2 text-sm text-ink-3 italic">Personne pour l&apos;instant.</li>}
+          {list.length === 0 && <li className="p-3 text-base text-ink-3 italic">Personne pour l&apos;instant.</li>}
           {list.map((m) => (
-            <li key={m.id} className="flex items-center justify-between p-2 text-sm">
-              <span>
-                <span className="font-bold">{m.firstName} {m.lastName}</span> <span className="text-ink-3">· {m.className ?? "?"}</span>
+            <li key={m.id} className="flex items-center justify-between gap-2 p-3">
+              <span className="min-w-0">
+                {/* Les eleves cherchent leur nom sur l'ecran projete : il doit etre gros. */}
+                <span className="font-display font-bold text-xl text-ink">{m.firstName} {m.lastName}</span>
+                <span className="text-ink-3 text-sm"> · {m.className ?? "?"}</span>
                 {m.tag && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{m.tag}</span>}
               </span>
               <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>

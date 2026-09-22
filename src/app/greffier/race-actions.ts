@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
+import { getWodEngine } from "@/lib/wod-engines";
 
 async function requireGreffierAccess(sessionId: string) {
   const user = await getSession();
@@ -16,10 +17,21 @@ function toMs(v: unknown): number {
 }
 
 export async function ensureRaceStateAction(sessionId: string): Promise<string> {
-  await requireGreffierAccess(sessionId);
+  const { session } = await requireGreffierAccess(sessionId);
+  // Ateliers ou personne ne commence : valeur par defaut du WOD (Pyramide : Helicoptere et Corde a sauter).
+  const noStart = getWodEngine(session.wodType).noStartExerciseIds ?? [];
+
   const existing = await db.orm.public.RaceState.where({ sessionId }).first();
-  if (existing) return existing.id;
-  const created = await db.orm.public.RaceState.create({ sessionId });
+  if (existing) {
+    // Seance pas encore lancee et liste jamais renseignee : on applique le defaut du WOD (rattrapage des
+    // seances creees avant que ce reglage existe). Une course demarree n'est jamais modifiee.
+    const current = (existing.noStartExerciseIds as string[] | null) ?? [];
+    if (!existing.startedAt && current.length === 0 && noStart.length > 0) {
+      await db.orm.public.RaceState.where({ id: existing.id }).update({ noStartExerciseIds: noStart });
+    }
+    return existing.id;
+  }
+  const created = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: noStart });
   return created.id;
 }
 
