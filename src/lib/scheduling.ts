@@ -1,7 +1,7 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { readSessionClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, readSessionClasses } from "@/lib/session-roles";
 import { groupSlots, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -122,7 +122,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         startMin: g.startMin,
         endMin: g.endMin,
         startsAtMs: toMs(instantAtBrussels(dateKey, g.startMin).toString()),
-        classes: g.classes.map((c) => c.className).sort().slice(0, 5),
+        classes: g.classes.map((c) => c.className).sort().slice(0, MAX_CLASSES),
         teacherId: g.teacherId,
         teacherName: g.teacherId ? names.get(g.teacherId) ?? null : null,
         cycleId: p.cycleId,
@@ -223,7 +223,7 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
       const session = await openSession({
         wodType: p.wodType,
         label: p.label,
-        classes: g.classes.map((c) => c.className).sort().slice(0, 5),
+        classes: g.classes.map((c) => c.className).sort().slice(0, MAX_CLASSES),
         numTeams: p.numTeams,
         refereeMode: p.refereeMode,
         cycleId: p.cycleId,

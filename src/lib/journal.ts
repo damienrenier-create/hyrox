@@ -1,19 +1,63 @@
 // Journal de classe : l'horaire hebdomadaire d'UN prof (lundi-vendredi, heure de Bruxelles), fait de creneaux
-// (`ClassSlot`) qui lui appartiennent. Meme prof + meme debut + meme fin = un « groupe » : jusqu'a 5 classes
-// qui feront une seule seance commune, ouverte automatiquement a l'heure dite (voir src/lib/scheduling.ts).
+// (`ClassSlot`) qui lui appartiennent. Meme prof + meme debut + meme fin = un « groupe » : jusqu'a MAX_CLASSES
+// classes qui feront une seule seance commune, ouverte automatiquement a l'heure dite (voir src/lib/scheduling.ts).
 // Module PUR (aucun acces base) : partage par le serveur, les actions et le composant client de la grille.
 
 import { MAX_CLASSES } from "@/lib/session-roles";
 
 export const WEEKDAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-
-// Grille affichee : de 08:00 a 17:00 par pas de 30 min. Les heures reelles d'un creneau restent libres
-// (08:25, 10:15…) : la grille sert a poser, l'editeur du creneau sert a ajuster a la minute.
-export const DAY_START = 8 * 60;
-export const DAY_END = 17 * 60;
-export const STEP = 30;
-export const DEFAULT_DURATION = 100; // deux periodes de 50 min, comme les formulaires de la console (08:00-09:40)
 export const MAX_SLOT_CLASSES = MAX_CLASSES;
+
+// ===== Grille horaire de l'ecole =====
+// Deduite de l'horaire de DAMZER (23/09/2026) : 8 periodes de 50 min, deux petites recres (09:55-10:10 et
+// 14:20-14:35) et le temps de midi (12:40-13:30). Un cours = 2 periodes ; quand la recre tombe entre les deux,
+// le creneau l'enjambe (09:05-11:00) : la seance reste ouverte pendant la recre.
+export type Period = { id: string; start: number; end: number };
+export const PERIOD_MIN = 50;
+export const PERIODS: Period[] = [
+  { id: "P1", start: 8 * 60 + 15, end: 9 * 60 + 5 },
+  { id: "P2", start: 9 * 60 + 5, end: 9 * 60 + 55 },
+  { id: "P3", start: 10 * 60 + 10, end: 11 * 60 },
+  { id: "P4", start: 11 * 60, end: 11 * 60 + 50 },
+  { id: "P5", start: 11 * 60 + 50, end: 12 * 60 + 40 },
+  { id: "P6", start: 13 * 60 + 30, end: 14 * 60 + 20 },
+  { id: "P7", start: 14 * 60 + 35, end: 15 * 60 + 25 },
+  { id: "P8", start: 15 * 60 + 25, end: 16 * 60 + 15 },
+];
+export const DAY_START = PERIODS[0].start;
+export const DAY_END = PERIODS[PERIODS.length - 1].end;
+export const DEFAULT_PERIODS = 2; // un cours = 2 x 50 min
+export const LUNCH_GAP_MIN = 20; // au-dela de 20 min entre deux periodes, c'est le temps de midi : un cours ne l'enjambe pas
+
+// Pauses entre deux periodes (recre ou midi), pour dessiner la grille.
+export type Break = { start: number; end: number; label: string };
+export const BREAKS: Break[] = PERIODS.slice(1)
+  .map((p, i) => ({ start: PERIODS[i].end, end: p.start, label: p.start - PERIODS[i].end > LUNCH_GAP_MIN ? "midi" : "récré" }))
+  .filter((b) => b.end > b.start);
+
+// Indice de la periode qui contient cette minute (debut inclus, fin exclue), -1 hors periode.
+export function periodIndexAt(min: number): number {
+  return PERIODS.findIndex((p) => p.start <= min && min < p.end);
+}
+
+// Fin d'un creneau de n periodes qui commence a startMin : on enchaine les periodes suivantes en incluant les
+// petites recres, jamais le temps de midi. Hors grille (heure libre) : n x 50 min.
+export function slotEndFor(startMin: number, nPeriods: number): number {
+  const n = Math.max(1, Math.floor(nPeriods));
+  const i = periodIndexAt(startMin);
+  if (i === -1) return startMin + n * PERIOD_MIN;
+  let end = PERIODS[i].end;
+  for (let k = 1; k < n && i + k < PERIODS.length; k++) {
+    if (PERIODS[i + k].start - PERIODS[i + k - 1].end > LUNCH_GAP_MIN) break;
+    end = PERIODS[i + k].end;
+  }
+  return end;
+}
+
+// Nombre de periodes couvertes par [startMin, endMin) : celles dont le debut tombe dans l'intervalle.
+export function periodsCovered(startMin: number, endMin: number): number {
+  return PERIODS.filter((p) => p.start >= startMin && p.start < endMin).length;
+}
 
 export type SlotRow = {
   id: string;
@@ -76,7 +120,10 @@ export function groupSlots(rows: SlotRow[]): SlotGroup[] {
 // Libelle d'un groupe de classes tel qu'on le lit dans le journal : « 5GTb + 6GTa ».
 export const groupLabel = (classes: string[]) => [...classes].sort((a, b) => a.localeCompare(b, "fr", { numeric: true })).join(" + ");
 
-// Minutes totales de cours par semaine (chaque groupe compte une fois, quel que soit son nombre de classes).
+// Minutes de cours par semaine : les periodes couvertes (les recres enjambees ne comptent pas), sinon la duree brute.
 export function weeklyMinutes(groups: SlotGroup[]): number {
-  return groups.reduce((n, g) => n + (g.endMin - g.startMin), 0);
+  return groups.reduce((n, g) => {
+    const p = periodsCovered(g.startMin, g.endMin);
+    return n + (p > 0 ? p * PERIOD_MIN : g.endMin - g.startMin);
+  }, 0);
 }

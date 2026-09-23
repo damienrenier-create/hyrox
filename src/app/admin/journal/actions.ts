@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { DEFAULT_DURATION, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, overlaps, type SlotRow } from "@/lib/journal";
+import { DEFAULT_PERIODS, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, overlaps, periodsCovered, slotEndFor, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
 // Actions du journal de classe. Chaque prof (ADMIN) ne modifie que le sien ; DAMZER (MASTER_ADMIN) les modifie
@@ -72,7 +72,8 @@ async function conflictFor(
 }
 
 // Pose une classe a une heure de depart. Si le prof a deja un creneau qui contient cette minute, la classe
-// s'y ajoute (memes heures, meme seance-type) ; sinon un nouveau creneau de 100 min est cree.
+// s'y ajoute (memes heures, meme seance-type) ; sinon un nouveau creneau est cree : `endMin` s'il est donne,
+// sinon deux periodes de la grille (la petite recre entre les deux est enjambee, jamais le temps de midi).
 export async function placeClassAction(input: { teacherId: string; weekday: number; startMin: number; className: string; endMin?: number | null }): Promise<JournalResult> {
   try {
     const { teacherId, weekday } = input;
@@ -95,7 +96,7 @@ export async function placeClassAction(input: { teacherId: string; weekday: numb
       planId = group.find((r) => r.planId)?.planId ?? null;
     } else {
       startMin = input.startMin;
-      endMin = input.endMin ?? Math.min(startMin + DEFAULT_DURATION, MINUTES_IN_DAY);
+      endMin = input.endMin ?? slotEndFor(startMin, DEFAULT_PERIODS);
     }
     const bad = validTimes(startMin, endMin);
     if (bad) return { error: bad };
@@ -111,7 +112,7 @@ export async function placeClassAction(input: { teacherId: string; weekday: numb
 }
 
 // Deplace UNE classe vers une autre case : dans un creneau existant du prof (elle s'y ajoute) ou vers une
-// heure libre (elle garde sa duree).
+// heure libre (elle garde son nombre de periodes ; hors grille, sa duree brute).
 export async function moveClassAction(input: { slotId: string; weekday: number; startMin: number }): Promise<JournalResult> {
   try {
     const row = (await db.orm.public.ClassSlot.where({ id: input.slotId }).first()) as SlotRow | null;
@@ -135,7 +136,8 @@ export async function moveClassAction(input: { slotId: string; weekday: number; 
       planId = group.find((r) => r.planId)?.planId ?? null;
     } else {
       startMin = input.startMin;
-      endMin = startMin + (row.endMin - row.startMin);
+      const n = periodsCovered(row.startMin, row.endMin);
+      endMin = n > 0 ? slotEndFor(startMin, n) : startMin + (row.endMin - row.startMin);
     }
     if (input.weekday === row.weekday && startMin === row.startMin && endMin === row.endMin) return { ok: true };
     const bad = validTimes(startMin, endMin);
@@ -182,7 +184,7 @@ export async function setSlotTimesAction(input: GroupRef & { newStart: number; n
     if (input.newStart === input.startMin && input.newEnd === input.endMin) return { ok: true };
 
     const ids = new Set(group.map((r) => r.id));
-    // Fusion avec un creneau du prof qui aurait deja exactement ces heures : pas plus de 5 classes au total.
+    // Fusion avec un creneau du prof qui aurait deja exactement ces heures : pas plus de MAX classes au total.
     const twin = rows.filter((r) => !ids.has(r.id) && r.teacherId === input.teacherId && r.weekday === input.weekday && r.startMin === input.newStart && r.endMin === input.newEnd);
     if (twin.length + group.length > MAX_SLOT_CLASSES) return { error: `En fusionnant avec ton créneau ${fmtMin(input.newStart)}–${fmtMin(input.newEnd)}, tu dépasserais ${MAX_SLOT_CLASSES} classes.` };
     const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.newStart, input.newEnd, group.map((r) => r.className), ids);

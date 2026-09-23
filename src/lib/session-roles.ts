@@ -1,5 +1,6 @@
 // Constantes partagees client/serveur pour la preparation d'une seance par le greffier.
-export const MAX_CLASSES = 5;
+// 6 depuis le 23/09 : les groupes AC Sport de DAMZER (2Ce, 2Cf, 2Cg, 2Sb, 2Sd, 2Se) comptent six classes.
+export const MAX_CLASSES = 6;
 
 // Motif obligatoire pour arbitrer : un eleve qui arbitre au lieu de jouer dit pourquoi.
 export const REFEREE_REASONS = ["Blessé(e)", "Abandon (DNF)", "Pas de tenue", "Sanctionné(e)", "Autre"] as const;
