@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { openSession, parseHHMM, upcomingSessions, currentCycleAndPlan, instantAtBrussels } from "@/lib/scheduling";
+import { openSession, parseHHMM, upcomingSessions, instantAtBrussels } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { getWodEngine } from "@/lib/wod-engines";
 
@@ -130,32 +130,10 @@ export async function deletePlanAction(formData: FormData) {
   done();
 }
 
-// ===== Horaires des classes =====
-
-export async function addSlotAction(formData: FormData) {
-  await requireStaff();
-  const className = str(formData, "className");
-  const weekday = int(formData, "weekday", 0);
-  const startMin = parseHHMM(str(formData, "start"));
-  const endMin = parseHHMM(str(formData, "end"));
-  if (!className) fail("Classe requise.");
-  if (weekday < 1 || weekday > 5) fail("Jour invalide (lundi à vendredi).");
-  if (startMin === null || endMin === null) fail("Heures invalides (format HH:MM).");
-  if (endMin <= startMin) fail("L'heure de fin doit être après le début.");
-  await db.orm.public.ClassSlot.create({ className, weekday, startMin, endMin });
-  done();
-}
-
-export async function deleteSlotAction(formData: FormData) {
-  await requireMaster();
-  await db.orm.public.ClassSlot.where({ id: str(formData, "id") }).delete();
-  done();
-}
-
 // ===== Ouverture / fermeture manuelle =====
 
 export async function openSessionAction(formData: FormData) {
-  await requireStaff();
+  const user = await requireStaff();
   const planId = str(formData, "planId");
   const classes = formData.getAll("classes").map(String).filter(Boolean);
   const hours = Math.min(12, Math.max(1, int(formData, "hours", 3)));
@@ -202,6 +180,7 @@ export async function openSessionAction(formData: FormData) {
     refereeMode,
     cycleId,
     planId: planId || null,
+    teacherId: user.id, // celui qui ouvre la tient
     opensAt,
     closesAt: closesAtPlanned ?? Temporal.Now.instant().add({ hours }),
     autoOpened: false,
@@ -242,8 +221,9 @@ export async function prepareSessionAction(formData: FormData) {
     classes: slot.classes,
     numTeams: slot.numTeams,
     refereeMode: slot.refereeMode,
-    cycleId: (await currentCycleAndPlan()).cycle?.id ?? null,
+    cycleId: slot.cycleId,
     planId: slot.planId,
+    teacherId: slot.teacherId,
     opensAt: instantAtBrussels(slot.dateKey, slot.startMin),
     closesAt: instantAtBrussels(slot.dateKey, slot.endMin),
     slotKey: slot.slotKey,

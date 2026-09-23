@@ -2,27 +2,17 @@ import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
 import { readSessionClasses } from "@/lib/session-roles";
+import { groupSlots, type SlotGroup, type SlotRow } from "@/lib/journal";
+import { teacherNameById } from "@/lib/staff";
 
 type Instant = TemporalNS.Instant;
 
 export const TZ = "Europe/Brussels";
-export const WEEKDAYS = ["", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+// Aides pures (jours, HH:MM) : elles vivent dans journal.ts pour etre importables cote client ; re-exportees ici.
+export { WEEKDAYS, fmtMin, parseHHMM } from "@/lib/journal";
 
 export function toMs(v: unknown): number {
   return new Date(String(v)).getTime();
-}
-
-export function fmtMin(min: number): string {
-  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-}
-
-export function parseHHMM(s: string): number | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
-  if (!m) return null;
-  const h = Number(m[1]);
-  const mm = Number(m[2]);
-  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
-  return h * 60 + mm;
 }
 
 // Heure de Bruxelles (Vercel tourne en UTC) : jour de semaine 1=lundi..7=dimanche, minutes depuis minuit, date ISO.
@@ -64,6 +54,24 @@ export async function listOpenSessions() {
   return open;
 }
 
+// Cle d'ouverture automatique : une seule seance par (date, prof, seance-type, debut, fin). Le prof en fait
+// partie depuis le journal de classe : deux profs qui donnent cours a la meme heure ont chacun leur seance.
+export function slotKeyFor(dateKey: string, teacherId: string | null, planId: string, startMin: number, endMin: number): string {
+  return `${dateKey}_${teacherId ?? "global"}_${planId}_${startMin}_${endMin}`;
+}
+
+type PlanRow = { id: string; cycleId: string; label: string; wodType: string; numTeams: number; refereeMode: boolean };
+
+// La seance-type d'un groupe : celle imposee sur le creneau si elle existe encore, sinon la seance de la semaine.
+function planOf(g: SlotGroup, planById: Map<string, PlanRow>, weekly: PlanRow | null): PlanRow | null {
+  return (g.planId && planById.get(g.planId)) || weekly;
+}
+
+async function allPlansById(): Promise<Map<string, PlanRow>> {
+  const plans = await db.orm.public.CyclePlan.where({}).all();
+  return new Map(plans.map((p) => [p.id, p as PlanRow]));
+}
+
 export type UpcomingSlot = {
   slotKey: string;
   dateKey: string; // AAAA-MM-JJ (Bruxelles)
@@ -72,6 +80,9 @@ export type UpcomingSlot = {
   endMin: number;
   startsAtMs: number;
   classes: string[];
+  teacherId: string | null;
+  teacherName: string | null;
+  cycleId: string;
   planId: string;
   planLabel: string;
   wodType: string;
@@ -80,14 +91,15 @@ export type UpcomingSlot = {
   sessionId: string | null; // deja preparee ?
 };
 
-// Les prochains creneaux de classe (lundi-vendredi) pour la seance de la semaine du cycle en cours,
-// dans l'ordre chronologique. Meme regroupement que l'ouverture automatique : deux classes sur le meme
-// creneau = une seule seance. Sert a anticiper (preparer les equipes et les reglages avant l'heure).
-export async function upcomingSessions(limit = 10, daysAhead = 21): Promise<UpcomingSlot[]> {
-  const { cycle, plan } = await currentCycleAndPlan();
-  if (!cycle || !plan) return [];
-  const slots = await db.orm.public.ClassSlot.where({}).all();
+// Les prochains creneaux (lundi-vendredi) de tous les journaux de classe — ou d'un seul prof — dans l'ordre
+// chronologique. Meme regroupement que l'ouverture automatique : les classes d'un meme groupe = une seule
+// seance. Sert a anticiper (preparer les equipes et les reglages avant l'heure).
+export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: string): Promise<UpcomingSlot[]> {
+  const { plan: weekly } = await currentCycleAndPlan();
+  const all = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
+  const slots = teacherId ? all.filter((s) => s.teacherId === teacherId) : all;
   if (!slots.length) return [];
+  const [planById, names] = await Promise.all([allPlansById(), teacherNameById()]);
 
   const now = brusselsNow();
   const today = Temporal.Now.zonedDateTimeISO(TZ);
@@ -98,29 +110,27 @@ export async function upcomingSessions(limit = 10, daysAhead = 21): Promise<Upco
     const weekday = day.dayOfWeek;
     if (weekday > 5) continue;
     const dateKey = day.toPlainDate().toString();
+    const rows = slots.filter((s) => s.weekday === weekday && !(d === 0 && s.endMin <= now.minutes)); // creneau deja passe aujourd'hui
 
-    const groups = new Map<string, { startMin: number; endMin: number; classes: Set<string> }>();
-    for (const s of slots.filter((s) => s.weekday === weekday)) {
-      if (d === 0 && s.endMin <= now.minutes) continue; // creneau deja passe aujourd'hui
-      const key = `${s.startMin}_${s.endMin}`;
-      if (!groups.has(key)) groups.set(key, { startMin: s.startMin, endMin: s.endMin, classes: new Set() });
-      groups.get(key)!.classes.add(s.className);
-    }
-
-    for (const g of groups.values()) {
+    for (const g of groupSlots(rows)) {
+      const p = planOf(g, planById, weekly as PlanRow | null);
+      if (!p) continue; // sans seance-type, rien ne peut s'ouvrir
       out.push({
-        slotKey: `${dateKey}_${plan.id}_${g.startMin}_${g.endMin}`,
+        slotKey: slotKeyFor(dateKey, g.teacherId, p.id, g.startMin, g.endMin),
         dateKey,
         weekday,
         startMin: g.startMin,
         endMin: g.endMin,
         startsAtMs: toMs(instantAtBrussels(dateKey, g.startMin).toString()),
-        classes: [...g.classes].sort().slice(0, 5),
-        planId: plan.id,
-        planLabel: plan.label,
-        wodType: plan.wodType,
-        numTeams: plan.numTeams,
-        refereeMode: plan.refereeMode,
+        classes: g.classes.map((c) => c.className).sort().slice(0, 5),
+        teacherId: g.teacherId,
+        teacherName: g.teacherId ? names.get(g.teacherId) ?? null : null,
+        cycleId: p.cycleId,
+        planId: p.id,
+        planLabel: p.label,
+        wodType: p.wodType,
+        numTeams: p.numTeams,
+        refereeMode: p.refereeMode,
         sessionId: null,
       });
     }
@@ -143,6 +153,7 @@ export type OpenSessionInput = {
   refereeMode: boolean;
   cycleId?: string | null;
   planId?: string | null;
+  teacherId?: string | null; // prof qui tient la seance (journal de classe, ou celui qui l'ouvre a la main)
   opensAt?: Instant | null; // seance preparee : pas visible des eleves avant cette heure
   closesAt?: Instant | null;
   slotKey?: string | null;
@@ -162,6 +173,7 @@ export async function openSession(input: OpenSessionInput) {
       settings: { numTeams, classes: input.classes },
       cycleId: input.cycleId ?? null,
       planId: input.planId ?? null,
+      teacherId: input.teacherId ?? null,
       label: input.label,
       slotKey: input.slotKey ?? null,
       opensAt: input.opensAt ?? null,
@@ -182,43 +194,41 @@ export async function currentCycleAndPlan() {
   return { cycle, plan };
 }
 
-// Ouverture automatique : pour chaque groupe de classes en creneau MAINTENANT (meme debut/fin = seance commune),
-// ouvre la seance de la semaine du cycle en cours si ce n'est pas deja fait (slotKey unique = pas de doublon,
-// meme si deux appareils arrivent en meme temps). `onlyClasses` limite la verification (ex : la classe de l'eleve).
+// Ouverture automatique : pour chaque groupe (prof, debut, fin) en creneau MAINTENANT, ouvre sa seance-type
+// (celle du creneau, sinon la seance de la semaine) si ce n'est pas deja fait — slotKey unique = pas de doublon,
+// meme si deux appareils arrivent en meme temps. `onlyClasses` limite la verification (ex : la classe de l'eleve),
+// mais le groupe touche s'ouvre avec TOUTES ses classes.
 export async function ensureAutoSessions(onlyClasses?: string[]) {
-  const { cycle, plan } = await currentCycleAndPlan();
-  if (!cycle || !plan) return [];
   const { weekday, minutes, dateKey } = brusselsNow();
   if (weekday > 5) return [];
 
-  const slots = (await db.orm.public.ClassSlot.where({ weekday }).all()).filter(
-    (s) => s.startMin <= minutes && minutes < s.endMin && (!onlyClasses || onlyClasses.includes(s.className))
-  );
-  if (slots.length === 0) return [];
+  const today = (await db.orm.public.ClassSlot.where({ weekday }).all()) as SlotRow[];
+  const active = today.filter((s) => s.startMin <= minutes && minutes < s.endMin);
+  const wanted = onlyClasses ? active.filter((s) => onlyClasses.includes(s.className)) : active;
+  if (wanted.length === 0) return [];
+  const wantedIds = new Set(wanted.map((s) => s.id));
+  const groups = groupSlots(active).filter((g) => g.classes.some((c) => wantedIds.has(c.id)));
 
-  // Toutes les classes du meme creneau (pas seulement celles demandees) partagent la seance.
-  const allToday = onlyClasses ? await db.orm.public.ClassSlot.where({ weekday }).all() : slots;
-  const groups = new Map<string, { startMin: number; endMin: number; classes: Set<string> }>();
-  for (const s of slots) {
-    const key = `${s.startMin}_${s.endMin}`;
-    if (!groups.has(key)) groups.set(key, { startMin: s.startMin, endMin: s.endMin, classes: new Set() });
-    for (const t of allToday) if (t.startMin === s.startMin && t.endMin === s.endMin) groups.get(key)!.classes.add(t.className);
-  }
+  const { plan: weekly } = await currentCycleAndPlan();
+  const planById = await allPlansById();
 
   const created = [];
-  for (const g of groups.values()) {
-    const slotKey = `${dateKey}_${plan.id}_${g.startMin}_${g.endMin}`;
+  for (const g of groups) {
+    const p = planOf(g, planById, weekly as PlanRow | null);
+    if (!p) continue;
+    const slotKey = slotKeyFor(dateKey, g.teacherId, p.id, g.startMin, g.endMin);
     const existing = await db.orm.public.Session.where({ slotKey }).first();
     if (existing) continue;
     try {
       const session = await openSession({
-        wodType: plan.wodType,
-        label: plan.label,
-        classes: [...g.classes].sort().slice(0, 5),
-        numTeams: plan.numTeams,
-        refereeMode: plan.refereeMode,
-        cycleId: cycle.id,
-        planId: plan.id,
+        wodType: p.wodType,
+        label: p.label,
+        classes: g.classes.map((c) => c.className).sort().slice(0, 5),
+        numTeams: p.numTeams,
+        refereeMode: p.refereeMode,
+        cycleId: p.cycleId,
+        planId: p.id,
+        teacherId: g.teacherId,
         closesAt: instantAtBrussels(dateKey, g.endMin),
         slotKey,
         autoOpened: true,

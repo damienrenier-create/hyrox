@@ -7,9 +7,11 @@ import { listWodEngines } from "@/lib/wod-engines";
 import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
 import { readSessionClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
+import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
+import { teacherNameById } from "@/lib/staff";
 import {
-  addPlanAction, addSlotAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
-  deleteSlotAction, openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
+  addPlanAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
+  openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
@@ -48,9 +50,10 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const cycles = await db.orm.public.Cycle.where({}).orderBy((c) => c.order.asc()).all();
   const current = cycles.find((c) => c.isCurrent) ?? null;
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
-  const slots = (await db.orm.public.ClassSlot.where({}).all()).sort(
-    (a, b) => a.className.localeCompare(b.className) || a.weekday - b.weekday || a.startMin - b.startMin
-  );
+  // Journal de classe : les creneaux appartiennent a chaque prof ; la console n'en montre qu'un resume.
+  const slots = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
+  const myGroups = groupSlots(slots.filter((s) => s.teacherId === user.id));
+  const teacherNames = await teacherNameById();
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
   const engines = listWodEngines();
   const engineName = (id: string) => engines.find((e) => e.id === id)?.name ?? wodLabel(id);
@@ -66,12 +69,6 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
     }
   }
 
-  const slotsByClass = new Map<string, typeof slots>();
-  for (const s of slots) {
-    if (!slotsByClass.has(s.className)) slotsByClass.set(s.className, []);
-    slotsByClass.get(s.className)!.push(s);
-  }
-
   return (
     <div className={ui.page}>
       <TopBar
@@ -79,6 +76,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         subtitle={<>Heure de Bruxelles : {WEEKDAYS[now.weekday] ?? ""} {fmtMin(now.minutes)} · cycle en cours : <b className="text-ink">{current?.name ?? "aucun"}</b>{current && <> · séance de la semaine : <b className="text-ink">{plans.find((p) => p.isCurrent)?.label ?? "aucune"}</b></>}</>}
         right={
           <nav className="flex flex-wrap gap-2">
+            <Link href="/admin/journal" className={btn.smPrimary}>📅 Journal de classe</Link>
+            <Link href="/admin/carnet" className={btn.smGhost}>📒 Carnet de cotes</Link>
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
             <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
@@ -113,7 +112,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       </div>
                       <div className="text-xs text-ink-2">
                         {classes.length ? classes.join(", ") : "toutes classes"} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
-                        {s.closesAt && <> → ferme à {fmtTime(s.closesAt)}</>} · {s.autoOpened ? "auto (horaire)" : "manuelle"}
+                        {s.closesAt && <> → ferme à {fmtTime(s.closesAt)}</>} · {s.autoOpened ? "auto (journal de classe)" : "manuelle"}
+                        {s.teacherId && teacherNames.get(s.teacherId) && <> · {teacherNames.get(s.teacherId)}</>}
                         {s.raceEndedAt && " · WOD terminé"}
                       </div>
                     </div>
@@ -212,13 +212,13 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         <section className={card}>
           <h2 className={`${ui.h2} mb-1`}>Prochains créneaux <span className="text-ink-3 text-sm font-sans font-normal">({upcoming.length})</span></h2>
           <p className={`${ui.hint} mb-3`}>
-            Ce ne sont pas des séances : c&apos;est ton horaire de classe, <b>qui revient chaque semaine</b>. Rien n&apos;est
+            Ce ne sont pas des séances : ce sont les créneaux des <b>journaux de classe</b>, qui reviennent chaque semaine. Rien n&apos;est
             créé tant que tu n&apos;as pas appuyé sur « Préparer » — et « Préparer » ne crée <b>que cette date-là</b>.
             Le jour venu, une séance s&apos;ouvre de toute façon automatiquement, préparée ou non.
           </p>
           {upcoming.length === 0 ? (
             <p className={ui.muted}>
-              Aucun créneau à venir. Il faut un cycle en cours, une séance de la semaine, et des créneaux horaires de classe (plus bas).
+              Aucun créneau à venir. Il faut un cycle en cours, une séance de la semaine, et des classes posées dans un <Link href="/admin/journal" className="underline font-semibold">journal de classe</Link>.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -234,6 +234,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <div className="font-bold">
                         {u.planLabel}
                         <span className="text-ink-3 font-normal"> · {fmtMin(u.startMin)}–{fmtMin(u.endMin)}</span>
+                        {u.teacherName && <span className={`${ui.chip} ${u.teacherId === user.id ? ui.chipBrand : ui.chipMuted} ml-2`}>{u.teacherName}</span>}
                         {u.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>Touché-Coulé</span>}
                       </div>
                       <div className="text-xs text-ink-3">
@@ -424,60 +425,29 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           )}
         </section>
 
-        {/* ===== Horaires ===== */}
+        {/* ===== Journal de classe (resume) ===== */}
         <section className={card}>
-          <h2 className={`${ui.h2} mb-1`}>Horaires des classes</h2>
-          <p className={`${ui.hint} mb-4`}>
-            Pendant ces créneaux (lundi→vendredi, heure de Bruxelles), la séance de la semaine s&apos;ouvre toute seule pour la classe et se ferme à la fin du créneau.
-            Deux classes sur le même créneau partagent la même séance.
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <h2 className={ui.h2}>Mon journal de classe</h2>
+            <Link href="/admin/journal" className={btn.smPrimary}>Ouvrir le journal</Link>
+          </div>
+          <p className={`${ui.hint} mb-3`}>
+            Chaque prof pose ses classes dans sa grille de la semaine (jusqu&apos;à {MAX_CLASSES} classes par créneau = une séance commune).
+            Pendant ces créneaux, la séance de la semaine s&apos;ouvre toute seule et se ferme à la fin.
           </p>
-          {slotsByClass.size === 0 ? (
-            <p className={`${ui.muted} mb-3`}>Aucun créneau encodé.</p>
+          {myGroups.length === 0 ? (
+            <p className={ui.muted}>Aucun créneau dans ton journal pour l&apos;instant.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-              {[...slotsByClass.entries()].map(([cls, list]) => (
-                <div key={cls} className={`${ui.inset} p-2.5`}>
-                  <div className="font-bold text-sm mb-1">{cls}</div>
-                  <ul className="space-y-1">
-                    {list.map((s) => (
-                      <li key={s.id} className="flex items-center justify-between text-xs text-ink-2">
-                        <span>{WEEKDAYS[s.weekday]} {fmtMin(s.startMin)}–{fmtMin(s.endMin)}</span>
-                        {canDelete && (
-                          <form action={deleteSlotAction}>
-                            <input type="hidden" name="id" value={s.id} />
-                            <button type="submit" className="text-danger font-bold px-2 hover:bg-danger-soft rounded">✕</button>
-                          </form>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {myGroups.map((g) => (
+                <li key={g.key} className={`${ui.inset} p-2.5`}>
+                  <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[g.weekday]} {fmtMin(g.startMin)}–{fmtMin(g.endMin)}</div>
+                  <div className="font-bold text-sm">{groupLabel(g.classes.map((c) => c.className))}</div>
+                </li>
               ))}
-            </div>
+              <li className="text-xs text-ink-3 self-center px-1">{Math.floor(weeklyMinutes(myGroups) / 60)} h {String(weeklyMinutes(myGroups) % 60).padStart(2, "0")} par semaine</li>
+            </ul>
           )}
-          <form action={addSlotAction} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
-            <label className="text-xs">
-              <span className={fieldLabel}>Classe</span>
-              <select name="className" className={input}>
-                {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <label className="text-xs">
-              <span className={fieldLabel}>Jour</span>
-              <select name="weekday" className={input}>
-                {[1, 2, 3, 4, 5].map((d) => <option key={d} value={d}>{WEEKDAYS[d]}</option>)}
-              </select>
-            </label>
-            <label className="text-xs">
-              <span className={fieldLabel}>Début</span>
-              <input type="time" name="start" defaultValue="08:00" required className={input} />
-            </label>
-            <label className="text-xs">
-              <span className={fieldLabel}>Fin</span>
-              <input type="time" name="end" defaultValue="09:40" required className={input} />
-            </label>
-            <button type="submit" className={btn.primary}>+ Créneau</button>
-          </form>
         </section>
 
         {/* ===== Cycles ===== */}

@@ -97,14 +97,20 @@ model CyclePlan {
 }
 
 // Creneau horaire d'une classe (heure de Bruxelles) : weekday 1=lundi..5=vendredi, minutes depuis minuit.
+// Depuis le journal de classe (23/09), chaque creneau appartient a un prof (teacherId = User.id d'un
+// ADMIN/MASTER_ADMIN) : meme prof + meme debut/fin = un seul groupe (max 5 classes) = une seance commune.
+// planId : seance-type imposee pour ce creneau ; null = la « seance de la semaine » du cycle en cours.
 model ClassSlot {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   className String
   weekday   Int
   startMin  Int
   endMin    Int
+  teacherId String?
+  planId    String?
 
   @@index([className])
+  @@index([teacherId])
 }
 
 model Session {
@@ -125,6 +131,7 @@ model Session {
   opensAt     DateTime?   // seance PREPAREE a l'avance : invisible des eleves jusqu'a cette heure
   closesAt    DateTime?   // fin d'ouverture (fin du creneau, ou duree fixee a l'ouverture manuelle)
   autoOpened  Boolean     @default(false)
+  teacherId   String?     // prof qui tient la seance (journal de classe ou ouverture manuelle) ; null = inconnu
 
   teams           Team[]
   evaluations     Evaluation[]

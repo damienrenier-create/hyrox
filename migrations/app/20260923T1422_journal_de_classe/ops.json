@@ -1,0 +1,167 @@
+[
+  {
+    "id": "column.public.classSlot.planId",
+    "label": "Add column \"planId\" to \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "planId",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"planId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "planId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"planId\"",
+        "sql": "ALTER TABLE \"public\".\"classSlot\" ADD COLUMN \"planId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"planId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "planId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.classSlot.teacherId",
+    "label": "Add column \"teacherId\" to \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "teacherId",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"teacherId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "teacherId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"teacherId\"",
+        "sql": "ALTER TABLE \"public\".\"classSlot\" ADD COLUMN \"teacherId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"teacherId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "teacherId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.session.teacherId",
+    "label": "Add column \"teacherId\" to \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "teacherId",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"teacherId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "teacherId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"teacherId\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD COLUMN \"teacherId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"teacherId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "session",
+          "teacherId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.classSlot.classSlot_teacherId_idx_bc266660",
+    "label": "Create index \"classSlot_teacherId_idx_bc266660\" on \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "classSlot_teacherId_idx_bc266660",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"classSlot_teacherId_idx_bc266660\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot_teacherId_idx_bc266660\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"classSlot_teacherId_idx_bc266660\"",
+        "sql": "CREATE INDEX \"classSlot_teacherId_idx_bc266660\" ON \"public\".\"classSlot\" (\"teacherId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"classSlot_teacherId_idx_bc266660\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"classSlot_teacherId_idx_bc266660\""
+        ]
+      }
+    ]
+  }
+]

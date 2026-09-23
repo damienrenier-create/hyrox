@@ -330,10 +330,24 @@
                   "kind": "scalar"
                 }
               },
+              "planId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "startMin": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "teacherId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -357,8 +371,14 @@
                 "id": {
                   "column": "id"
                 },
+                "planId": {
+                  "column": "planId"
+                },
                 "startMin": {
                   "column": "startMin"
+                },
+                "teacherId": {
+                  "column": "teacherId"
                 },
                 "weekday": {
                   "column": "weekday"
@@ -1718,6 +1738,13 @@
                   "kind": "scalar"
                 }
               },
+              "teacherId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "wodType": {
                 "nullable": false,
                 "type": {
@@ -1942,6 +1969,9 @@
                 },
                 "slotKey": {
                   "column": "slotKey"
+                },
+                "teacherId": {
+                  "column": "teacherId"
                 },
                 "wodType": {
                   "column": "wodType"
@@ -3000,10 +3030,20 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "planId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "startMin": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": false
+                },
+                "teacherId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "weekday": {
                   "codecId": "pg/int4@1",
@@ -3019,6 +3059,14 @@
                   ],
                   "name": "classSlot_className_idx_f1738847",
                   "prefix": "classSlot_className_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "teacherId"
+                  ],
+                  "name": "classSlot_teacherId_idx_bc266660",
+                  "prefix": "classSlot_teacherId_idx",
                   "unique": false
                 }
               ],
@@ -4164,6 +4212,11 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "teacherId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "wodType": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -5020,7 +5073,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2e1e20d2b6c2768d428e587093f9c35a7a1304d5a0811d712fc30478c518b09a"
+    "storageHash": "5b30c5d232c4b5b6b8b23ed10c8ae0c7fb11cc2ad51a988e296e762d93fb5c9b"
   },
   "execution": {
     "executionHash": "5692c6da233d65bb9f783d697d981d4cd207b2a0f536c1f06462f23976671e46",
