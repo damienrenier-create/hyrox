@@ -26,6 +26,9 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
 
   const teachers = await listTeachers();
   const prof = one(sp.prof);
+  const sex = ["F", "M"].includes(one(sp.sexe)) ? one(sp.sexe) : "";
+  const sexParam = sex ? `&sexe=${sex}` : "";
+  const sexLabel = sex === "F" ? "filles" : sex === "M" ? "garçons" : "";
   const viewedId = isMaster && prof && teachers.some((t) => t.id === prof) ? prof : user.id;
   const profParam = viewedId !== user.id ? `&prof=${viewedId}` : "";
 
@@ -46,9 +49,9 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
   }
   const myClasses = [...new Set(groups.flatMap((g) => g.classes.map((c) => c.className)))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
   const selectedLabel = groupLabel(selected);
-  const linkTo = (classes: string[]) => `/admin/carnet?classes=${encodeURIComponent(classes.join(","))}${profParam}`;
+  const linkTo = (classes: string[], s: string = sex) => `/admin/carnet?classes=${encodeURIComponent(classes.join(","))}${profParam}${s ? `&sexe=${s}` : ""}`;
 
-  const carnet = selected.length ? await buildCarnet(selected) : null;
+  const carnet = selected.length ? await buildCarnet(selected, sex || undefined) : null;
   const csv = carnet ? carnetCsv(carnet) : "";
 
   const tooltip = (cell: CarnetCell) => {
@@ -64,12 +67,12 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
     <div className={ui.page}>
       <TopBar
         title="Carnet de cotes"
-        subtitle={selected.length ? <>{selectedLabel} · {carnet?.rows.length ?? 0} élève{(carnet?.rows.length ?? 0) > 1 ? "s" : ""} · {carnet?.columns.length ?? 0} WOD</> : "Choisis un groupe ou une classe"}
+        subtitle={selected.length ? <>{selectedLabel}{sexLabel ? ` · ${sexLabel}` : ""} · {carnet?.rows.length ?? 0} élève{(carnet?.rows.length ?? 0) > 1 ? "s" : ""} · {carnet?.columns.length ?? 0} WOD</> : "Choisis un groupe ou une classe"}
         back={{ href: "/admin", label: "Console" }}
         wide
         right={
           <nav className="flex flex-wrap items-center gap-2">
-            {carnet && carnet.rows.length > 0 && <ExportCsvButton csv={csv} filename={`carnet-${selected.join("+")}.csv`} />}
+            {carnet && carnet.rows.length > 0 && <ExportCsvButton csv={csv} filename={`carnet-${selected.join("+")}${sex ? `-${sexLabel}` : ""}.csv`} />}
             <Link href={viewedId === user.id ? "/admin/journal" : `/admin/journal?prof=${viewedId}`} className={btn.smGhost}>Journal de classe</Link>
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
           </nav>
@@ -80,7 +83,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
             {teachers.map((t) => (
               <Link
                 key={t.id}
-                href={`/admin/carnet?${selected.length ? `classes=${encodeURIComponent(selected.join(","))}&` : ""}${t.id === user.id ? "" : `prof=${t.id}`}`}
+                href={`/admin/carnet?${selected.length ? `classes=${encodeURIComponent(selected.join(","))}&` : ""}${t.id === user.id ? "" : `prof=${t.id}`}${sexParam}`}
                 className={cx("px-3 py-1.5 rounded-lg text-xs font-bold transition", t.id === viewedId ? ui.segOn : ui.segOff)}
               >
                 {t.name}
@@ -115,10 +118,21 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
               </div>
             </div>
           )}
+          {selected.length > 0 && (
+            <div>
+              <div className={`${ui.eyebrow} mb-1.5`}>Sexe <span className="normal-case tracking-normal font-normal text-ink-3">· quand tu n&apos;as que les filles ou que les garçons d&apos;une classe</span></div>
+              <div className="flex flex-wrap gap-1.5">
+                {([["", "Tous"], ["F", "Filles"], ["M", "Garçons"]] as [string, string][]).map(([v, label]) => (
+                  <Link key={v || "all"} href={linkTo(selected, v)} className={cx(ui.pill, sex === v ? ui.pillOn : ui.pillOff)}>{label}</Link>
+                ))}
+              </div>
+            </div>
+          )}
           <details>
             <summary className="text-xs font-bold text-ink-2 cursor-pointer select-none">Une autre classe, ou un groupe à la carte</summary>
             <form className="mt-2">
               {profParam && <input type="hidden" name="prof" value={viewedId} />}
+              {sex && <input type="hidden" name="sexe" value={sex} />}
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-1.5 mb-2">
                 {allClasses.map((c) => (
                   <label key={c} className="flex items-center gap-1.5 text-xs font-semibold bg-paper border border-line rounded-lg px-2 py-1.5 cursor-pointer hover:border-brand">

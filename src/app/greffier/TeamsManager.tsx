@@ -16,8 +16,9 @@ import {
 import { decideRefereeAction } from "./referee-decisions";
 import { MAX_CLASSES, REFEREE_REASONS } from "@/lib/session-roles";
 import { btn, cx, ui } from "@/lib/ui";
+import { cake } from "@/lib/birthday";
 
-export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null };
+export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null; birthday?: boolean };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
 export type RefereeView = TeamMemberView & { note: string | null; status: string; teamName: string | null };
 
@@ -220,7 +221,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
                 <ul className="text-base text-ink-2 space-y-0.5 leading-snug">
                   {team.members.map((m) => (
                     <li key={m.id} className="truncate">
-                      <span className="text-ink font-semibold">{m.firstName} {m.lastName}</span>
+                      <span className="text-ink font-semibold">{m.firstName} {m.lastName}{cake(m.birthday)}</span>
                       {approvedIds.has(m.id) && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>arbitre</span>}
                     </li>
                   ))}

@@ -1,7 +1,7 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { MAX_CLASSES, readSessionClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, readSessionClasses, readCycleClasses } from "@/lib/session-roles";
 import { groupSlots, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -67,6 +67,17 @@ function planOf(g: SlotGroup, planById: Map<string, PlanRow>, weekly: PlanRow | 
   return (g.planId && planById.get(g.planId)) || weekly;
 }
 
+// Classes autorisees par cycle (null = toutes). Un groupe dont aucune classe n'est dans le cycle de sa
+// seance-type n'ouvre rien : le cycle Hyrox ne concerne pas les deuxiemes, leurs creneaux restent muets.
+async function cycleClassesById(): Promise<Map<string, string[] | null>> {
+  const cycles = await db.orm.public.Cycle.where({}).all();
+  return new Map(cycles.map((c) => [c.id, readCycleClasses(c.classes)]));
+}
+function classesInCycle(g: SlotGroup, allowed: string[] | null | undefined): string[] {
+  const names = g.classes.map((c) => c.className);
+  return allowed ? names.filter((n) => allowed.includes(n)) : names;
+}
+
 async function allPlansById(): Promise<Map<string, PlanRow>> {
   const plans = await db.orm.public.CyclePlan.where({}).all();
   return new Map(plans.map((p) => [p.id, p as PlanRow]));
@@ -99,7 +110,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
   const all = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
   const slots = teacherId ? all.filter((s) => s.teacherId === teacherId) : all;
   if (!slots.length) return [];
-  const [planById, names] = await Promise.all([allPlansById(), teacherNameById()]);
+  const [planById, names, cycleClasses] = await Promise.all([allPlansById(), teacherNameById(), cycleClassesById()]);
 
   const now = brusselsNow();
   const today = Temporal.Now.zonedDateTimeISO(TZ);
@@ -115,6 +126,8 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
     for (const g of groupSlots(rows)) {
       const p = planOf(g, planById, weekly as PlanRow | null);
       if (!p) continue; // sans seance-type, rien ne peut s'ouvrir
+      const inCycle = classesInCycle(g, cycleClasses.get(p.cycleId));
+      if (!inCycle.length) continue; // aucune classe du groupe n'est dans ce cycle
       out.push({
         slotKey: slotKeyFor(dateKey, g.teacherId, p.id, g.startMin, g.endMin),
         dateKey,
@@ -122,7 +135,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         startMin: g.startMin,
         endMin: g.endMin,
         startsAtMs: toMs(instantAtBrussels(dateKey, g.startMin).toString()),
-        classes: g.classes.map((c) => c.className).sort().slice(0, MAX_CLASSES),
+        classes: inCycle.sort().slice(0, MAX_CLASSES),
         teacherId: g.teacherId,
         teacherName: g.teacherId ? names.get(g.teacherId) ?? null : null,
         cycleId: p.cycleId,
@@ -138,10 +151,11 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
 
   out.sort((a, b) => a.startsAtMs - b.startsAtMs);
   const top = out.slice(0, limit);
-  for (const u of top) {
-    const existing = await db.orm.public.Session.where({ slotKey: u.slotKey }).first();
-    u.sessionId = existing?.id ?? null;
-  }
+  // Seances deja preparees : UNE requete groupee, pas une par creneau.
+  const keys = top.map((u) => u.slotKey);
+  const prepared = keys.length ? await db.orm.public.Session.where((x) => x.slotKey.in(keys)).all() : [];
+  const byKey = new Map(prepared.map((x) => [x.slotKey, x.id]));
+  for (const u of top) u.sessionId = byKey.get(u.slotKey) ?? null;
   return top;
 }
 
@@ -210,12 +224,14 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
   const groups = groupSlots(active).filter((g) => g.classes.some((c) => wantedIds.has(c.id)));
 
   const { plan: weekly } = await currentCycleAndPlan();
-  const planById = await allPlansById();
+  const [planById, cycleClasses] = await Promise.all([allPlansById(), cycleClassesById()]);
 
   const created = [];
   for (const g of groups) {
     const p = planOf(g, planById, weekly as PlanRow | null);
     if (!p) continue;
+    const inCycle = classesInCycle(g, cycleClasses.get(p.cycleId));
+    if (!inCycle.length) continue; // creneau d'une classe hors cycle : rien ne s'ouvre
     const slotKey = slotKeyFor(dateKey, g.teacherId, p.id, g.startMin, g.endMin);
     const existing = await db.orm.public.Session.where({ slotKey }).first();
     if (existing) continue;
@@ -223,7 +239,7 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
       const session = await openSession({
         wodType: p.wodType,
         label: p.label,
-        classes: g.classes.map((c) => c.className).sort().slice(0, MAX_CLASSES),
+        classes: inCycle.sort().slice(0, MAX_CLASSES),
         numTeams: p.numTeams,
         refereeMode: p.refereeMode,
         cycleId: p.cycleId,

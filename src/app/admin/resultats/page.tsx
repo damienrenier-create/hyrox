@@ -24,6 +24,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
   const cycleId = one(sp.cycle);
   const sessionId = one(sp.session);
   const className = one(sp.classe);
+  const sex = ["F", "M"].includes(one(sp.sexe)) ? one(sp.sexe) : "";
   const query = one(sp.eleve);
   const from = one(sp.from);
   const to = one(sp.to);
@@ -42,6 +43,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
     cycleId: cycleId || undefined,
     sessionId: sessionId || undefined,
     className: className || undefined,
+    sex: sex || undefined,
     query: query || undefined,
     from: from || undefined,
     to: to || undefined,
@@ -56,13 +58,14 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
   // Conserve les filtres courants en changeant un seul parametre (pagination, tri).
   const linkWith = (patch: Record<string, string>) => {
     const p = new URLSearchParams();
-    const base: Record<string, string> = { cycle: cycleId, session: sessionId, classe: className, eleve: query, from, to, role, tri: sort, page: String(page) };
+    const base: Record<string, string> = { cycle: cycleId, session: sessionId, classe: className, sexe: sex, eleve: query, from, to, role, tri: sort, page: String(page) };
     for (const c of SELF_EVAL_CRITERIA) if (levels[c.id]) base[`c_${c.id}`] = levels[c.id]!;
     for (const [k, v] of Object.entries({ ...base, ...patch })) if (v) p.set(k, v);
     return `/admin/resultats?${p.toString()}`;
   };
   const activeFilters = [
     className && `classe ${className}`,
+    sex && (sex === "F" ? "filles" : "garçons"),
     query && `« ${query} »`,
     role && (role === "arbitre" ? "arbitres seulement" : "participants seulement"),
     from && `depuis le ${from}`,
@@ -111,6 +114,14 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
               <select name="classe" defaultValue={className} className={`${ui.input} w-full`}>
                 <option value="">Toutes</option>
                 {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="text-xs">
+              <span className={ui.label}>Sexe</span>
+              <select name="sexe" defaultValue={sex} className={`${ui.input} w-full`}>
+                <option value="">Tous</option>
+                <option value="F">Filles</option>
+                <option value="M">Garçons</option>
               </select>
             </label>
             <label className="text-xs">

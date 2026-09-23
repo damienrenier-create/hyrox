@@ -48,13 +48,28 @@ const defaultTeamsOf = (wodType: string) => {
 
 // ===== Cycles =====
 
+// Classes cochees dans un formulaire (cases « classes ») ; vide = toutes les classes.
+const classesOf = (fd: FormData) => [...new Set(fd.getAll("classes").map(String).map((c) => c.trim()).filter(Boolean))];
+
 export async function createCycleAction(formData: FormData) {
   await requireStaff();
   const name = str(formData, "name");
   if (!name) fail("Nom du cycle requis.");
+  const classes = classesOf(formData);
   const all = await db.orm.public.Cycle.where({}).all();
-  const cycle = await db.orm.public.Cycle.create({ name, order: all.length + 1, isCurrent: all.length === 0 });
-  done(`Cycle « ${cycle.name} » créé.`);
+  const cycle = await db.orm.public.Cycle.create({ name, order: all.length + 1, isCurrent: all.length === 0, classes: classes.length ? classes : null });
+  done(`Cycle « ${cycle.name} » créé${classes.length ? ` pour ${classes.length} classe(s)` : " pour toutes les classes"}.`);
+}
+
+// Classes concernees par un cycle : les creneaux des autres classes n'ouvrent rien dans ce cycle.
+export async function setCycleClassesAction(formData: FormData) {
+  await requireStaff();
+  const id = str(formData, "id");
+  const cycle = await db.orm.public.Cycle.where({ id }).first();
+  if (!cycle) fail("Cycle introuvable.");
+  const classes = classesOf(formData);
+  await db.orm.public.Cycle.where({ id }).update({ classes: classes.length ? classes : null });
+  done(`Cycle « ${cycle!.name} » : ${classes.length ? `${classes.length} classe(s)` : "toutes les classes"}.`);
 }
 
 export async function renameCycleAction(formData: FormData) {

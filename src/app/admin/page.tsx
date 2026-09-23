@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { generateGhostFleetsAction } from "../touche-coule/actions";
 import { listWodEngines } from "@/lib/wod-engines";
 import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
-import { readSessionClasses, MAX_CLASSES } from "@/lib/session-roles";
+import { readSessionClasses, readCycleClasses, MAX_CLASSES } from "@/lib/session-roles";
+import { SlotDeleteButton } from "./SlotDeleteButton";
 import { wodLabel } from "@/lib/student-sessions";
 import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 import {
   addPlanAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
-  openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction,
+  openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
@@ -28,18 +29,27 @@ const card = ui.cardPad;
 const input = ui.input;
 const fieldLabel = ui.label;
 
-export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ ok?: string; msg?: string }> }) {
+export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ ok?: string; msg?: string; w?: string }> }) {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) {
     redirect("/");
   }
   // Un coach voit et pilote tout, mais aucune suppression ne lui est proposee.
   const canDelete = user.role === "MASTER_ADMIN";
-  const { ok, msg } = await searchParams;
+  const { ok, msg, w } = await searchParams;
 
   await ensureAutoSessions();
   const open = await listOpenSessions();
-  const upcoming = await upcomingSessions(10);
+  // Vue semaine du lundi au vendredi : cette semaine par defaut (la suivante des le samedi), ?w=1 pour la suivante.
+  const wk = Math.min(4, Math.max(0, parseInt(w ?? "0", 10) || 0));
+  const todayZ = Temporal.Now.zonedDateTimeISO(TZ);
+  const monday = todayZ.subtract({ days: todayZ.dayOfWeek - 1 }).add({ weeks: (todayZ.dayOfWeek > 5 ? 1 : 0) + wk });
+  const weekDays = [0, 1, 2, 3, 4].map((i) => monday.add({ days: i }).toPlainDate().toString());
+  const todayKey = todayZ.toPlainDate().toString();
+  const daysAhead = Math.max(1, Math.round((monday.add({ days: 5 }).epochMilliseconds - todayZ.epochMilliseconds) / 86_400_000) + 1);
+  const upcoming = (await upcomingSessions(80, daysAhead)).filter((u) => weekDays.includes(u.dateKey));
+  const byDay = weekDays.map((dk) => upcoming.filter((u) => u.dateKey === dk));
+  const fmtWeekDay = (dk: string) => `${dk.slice(8)}/${dk.slice(5, 7)}`;
   const allSessions = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all();
   // Seances DEJA creees en attente de leur heure (a distinguer des simples creneaux recurrents).
   const scheduled = allSessions.filter((s) => s.isActive && isScheduled(s)).sort((a, b) => toMs(a.opensAt) - toMs(b.opensAt));
@@ -55,6 +65,26 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const myGroups = groupSlots(slots.filter((s) => s.teacherId === user.id));
   const teacherNames = await teacherNameById();
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
+  // Classes rangees par degre (1P2, 2Ca…, 3GTa…) pour les cases a cocher des cycles.
+  const families = (() => {
+    const m = new Map<string, string[]>();
+    for (const c of allClasses) (m.get(c[0] ?? "?") ?? m.set(c[0] ?? "?", []).get(c[0] ?? "?")!).push(c);
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b, "fr", { numeric: true }));
+  })();
+  const ClassPicker = ({ checked }: { checked: string[] }) => (
+    <div className="space-y-1.5">
+      {families.map(([fam, list]) => (
+        <div key={fam} className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-extrabold uppercase text-ink-3 w-6">{/^\d$/.test(fam) ? `${fam}e` : fam}</span>
+          {list.map((c) => (
+            <label key={c} className="inline-flex items-center gap-1 text-xs font-semibold bg-paper border border-line rounded-lg px-2 py-1 cursor-pointer hover:border-brand">
+              <input type="checkbox" name="classes" value={c} defaultChecked={checked.includes(c)} className={ui.check} /> {c}
+            </label>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
   const engines = listWodEngines();
   const engineName = (id: string) => engines.find((e) => e.id === id)?.name ?? wodLabel(id);
   const now = brusselsNow();
@@ -208,52 +238,69 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           </section>
         )}
 
-        {/* ===== Creneaux RECURRENTS a venir : rien n'existe tant qu'on n'a pas appuye sur Preparer ===== */}
+        {/* ===== Semaine du lundi au vendredi : les creneaux des journaux de classe, une colonne par jour ===== */}
         <section className={card}>
-          <h2 className={`${ui.h2} mb-1`}>Prochains créneaux <span className="text-ink-3 text-sm font-sans font-normal">({upcoming.length})</span></h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <h2 className={ui.h2}>
+              Semaine du {fmtWeekDay(weekDays[0])} au {fmtWeekDay(weekDays[4])}
+              <span className="text-ink-3 text-sm font-sans font-normal"> ({upcoming.length} créneau{upcoming.length > 1 ? "x" : ""})</span>
+            </h2>
+            <div className={`${ui.segmented}`}>
+              <Link href="/admin" className={cx("px-3 py-1 rounded-lg text-xs font-bold transition", wk === 0 ? ui.segOn : ui.segOff)}>Cette semaine</Link>
+              <Link href="/admin?w=1" className={cx("px-3 py-1 rounded-lg text-xs font-bold transition", wk === 1 ? ui.segOn : ui.segOff)}>Semaine suivante</Link>
+              {wk > 1 && <span className={cx("px-3 py-1 rounded-lg text-xs font-bold", ui.segOn)}>+{wk} semaines</span>}
+              {wk >= 1 && wk < 4 && <Link href={`/admin?w=${wk + 1}`} className={cx("px-3 py-1 rounded-lg text-xs font-bold transition", ui.segOff)}>›</Link>}
+            </div>
+          </div>
           <p className={`${ui.hint} mb-3`}>
-            Ce ne sont pas des séances : ce sont les créneaux des <b>journaux de classe</b>, qui reviennent chaque semaine. Rien n&apos;est
-            créé tant que tu n&apos;as pas appuyé sur « Préparer » — et « Préparer » ne crée <b>que cette date-là</b>.
-            Le jour venu, une séance s&apos;ouvre de toute façon automatiquement, préparée ou non.
+            Ce sont les créneaux des <b>journaux de classe</b>, qui reviennent chaque semaine : rien n&apos;est créé tant que tu n&apos;as pas appuyé sur
+            « Préparer », et le jour venu la séance s&apos;ouvre de toute façon toute seule. La croix retire le créneau du journal, pour toutes les semaines.
           </p>
-          {upcoming.length === 0 ? (
-            <p className={ui.muted}>
-              Aucun créneau à venir. Il faut un cycle en cours, une séance de la semaine, et des classes posées dans un <Link href="/admin/journal" className="underline font-semibold">journal de classe</Link>.
+          {upcoming.length === 0 && (
+            <p className={`${ui.muted} mb-3`}>
+              Rien cette semaine. Il faut un cycle en cours avec ses classes, une séance de la semaine, et des classes posées dans un <Link href="/admin/journal" className="underline font-semibold">journal de classe</Link>.
             </p>
-          ) : (
-            <ul className="space-y-2">
-              {upcoming.map((u) => (
-                <li key={u.slotKey} className={cx("bg-paper border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3", u.sessionId ? "border-success/50" : "border-line")}>
-                  <div className="min-w-0 flex items-center gap-3">
-                    <div className="text-center flex-shrink-0 w-16">
-                      <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[u.weekday]?.slice(0, 3)}</div>
-                      <div className="font-display font-extrabold text-xl leading-none">{u.dateKey.slice(8)}/{u.dateKey.slice(5, 7)}</div>
-                      <div className="text-[11px] text-ink-3 tabular-nums">{fmtMin(u.startMin)}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold">
-                        {u.planLabel}
-                        <span className="text-ink-3 font-normal"> · {fmtMin(u.startMin)}–{fmtMin(u.endMin)}</span>
-                        {u.teacherName && <span className={`${ui.chip} ${u.teacherId === user.id ? ui.chipBrand : ui.chipMuted} ml-2`}>{u.teacherName}</span>}
-                        {u.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>Touché-Coulé</span>}
-                      </div>
-                      <div className="text-xs text-ink-3">
-                        {u.classes.length ? u.classes.join(", ") : "aucune classe"} · {u.numTeams} équipes
-                      </div>
-                    </div>
-                  </div>
-                  {u.sessionId ? (
-                    <span className={`${ui.chip} ${ui.chipOk}`}>✓ déjà préparée</span>
-                  ) : (
-                    <form action={prepareSessionAction}>
-                      <input type="hidden" name="slotKey" value={u.slotKey} />
-                      <button type="submit" className={btn.smGhost}>Préparer cette date</button>
-                    </form>
-                  )}
-                </li>
-              ))}
-            </ul>
           )}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            {weekDays.map((dk, i) => {
+              const past = dk < todayKey;
+              return (
+                <div key={dk} className={cx(ui.inset, "p-2 min-h-[110px]", dk === todayKey && "border-brand ring-1 ring-brand/30", past && "opacity-60")}>
+                  <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[i + 1]}</div>
+                  <div className="font-display font-extrabold text-lg leading-none mb-2">{fmtWeekDay(dk)}</div>
+                  {byDay[i].length === 0 ? (
+                    <p className={ui.hint}>{past ? "passé" : "—"}</p>
+                  ) : (
+                    byDay[i].map((u) => (
+                      <div key={u.slotKey} className={cx("rounded-lg border bg-card p-2 mb-1.5 text-xs", u.sessionId ? "border-success/50" : "border-line")}>
+                        <div className="flex items-start justify-between gap-1">
+                          <div className="min-w-0">
+                            <div className="font-extrabold tabular-nums">{fmtMin(u.startMin)}–{fmtMin(u.endMin)}</div>
+                            <div className="font-bold truncate">{u.planLabel}{u.refereeMode ? " 🏴‍☠️" : ""}</div>
+                            <div className="text-ink-2 truncate">{u.classes.length ? u.classes.join(", ") : "aucune classe"}</div>
+                            {u.teacherName && <div className={cx("truncate", u.teacherId === user.id ? "text-brand-ink font-semibold" : "text-ink-3")}>{u.teacherName}</div>}
+                          </div>
+                          {u.teacherId && (u.teacherId === user.id || canDelete) && (
+                            <SlotDeleteButton teacherId={u.teacherId} weekday={u.weekday} startMin={u.startMin} endMin={u.endMin} classes={u.classes} />
+                          )}
+                        </div>
+                        <div className="mt-1.5">
+                          {u.sessionId ? (
+                            <Link href={`/greffier?session=${u.sessionId}`} className={`${ui.chip} ${ui.chipOk}`}>✓ préparée · ouvrir</Link>
+                          ) : (
+                            <form action={prepareSessionAction}>
+                              <input type="hidden" name="slotKey" value={u.slotKey} />
+                              <button type="submit" className={btn.smGhost}>Préparer</button>
+                            </form>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         {pendingRequests.length > 0 && (
@@ -479,13 +526,40 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       </form>
                     )}
                   </div>
+                  {/* Classes concernees : les creneaux des autres classes n'ouvrent rien dans ce cycle. */}
+                  {(() => {
+                    const cls = readCycleClasses(c.classes);
+                    return (
+                      <details className="basis-full">
+                        <summary className="text-xs cursor-pointer select-none">
+                          <span className="font-bold text-ink-2">Classes : </span>
+                          {cls ? <span className="font-semibold">{cls.join(", ")}</span> : <span className="text-ink-3">toutes (aucune restriction)</span>}
+                          <span className="text-ink-3"> · modifier</span>
+                        </summary>
+                        <form action={setCycleClassesAction} className="mt-2 space-y-2">
+                          <input type="hidden" name="id" value={c.id} />
+                          <ClassPicker checked={cls ?? []} />
+                          <div className="flex items-center gap-2">
+                            <button type="submit" className={btn.smPrimary}>Enregistrer</button>
+                            <span className={ui.hint}>Rien de coché = toutes les classes.</span>
+                          </div>
+                        </form>
+                      </details>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>
           )}
-          <form action={createCycleAction} className="flex gap-2">
-            <input name="name" placeholder="Nouveau cycle (ex. Hyrox)" required className={`${input} flex-1`} />
-            <button type="submit" className={btn.primary}>+ Créer</button>
+          <form action={createCycleAction} className="space-y-2">
+            <div className="flex gap-2">
+              <input name="name" placeholder="Nouveau cycle (ex. Hyrox)" required className={`${input} flex-1`} />
+              <button type="submit" className={btn.primary}>+ Créer</button>
+            </div>
+            <details>
+              <summary className="text-xs font-bold text-ink-2 cursor-pointer select-none">Pour quelles classes ? <span className="font-normal text-ink-3">(rien de coché = toutes ; en Hyrox, pas de deuxièmes par exemple)</span></summary>
+              <div className="mt-2"><ClassPicker checked={[]} /></div>
+            </details>
           </form>
         </section>
       </main>

@@ -21,6 +21,7 @@ export type ConsultationFilters = {
   cycleId?: string;
   sessionId?: string;
   className?: string;
+  sex?: string; // "F" | "M" ; vide = tous
   query?: string; // sous-chaine dans le prenom OU le nom (« max » -> Maxime ET Lemax)
   from?: string; // YYYY-MM-DD
   to?: string;
@@ -45,6 +46,7 @@ export type ConsultationRow = {
   lastName: string;
   firstName: string;
   className: string;
+  sex: string; // "F", "M" ou ""
   sessionId: string;
   sessionLabel: string;
   sessionDate: string; // ISO
@@ -163,6 +165,7 @@ export async function buildConsultation(f: ConsultationFilters): Promise<Consult
         lastName: u.lastName ?? "",
         firstName: u.firstName ?? "",
         className: cls,
+        sex: (u.sex as string | null) ?? "",
         sessionId: s.id,
         sessionLabel: s.label ?? wodLabel(s.wodType),
         sessionDate: String(s.createdAt),
@@ -189,6 +192,7 @@ export async function buildConsultation(f: ConsultationFilters): Promise<Consult
   const levels = Object.entries(f.levels ?? {}).filter(([, v]) => v && isQualityCode(v)) as [string, QualityCode][];
   const all = rows.filter((r) => {
     if (f.className && r.className !== f.className) return false;
+    if (f.sex && r.sex !== f.sex) return false;
     // Recherche par sous-chaine (et non par prefixe) : « max » trouve Maxime ET Lemax.
     if (q && !`${r.firstName} ${r.lastName}`.toLowerCase().includes(q) && !`${r.lastName} ${r.firstName}`.toLowerCase().includes(q)) return false;
     if (f.role === "participant" && r.role === "arbitre") return false;
@@ -243,7 +247,7 @@ export function readConsultationLevels(sp: Record<string, string | string[] | un
 
 export function consultationCsv(rows: ConsultationRow[]): string {
   const head = [
-    "Date", "Cycle", "Séance", "Classe", "Nom", "Prénom", "Rôle", "Motif arbitre", "Équipe", "Rang", "Tours", "Tours total", "Temps", "Reps", "Cartons",
+    "Date", "Cycle", "Séance", "Classe", "Nom", "Prénom", "Sexe", "Rôle", "Motif arbitre", "Équipe", "Rang", "Tours", "Tours total", "Temps", "Reps", "Cartons",
     "Nb évals arbitres", "Reps médianes (arbitres)", "Qualités (arbitres)", "Touchés (arbitre)",
     ...SELF_EVAL_CRITERIA.map((c) => `Auto-éval : ${c.label}`),
   ];
@@ -255,7 +259,7 @@ export function consultationCsv(rows: ConsultationRow[]): string {
   for (const r of rows) {
     lines.push(
       [
-        new Date(r.sessionDate).toLocaleDateString("fr-BE", { timeZone: "Europe/Brussels" }), r.cycleName, r.sessionLabel, r.className, r.lastName, r.firstName, r.role, r.refereeNote,
+        new Date(r.sessionDate).toLocaleDateString("fr-BE", { timeZone: "Europe/Brussels" }), r.cycleName, r.sessionLabel, r.className, r.lastName, r.firstName, r.sex, r.role, r.refereeNote,
         r.teamName, r.rank, r.laps, r.lapsTotal, r.time, r.reps, r.cards, r.evalCount, r.evalMedianReps, r.evalQualities, r.pirateScore,
         ...SELF_EVAL_CRITERIA.map((c) => r.selfEval?.[c.id] ?? ""),
       ].map(esc).join(";")

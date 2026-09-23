@@ -16,3 +16,10 @@ export function readSessionClasses(settings: unknown): string[] {
   const s = settings as { classes?: unknown } | null;
   return Array.isArray(s?.classes) ? (s!.classes as unknown[]).filter((c): c is string => typeof c === "string") : [];
 }
+
+// Classes concernees par un cycle (Cycle.classes, JSON) : null ou vide = toutes les classes.
+// Ex. : le cycle Hyrox n'a jamais de deuxiemes ; leurs creneaux ne doivent alors rien ouvrir dans ce cycle.
+export function readCycleClasses(classes: unknown): string[] | null {
+  const list = Array.isArray(classes) ? (classes as unknown[]).filter((c): c is string => typeof c === "string" && c.trim() !== "") : [];
+  return list.length ? [...new Set(list)] : null;
+}

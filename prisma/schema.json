@@ -390,6 +390,13 @@
           },
           "Cycle": {
             "fields": {
+              "classes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -460,6 +467,9 @@
             },
             "storage": {
               "fields": {
+                "classes": {
+                  "column": "classes"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -3079,6 +3089,11 @@
             },
             "cycle": {
               "columns": {
+                "classes": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -5073,7 +5088,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "5b30c5d232c4b5b6b8b23ed10c8ae0c7fb11cc2ad51a988e296e762d93fb5c9b"
+    "storageHash": "a8eaac01ec949473fec558985cff6f60d9021dd41596ec3c77f4cff9c07d8869"
   },
   "execution": {
     "executionHash": "5692c6da233d65bb9f783d697d981d4cd207b2a0f536c1f06462f23976671e46",

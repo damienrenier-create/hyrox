@@ -40,13 +40,15 @@ const fmtHours = (min: number) => `${Math.floor(min / 60)} h${min % 60 ? ` ${Str
 const plural = (n: number, s: string, p = s + "s") => (n > 1 ? p : s);
 
 export function JournalClient({
-  teacherId, slots, classes, plans, elsewhere,
+  teacherId, slots, classes, plans, elsewhere, cycleClasses = null, cycleName = null,
 }: {
   teacherId: string;
   slots: SlotRow[];
   classes: string[];
   plans: PlanOption[];
   elsewhere: Record<string, Elsewhere[]>; // classe -> creneaux des AUTRES profs (info-bulle)
+  cycleClasses?: string[] | null; // classes du cycle en cours ; null = toutes
+  cycleName?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -146,8 +148,10 @@ export function JournalClient({
                   const n = placedCount.get(c) ?? 0;
                   const other = elsewhere[c] ?? [];
                   const isArmed = armed?.className === c && !armed.slotId;
+                  const outside = !!cycleClasses && !cycleClasses.includes(c);
                   const title =
-                    `${c}${n ? ` · ${n} ${plural(n, "créneau", "créneaux")} dans ce journal` : ""}` +
+                    `${c}${n ? ` · ${n} ${plural(n, "créneau", "créneaux")} dans ce journal` : ""}${outside ? `
+Hors du cycle ${cycleName ?? "en cours"} : un créneau de cette classe n'ouvrira rien tant que le cycle ne la concerne pas.` : ""}` +
                     (other.length ? `\nAilleurs : ${other.map((o) => `${WEEKDAYS[o.weekday].slice(0, 3)} ${fmtMin(o.startMin)}–${fmtMin(o.endMin)} (${o.who})`).join(", ")}` : "");
                   return (
                     <button
@@ -159,7 +163,8 @@ export function JournalClient({
                       title={title}
                       className={cx(
                         "px-2 py-1 rounded-lg border text-xs font-bold select-none cursor-grab active:cursor-grabbing transition",
-                        isArmed ? "bg-brand text-white border-brand" : other.length ? "bg-paper border-line-2 text-ink-2 hover:border-brand" : "bg-card border-line hover:border-brand"
+                        isArmed ? "bg-brand text-white border-brand" : other.length ? "bg-paper border-line-2 text-ink-2 hover:border-brand" : "bg-card border-line hover:border-brand",
+                        outside && "opacity-40 border-dashed"
                       )}
                     >
                       {c}

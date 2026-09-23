@@ -57,6 +57,7 @@ import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
 import { finishRaceAction } from "./actions";
 import { btn, cx, ui } from "@/lib/ui";
+import { cake } from "@/lib/birthday";
 
 // ===== Tuiles d'equipe : port FIDELE de « compte-tours-wod Pyramide final.html » (memes classes, memes
 // couleurs, memes degrades). 15 medailles = 5 paliers (bronze, argent, or, platine, diamant) x 3 eclats ;
@@ -708,7 +709,7 @@ export function GreffierClient({
               const tier = tierOf(ctx.settings, n);
               const yc = cardsOf(ctx, team.id);
               const isDone = fa !== null;
-              const who = (membersByTeam.get(team.id) ?? []).map((m) => m.firstName).join(", ");
+              const who = (membersByTeam.get(team.id) ?? []).map((m) => m.firstName + cake(m.birthday)).join(", ");
               // drawGrid() du fichier d'origine : grand chiffre + libelle selon la phase.
               let cls = "tile";
               let big: string | number;

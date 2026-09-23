@@ -71,12 +71,14 @@ export type Carnet = {
   overallMean: number | null;
 };
 
-export async function buildCarnet(classes: string[]): Promise<Carnet> {
+// `sex` : "F" ou "M" pour ne garder que les filles ou que les garcons de ces classes (un prof n'a parfois
+// que la moitie d'une classe, l'autre moitie etant chez un collegue). Les moyennes suivent le filtre.
+export async function buildCarnet(classes: string[], sex?: string): Promise<Carnet> {
   const empty: Carnet = { classes, columns: [], rows: [], columnMeans: {}, overallMean: null };
   if (!classes.length) return empty;
   const wanted = new Set(classes);
 
-  const students = (await db.orm.public.User.where({ role: "STUDENT" }).all()).filter((u) => u.className && wanted.has(u.className));
+  const students = (await db.orm.public.User.where({ role: "STUDENT" }).all()).filter((u) => u.className && wanted.has(u.className) && (!sex || u.sex === sex));
   if (!students.length) return empty;
   const ids = students.map((s) => s.id);
 

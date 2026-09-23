@@ -14,6 +14,7 @@ export type SelfEvalRow = {
   firstName: string;
   lastName: string;
   className: string;
+  sex: string; // "F", "M" ou "" : un prof n'a parfois que les filles ou que les garcons d'une classe
   teamName: string;
   sessionId: string;
   sessionLabel: string;
@@ -30,6 +31,7 @@ export type SelfEvalSort = "recent" | "ancien" | "prenom" | "nom" | "classe";
 export type SelfEvalFilters = {
   sessionId?: string; // vide = toutes les seances
   className?: string;
+  sex?: string; // "F" | "M" ; vide = tous
   query?: string; // sous-chaine dans le prenom OU le nom (« max » -> Maxime, Lemax…)
   levels?: Partial<Record<string, QualityCode>>; // criterionId -> niveau exige
   sort?: SelfEvalSort;
@@ -81,6 +83,7 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
       firstName: u?.firstName ?? "",
       lastName: u?.lastName ?? "",
       className: u?.className ?? "",
+      sex: (u?.sex as string | null) ?? "",
       teamName: teamNameOf.get(`${e.sessionId}_${e.studentId}`) ?? "—",
       sessionId: e.sessionId,
       sessionLabel: s ? s.label ?? wodLabel(s.wodType) : "—",
@@ -102,6 +105,7 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
 
   const filtered = all.filter((r) => {
     if (f.className && r.className !== f.className) return false;
+    if (f.sex && r.sex !== f.sex) return false;
     // Recherche par sous-chaine (et non par prefixe) : « max » trouve Maxime ET Lemax.
     if (q && !`${r.firstName} ${r.lastName}`.toLowerCase().includes(q) && !`${r.lastName} ${r.firstName}`.toLowerCase().includes(q)) return false;
     for (const [criterionId, level] of levels) if (r.answers[criterionId] !== level) return false;

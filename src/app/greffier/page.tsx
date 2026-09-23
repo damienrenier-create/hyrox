@@ -7,6 +7,7 @@ import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
+import { isBirthdayToday } from "@/lib/birthday";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
@@ -84,7 +85,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     for (const m of membersByTeam[i]) {
       const u = studentById.get(m.userId);
       if (u) {
-        views.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null });
+        views.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, birthday: isBirthdayToday(u.dateOfBirth) });
         teamOfStudent.set(u.id, t.name);
       }
     }

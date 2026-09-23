@@ -71,6 +71,7 @@ model Cycle {
   name      String
   order     Int         @default(0)
   isCurrent Boolean     @default(false)
+  classes   Json?       // classes concernees par ce cycle (ex. ["5GTb","6GTa"]) ; null ou vide = toutes
   createdAt DateTime    @default(now())
 
   plans    CyclePlan[]

@@ -8,25 +8,26 @@ import { btn, cx, ui } from "@/lib/ui";
 export const dynamic = "force-dynamic";
 
 // Annuaire des eleves (DAMZER + coachs) : par classe, ou par recherche de nom. Ouvre la fiche.
-export default async function ElevesPage({ searchParams }: { searchParams: Promise<{ classe?: string; q?: string; msg?: string }> }) {
+export default async function ElevesPage({ searchParams }: { searchParams: Promise<{ classe?: string; q?: string; sexe?: string; msg?: string }> }) {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) redirect("/");
-  const { classe = "", q = "", msg } = await searchParams;
+  const { classe = "", q = "", sexe = "", msg } = await searchParams;
+  const sex = ["F", "M"].includes(sexe) ? sexe : "";
 
   const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
   const classes = [...new Set(students.map((s) => s.className).filter((c): c is string => !!c))].sort();
   const needle = q.trim().toLowerCase();
   const list = students
-    .filter((s) => (!classe || s.className === classe) && (!needle || `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase().includes(needle) || `${s.lastName ?? ""} ${s.firstName ?? ""}`.toLowerCase().includes(needle)))
+    .filter((s) => (!classe || s.className === classe) && (!sex || s.sex === sex) && (!needle || `${s.firstName ?? ""} ${s.lastName ?? ""}`.toLowerCase().includes(needle) || `${s.lastName ?? ""} ${s.firstName ?? ""}`.toLowerCase().includes(needle)))
     .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "") || (a.lastName ?? "").localeCompare(b.lastName ?? "") || (a.firstName ?? "").localeCompare(b.firstName ?? ""));
-  const shown = classe || needle ? list : [];
+  const shown = classe || needle || sex ? list : [];
 
   return (
     <div className={ui.page}>
       <TopBar title="Élèves" subtitle={`${students.length} élèves · ${classes.length} classes`} back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined} />
       <main className={`${ui.container} py-6 space-y-4`}>
         {msg && <p className={ui.alertErr}>⚠️ {msg}</p>}
-        <form className={`${ui.cardPad} grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end`}>
+        <form className={`${ui.cardPad} grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end`}>
           <label className="text-xs">
             <span className={ui.label}>Classe</span>
             <select name="classe" defaultValue={classe} className={ui.input}>
@@ -38,10 +39,18 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
             <span className={ui.label}>Nom ou prénom</span>
             <input name="q" defaultValue={q} placeholder="ex. max" autoCapitalize="off" className={ui.input} />
           </label>
+          <label className="text-xs">
+            <span className={ui.label}>Sexe</span>
+            <select name="sexe" defaultValue={sex} className={ui.input}>
+              <option value="">Tous</option>
+              <option value="F">Filles</option>
+              <option value="M">Garçons</option>
+            </select>
+          </label>
           <button type="submit" className={btn.primary}>Chercher</button>
         </form>
 
-        {!classe && !needle ? (
+        {!classe && !needle && !sex ? (
           <p className={`${ui.cardPad} ${ui.muted}`}>Choisis une classe ou tape un nom pour afficher des élèves.</p>
         ) : (
           <div className={`${ui.card} overflow-x-auto`}>

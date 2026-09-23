@@ -21,6 +21,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
 
   const sessionId = one(sp.session);
   const className = one(sp.classe);
+  const sex = ["F", "M"].includes(one(sp.sexe)) ? one(sp.sexe) : "";
   const query = one(sp.q);
   const sort = (one(sp.tri) || "recent") as SelfEvalSort;
   const page = Math.max(1, parseInt(one(sp.page) || "1", 10) || 1);
@@ -31,18 +32,18 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
     db.orm.public.User.where({ role: "STUDENT" }).all().then((us) => [...new Set(us.map((u) => u.className).filter((c): c is string => !!c))].sort()),
   ]);
 
-  const res = await querySelfEvaluations({ sessionId: sessionId || undefined, className: className || undefined, query, levels, sort, page });
+  const res = await querySelfEvaluations({ sessionId: sessionId || undefined, className: className || undefined, sex: sex || undefined, query, levels, sort, page });
   const colorOf = (code: string | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
 
   // Conserve les filtres courants en changeant un seul parametre (pagination, tri).
   const linkWith = (patch: Record<string, string>) => {
     const p = new URLSearchParams();
-    const base: Record<string, string> = { session: sessionId, classe: className, q: query, tri: sort, page: String(page) };
+    const base: Record<string, string> = { session: sessionId, classe: className, sexe: sex, q: query, tri: sort, page: String(page) };
     for (const c of SELF_EVAL_CRITERIA) if (levels[c.id]) base[`c_${c.id}`] = levels[c.id]!;
     for (const [k, v] of Object.entries({ ...base, ...patch })) if (v) p.set(k, v);
     return `/admin/auto-evaluations?${p.toString()}`;
   };
-  const activeFilters = [className && `classe ${className}`, query && `« ${query} »`, ...SELF_EVAL_CRITERIA.filter((c) => levels[c.id]).map((c) => `${c.label} = ${levels[c.id]}`)].filter(Boolean) as string[];
+  const activeFilters = [className && `classe ${className}`, sex && (sex === "F" ? "filles" : "garçons"), query && `« ${query} »`, ...SELF_EVAL_CRITERIA.filter((c) => levels[c.id]).map((c) => `${c.label} = ${levels[c.id]}`)].filter(Boolean) as string[];
 
   return (
     <div className={ui.page}>
@@ -60,7 +61,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
       <main className={`${ui.container} py-6 space-y-4`}>
         {/* ===== Filtres (une seule soumission, tout en parametres d'URL) ===== */}
         <form className={`${ui.cardPad} space-y-3`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <label className="text-xs">
               <span className={ui.label}>Séance</span>
               <select name="session" defaultValue={sessionId} className={`${ui.input} w-full`}>
@@ -77,6 +78,14 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
               <select name="classe" defaultValue={className} className={`${ui.input} w-full`}>
                 <option value="">Toutes</option>
                 {allClasses.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="text-xs">
+              <span className={ui.label}>Sexe</span>
+              <select name="sexe" defaultValue={sex} className={`${ui.input} w-full`}>
+                <option value="">Tous</option>
+                <option value="F">Filles</option>
+                <option value="M">Garçons</option>
               </select>
             </label>
             <label className="text-xs">

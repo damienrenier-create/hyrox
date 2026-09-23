@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { currentCycleAndPlan } from "@/lib/scheduling";
 import { WEEKDAYS, fmtMin, groupLabel, groupSlots, type SlotRow } from "@/lib/journal";
 import { listTeachers } from "@/lib/staff";
+import { readCycleClasses } from "@/lib/session-roles";
 import { displayPseudo } from "@/lib/staff-names";
 import { TopBar } from "../../_components/TopBar";
 import { JournalClient, type Elsewhere, type PlanOption } from "./JournalClient";
@@ -79,7 +80,15 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           </p>
         )}
 
-        <JournalClient teacherId={viewedId} slots={mine} classes={classes} plans={plans} elsewhere={elsewhere} />
+        <JournalClient
+          teacherId={viewedId}
+          slots={mine}
+          classes={classes}
+          plans={plans}
+          elsewhere={elsewhere}
+          cycleClasses={cycle ? readCycleClasses(cycle.classes) : null}
+          cycleName={cycle?.name ?? null}
+        />
 
         <section className={ui.cardPad}>
           <h2 className={`${ui.h3} mb-1`}>Groupes de ce journal</h2>

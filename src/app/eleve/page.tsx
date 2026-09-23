@@ -9,6 +9,7 @@ import { LogoutButton } from "./LogoutButton";
 import { RefereeRequest } from "./RefereeRequest";
 import { TopBar } from "../_components/TopBar";
 import { ui } from "@/lib/ui";
+import { isBirthdayToday } from "@/lib/birthday";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -16,6 +17,8 @@ export default async function ElevePage() {
   if (user.role !== "STUDENT") redirect(user.role === "GREFFIER" ? "/greffier" : user.role === "MASTER_ADMIN" ? "/admin" : "/touche-coule");
 
   // Les seances de ma classe s'ouvrent automatiquement pendant mon creneau (voir scheduling.ts).
+  const me = await db.orm.public.User.where({ id: user.id }).first();
+  const birthday = isBirthdayToday(me?.dateOfBirth);
   const openSessions = await openSessionsForStudent(user.id, user.className ?? null);
   const mine = await sessionsForStudent(user.id);
   const openIds = new Set(openSessions.map((s) => s.id));
@@ -31,7 +34,7 @@ export default async function ElevePage() {
 
   return (
     <div className={ui.page}>
-      <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
+      <TopBar title={birthday ? `${user.name} 🎂` : user.name} subtitle={birthday ? `${user.className ?? ""} · joyeux anniversaire !` : (user.className ?? "")} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
         {/* Le palmares est ouvert aux eleves : c'est ce qui donne envie de battre le record. */}
