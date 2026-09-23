@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { QUALITY_LEVELS, qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import type { BoardData } from "@/lib/referee-board";
 import { RefereeLeaderboard } from "../touche-coule/Effects";
-import { ui } from "@/lib/ui";
+import { EvalEditor } from "./EvalEditor";
+import { cx, ui } from "@/lib/ui";
 
 // Onglet « Arbitrage » du greffier (ecran projete) : ce que les arbitres ont observe case par case
 // (reps medianes + qualite), et le classement pirate des arbitres, rafraichi toutes les 5 s.
@@ -29,6 +30,9 @@ export function ArbitrageTab({ board }: { board: BoardData }) {
     shotsByCell.set(k, v);
   }
   const colorOf = (note: number) => QUALITY_LEVELS.find((l) => l.value === note)?.color ?? "text-ink-3";
+  // Case ouverte pour correction (reps ou appreciation d'un arbitre qui a tape a cote).
+  const [editing, setEditing] = useState<{ teamId: string; exerciseId: string } | null>(null);
+  const editingCell = editing ? cellMap.get(`${editing.teamId}_${editing.exerciseId}`) ?? null : null;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
@@ -57,7 +61,12 @@ export function ArbitrageTab({ board }: { board: BoardData }) {
                   const c = cellMap.get(`${t.id}_${e.id}`);
                   const sh = shotsByCell.get(`${t.id}_${e.id}`);
                   return (
-                    <td key={e.id} className="p-0.5 border border-line/70 align-top min-w-[52px] h-[44px]">
+                    <td
+                      key={e.id}
+                      onClick={() => c && setEditing({ teamId: t.id, exerciseId: e.id })}
+                      title={c ? "Voir et corriger les évaluations de cette case" : undefined}
+                      className={cx("p-0.5 border border-line/70 align-top min-w-[52px] h-[44px]", c && "cursor-pointer hover:bg-brand-soft/60")}
+                    >
                       {c ? (
                         <motion.div key={c.count} initial={{ scale: 1.15, backgroundColor: "#fff0e5" }} animate={{ scale: 1, backgroundColor: "#ffffff00" }} className="rounded px-1 py-0.5 leading-tight">
                           <div className="font-display font-extrabold text-sm text-ink flex items-center justify-center gap-1">
@@ -96,6 +105,15 @@ export function ArbitrageTab({ board }: { board: BoardData }) {
         )}
         <p className={`${ui.hint} mt-2`}>+1 touché · +3 coulé · +1 par case intacte de sa flotte</p>
       </aside>
+
+      {editing && editingCell && (
+        <EvalEditor
+          cell={editingCell}
+          teamName={board.teams.find((t) => t.id === editing.teamId)?.name ?? "?"}
+          exerciseLabel={board.exercises.find((e) => e.id === editing.exerciseId)?.label ?? "?"}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

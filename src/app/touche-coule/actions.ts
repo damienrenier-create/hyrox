@@ -560,3 +560,19 @@ export async function generateGhostFleetsAction(
 
   return { ok: true, created };
 }
+
+// ===== Corriger une de SES evaluations recentes (misclic : 55 reps au lieu de 5) =====
+// Seul l'auteur, seulement ses evaluations de cette seance. Le tir n'est pas touche : toucher ou couler
+// ne depend pas des reps, seuls les reps et l'appreciation sont corriges.
+export type MyEvalEdit = { id: string; reps: number; note: number };
+export async function updateMyEvaluationAction(sessionId: string, evaluationId: string, reps: number, note: number): Promise<{ error: string } | { ok: true }> {
+  const evaluator = await getSession();
+  if (!evaluator) throw new Error("Non authentifié.");
+  if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
+  if (!VALID_NOTES.includes(note)) return { error: "Appréciation invalide." };
+  const ev = await db.orm.public.Evaluation.where({ id: evaluationId, sessionId }).first();
+  if (!ev) return { error: "Évaluation introuvable." };
+  if (ev.evaluatorId !== evaluator.id) return { error: "Tu ne peux corriger que tes propres évaluations." };
+  await db.orm.public.Evaluation.where({ id: ev.id }).update({ repsObserved: reps, note });
+  return { ok: true };
+}

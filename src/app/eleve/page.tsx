@@ -34,6 +34,17 @@ export default async function ElevePage() {
       <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
+        {/* Le palmares est ouvert aux eleves : c'est ce qui donne envie de battre le record. */}
+        <Link href="/eleve/records" className={`block ${ui.card} border-accent/60 bg-accent-soft/40 hover:border-accent p-3 transition`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-display font-extrabold text-ink">🏆 Records du WOD Pyramide</div>
+              <div className="text-xs text-ink-2">Toutes classes confondues · par équipe et par année</div>
+            </div>
+            <span className="text-ink-3 text-xl">›</span>
+          </div>
+        </Link>
+
         <section>
           <h2 className={`${ui.eyebrow} mb-2`}>WOD en cours</h2>
           {cards.length === 0 ? (

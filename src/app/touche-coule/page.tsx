@@ -116,6 +116,14 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
   // et ce geste d'arbitrage ne doit jamais abimer sa propre flotte ni lui couter un point.
   const incoming = allShots.filter((s) => s.refereeId !== evaluator.id && myCellSet.has(`${s.targetTeamId}_${s.targetExerciseId}`));
   const hitsOnMyFleet = incoming.length;
+
+  // Mes cinq dernieres evaluations, corrigeables : un arbitre qui tape 55 au lieu de 5 doit pouvoir
+  // se rattraper sans passer par le prof.
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const exLabel = new Map(exercises.map((e) => [e.id, e.label]));
+  const myRecent = (await db.orm.public.Evaluation.where({ sessionId: session.id, evaluatorId: evaluator.id }).orderBy((e) => e.createdAt.desc()).all())
+    .slice(0, 5)
+    .map((e) => ({ id: e.id, teamName: teamName.get(e.teamId) ?? "?", exerciseLabel: exLabel.get(e.exerciseId) ?? "?", reps: e.repsObserved, note: e.note, atMs: new Date(String(e.createdAt)).getTime() }));
   // Cases de MA flotte deja touchees : l'arbitre doit voir OU il encaisse, pas seulement un compteur.
   const damagedCells = incoming.map((s) => ({ teamId: s.targetTeamId, exerciseId: s.targetExerciseId }));
 
@@ -148,6 +156,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       myScore={myScore}
       ownTeam={access.teamId ? { id: access.teamId, name: access.teamName ?? "" } : null}
       leaderboard={leaderboard}
+      myRecent={myRecent}
       canUnlock={incoming.length === 0}
     />
   );

@@ -27,6 +27,7 @@ export type ShotData = { teamId: string; exerciseId: string; refereeId: string; 
 export type CellSummary = {
   teamId: string; exerciseId: string; count: number; reps: number[]; notes: number[]; medianReps: number | null;
   byStaff: boolean; byStudent: boolean;
+  items: { id: string; reps: number; note: number; refereeName: string }[]; // detail par evaluation, corrigeable par le greffier
 };
 
 export type RefereeRow = {
@@ -190,11 +191,12 @@ export async function buildBoardData(sessionId: string): Promise<BoardData> {
   const cellMap = new Map<string, CellSummary>();
   for (const e of evaluations) {
     const key = `${e.teamId}_${e.exerciseId}`;
-    if (!cellMap.has(key)) cellMap.set(key, { teamId: e.teamId, exerciseId: e.exerciseId, count: 0, reps: [], notes: [], medianReps: null, byStaff: false, byStudent: false });
+    if (!cellMap.has(key)) cellMap.set(key, { teamId: e.teamId, exerciseId: e.exerciseId, count: 0, reps: [], notes: [], medianReps: null, byStaff: false, byStudent: false, items: [] });
     const c = cellMap.get(key)!;
     c.count++;
     c.reps.push(e.repsObserved);
     c.notes.push(e.note);
+    c.items.push({ id: e.id, reps: e.repsObserved, note: e.note, refereeName: userById.get(e.evaluatorId)?.name ?? "?" });
     // Le prof qui joue avec sa propre flotte reste un adulte : c'est bien son ROLE qui decide.
     if (userById.get(e.evaluatorId)?.role === "STUDENT") c.byStudent = true;
     else c.byStaff = true;

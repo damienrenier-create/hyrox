@@ -11,6 +11,7 @@ import { usePulse } from "../_components/usePulse";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { Board, type BoardShip, type BoardTeam, type BoardExercise, type BoardMarker } from "./Board";
 import { BoardEffectsLayer, ScoreBadge, RefereeLeaderboard, EFFECT_STYLES, type BoardEffect, type LeaderboardRow } from "./Effects";
+import { RecentEvals, type RecentEval } from "./RecentEvals";
 import { btn, cx, ui } from "@/lib/ui";
 import { displayPseudo } from "@/lib/staff-names";
 
@@ -37,9 +38,10 @@ type Props = {
   canUnlock: boolean; // aucune de mes cases n'a encore ete visee : je peux rouvrir ma flotte pour la deplacer
   ownTeam?: { id: string; name: string } | null; // arbitre issu d'une equipe (DNF...) : ne peut pas evaluer sa propre equipe
   leaderboard: LeaderboardRow[];
+  myRecent?: RecentEval[]; // mes cinq dernieres evaluations, corrigeables (misclic)
 };
 
-export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard, canUnlock }: Props) {
+export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, myShips, myCells, myShots, hitsOnMyFleet, damagedCells, wreckCells, raceEnded, myScore, ownTeam = null, leaderboard, canUnlock, myRecent = [] }: Props) {
   const router = useRouter();
   const myCellSet = new Set(myCells);
   const tIndex = useMemo(() => new Map(teams.map((t, i) => [t.id, i] as const)), [teams]);
@@ -222,6 +224,7 @@ export function ToucheCouleClient({ evaluator, sessionId, teams, exercises, mySh
             </motion.section>
           )}
         </AnimatePresence>
+        <RecentEvals sessionId={sessionId} items={myRecent} />
         <p className="text-[11px] text-ink-2 px-1 mb-1">
           Touche une case (équipe × exercice) pour évaluer, puis tirer. Une case ne s&apos;évalue qu&apos;une seule fois. Tes bateaux sont affichés, les autres restent cachés.
           {ownTeam && <> <span className="text-accent-ink font-bold">Ta propre équipe ({ownTeam.name}) ne peut pas être arbitrée par toi.</span></>}
