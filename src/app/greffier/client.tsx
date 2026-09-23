@@ -48,6 +48,9 @@ import {
   undoLastAction,
   setTeamStartAction,
   setTeamEndAction,
+  teamLapsAction,
+  deleteLapAction,
+  type TeamLap,
 } from "./race-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { greffierPulseAction } from "@/lib/pulse";
@@ -62,6 +65,7 @@ const TIERS = ["b", "s", "g", "p", "d"];
 const MEDAL_NAMES = ["Bronze", "Argent", "Or", "Platine", "Diamant"];
 const TOP_RANKED = 5; // les 5 premieres equipes a obtenir une medaille voient leur rang inscrit dedans
 const ordinal = (n: number) => (n === 1 ? "1re" : `${n}e`);
+const MIN_LAP_GAP_MS = 60_000; // deux tours de la meme equipe a moins d'une minute = double clic (idem serveur)
 
 const PYR_STYLES = `
 .pyr{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -77,6 +81,9 @@ const PYR_STYLES = `
 .pyr .tile:active{transform:scale(.97)}
 .pyr .tile > span{max-width:100%}
 .pyr .tile .num{font-size:13px;font-weight:800;opacity:.85;line-height:1.1}
+/* Numero d'equipe en noir, tout en haut de la tuile, au-dessus des medailles : lisible sur tous les fonds. */
+.pyr .tile .tnum{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:19px;padding:0 7px;border-radius:999px;
+  background:#000;color:#fff;font:800 12px/1 inherit;letter-spacing:.02em;margin-bottom:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
 .pyr .tile .reps{font-size:28px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
 .pyr .tile.done .reps{font-size:22px}
 .pyr .tile .lbl{font-size:10.5px;opacity:.88;line-height:1.15;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -443,6 +450,13 @@ export function GreffierClient({
       return;
     }
     if (finishAt(ctx, teamId) !== null) return;
+    // Un tour de pyramide prend plusieurs minutes : une deuxieme validation de la meme equipe a moins
+    // d'une minute est un double clic. Refus immediat ici, et le serveur refuse aussi de son cote.
+    const lastAt = Math.max(-Infinity, ...ctx.laps.filter((l) => l.teamId === teamId).map((l) => l.at));
+    if (Number.isFinite(lastAt) && nowElapsed() - lastAt < MIN_LAP_GAP_MS) {
+      setError(`${teamNames[teamId] ?? "Cette équipe"} vient déjà de valider un tour il y a ${Math.round((nowElapsed() - lastAt) / 1000)} s : double clic ignoré. Pour corriger un tour, ouvre l'équipe.`);
+      return;
+    }
     const t = Date.now();
     if (t - (lastTap.current.get(teamId) ?? 0) < 600) return; // double-tap accidentel = un seul tour
     lastTap.current.set(teamId, t);
@@ -681,6 +695,7 @@ export function GreffierClient({
               return (
                 <div key={team.id} className={`cell${tier ? ` tier t${tier}` : ""}${slope}`}>
                   <button type="button" onClick={() => handleLap(team.id)} className={cls} data-team={team.id}>
+                    <span className="tnum">{teamNum(teamNames[team.id])}</span>
                     {phase !== "pre" && <Medals settings={ctx.settings} n={n} ord={ord[team.id]} />}
                     <span className="num">{teamNames[team.id] ?? team.id}</span>
                     <span className="reps">{big}</span>
@@ -772,6 +787,7 @@ export function GreffierClient({
       {openTeamId && (
         <TeamPanel
           teamId={openTeamId}
+          ctxSessionId={sessionId}
           ctx={ctx}
           exerciseLabels={exerciseLabels}
           teamName={teamNames[openTeamId] ?? openTeamId}
@@ -911,9 +927,10 @@ function ScoreTable({
 }
 
 function TeamPanel({
-  teamId, ctx, exerciseLabels, teamName, onClose,
+  teamId, ctxSessionId, ctx, exerciseLabels, teamName, onClose,
 }: {
   teamId: string;
+  ctxSessionId: string;
   ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext;
   exerciseLabels: Record<string, string>;
   teamName: string;
@@ -924,6 +941,23 @@ function TeamPanel({
   const startEx = startOf(ctx, team);
   const finished = finishAt(ctx, teamId) !== null;
   const partial = partialOf(ctx, team);
+  // Tours valides de l'equipe, avec leur identifiant : on peut en annuler UN precis, pas seulement le dernier.
+  const [laps, setLaps] = useState<TeamLap[] | null>(null);
+  const [lapError, setLapError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    teamLapsAction(ctxSessionId, teamId).then((l) => { if (alive) setLaps(l); });
+    return () => { alive = false; };
+  }, [ctxSessionId, teamId]);
+  function cancelLap(lap: TeamLap, index: number) {
+    if (!confirm(`Annuler le tour n°${index + 1} de ${teamName} (validé à ${new Date(lap.atMs).toLocaleTimeString("fr-BE")}) ?`)) return;
+    setLapError("");
+    startTransition(async () => {
+      const res = await deleteLapAction(ctxSessionId, lap.id);
+      if ("error" in res) { setLapError(res.error); return; }
+      onClose();
+    });
+  }
 
   function setStart(exerciseId: string) {
     startTransition(async () => {
@@ -964,6 +998,30 @@ function TeamPanel({
         ) : (
           <p className="text-sm text-success-ink font-bold mb-4">🏁 Équipe arrivée.</p>
         )}
+
+        <p className="text-sm font-bold mb-1">Tours validés{laps ? ` (${laps.length})` : ""}</p>
+        <p className={`${ui.hint} mb-2`}>Deux tours à moins d&apos;une minute d&apos;écart sont signalés : c&apos;est presque toujours un double clic.</p>
+        {laps === null ? (
+          <p className={`${ui.hint} mb-4`}>Chargement…</p>
+        ) : laps.length === 0 ? (
+          <p className={`${ui.hint} mb-4`}>Aucun tour validé.</p>
+        ) : (
+          <ul className="space-y-1 mb-4">
+            {laps.map((lap, i) => {
+              const suspect = i > 0 && lap.atMs - laps[i - 1].atMs < MIN_LAP_GAP_MS;
+              return (
+                <li key={lap.id} className={cx("flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-sm", suspect ? "bg-danger-soft border-danger/40" : "bg-paper border-line")}>
+                  <span>
+                    <b>Tour {i + 1}</b> <span className="text-ink-2">· {new Date(lap.atMs).toLocaleTimeString("fr-BE")}</span>
+                    {suspect && <span className="text-danger-ink font-bold"> · {Math.round((lap.atMs - laps[i - 1].atMs) / 1000)} s après le précédent</span>}
+                  </span>
+                  <button type="button" onClick={() => cancelLap(lap, i)} disabled={pending} className={btn.smDanger}>Annuler ce tour</button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {lapError && <p className={`${ui.alertErr} mb-3`}>{lapError}</p>}
 
         <p className="text-sm font-bold mb-2">Changer le départ</p>
         <div className="grid grid-cols-2 gap-2">

@@ -68,7 +68,38 @@ export async function validateLapAction(sessionId: string, teamId: string): Prom
   if (!rs || !rs.startedAt || rs.endedAt) return { error: "Course non démarrée ou déjà terminée." };
   const pauses = await db.orm.public.RacePause.where({ raceStateId: rs.id }).all();
   if (pauses.some((p) => p.to === null)) return { error: "Course en pause." };
+  // Filet de securite : un tour de pyramide prend plusieurs minutes, deux validations de la meme
+  // equipe a moins d'une minute d'ecart sont un double clic, jamais un vrai tour.
+  const last = await db.orm.public.Lap.where({ raceStateId: rs.id, teamId }).orderBy((l) => l.at.desc()).first();
+  if (last && Date.now() - toMs(last.at) < MIN_LAP_GAP_MS) {
+    const s = Math.round((Date.now() - toMs(last.at)) / 1000);
+    return { error: `Tour refusé : cette équipe vient déjà d'en valider un il y a ${s} s. Un tour ne se boucle pas en moins d'une minute.` };
+  }
   await db.orm.public.Lap.create({ raceStateId: rs.id, teamId, at: Temporal.Now.instant() });
+  return { ok: true };
+}
+
+// Ecart minimal entre deux tours d'une meme equipe (double clic du greffier).
+const MIN_LAP_GAP_MS = 60_000;
+
+// Tours d'une equipe, avec leur identifiant, pour en annuler un precis depuis le panneau d'equipe.
+export type TeamLap = { id: string; atMs: number };
+export async function teamLapsAction(sessionId: string, teamId: string): Promise<TeamLap[]> {
+  await requireGreffierAccess(sessionId);
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (!rs) return [];
+  const laps = await db.orm.public.Lap.where({ raceStateId: rs.id, teamId }).orderBy((l) => l.at.asc()).all();
+  return laps.map((l) => ({ id: l.id, atMs: toMs(l.at) }));
+}
+
+// Annule UN tour precis (pas forcement le dernier) : une equipe cliquee deux fois sans que personne le voie.
+export async function deleteLapAction(sessionId: string, lapId: string): Promise<{ error: string } | { ok: true }> {
+  await requireGreffierAccess(sessionId);
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (!rs) return { error: "État de course manquant." };
+  const lap = await db.orm.public.Lap.where({ id: lapId, raceStateId: rs.id }).first();
+  if (!lap) return { error: "Ce tour n'existe plus." };
+  await db.orm.public.Lap.where({ id: lap.id }).delete();
   return { ok: true };
 }
 
