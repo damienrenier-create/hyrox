@@ -66,6 +66,27 @@ const MEDAL_NAMES = ["Bronze", "Argent", "Or", "Platine", "Diamant"];
 const TOP_RANKED = 5; // les 5 premieres equipes a obtenir une medaille voient leur rang inscrit dedans
 const ordinal = (n: number) => (n === 1 ? "1re" : `${n}e`);
 const MIN_LAP_GAP_MS = 60_000; // deux tours de la meme equipe a moins d'une minute = double clic (idem serveur)
+const CHOICE = "border border-line-2 rounded-xl py-2 text-sm font-semibold bg-card hover:bg-paper transition disabled:opacity-50";
+
+// ===== Saisies optimistes (tours, cartes) =====
+// Une saisie locale porte le compte serveur de son equipe au moment du clic (`serverCountBefore`). Elle est
+// « vivante » tant que le serveur n'a pas renvoye plus que ce compte ; au-dela, il l'a absorbee.
+type LocalEntry = { id: number; teamId: string; at: number; serverCountBefore: number };
+const countOf = (list: { teamId: string }[], teamId: string) => list.reduce((n, x) => (x.teamId === teamId ? n + 1 : n), 0);
+function stillLive(entries: LocalEntry[], server: { teamId: string }[]): LocalEntry[] {
+  const kept = entries.filter((e) => e.serverCountBefore >= countOf(server, e.teamId));
+  return kept.length === entries.length ? entries : kept; // meme reference si rien ne change : pas de re-rendu
+}
+// Une action qui echoue en vol (reseau coupe, session expiree) doit rendre une erreur lisible, jamais laisser
+// une saisie locale orpheline que le serveur ne connait pas.
+async function settle(action: () => Promise<{ error: string } | { ok: true }>): Promise<{ error: string } | { ok: true }> {
+  try {
+    return await action();
+  } catch (e) {
+    return { error: "Saisie non enregistrée (réseau ou session expirée) : " + (e instanceof Error ? e.message : String(e)) };
+  }
+}
+const fmtGap = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)} s` : fmtUp(ms));
 
 const PYR_STYLES = `
 .pyr{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -320,7 +341,7 @@ export function SessionStep({ to, dir }: { to: SessionOption | null; dir: "older
 }
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, canCorrect = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -328,6 +349,7 @@ export function GreffierClient({
   olderSession: SessionOption | null;
   newerSession: SessionOption | null;
   isMaster?: boolean;
+  canCorrect?: boolean; // DAMZER et GREFFIER : retirer un tour precis (les coachs ne suppriment rien)
   bundle: RaceContextBundle;
   teamsWithMembers: TeamWithMembers[];
   classes: string[];
@@ -343,19 +365,21 @@ export function GreffierClient({
   // ===== Etat OPTIMISTE : un tap = un tour (ou une carte) affiche IMMEDIATEMENT — medaille, palier, niveau,
   // classement — sans attendre le serveur. L'action part en arriere-plan ; le re-rendu serveur est groupe
   // (1,5 s apres la derniere saisie) et absorbe les saisies locales une a une (pas de doublon, pas de saut).
-  type LocalEntry = { teamId: string; at: number; serverCountBefore: number };
+  // Le tri « vivante / absorbee » se fait PENDANT le rendu, des que de nouvelles donnees serveur arrivent
+  // (pattern React « ajuster un etat quand une prop change » : React relance le rendu avant d'afficher quoi
+  // que ce soit). Jamais dans un effet : l'image ou les donnees serveur arrivent compterait le meme tour deux
+  // fois (9 → 7 → 8 sur la tuile), quelle que soit la source du rafraichissement (pouls, minuterie, annulation).
+  const seq = useRef(0);
   const [localLaps, setLocalLaps] = useState<LocalEntry[]>([]);
   const [localCards, setLocalCards] = useState<LocalEntry[]>([]);
-  const localLapsRef = useRef(localLaps);
-  localLapsRef.current = localLaps;
-  const localCardsRef = useRef(localCards);
-  localCardsRef.current = localCards;
-  useEffect(() => {
-    const laps = (teamId: string) => serverCtx.laps.filter((l) => l.teamId === teamId).length;
-    const cards = (teamId: string) => serverCtx.cards.filter((c) => c.teamId === teamId).length;
-    setLocalLaps((ls) => ls.filter((l) => l.serverCountBefore >= laps(l.teamId)));
-    setLocalCards((cs) => cs.filter((c) => c.serverCountBefore >= cards(c.teamId)));
-  }, [serverCtx]);
+  const [seenCtx, setSeenCtx] = useState(serverCtx); // dernier etat serveur deja depouille
+  if (seenCtx !== serverCtx) {
+    setSeenCtx(serverCtx);
+    const ls = stillLive(localLaps, serverCtx.laps);
+    if (ls !== localLaps) setLocalLaps(ls);
+    const cs = stillLive(localCards, serverCtx.cards);
+    if (cs !== localCards) setLocalCards(cs);
+  }
   const ctx = useMemo<typeof serverCtx>(() => {
     if (!localLaps.length && !localCards.length) return serverCtx;
     return {
@@ -375,6 +399,7 @@ export function GreffierClient({
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fixOpen, setFixOpen] = useState(false); // « Annuler un tour » : equipe → tours → retrait
   const [hitTeam, setHitTeam] = useState<string | null>(null);
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
 
@@ -393,7 +418,7 @@ export function GreffierClient({
   // et on ne refabrique la page QUE s'il a change — au lieu de la reconstruire toutes les 5 s pour rien.
   // Actif meme avant le depart : les equipes et les arbitres bougent aussi depuis un autre appareil.
   const pulse = useCallback(() => greffierPulseAction(sessionId), [sessionId]);
-  usePulse(pulse, 10000, phase !== "post" && !openTeamId && !settingsOpen && !pending);
+  usePulse(pulse, 10000, phase !== "post" && !openTeamId && !settingsOpen && !fixOpen && !pending);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;
@@ -425,7 +450,7 @@ export function GreffierClient({
   function run(action: () => Promise<{ error: string } | { ok: true }>) {
     setError("");
     startTransition(async () => {
-      const res = await action();
+      const res = await settle(action);
       if ("error" in res) setError(res.error);
       else refresh();
     });
@@ -464,15 +489,18 @@ export function GreffierClient({
     setHitTeam(teamId);
     setTimeout(() => setHitTeam((x) => (x === teamId ? null : x)), 350);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
-    // Affichage immediat, serveur ensuite.
-    const before = serverCtx.laps.filter((l) => l.teamId === teamId).length + localLapsRef.current.filter((l) => l.teamId === teamId).length;
-    setLocalLaps((ls) => [...ls, { teamId, at: nowElapsed(), serverCountBefore: before }]);
+    // Affichage immediat, serveur ensuite. Le compte de reference = compte serveur + saisies locales encore
+    // vivantes (l'etat est depouille a chaque arrivee de donnees, voir plus haut) : une saisie deja absorbee
+    // n'est jamais comptee, sinon un clic tombant entre deux rendus laisserait un tour fantome a l'ecran.
+    const before = countOf(serverCtx.laps, teamId) + countOf(localLaps, teamId);
+    const id = ++seq.current;
+    setLocalLaps((ls) => [...ls, { id, teamId, at: nowElapsed(), serverCountBefore: before }]);
     setError("");
     startTransition(async () => {
-      const res = await validateLapAction(sessionId, teamId);
+      const res = await settle(() => validateLapAction(sessionId, teamId));
       if ("error" in res) {
         setError(res.error);
-        setLocalLaps((ls) => ls.filter((l) => !(l.teamId === teamId && l.serverCountBefore === before)));
+        setLocalLaps((ls) => ls.filter((l) => l.id !== id)); // le serveur n'a rien : la tuile revient a l'etat vrai
         return;
       }
       scheduleRefresh();
@@ -480,29 +508,43 @@ export function GreffierClient({
   }
   function handleCard(teamId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    const before = serverCtx.cards.filter((c) => c.teamId === teamId).length + localCardsRef.current.filter((c) => c.teamId === teamId).length;
-    setLocalCards((cs) => [...cs, { teamId, at: nowElapsed(), serverCountBefore: before }]);
+    const before = countOf(serverCtx.cards, teamId) + countOf(localCards, teamId);
+    const id = ++seq.current;
+    setLocalCards((cs) => [...cs, { id, teamId, at: nowElapsed(), serverCountBefore: before }]);
     setError("");
     startTransition(async () => {
-      const res = await giveCardAction(sessionId, teamId);
+      const res = await settle(() => giveCardAction(sessionId, teamId));
       if ("error" in res) {
         setError(res.error);
-        setLocalCards((cs) => cs.filter((c) => !(c.teamId === teamId && c.serverCountBefore === before)));
+        setLocalCards((cs) => cs.filter((c) => c.id !== id));
         return;
       }
       scheduleRefresh();
     });
   }
   function handleUndo() {
-    // Optimiste : la derniere saisie encore locale disparait tout de suite ; le serveur retire la sienne,
-    // puis un rafraichissement immediat recolle les deux.
+    // Le serveur retire SA saisie la plus recente. On ne retire une saisie locale que si c'est la meme : une
+    // saisie encore vivante, plus recente que tout ce que le serveur connait. Sinon on laisse le serveur
+    // trancher et le rafraichissement recoller — jamais deux retraits pour un seul clic.
+    const newestServer = Math.max(-Infinity, ...serverCtx.laps.map((l) => l.at), ...serverCtx.cards.map((c) => c.at));
     const lastLap = localLaps[localLaps.length - 1];
     const lastCard = localCards[localCards.length - 1];
-    if (lastLap || lastCard) {
-      if (!lastCard || (lastLap && lastLap.at >= lastCard.at)) setLocalLaps((ls) => ls.slice(0, -1));
-      else setLocalCards((cs) => cs.slice(0, -1));
+    const lapWins = !!lastLap && (!lastCard || lastLap.at >= lastCard.at);
+    const newest = lapWins ? lastLap : lastCard;
+    if (newest && newest.at >= newestServer) {
+      if (lapWins) setLocalLaps((ls) => ls.filter((l) => l.id !== newest.id));
+      else setLocalCards((cs) => cs.filter((c) => c.id !== newest.id));
     }
+    if (refreshTimer.current) clearTimeout(refreshTimer.current); // run() rafraichit tout de suite
     run(() => undoLastAction(sessionId));
+  }
+  // Un tour retire a la main (panneau d'equipe ou « Annuler un tour ») : les saisies locales de cette equipe
+  // n'ont plus de sens — le compte serveur baisse, elles redeviendraient « vivantes » et re-afficheraient
+  // un tour de trop. On les jette et on relit le serveur.
+  function handleLapDeleted(teamId: string) {
+    setLocalLaps((ls) => (ls.some((l) => l.teamId === teamId) ? ls.filter((l) => l.teamId !== teamId) : ls));
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refresh();
   }
   function handleFinish() {
     if (!confirm("Terminer le WOD ? Les évaluations en cours seront closes (fiabilité calculée) et la séance clôturée.")) return;
@@ -764,10 +806,17 @@ export function GreffierClient({
                   {isPaused ? "Reprendre" : "Pause"}
                 </button>
                 <button onClick={handleUndo} disabled={pending} className={btn.lgGhost}>Annuler le dernier</button>
+                {canCorrect && <button onClick={() => setFixOpen(true)} disabled={pending} className={btn.lgGhost}>Annuler un tour…</button>}
                 <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>Fin de course</button>
               </>
             )}
-            {phase === "post" && <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>}
+            {phase === "post" && (
+              <>
+                <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>
+                {/* Un tour frauduleux se corrige aussi apres coup : classement, medailles et records se recalculent. */}
+                {canCorrect && <button onClick={() => setFixOpen(true)} disabled={pending} className={btn.lgGhost}>Annuler un tour…</button>}
+              </>
+            )}
             <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
           </div>
         </div>
@@ -791,10 +840,25 @@ export function GreffierClient({
           ctx={ctx}
           exerciseLabels={exerciseLabels}
           teamName={teamNames[openTeamId] ?? openTeamId}
+          startedAtMs={startedAtMs}
+          pauses={pauses}
+          onLapDeleted={handleLapDeleted}
           onClose={() => {
             setOpenTeamId(null);
             refresh();
           }}
+        />
+      )}
+
+      {fixOpen && (
+        <CancelLapDialog
+          sessionId={sessionId}
+          ctx={ctx}
+          teamNames={teamNames}
+          startedAtMs={startedAtMs}
+          pauses={pauses}
+          onDeleted={handleLapDeleted}
+          onClose={() => setFixOpen(false)}
         />
       )}
     </div>
@@ -927,13 +991,16 @@ function ScoreTable({
 }
 
 function TeamPanel({
-  teamId, ctxSessionId, ctx, exerciseLabels, teamName, onClose,
+  teamId, ctxSessionId, ctx, exerciseLabels, teamName, startedAtMs, pauses, onLapDeleted, onClose,
 }: {
   teamId: string;
   ctxSessionId: string;
-  ctx: import("@/lib/wod-engines/templates/pyramide-engine").RaceContext;
+  ctx: PyrCtx;
   exerciseLabels: Record<string, string>;
   teamName: string;
+  startedAtMs: number | null;
+  pauses: { from: number; to: number | null }[];
+  onLapDeleted: (teamId: string) => void;
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -941,23 +1008,6 @@ function TeamPanel({
   const startEx = startOf(ctx, team);
   const finished = finishAt(ctx, teamId) !== null;
   const partial = partialOf(ctx, team);
-  // Tours valides de l'equipe, avec leur identifiant : on peut en annuler UN precis, pas seulement le dernier.
-  const [laps, setLaps] = useState<TeamLap[] | null>(null);
-  const [lapError, setLapError] = useState("");
-  useEffect(() => {
-    let alive = true;
-    teamLapsAction(ctxSessionId, teamId).then((l) => { if (alive) setLaps(l); });
-    return () => { alive = false; };
-  }, [ctxSessionId, teamId]);
-  function cancelLap(lap: TeamLap, index: number) {
-    if (!confirm(`Annuler le tour n°${index + 1} de ${teamName} (validé à ${new Date(lap.atMs).toLocaleTimeString("fr-BE")}) ?`)) return;
-    setLapError("");
-    startTransition(async () => {
-      const res = await deleteLapAction(ctxSessionId, lap.id);
-      if ("error" in res) { setLapError(res.error); return; }
-      onClose();
-    });
-  }
 
   function setStart(exerciseId: string) {
     startTransition(async () => {
@@ -972,8 +1022,6 @@ function TeamPanel({
     });
   }
 
-  const choice = "border border-line-2 rounded-xl py-2 text-sm font-semibold bg-card hover:bg-paper transition disabled:opacity-50";
-
   return (
     <div className={ui.backdrop} onClick={onClose}>
       <div className={`${ui.sheet} sm:max-w-md`} onClick={(e) => e.stopPropagation()}>
@@ -987,9 +1035,9 @@ function TeamPanel({
             <p className="text-sm font-bold mb-2">Dernier exercice entièrement terminé ?</p>
             <p className={`${ui.hint} mb-3`}>Départ : {exerciseLabels[startEx.id]}{partial != null ? ` · actuellement ${partial} exercice(s) du dernier tour` : ""}</p>
             <div className="grid grid-cols-2 gap-2 mb-4">
-              <button onClick={() => setEnd(null)} disabled={pending} className={choice}>aucun</button>
+              <button onClick={() => setEnd(null)} disabled={pending} className={CHOICE}>aucun</button>
               {ctx.exercises.map((ex) => (
-                <button key={ex.id} onClick={() => setEnd(ex.id)} disabled={pending} className={choice}>
+                <button key={ex.id} onClick={() => setEnd(ex.id)} disabled={pending} className={CHOICE}>
                   {ex.number} · {exerciseLabels[ex.id]}
                 </button>
               ))}
@@ -999,29 +1047,7 @@ function TeamPanel({
           <p className="text-sm text-success-ink font-bold mb-4">🏁 Équipe arrivée.</p>
         )}
 
-        <p className="text-sm font-bold mb-1">Tours validés{laps ? ` (${laps.length})` : ""}</p>
-        <p className={`${ui.hint} mb-2`}>Deux tours à moins d&apos;une minute d&apos;écart sont signalés : c&apos;est presque toujours un double clic.</p>
-        {laps === null ? (
-          <p className={`${ui.hint} mb-4`}>Chargement…</p>
-        ) : laps.length === 0 ? (
-          <p className={`${ui.hint} mb-4`}>Aucun tour validé.</p>
-        ) : (
-          <ul className="space-y-1 mb-4">
-            {laps.map((lap, i) => {
-              const suspect = i > 0 && lap.atMs - laps[i - 1].atMs < MIN_LAP_GAP_MS;
-              return (
-                <li key={lap.id} className={cx("flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-sm", suspect ? "bg-danger-soft border-danger/40" : "bg-paper border-line")}>
-                  <span>
-                    <b>Tour {i + 1}</b> <span className="text-ink-2">· {new Date(lap.atMs).toLocaleTimeString("fr-BE")}</span>
-                    {suspect && <span className="text-danger-ink font-bold"> · {Math.round((lap.atMs - laps[i - 1].atMs) / 1000)} s après le précédent</span>}
-                  </span>
-                  <button type="button" onClick={() => cancelLap(lap, i)} disabled={pending} className={btn.smDanger}>Annuler ce tour</button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {lapError && <p className={`${ui.alertErr} mb-3`}>{lapError}</p>}
+        <TeamLapList sessionId={ctxSessionId} teamId={teamId} teamName={teamName} settings={ctx.settings} startedAtMs={startedAtMs} pauses={pauses} onDeleted={onLapDeleted} />
 
         <p className="text-sm font-bold mb-2">Changer le départ</p>
         <div className="grid grid-cols-2 gap-2">
@@ -1030,12 +1056,147 @@ function TeamPanel({
               key={ex.id}
               onClick={() => setStart(ex.id)}
               disabled={pending}
-              className={cx(choice, startEx.id === ex.id && "border-brand bg-brand text-white hover:bg-brand-hover")}
+              className={cx(CHOICE, startEx.id === ex.id && "border-brand bg-brand text-white hover:bg-brand-hover")}
             >
               {ex.number} · {exerciseLabels[ex.id]}
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Tours d'une equipe : heure de course, heure reelle, ecart avec le precedent, retrait d'UN tour =====
+// Partage par le panneau d'equipe et par « Annuler un tour ». La liste vient du serveur (identifiants des tours),
+// jamais de l'etat optimiste : on ne retire que ce qui existe vraiment en base. Deux tours a moins d'une minute
+// sont signales en rouge : c'est presque toujours un double clic.
+function TeamLapList({
+  sessionId, teamId, teamName, settings, startedAtMs, pauses, onDeleted,
+}: {
+  sessionId: string;
+  teamId: string;
+  teamName: string;
+  settings: RaceSettings;
+  startedAtMs: number | null;
+  pauses: { from: number; to: number | null }[];
+  onDeleted: (teamId: string) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  // Liste chargee, etiquetee par (seance, equipe) : une liste d'une autre equipe ne s'affiche jamais par erreur.
+  const key = `${sessionId}|${teamId}`;
+  const [loaded, setLoaded] = useState<{ key: string; laps: TeamLap[]; error: string } | null>(null);
+  const laps = loaded?.key === key ? loaded.laps : null;
+  const loadError = loaded?.key === key ? loaded.error : "";
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    let on = true;
+    teamLapsAction(sessionId, teamId)
+      .then((l) => { if (on) setLoaded({ key, laps: l, error: "" }); })
+      .catch(() => { if (on) setLoaded({ key, laps: [], error: "Impossible de charger les tours de cette équipe." }); });
+    return () => { on = false; };
+  }, [sessionId, teamId, key]);
+  const p = pyramid(settings);
+
+  function remove(lap: TeamLap, index: number) {
+    const when = new Date(lap.atMs).toLocaleTimeString("fr-BE");
+    if (!confirm(`Retirer le tour n°${index + 1} de ${teamName} (validé à ${when}) ?\n\nL'équipe perd ce tour ; classement, médailles et records sont recalculés.`)) return;
+    setError("");
+    setNotice("");
+    startTransition(async () => {
+      const res = await settle(() => deleteLapAction(sessionId, lap.id));
+      if ("error" in res) { setError(res.error); return; }
+      // On relit la liste au serveur ; s'il ne repond pas, on retire au moins la ligne supprimee.
+      const fresh = await teamLapsAction(sessionId, teamId).catch(() => null);
+      const next = fresh ?? (laps ?? []).filter((l) => l.id !== lap.id);
+      setLoaded({ key, laps: next, error: "" });
+      setNotice(`Tour n°${index + 1} retiré. ${teamName} compte maintenant ${next.length} tour${next.length > 1 ? "s" : ""}.`);
+      onDeleted(teamId);
+    });
+  }
+
+  return (
+    <div className="mb-4">
+      <p className="text-sm font-bold mb-1">Tours validés{laps ? ` (${laps.length})` : ""}</p>
+      <p className={`${ui.hint} mb-2`}>Deux tours à moins d&apos;une minute d&apos;écart sont signalés en rouge : c&apos;est presque toujours un double clic.</p>
+      {laps === null ? (
+        <p className={ui.hint}>Chargement…</p>
+      ) : laps.length === 0 ? (
+        <p className={ui.hint}>Aucun tour validé.</p>
+      ) : (
+        <ul className="space-y-1">
+          {laps.map((lap, i) => {
+            const gap = i > 0 ? lap.atMs - laps[i - 1].atMs : null;
+            const suspect = gap !== null && gap < MIN_LAP_GAP_MS;
+            const race = elapsed(startedAtMs, pauses, lap.atMs);
+            return (
+              <li key={lap.id} className={cx("flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-sm", suspect ? "bg-danger-soft border-danger/40" : "bg-paper border-line")}>
+                <span className="min-w-0">
+                  <b>Tour {i + 1}</b>
+                  {i < p.length && <span className="text-ink-2"> · {p[i]} reps</span>}
+                  <span className="text-ink-2"> · {race !== null ? `${fmt(race)} de course · ` : ""}{new Date(lap.atMs).toLocaleTimeString("fr-BE")}</span>
+                  {gap !== null && <span className={suspect ? "text-danger-ink font-bold" : "text-ink-3"}> · +{fmtGap(gap)} après le précédent</span>}
+                </span>
+                <button type="button" onClick={() => remove(lap, i)} disabled={pending} className={btn.smDanger}>Retirer</button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {notice && <p className={`${ui.alertOk} mt-2`}>{notice}</p>}
+      {(error || loadError) && <p className={`${ui.alertErr} mt-2`}>{error || loadError}</p>}
+    </div>
+  );
+}
+
+// ===== « Annuler un tour » : choisir l'equipe, voir l'heure de chacun de ses tours, retirer le frauduleux =====
+// Complement de « Annuler le dernier » (qui ne retire que la toute derniere saisie, toutes equipes confondues).
+function CancelLapDialog({
+  sessionId, ctx, teamNames, startedAtMs, pauses, onDeleted, onClose,
+}: {
+  sessionId: string;
+  ctx: PyrCtx;
+  teamNames: Record<string, string>;
+  startedAtMs: number | null;
+  pauses: { from: number; to: number | null }[];
+  onDeleted: (teamId: string) => void;
+  onClose: () => void;
+}) {
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const T = total(ctx.settings);
+  return (
+    <div className={ui.backdrop} onClick={onClose}>
+      <div className={`${ui.sheet} sm:max-w-lg`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className={ui.h2}>{teamId ? `Tours de ${teamNames[teamId] ?? teamId}` : "Annuler un tour"}</h3>
+          <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
+        </div>
+        {teamId === null ? (
+          <>
+            <p className={`${ui.hint} mb-3`}>Choisis l&apos;équipe, puis le tour à retirer. Les équipes sans tour validé sont grisées.</p>
+            {ctx.teams.length === 0 ? (
+              <p className={ui.hint}>Aucune équipe.</p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {ctx.teams.map((t) => {
+                  const n = lapsOf(ctx, t.id);
+                  return (
+                    <button key={t.id} type="button" disabled={n === 0} onClick={() => setTeamId(t.id)} className={cx(CHOICE, "flex flex-col items-center leading-tight")}>
+                      <span className="font-extrabold">{teamNames[t.id] ?? t.id}</span>
+                      <span className={ui.hint}>{n}/{T} tour{n > 1 ? "s" : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => setTeamId(null)} className={`${btn.smGhost} mb-3`}>‹ Autre équipe</button>
+            <TeamLapList sessionId={sessionId} teamId={teamId} teamName={teamNames[teamId] ?? teamId} settings={ctx.settings} startedAtMs={startedAtMs} pauses={pauses} onDeleted={onDeleted} />
+          </>
+        )}
       </div>
     </div>
   );

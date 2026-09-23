@@ -134,6 +134,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       olderSession={olderSession}
       newerSession={newerSession}
       isMaster={evaluator.role === "MASTER_ADMIN"}
+      canCorrect={["MASTER_ADMIN", "GREFFIER"].includes(evaluator.role)}
       bundle={bundle}
       teamsWithMembers={teamsWithMembers}
       classes={classes}
