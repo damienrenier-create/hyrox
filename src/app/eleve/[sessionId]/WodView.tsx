@@ -44,9 +44,11 @@ type Props = {
   criteria: SelfEvalCriterion[];
   instruction: string;
   selfEval: { initial: Record<string, string> | null; state: "open" | "notYet" | "expired"; closesAt: number | null; submittedAt: number | null };
+  // Avis du prof, deja filtre par le serveur : grille absente si non visible, commentaire absent si non visible.
+  review?: { answers: Record<string, string> | null; comment: string | null; reviewerName: string } | null;
 };
 
-export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval }: Props) {
+export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -176,6 +178,39 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
             closesAt={selfEval.closesAt}
             submittedAt={selfEval.submittedAt}
           />
+
+          {/* L'avis du prof, uniquement ce qu'il a choisi de montrer. */}
+          {review && (
+            <section className="mt-6 rounded-2xl border-2 border-brand/40 bg-brand-soft/40 p-4">
+              <div className={ui.eyebrow}>L&apos;avis de {review.reviewerName}</div>
+              {review.answers && (
+                <ul className="mt-2 space-y-1.5">
+                  {criteria.map((c) => {
+                    const code = review.answers?.[c.id];
+                    if (!code) return null;
+                    const mine = selfEval.initial?.[c.id];
+                    return (
+                      <li key={c.id} className="bg-card rounded-xl border border-line px-3 py-2 text-sm">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-bold text-ink">{c.label}</span>
+                          <span className="font-display font-extrabold text-brand-ink whitespace-nowrap">
+                            {code}
+                            {mine && mine !== code && <span className="text-ink-3 font-sans font-semibold text-xs"> · toi : {mine}</span>}
+                          </span>
+                        </div>
+                        <p className="text-xs text-ink-2 leading-snug mt-0.5">{c.levels[code as keyof typeof c.levels]}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {review.comment && (
+                <p className="mt-3 bg-card rounded-xl border border-line px-3 py-2 text-sm text-ink whitespace-pre-line">
+                  💬 {review.comment}
+                </p>
+              )}
+            </section>
+          )}
         </div>
       )}
     </div>

@@ -16,6 +16,8 @@ export const SEX_LABEL: Record<TeamSex, string> = { F: "Équipes de filles", M: 
 
 export type RecordEntry = {
   key: string;
+  sessionId: string;
+  teamId: string;
   teamName: string;
   members: string[];
   sex: TeamSex;
@@ -28,7 +30,14 @@ export type RecordEntry = {
 export type RecordBoard = { id: string; title: string; hint: string; rows: RecordEntry[] };
 // « annee » = le degre scolaire (1re a 6e), lu sur le premier chiffre du nom de classe (« 5GTb » -> 5).
 export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null };
-export type RecordsResult = { boards: RecordBoard[]; grades: number[]; teamsScanned: number; sessionsScanned: number };
+// `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
+// visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
+export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };
+
+export function readExcludedFromRecords(settings: unknown): string[] {
+  const s = settings as { excludedFromRecords?: unknown } | null;
+  return Array.isArray(s?.excludedFromRecords) ? (s!.excludedFromRecords as unknown[]).filter((x): x is string => typeof x === "string") : [];
+}
 
 export function gradeOf(className: string | null | undefined): number | null {
   const m = (className ?? "").match(/\d/);
@@ -62,7 +71,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     (a, b) => toMs(b.createdAt) - toMs(a.createdAt)
   );
   const kept = sessions;
-  if (!kept.length) return { boards: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
+  if (!kept.length) return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
 
   const ids = kept.map((s) => s.id);
   const [raceStates, allTeams] = await Promise.all([
@@ -93,6 +102,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
   const pausesBy = group(allPauses, (p) => p.raceStateId);
 
   const rows: Row[] = [];
+  const excluded: RecordEntry[] = [];
   let sessionsScanned = 0;
 
   for (const s of kept) {
@@ -130,6 +140,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     const apexIdx = peakIndex(ctx.settings);
     const sessionLabel = s.label ?? wodLabel(s.wodType);
     const dateMs = toMs(s.createdAt);
+    const excludedIds = new Set(readExcludedFromRecords(s.settings));
 
     for (const t of teams) {
       const n = lapsOf(ctx, t.id);
@@ -145,16 +156,24 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
       const times = ctx.laps.filter((l) => l.teamId === t.id).map((l) => l.at).sort((a, b) => a - b);
       const durations = times.map((at, i) => at - (i === 0 ? 0 : times[i - 1]));
 
+      const base = {
+        key: `${s.id}_${t.id}`,
+        sessionId: s.id,
+        teamId: t.id,
+        teamName: t.name,
+        members: mem.map((u) => `${u!.firstName ?? ""}`.trim()).filter(Boolean),
+        sex,
+        classes: [...new Set(mem.map((u) => u!.className).filter((c): c is string => !!c))].sort().join(", "),
+        sessionLabel,
+        dateMs,
+      };
+      if (excludedIds.has(t.id)) {
+        excluded.push({ ...base, display: `${n}/${T} tours` });
+        continue;
+      }
+
       rows.push({
-        base: {
-          key: `${s.id}_${t.id}`,
-          teamName: t.name,
-          members: mem.map((u) => `${u!.firstName ?? ""}`.trim()).filter(Boolean),
-          sex,
-          classes: [...new Set(mem.map((u) => u!.className).filter((c): c is string => !!c))].sort().join(", "),
-          sessionLabel,
-          dateMs,
-        },
+        base,
         grade: (() => {
           const gs = new Set(mem.map((u) => gradeOf(u!.className)).filter((g): g is number => g !== null));
           return gs.size === 1 ? [...gs][0] : null;
@@ -203,6 +222,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     top("lastLap", "🏁 Le dernier tour le plus rapide", "le sprint final, équipes arrivées au bout", (r) => r.lastLapMs, true, (v) => fmtMs(v)),
   ];
 
-  return { boards, grades, teamsScanned: pool.length, sessionsScanned };
+  excluded.sort((a, b) => b.dateMs - a.dateMs);
+  return { boards, excluded, grades, teamsScanned: pool.length, sessionsScanned };
 }
 

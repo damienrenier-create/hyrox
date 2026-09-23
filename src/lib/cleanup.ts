@@ -74,6 +74,7 @@ export async function deleteSession(sessionId: string): Promise<number> {
   n += await deleteAll(await db.orm.public.Shot.where({ sessionId }).all(), (id) => db.orm.public.Shot.where({ id }).delete());
   n += await deleteAll(await db.orm.public.Evaluation.where({ sessionId }).all(), (id) => db.orm.public.Evaluation.where({ id }).delete());
   n += await deleteAll(await db.orm.public.SelfEvaluation.where({ sessionId }).all(), (id) => db.orm.public.SelfEvaluation.where({ id }).delete());
+  n += await deleteAll(await db.orm.public.SelfEvalReview.where({ sessionId }).all(), (id) => db.orm.public.SelfEvalReview.where({ id }).delete());
   n += await deleteAll(await db.orm.public.RefereeFleet.where({ sessionId }).all(), (id) => db.orm.public.RefereeFleet.where({ id }).delete());
   n += await deleteAll(await db.orm.public.BoatPlacement.where({ sessionId }).all(), (id) => db.orm.public.BoatPlacement.where({ id }).delete());
   n += await deleteAll(await db.orm.public.SessionReferee.where({ sessionId }).all(), (id) => db.orm.public.SessionReferee.where({ id }).delete());

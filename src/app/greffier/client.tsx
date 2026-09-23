@@ -82,10 +82,15 @@ const PYR_STYLES = `
 .pyr .tile .lbl{font-size:10.5px;opacity:.88;line-height:1.15;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pyr .tile .who{font-size:9.5px;opacity:.75;padding:0 3px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pyr .tile.unset{box-shadow:inset 0 0 0 3px #FFC93C}
-.pyr .ycard{margin-top:3px;width:100%;min-height:19px;border:1px dashed #D2B200;background:#FFFBE6;color:#6B5600;border-radius:8px;
+/* Cartes jaunes : contrastes releves, le creme sur blanc disparaissait au projecteur. */
+.pyr .ycard{margin-top:3px;width:100%;min-height:19px;border:1.5px dashed #9A7400;background:#FFF0A8;color:#3D2E00;border-radius:8px;
   padding:1px 6px;font:700 10.5px/1.2 inherit;display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;overflow:hidden;cursor:pointer}
-.pyr .ycard.has{border-style:solid;background:#FFF1A6;color:#4A3B00}
-.pyr .ycard:active{background:#FFE36B}
+.pyr .ycard.has{border-style:solid;border-color:#7A5C00;background:#FFD23F;color:#241B00}
+.pyr .ycard:active{background:#F2BC00}
+/* Montee / descente de la pyramide : la tuile se souleve ou s'affaisse de quelques pixels. */
+.pyr .cell{transition:transform .25s ease}
+.pyr .cell.up{transform:translateY(-5px)}
+.pyr .cell.down{transform:translateY(5px)}
 .pyr .yc{width:8px;height:11px;border-radius:1.5px;background:#FFD200;box-shadow:0 0 0 1px #A88700;display:inline-block;transform:rotate(-8deg);flex:none}
 .pyr .yplus{font-weight:600;opacity:.75}
 .pyr .medals{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:2px 3px;max-width:120px;margin:0 auto 3px;min-height:12px}
@@ -131,11 +136,13 @@ const PYR_STYLES = `
 .hr-track{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .hr-slot{position:relative;border-radius:9px;background:#F4F7F9;border:1px solid #E6EBEF;min-height:48px;padding:15px 4px 4px;
   display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start;justify-content:center}
-.hr-slot.win{background:linear-gradient(160deg,#FFF8DE,#FFE9A8);border-color:#E8C65A}
-.hr-slot.lastslot{background:#FBEEF0;border-color:#F0CFD5}
-.hr-num{position:absolute;top:3px;left:6px;font:800 9px/1 inherit;color:#8FA0AE;letter-spacing:.06em;text-transform:uppercase}
-.hr-car{display:inline-flex;align-items:center;gap:4px;background:#16344E;color:#fff;border-radius:8px;padding:3px 7px;font:800 12px/1.2 inherit;white-space:nowrap}
-.hr-car .v{opacity:.7;font-weight:700;font-size:10px}
+/* Couleurs relevees pour le projecteur : les pastels jaunes s'y effacent completement. */
+.hr-slot.win{background:linear-gradient(160deg,#FFE58A,#F5C518);border-color:#B8860B}
+.hr-slot.lastslot{background:#F7D5DB;border-color:#D9899A}
+.hr-num{position:absolute;top:3px;left:6px;font:800 9px/1 inherit;color:#4A5A68;letter-spacing:.06em;text-transform:uppercase}
+/* Seule dans son couloir, l'equipe prend toute la place : c'est ce qui doit se lire du fond de la salle. */
+.hr-car{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;background:#16344E;color:#fff;border-radius:8px;padding:6px 8px;font:800 14px/1.2 inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hr-car .v{opacity:.8;font-weight:700;font-size:11px}
 .hr-dot{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:7px;background:#16344E;color:#fff;font:800 11px/1 inherit}
 .hr-fin{display:flex;align-items:center;gap:5px;margin-top:5px;padding-top:5px;border-top:1px dashed #E6EBEF;overflow-x:auto}
 .hr-flag{font-size:13px;flex:none}
@@ -228,6 +235,7 @@ function RaceStrip({
   const inSlot = (i: number): Standing[] =>
     i === 1 ? (last ? [last] : []) : i === 2 ? pack : head[7 - i] ? [head[7 - i]] : [];
 
+  // `tiny` = pastille numerotee (peloton a plusieurs) ; sinon la vignette prend tout le couloir.
   const car = (e: Standing, tiny: boolean) => {
     const n = lapsE(e);
     const m = medalInfo(ctx.settings, Math.max(0, Math.min(n, maxMedals(ctx.settings)) - 1));
@@ -240,7 +248,7 @@ function RaceStrip({
         title={`${teamNames[e.team.id] ?? ""} · ${n}/${T} tours`}
       >
         {!tiny && n > 0 && <span className={`md ${TIERS[m.tier]}${m.variant}`} />}
-        <b>{teamNum(teamNames[e.team.id])}</b>
+        <b>{tiny ? teamNum(teamNames[e.team.id]) : teamNames[e.team.id] ?? teamNum(teamNames[e.team.id])}</b>
         {!tiny && <span className="v">{n}/{T}</span>}
       </motion.span>
     );
@@ -249,12 +257,15 @@ function RaceStrip({
   return (
     <section className="hr col-span-full">
       <div className="hr-track">
-        {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-          <div key={i} className={cx("hr-slot", i === 7 && "win", i === 1 && "lastslot")}>
-            <span className="hr-num">{i === 1 ? "dernier" : i === 2 ? "peloton" : ordinal(8 - i)}</span>
-            {inSlot(i).map((e) => car(e, i === 2))}
-          </div>
-        ))}
+        {[1, 2, 3, 4, 5, 6, 7].map((i) => {
+          const here = inSlot(i);
+          return (
+            <div key={i} className={cx("hr-slot", i === 7 && "win", i === 1 && "lastslot")}>
+              <span className="hr-num">{i === 1 ? "dernier" : i === 2 ? "peloton" : ordinal(8 - i)}</span>
+              {here.map((e) => car(e, here.length > 1))}
+            </div>
+          );
+        })}
       </div>
       <div className="hr-fin">
         <span className="hr-flag">🏁</span>
@@ -302,13 +313,14 @@ export function SessionStep({ to, dir }: { to: SessionOption | null; dir: "older
 }
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
 }: {
   sessionId: string;
   sessionLabel: string;
   sessionOptions: SessionOption[];
   olderSession: SessionOption | null;
   newerSession: SessionOption | null;
+  isMaster?: boolean;
   bundle: RaceContextBundle;
   teamsWithMembers: TeamWithMembers[];
   classes: string[];
@@ -554,9 +566,13 @@ export function GreffierClient({
   const overtime = phase === "run" && rest <= 0;
   // Le compte a rebours ne s'affiche qu'une fois qu'une equipe est arrivee (la fin se rapproche alors a
   // chaque arrivee) OU dans les 3 dernieres minutes. Avant, il n'apporte rien et stresse pour rien.
+  // Dix dernieres minutes : le chronometre passe au rouge et le decompte s'affiche en grand a cote.
+  // Sur le temps limite de 40 min, cela commence donc a 30 min de course.
+  const COUNTDOWN_MS = 10 * 60000;
+  const redZone = phase === "run" && !overtime && rest <= COUNTDOWN_MS;
   const URGENT_MS = 3 * 60000;
   const LAST_MS = 60000;
-  const showCountdown = phase === "post" || overtime || tl.count > 0 || rest <= URGENT_MS;
+  const showCountdown = phase === "post" || overtime || tl.count > 0 || rest <= COUNTDOWN_MS;
   const urgent = phase === "run" && !overtime && rest <= URGENT_MS;
   const lastMinute = phase === "run" && !overtime && rest <= LAST_MS;
   const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
@@ -596,7 +612,7 @@ export function GreffierClient({
             <SessionStep to={newerSession} dir="newer" />
           </div>
 
-          <p className={cx("justify-self-center font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>
+          <p className={cx("justify-self-center font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : redZone || overtime ? "text-danger" : "text-ink")}>
             {fmt(liveMs)}
           </p>
 
@@ -605,14 +621,14 @@ export function GreffierClient({
               <div
                 className={cx(
                   "border rounded-xl px-3 py-1.5 text-right min-w-[130px]",
-                  overtime || urgent ? "border-danger bg-danger-soft" : "border-line bg-paper",
+                  overtime || redZone ? "border-danger bg-danger-soft" : "border-line bg-paper",
                   lastMinute && "pyr-blink"
                 )}
               >
                 <div className={ui.eyebrow}>
                   {phase === "post" ? "WOD" : overtime ? "Temps supp." : showCountdown ? "Fin dans" : "Temps limite"}
                 </div>
-                <div className={cx("font-display text-2xl font-extrabold leading-tight tabular-nums", overtime || urgent ? "text-danger" : "text-ink")}>
+                <div className={cx("font-display font-extrabold leading-tight tabular-nums", overtime || redZone ? "text-[2.6rem] text-danger" : "text-2xl text-ink")}>
                   {phase === "post" ? "terminé" : overtime ? `−${fmtUp(-rest)}` : showCountdown ? fmtDown(rest) : `${ctx.settings.capMin} min`}
                 </div>
                 <div className="text-[11px] text-ink-2">{finishedCount}/{ctx.teams.length} arrivées</div>
@@ -659,8 +675,11 @@ export function GreffierClient({
                 if (e == null) cls += " unset";
               }
               if (hitTeam === team.id) cls += " hit";
+              // En course, la tuile se souleve pendant la montee et s'affaisse pendant la descente.
+              const dir = phase === "run" && !isDone ? dirLabel(ctx.settings, n) : null;
+              const slope = dir === "↑" ? " up" : dir === "↓" ? " down" : "";
               return (
-                <div key={team.id} className={`cell${tier ? ` tier t${tier}` : ""}`}>
+                <div key={team.id} className={`cell${tier ? ` tier t${tier}` : ""}${slope}`}>
                   <button type="button" onClick={() => handleLap(team.id)} className={cls} data-team={team.id}>
                     {phase !== "pre" && <Medals settings={ctx.settings} n={n} ord={ord[team.id]} />}
                     <span className="num">{teamNames[team.id] ?? team.id}</span>
@@ -690,7 +709,7 @@ export function GreffierClient({
         ) : view === "score" ? (
           <ScoreTable ctx={ctx} phase={phase} teamNames={teamNames} tl={tl} ord={ord} membersByTeam={membersByTeam} />
         ) : view === "records" ? (
-          <RecordsTab />
+          <RecordsTab isMaster={isMaster} />
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (

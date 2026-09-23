@@ -7,6 +7,7 @@ import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { querySelfEvaluations, readLevelParams, PAGE_SIZE, type SelfEvalSort } from "@/lib/self-eval-query";
 import { TopBar } from "../../_components/TopBar";
+import { ReviewButton } from "../ReviewPanel";
 import { btn, cx, ui } from "@/lib/ui";
 
 type Params = Record<string, string | string[] | undefined>;
@@ -96,7 +97,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
 
           <div>
             <span className={ui.label}>Niveau atteint, critère par critère</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 mt-1">
               {SELF_EVAL_CRITERIA.map((c) => (
                 <label key={c.id} className="text-xs">
                   <span className="block text-ink-2 truncate mb-0.5" title={c.label}>{c.label}</span>
@@ -136,11 +137,12 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                 {SELF_EVAL_CRITERIA.map((c) => (
                   <th key={c.id} className={`${ui.th} text-center`} title={c.label}>{c.label}</th>
                 ))}
+                <th className={ui.th}>Prof</th>
               </tr>
             </thead>
             <tbody>
               {res.rows.length === 0 && (
-                <tr><td colSpan={5 + SELF_EVAL_CRITERIA.length} className="p-4 text-ink-3 italic">Aucune auto-évaluation pour ces filtres.</td></tr>
+                <tr><td colSpan={6 + SELF_EVAL_CRITERIA.length} className="p-4 text-ink-3 italic">Aucune auto-évaluation pour ces filtres.</td></tr>
               )}
               {res.rows.map((r) => (
                 <tr key={r.key} className={ui.tr}>
@@ -150,8 +152,27 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                   <td className="p-2 text-ink-2 whitespace-nowrap">{r.sessionLabel}</td>
                   <td className="p-2 text-ink-2">{r.teamName}</td>
                   {SELF_EVAL_CRITERIA.map((c) => (
-                    <td key={c.id} className={cx("p-2 text-center font-black", colorOf(r.answers[c.id]))}>{r.answers[c.id] ?? "—"}</td>
+                    <td key={c.id} className={cx("p-2 text-center font-black", colorOf(r.answers[c.id]))}>
+                      {r.answers[c.id] ?? "—"}
+                      {/* Sous la case de l'eleve, celle du prof quand elle differe : la comparaison se lit d'un coup d'oeil. */}
+                      {r.review?.answers[c.id] && r.review.answers[c.id] !== r.answers[c.id] && (
+                        <span className={cx("block text-[9px] font-bold", colorOf(r.review.answers[c.id]))} title="Avis du prof">prof : {r.review.answers[c.id]}</span>
+                      )}
+                    </td>
                   ))}
+                  <td className="p-2 whitespace-nowrap">
+                    <ReviewButton
+                      target={{
+                        sessionId: r.sessionId,
+                        studentId: r.studentId,
+                        studentName: `${r.firstName} ${r.lastName}`.trim(),
+                        className: r.className,
+                        sessionLabel: r.sessionLabel,
+                        studentAnswers: r.answers,
+                        review: r.review,
+                      }}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

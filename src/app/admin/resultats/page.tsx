@@ -148,7 +148,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
 
           <div>
             <span className={ui.label}>Niveau atteint en auto-évaluation, critère par critère</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 mt-1">
               {SELF_EVAL_CRITERIA.map((c) => (
                 <label key={c.id} className="text-xs">
                   <span className="block text-ink-2 truncate mb-0.5" title={c.label}>{c.label}</span>

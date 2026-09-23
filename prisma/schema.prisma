@@ -210,6 +210,25 @@ model SelfEvaluation {
   @@index([sessionId])
 }
 
+// Regard du prof sur la seance d'un eleve : la meme grille que l'auto-evaluation, remplie par un admin,
+// plus un commentaire libre. L'eleve ne voit chacun des deux que si l'admin l'a explicitement decide.
+// Table separee de SelfEvaluation : le prof peut evaluer un eleve qui n'a jamais rendu la sienne.
+model SelfEvalReview {
+  id             String   @id @default(uuid())
+  sessionId      String
+  studentId      String
+  answers        Json     // criterionId -> code (TI..E), memes criteres que l'auto-evaluation
+  visible        Boolean  @default(false) // l'eleve voit la grille du prof
+  comment        String?
+  commentVisible Boolean  @default(false) // l'eleve voit le commentaire
+  reviewerName   String   // nom affiche du prof (jamais son pseudo de connexion)
+  updatedAt      DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+}
+
 model Evaluation {
   id           String   @id @default(uuid())
   session      Session  @relation(fields: [sessionId], references: [id])

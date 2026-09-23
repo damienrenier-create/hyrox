@@ -133,6 +133,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       sessionOptions={options}
       olderSession={olderSession}
       newerSession={newerSession}
+      isMaster={evaluator.role === "MASTER_ADMIN"}
       bundle={bundle}
       teamsWithMembers={teamsWithMembers}
       classes={classes}

@@ -63,6 +63,16 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
   const raceEndedAtMs = session.raceEndedAt ? new Date(String(session.raceEndedAt)).getTime() : null;
   const win = selfEvalWindow(finishedAt, raceEndedAtMs);
   const existing = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: user.id }).first();
+  // Avis du prof : l'eleve n'en voit que ce que le prof a explicitement rendu visible (grille et commentaire, separement).
+  const rev = await db.orm.public.SelfEvalReview.where({ sessionId, studentId: user.id }).first();
+  const review =
+    rev && (rev.visible || (rev.commentVisible && rev.comment))
+      ? {
+          answers: rev.visible ? ((rev.answers as Record<string, string>) ?? {}) : null,
+          comment: rev.commentVisible && rev.comment ? rev.comment : null,
+          reviewerName: rev.reviewerName,
+        }
+      : null;
 
   return (
     <div className={ui.page}>
@@ -89,6 +99,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
             closesAt: win.closesAt,
             submittedAt: existing ? new Date(String(existing.submittedAt)).getTime() : null,
           }}
+          review={review}
         />
       </main>
     </div>

@@ -48,6 +48,10 @@
       "model": "Score",
       "namespace": "public"
     },
+    "selfEvalReview": {
+      "model": "SelfEvalReview",
+      "namespace": "public"
+    },
     "selfEvaluation": {
       "model": "SelfEvaluation",
       "namespace": "public"
@@ -1424,6 +1428,107 @@
               },
               "namespaceId": "public",
               "table": "score"
+            }
+          },
+          "SelfEvalReview": {
+            "fields": {
+              "answers": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "comment": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "commentVisible": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reviewerName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "studentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "visible": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "answers": {
+                  "column": "answers"
+                },
+                "comment": {
+                  "column": "comment"
+                },
+                "commentVisible": {
+                  "column": "commentVisible"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "reviewerName": {
+                  "column": "reviewerName"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "studentId": {
+                  "column": "studentId"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "visible": {
+                  "column": "visible"
+                }
+              },
+              "namespaceId": "public",
+              "table": "selfEvalReview"
             }
           },
           "SelfEvaluation": {
@@ -3778,6 +3883,99 @@
               },
               "uniques": []
             },
+            "selfEvalReview": {
+              "columns": {
+                "answers": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "comment": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "commentVisible": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "reviewerName": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "studentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "visible": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "selfEvalReview_sessionId_idx_29f415d4",
+                  "prefix": "selfEvalReview_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "studentId"
+                  ],
+                  "name": "selfEvalReview_studentId_idx_bf255322",
+                  "prefix": "selfEvalReview_studentId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId",
+                    "studentId"
+                  ]
+                }
+              ]
+            },
             "selfEvaluation": {
               "columns": {
                 "answers": {
@@ -4822,10 +5020,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e4123148b359b337ab53aae7038cb945dd712252256961367fa22d67fa115857"
+    "storageHash": "2e1e20d2b6c2768d428e587093f9c35a7a1304d5a0811d712fc30478c518b09a"
   },
   "execution": {
-    "executionHash": "057abf8c3e4e61889a74c80befaa687257c9824a4284fcad223955d8de81364b",
+    "executionHash": "5692c6da233d65bb9f783d697d981d4cd207b2a0f536c1f06462f23976671e46",
     "mutations": {
       "defaults": [
         {
@@ -4947,6 +5145,17 @@
             "column": "id",
             "namespace": "public",
             "table": "score"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "selfEvalReview"
           }
         },
         {

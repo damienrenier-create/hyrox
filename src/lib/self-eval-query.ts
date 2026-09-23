@@ -21,6 +21,8 @@ export type SelfEvalRow = {
   answers: Record<string, string>;
   submittedAt: string;
   submittedAtMs: number;
+  // Regard du prof sur cette seance, s'il existe (grille + commentaire, chacun visible ou non par l'eleve).
+  review: { answers: Record<string, string>; visible: boolean; comment: string | null; commentVisible: boolean; reviewerName: string; updatedAt: string } | null;
 };
 
 export type SelfEvalSort = "recent" | "ancien" | "prenom" | "nom" | "classe";
@@ -57,6 +59,9 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
 
   const sessionIds = [...new Set(evals.map((e) => e.sessionId))];
+  // Avis des profs sur ces seances, en une requete groupee.
+  const reviews = sessionIds.length ? await db.orm.public.SelfEvalReview.where((r) => r.sessionId.in(sessionIds)).all() : [];
+  const reviewOf = new Map(reviews.map((r) => [`${r.sessionId}_${r.studentId}`, r]));
   const teamNameOf = new Map<string, string>(); // `${sessionId}_${studentId}` -> nom d'equipe
   let participants: number | null = null;
   for (const sid of sessionIds) {
@@ -83,6 +88,12 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
       answers: (e.answers as Record<string, string>) ?? {},
       submittedAt: at,
       submittedAtMs: new Date(at).getTime(),
+      review: (() => {
+        const r = reviewOf.get(`${e.sessionId}_${e.studentId}`);
+        return r
+          ? { answers: (r.answers as Record<string, string>) ?? {}, visible: r.visible, comment: r.comment ?? null, commentVisible: r.commentVisible, reviewerName: r.reviewerName, updatedAt: String(r.updatedAt) }
+          : null;
+      })(),
     };
   });
 

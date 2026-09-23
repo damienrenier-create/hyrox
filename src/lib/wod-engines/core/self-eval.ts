@@ -74,6 +74,20 @@ export const SELF_EVAL_CRITERIA: SelfEvalCriterion[] = [
       E: "Attitude irréprochable. Anime le groupe, valorise toute l'équipe et pousse les autres à se dépasser. [~]",
     },
   },
+  // Ligne ajoutee le 23/09 a la demande de Sartay (hors PDF) : l'etat de forme du jour, du plus bas au plus haut.
+  // Elle ne juge pas l'eleve, elle contextualise le reste de la grille.
+  {
+    id: "forme",
+    label: "Ma forme du jour",
+    levels: {
+      TI: "Je ne suis pas en forme du tout : fatigué(e), malade ou blessé(e), j'ai eu du mal à tenir la séance.",
+      I: "Je suis en petite forme : peu d'énergie, j'ai fait le minimum et j'ai vite ressenti la fatigue.",
+      S: "Je suis dans une forme moyenne : j'ai tenu la séance sans plus, avec des hauts et des bas.",
+      B: "Je suis en bonne forme : de l'énergie tout au long de la séance, j'ai bien récupéré entre les ateliers.",
+      TB: "Je suis en très bonne forme : je me sentais fort(e) et endurant(e), la séance est passée facilement.",
+      E: "Je suis en pleine forme : plein d'énergie du début à la fin, j'aurais pu en faire davantage.",
+    },
+  },
 ];
 
 export const SELF_EVAL_WINDOW_MS = 24 * 60 * 60 * 1000;

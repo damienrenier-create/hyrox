@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { pyramideRecordsAction } from "./records-actions";
+import { excludeFromRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
 // Types uniquement : importer une valeur de `pyramide-records` embarquerait la base dans le paquet client.
-import type { RecordsResult, TeamSex } from "@/lib/pyramide-records";
+import type { RecordEntry, RecordsResult, TeamSex } from "@/lib/pyramide-records";
 import { btn, cx, ui } from "@/lib/ui";
 
 const SEXES: (TeamSex | "")[] = ["", "F", "M", "OPEN"];
@@ -14,19 +14,41 @@ const LABELS: Record<TeamSex | "", string> = {
   M: "Équipes de gars",
   OPEN: "Équipes mixtes",
 };
+const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 // Onglet « Records » : palmares du WOD Pyramide, toutes classes et toutes seances confondues.
 // Le calcul part d'un appel explicite (et repart a chaque changement de filtre) : rien n'est charge
-// tant que l'onglet n'est pas ouvert.
-export function RecordsTab() {
+// tant que l'onglet n'est pas ouvert. DAMZER peut ecarter une equipe du palmares (greffier qui a
+// tape trop vite ou trop tard) sans rien effacer de ce que les eleves ont fait, et la retablir.
+export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
   const [sex, setSex] = useState<TeamSex | "">("");
   const [grade, setGrade] = useState<number | null>(null);
   const [data, setData] = useState<RecordsResult | null>(null);
+  const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     startTransition(async () => setData(await pyramideRecordsAction({ sex, grade })));
   }, [sex, grade]);
+  useEffect(() => reload(), [reload]);
+
+  function invalidate(e: RecordEntry) {
+    if (!confirm(`Écarter « ${e.teamName} » (${e.members.join(", ")}) des records ?\nSes tours et ses résultats restent intacts, seul le palmarès l'ignore. Tu pourras la rétablir.`)) return;
+    setError("");
+    startTransition(async () => {
+      const res = await excludeFromRecordsAction(e.sessionId, e.teamId);
+      if ("error" in res) setError(res.error);
+      else setData(await pyramideRecordsAction({ sex, grade }));
+    });
+  }
+  function restore(e: RecordEntry) {
+    setError("");
+    startTransition(async () => {
+      const res = await restoreToRecordsAction(e.sessionId, e.teamId);
+      if ("error" in res) setError(res.error);
+      else setData(await pyramideRecordsAction({ sex, grade }));
+    });
+  }
 
   const grades = data?.grades ?? [];
 
@@ -53,14 +75,11 @@ export function RecordsTab() {
           ))}
         </div>
         <span className={ui.hint}>
-          {pending
-            ? "Calcul en cours…"
-            : data
-              ? `${data.teamsScanned} équipe(s) sur ${data.sessionsScanned} séance(s) Pyramide`
-              : ""}
+          {pending ? "Calcul en cours…" : data ? `${data.teamsScanned} équipe(s) sur ${data.sessionsScanned} séance(s) Pyramide` : ""}
         </span>
       </div>
 
+      {error && <p className={ui.alertErr}>{error}</p>}
       {data && data.teamsScanned === 0 && !pending && (
         <p className={ui.alertInfo}>Aucune équipe ne correspond à ces filtres. Il faut une séance lancée, des équipes composées et au moins un tour validé.</p>
       )}
@@ -85,14 +104,24 @@ export function RecordsTab() {
                   >
                     <span className={cx("font-display font-extrabold w-4 text-center", i === 0 ? "text-accent-ink" : "text-ink-3")}>{i + 1}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block font-bold text-ink truncate">
-                        {r.members.join(", ") || r.teamName}
-                      </span>
+                      <span className="block font-bold text-ink truncate">{r.members.join(", ") || r.teamName}</span>
                       <span className="block text-ink-3 text-[10px] truncate">
-                        {r.classes || "sans classe"} · {r.sessionLabel} · {new Date(r.dateMs).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                        {r.classes || "sans classe"} · {r.sessionLabel} · {day(r.dateMs)}
                       </span>
                     </span>
                     <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{r.display}</span>
+                    {isMaster && (
+                      <button
+                        type="button"
+                        onClick={() => invalidate(r)}
+                        disabled={pending}
+                        title="Écarter ce record (chrono faussé par le greffier), sans rien effacer"
+                        aria-label="Écarter ce record"
+                        className="w-5 h-5 rounded-full text-ink-3 hover:bg-danger-soft hover:text-danger-ink font-bold leading-none flex items-center justify-center flex-shrink-0"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </motion.li>
                 ))}
               </ol>
@@ -101,8 +130,33 @@ export function RecordsTab() {
         ))}
       </div>
 
+      {/* Equipes ecartees : visibles pour pouvoir revenir dessus, jamais perdues. */}
+      {data && data.excluded.length > 0 && (
+        <section className={`${ui.cardPad} border-warn/50`}>
+          <h3 className={`${ui.h3} mb-1`}>Écartées des records ({data.excluded.length})</h3>
+          <p className={`${ui.hint} mb-2`}>
+            Leurs tours, leurs temps et leurs résultats sont intacts partout ailleurs : seul le palmarès les ignore.
+          </p>
+          <ul className="space-y-1">
+            {data.excluded.map((e) => (
+              <li key={e.key} className={`${ui.inset} px-3 py-1.5 flex flex-wrap items-center gap-2 text-xs`}>
+                <span className="min-w-0 flex-1">
+                  <b className="text-ink">{e.members.join(", ") || e.teamName}</b>
+                  <span className="text-ink-3"> · {e.teamName} · {e.classes || "sans classe"} · {e.sessionLabel} · {day(e.dateMs)} · {e.display}</span>
+                </span>
+                {isMaster && (
+                  <button type="button" onClick={() => restore(e)} disabled={pending} className={btn.smGhost}>
+                    Rétablir
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {!data && pending && <p className={ui.muted}>Lecture de toutes les séances Pyramide…</p>}
-      <button type="button" onClick={() => startTransition(async () => setData(await pyramideRecordsAction({ sex, grade })))} disabled={pending} className={btn.smGhost}>
+      <button type="button" onClick={reload} disabled={pending} className={btn.smGhost}>
         ↻ Recalculer
       </button>
     </div>
