@@ -102,14 +102,13 @@ const PYR_STYLES = `
   min-width:0;width:100%;position:relative;cursor:pointer;transition:transform .08s}
 .pyr .tile:active{transform:scale(.97)}
 .pyr .tile > span{max-width:100%}
-.pyr .tile .num{font-size:13px;font-weight:800;opacity:.85;line-height:1.1}
-/* Numero d'equipe en noir, tout en haut de la tuile, au-dessus des medailles : lisible sur tous les fonds. */
-.pyr .tile .tnum{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:19px;padding:0 7px;border-radius:999px;
-  background:#000;color:#fff;font:800 12px/1 inherit;letter-spacing:.02em;margin-bottom:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+/* « EQUIPE 4 » en pastille noire tout en haut de la tuile, au-dessus des medailles : lisible sur tous les fonds. */
+.pyr .tile .tnum{display:inline-flex;align-items:center;justify-content:center;height:19px;padding:0 9px;border-radius:999px;
+  background:#000;color:#fff;font:800 11px/1 inherit;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;box-shadow:0 0 0 1px rgba(255,255,255,.35);white-space:nowrap}
 .pyr .tile .reps{font-size:28px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
 .pyr .tile.done .reps{font-size:22px}
 .pyr .tile .lbl{font-size:10.5px;opacity:.88;line-height:1.15;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pyr .tile .who{font-size:9.5px;opacity:.75;padding:0 3px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pyr .tile .who{font-size:12px;font-weight:700;opacity:.92;padding:0 3px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pyr .tile.unset{box-shadow:inset 0 0 0 3px #FFC93C}
 /* Cartes jaunes : contrastes releves, le creme sur blanc disparaissait au projecteur. */
 .pyr .ycard{margin-top:3px;width:100%;min-height:19px;border:1.5px dashed #9A7400;background:#FFF0A8;color:#3D2E00;border-radius:8px;
@@ -122,10 +121,11 @@ const PYR_STYLES = `
 .pyr .cell.down{transform:translateY(5px)}
 .pyr .yc{width:8px;height:11px;border-radius:1.5px;background:#FFD200;box-shadow:0 0 0 1px #A88700;display:inline-block;transform:rotate(-8deg);flex:none}
 .pyr .yplus{font-weight:600;opacity:.75}
-.pyr .medals{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:2px 3px;max-width:120px;margin:0 auto 3px;min-height:12px}
-.pyr .trio{display:flex;gap:1px}
-.pyr .md{width:12px;height:12px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;
-  box-shadow:0 0 0 1px rgba(0,0,0,.30);font:800 8px/1 "Helvetica Neue",Arial,sans-serif;color:#1A1A1A;text-shadow:none}
+/* Medailles : seulement celles gagnees dans les 5 premiers d'un tour, donc plus grandes et plus lisibles. */
+.pyr .medals{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:3px 4px;max-width:140px;margin:0 auto 3px;min-height:16px}
+.pyr .trio{display:flex;gap:2px}
+.pyr .md{width:16px;height:16px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 1px rgba(0,0,0,.30);font:800 10px/1 "Helvetica Neue",Arial,sans-serif;color:#1A1A1A;text-shadow:none}
 .pyr .md i{font-style:normal;display:block}
 .pyr .md.b0{background:radial-gradient(circle at 40% 35%,#B9906E,#8C5E3A 60%,#664127);color:#FFF}
 .pyr .md.b1{background:radial-gradient(circle at 34% 30%,#EBC39C,#C27A3E 55%,#7E4A1E)}
@@ -215,6 +215,9 @@ function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?:
       const m = medalInfo(settings, idx);
       const o = ord?.[idx];
       const pos = o ? o.pos : 0;
+      // Une medaille ne s'affiche que si l'equipe a boucle ce tour dans les 5 premieres : les autres tours
+      // se lisent au survol de la tuile (nombre de tours), pas ici.
+      if (!(pos && pos <= TOP_RANKED)) continue;
       const title = `${MEDAL_NAMES[i]} ${j + 1}/${sz[i]} · tour à ${p[idx]} reps${pos && o ? ` · ${ordinal(pos)} équipe à l'obtenir · ${fmt(o.at)}` : ""}`;
       items.push(
         <span key={idx} className={`md ${TIERS[i]}${m.variant}`} title={title}>
@@ -222,9 +225,9 @@ function Medals({ settings, n, ord }: { settings: RaceSettings; n: number; ord?:
         </span>
       );
     }
-    groups.push(<span key={i} className="trio">{items}</span>);
+    if (items.length) groups.push(<span key={i} className="trio">{items}</span>);
   }
-  return <span className="medals" aria-label={`${n} médaille${n > 1 ? "s" : ""}`}>{groups}</span>;
+  return <span className="medals" aria-label={`${n} tour${n > 1 ? "s" : ""}`}>{groups}</span>;
 }
 
 // ===== Piste « course de chevaux » =====
@@ -724,11 +727,11 @@ export function GreffierClient({
                 lbl = `🏁 ${ordinal(arrivalRank(ctx, team.id))} arrivée${tl.late[team.id] != null ? ` · +${fmt(tl.late[team.id])}` : ""}`;
               } else if (phase === "run") {
                 big = level ?? n;
-                lbl = `reps · tour ${n + 1}/${T} ${dirLabel(ctx.settings, n)}`;
+                lbl = `reps ${dirLabel(ctx.settings, n)}`;
               } else {
                 big = n;
                 const e = ctx.endOverride.get(team.id);
-                lbl = `sur ${T} · ${e == null ? "fin ?" : e === "NONE" ? "fin : aucun" : `fin : ex. ${ctx.exercises.find((x) => x.id === e)?.number ?? "?"}`}`;
+                lbl = e == null ? "dernier atelier ?" : e === "NONE" ? "fin : aucun" : `fin : ex. ${ctx.exercises.find((x) => x.id === e)?.number ?? "?"}`;
                 if (e == null) cls += " unset";
               }
               if (hitTeam === team.id) cls += " hit";
@@ -737,10 +740,15 @@ export function GreffierClient({
               const slope = dir === "↑" ? " up" : dir === "↓" ? " down" : "";
               return (
                 <div key={team.id} className={`cell${tier ? ` tier t${tier}` : ""}${slope}`}>
-                  <button type="button" onClick={() => handleLap(team.id)} className={cls} data-team={team.id}>
-                    <span className="tnum">{teamNum(teamNames[team.id])}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleLap(team.id)}
+                    className={cls}
+                    data-team={team.id}
+                    title={`${teamNames[team.id] ?? team.id}${who ? ` · ${who}` : ""}${phase === "pre" ? "" : ` · ${n} tour${n > 1 ? "s" : ""} sur ${T}${phase === "run" && !isDone ? ` (${dirLabel(ctx.settings, n)})` : ""}`}`}
+                  >
+                    <span className="tnum">{teamNames[team.id] ?? team.id}</span>
                     {phase !== "pre" && <Medals settings={ctx.settings} n={n} ord={ord[team.id]} />}
-                    <span className="num">{teamNames[team.id] ?? team.id}</span>
                     <span className="reps">{big}</span>
                     <span className="lbl">{lbl}</span>
                     {who && <span className="who">{who}</span>}
