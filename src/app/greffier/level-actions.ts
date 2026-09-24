@@ -8,11 +8,77 @@ import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
+import { toMs } from "@/lib/scheduling";
 
 // Actions du WOD Level. Profs, coachs ET greffier cochent (les BOSS se valident a plusieurs sur la meme
 // seance) ; l'unicite en base rend le double-tap et deux appareils sur la meme fiche inoffensifs.
 type Res = { error: string } | { ok: true };
 const STAFF = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
+
+// Etat « vivant » d'une seance Level : ce qui bouge pendant la course, sans les equipes, l'echelle ni le
+// catalogue. Les ecrans le rechargent a la place de la page entiere (30 a 40 requetes) a chaque pouls.
+export type LiveTick = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
+export type LiveLoss = { id: string; teamId: string; level: number; atMs: number };
+export type LiveCard = { id: string; teamId: string; atMs: number };
+export type LevelLive = {
+  ticks: LiveTick[];
+  losses: LiveLoss[];
+  yellowCards: LiveCard[];
+  pauses: { from: number; to: number | null }[];
+  startedAtMs: number | null;
+  endedAtMs: number | null;
+  raceEndedAtMs: number | null;
+};
+export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[] };
+type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
+
+async function raceClock(sessionId: string) {
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
+  const pauses = rs ? (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })) : [];
+  return { rs, startedAtMs, pauses };
+}
+const liveTick = (startedAtMs: number | null, pauses: { from: number; to: number | null }[]) => (t: { id: string; teamId: string; level: number; card: number; at: unknown; by: string }): LiveTick => {
+  const abs = toMs(t.at);
+  return { id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, abs) ?? 0, absMs: abs, by: t.by };
+};
+
+// Etat d'une seule equipe, apres une coche : 3 requetes, l'ecran remplace juste cette equipe.
+async function teamLive(sessionId: string, teamId: string, startedAtMs: number | null, pauses: { from: number; to: number | null }[], rsId: string | null): Promise<TeamLive> {
+  const [ticks, losses, cards] = await Promise.all([
+    db.orm.public.LevelTick.where({ sessionId, teamId }).all(),
+    db.orm.public.LevelLoss.where({ sessionId, teamId }).all(),
+    rsId ? db.orm.public.YellowCard.where({ raceStateId: rsId, teamId }).all() : Promise.resolve([]),
+  ]);
+  return {
+    teamId,
+    ticks: ticks.map(liveTick(startedAtMs, pauses)),
+    losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
+    yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
+  };
+}
+
+// Tout l'etat vivant (6 requetes) : appele par le pouls quand seuls les compteurs de course ont bouge.
+export async function levelLiveAction(sessionId: string): Promise<LevelLive | { error: string }> {
+  const user = await getSession();
+  if (!user || !STAFF.includes(user.role)) return { error: "Accès refusé." };
+  await applyZombieCatches(sessionId);
+  const [{ rs, startedAtMs, pauses }, session] = await Promise.all([raceClock(sessionId), db.orm.public.Session.where({ id: sessionId }).first()]);
+  const [ticks, losses, cards] = await Promise.all([
+    db.orm.public.LevelTick.where({ sessionId }).all(),
+    db.orm.public.LevelLoss.where({ sessionId }).all(),
+    rs ? db.orm.public.YellowCard.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+  ]);
+  return {
+    ticks: ticks.map(liveTick(startedAtMs, pauses)),
+    losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
+    yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
+    pauses,
+    startedAtMs,
+    endedAtMs: rs?.endedAt ? toMs(rs.endedAt) : null,
+    raceEndedAtMs: session?.raceEndedAt ? toMs(session.raceEndedAt) : null,
+  };
+}
 
 async function requireLevelStaff(sessionId: string) {
   const user = await getSession();
@@ -98,7 +164,7 @@ export async function endLevelAction(sessionId: string): Promise<Res> {
   return { ok: true };
 }
 
-async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: string }> {
+async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: string; startedAtMs: number; pauses: { from: number; to: number | null }[] }> {
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs || !rs.startedAt) return { error: "Lance d'abord la course." };
   if (rs.endedAt) return { error: "La course est terminée." };
@@ -108,7 +174,7 @@ async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: 
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   const cap = readLevelCap(session?.settings);
   if (cap !== null && (elapsed(new Date(String(rs.startedAt)).getTime(), pauses, Date.now()) ?? 0) >= cap * 60_000) return { error: "Temps écoulé : déclare la fin du WOD." };
-  return { rsId: rs.id };
+  return { rsId: rs.id, startedAtMs: new Date(String(rs.startedAt)).getTime(), pauses };
 }
 
 // Remise a zero du WOD (apres confirmation cote client) : chrono, fiches cochees, cartes jaunes, demineur et
@@ -148,42 +214,45 @@ export async function setLevelCapAction(sessionId: string, minutes: number | nul
 
 // Cocher une fiche : uniquement une fiche en jeu du niveau EN COURS de l'equipe (pas d'avance sur les niveaux
 // suivants). Deja cochee = rien a faire (deux profs sur le meme BOSS, double-tap).
-export async function tickCardAction(sessionId: string, teamId: string, level: number, card: number): Promise<Res> {
+// Coche : ne verifie le zombie que pour CETTE equipe, et renvoie l'etat de cette equipe (pas de rechargement
+// de page : l'ecran remplace juste la ligne). Une equipe rattrapee entre-temps est signalee (caught).
+export async function tickCardAction(sessionId: string, teamId: string, level: number, card: number): Promise<TeamRes> {
   const { user, session } = await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
-  if ((await applyZombieCatches(sessionId)) > 0) return { error: "Le zombie a rattrapé une équipe : l'écran se met à jour." };
-  const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
-  if (!team) return { error: "Équipe introuvable." };
+  const caught = (await applyZombieCatches(sessionId, teamId)) > 0;
   const levels = readFrozenFromSettings(session.settings);
   const l = levels.find((x) => x.number === level);
   if (!l || !l.cards[card] || l.cards[card].off) return { error: "Cette fiche n'est plus en jeu." };
-  // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
   const ticks = await db.orm.public.LevelTick.where({ sessionId, teamId }).all();
   const done = new Set(ticks.map((t) => `${t.level}_${t.card}`));
+  let refused: string | null = null;
+  // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
   for (const prev of levels) {
     if (prev.number >= level) break;
-    if (activeCards(prev).some(({ index }) => !done.has(`${prev.number}_${index}`))) return { error: `Le niveau ${prev.number} n'est pas terminé.` };
+    if (activeCards(prev).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
   }
-  if (done.has(`${level}_${card}`)) return { ok: true };
-  try {
-    await db.orm.public.LevelTick.create({ sessionId, teamId, level, card, by: user.name });
-  } catch {
-    /* unicite : deja cochee par un autre appareil */
+  if (refused && !caught) return { error: refused };
+  if (!refused && !done.has(`${level}_${card}`)) {
+    try {
+      await db.orm.public.LevelTick.create({ sessionId, teamId, level, card, by: user.name });
+    } catch {
+      /* unicite : deja cochee par un autre appareil */
+    }
   }
-  return { ok: true };
+  return { ok: true, caught, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
 }
 
-export async function untickCardAction(sessionId: string, teamId: string, level: number, card: number): Promise<Res> {
+export async function untickCardAction(sessionId: string, teamId: string, level: number, card: number): Promise<TeamRes> {
   await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
   const row = await db.orm.public.LevelTick.where({ sessionId, teamId, level, card }).first();
   if (row) await db.orm.public.LevelTick.where({ id: row.id }).delete();
-  return { ok: true };
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
 }
 
-export async function levelYellowCardAction(sessionId: string, teamId: string, delta: 1 | -1): Promise<Res> {
+export async function levelYellowCardAction(sessionId: string, teamId: string, delta: 1 | -1): Promise<TeamRes> {
   await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
@@ -193,7 +262,7 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
     const last = await db.orm.public.YellowCard.where({ raceStateId: gate.rsId, teamId }).orderBy((c) => c.at.desc()).first();
     if (last) await db.orm.public.YellowCard.where({ id: last.id }).delete();
   }
-  return { ok: true };
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
 }
 
 // Modifier l'echelle FIGEE de la seance pendant qu'elle tourne (greffier, profs) : reps ou exercice d'une

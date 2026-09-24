@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
@@ -8,8 +8,7 @@ import {
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
-import { endLevelAction, levelPauseAction, levelPulseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction } from "./level-actions";
-import { usePulse } from "../_components/usePulse";
+import { endLevelAction, levelLiveAction, levelPauseAction, levelPulseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -45,13 +44,26 @@ export function LevelClient({
   picker: PickerData;
 }) {
   const router = useRouter();
-  const { levels, teams, startedAtMs, endedAtMs, pauses } = bundle;
+  const { levels, teams } = bundle;
+  // Etat vivant (coches, vies, cartes, chrono) tenu localement : une coche remplace la ligne de son equipe,
+  // le pouls recharge cet etat leger, et la page entiere n'est rechargee que si la structure change.
+  const [live, setLive] = useState<LevelLive>(() => liveFromBundle(bundle));
+  useEffect(() => { setLive(liveFromBundle(bundle)); setOptimistic(new Map()); }, [bundle]);
+  const { startedAtMs, endedAtMs, pauses } = live;
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  // Coches en attente de confirmation serveur : l'ecran reagit au doigt, la base confirme au pouls suivant.
+  // Coches en attente de confirmation serveur : l'ecran reagit au doigt, la reponse de la coche confirme.
   const [optimistic, setOptimistic] = useState<Map<string, boolean>>(new Map());
-  useEffect(() => setOptimistic(new Map()), [bundle.ticks]);
+  function mergeTeam(t: TeamLive) {
+    setLive((l) => ({
+      ...l,
+      ticks: [...l.ticks.filter((x) => x.teamId !== t.teamId), ...t.ticks],
+      losses: [...l.losses.filter((x) => x.teamId !== t.teamId), ...t.losses],
+      yellowCards: [...l.yellowCards.filter((x) => x.teamId !== t.teamId), ...t.yellowCards],
+    }));
+    setOptimistic((m) => { const n = new Map(m); for (const k of n.keys()) if (k.startsWith(t.teamId + "_")) n.delete(k); return n; });
+  }
 
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
   const isPaused = pauses.some((p) => p.to === null);
@@ -76,8 +88,39 @@ export function LevelClient({
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [phase, isPaused]);
-  const pulse = useCallback(() => levelPulseAction(sessionId), [sessionId]);
-  usePulse(pulse, 8000, phase !== "post" && !pending);
+  // Pouls : compteurs seulement. Si la structure a bouge (equipes, membres, echelle, temps impose, depart,
+  // fin) -> page entiere ; sinon -> juste l'etat vivant (6 requetes). Aucun rendu si rien n'a change.
+  const lastPulse = useCallback(() => levelPulseAction(sessionId), [sessionId]);
+  const lastSig = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase === "post") return;
+    let stop = false;
+    let busy = false;
+    const tick = async () => {
+      if (stop || busy || (typeof document !== "undefined" && document.visibilityState !== "visible")) return;
+      busy = true;
+      try {
+        const sig = await lastPulse();
+        if (stop || !sig) return;
+        if (lastSig.current === null) { lastSig.current = sig; return; }
+        if (sig === lastSig.current) return;
+        const a = lastSig.current.split("|"), b = sig.split("|");
+        lastSig.current = sig;
+        const structural = [2, 3, 5, 6, 7, 8].some((i) => a[i] !== b[i]);
+        if (structural) router.refresh();
+        else {
+          const l = await levelLiveAction(sessionId);
+          if (!("error" in l)) setLive(l);
+        }
+      } catch {
+        /* reseau : prochain tick */
+      } finally {
+        busy = false;
+      }
+    };
+    const t = setInterval(tick, 8000);
+    return () => { stop = true; clearInterval(t); };
+  }, [phase, lastPulse, sessionId, router]);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;
@@ -98,23 +141,23 @@ export function LevelClient({
 
   // Coches effectives = base + optimistes (ajouts et retraits en attente).
   const ticks: Tick[] = useMemo(() => {
-    const out: Tick[] = bundle.ticks.filter((t) => optimistic.get(`${t.teamId}_${t.level}_${t.card}`) !== false).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs }));
+    const out: Tick[] = live.ticks.filter((t) => optimistic.get(`${t.teamId}_${t.level}_${t.card}`) !== false).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs }));
     for (const [key, on] of optimistic) {
       if (!on) continue;
       const [teamId, level, card] = key.split("_");
       if (!out.some((t) => t.teamId === teamId && t.level === Number(level) && t.card === Number(card))) out.push({ teamId, level: Number(level), card: Number(card), atMs: liveMs });
     }
     return out;
-  }, [bundle.ticks, optimistic, liveMs]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(levels, t.id, ticks, bundle.losses)])), [teams, levels, ticks, bundle.losses]);
+  }, [live.ticks, optimistic, liveMs]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(levels, t.id, ticks, live.losses)])), [teams, levels, ticks, live.losses]);
   const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
   const rankOf = useMemo(() => new Map(ranked.map((p, i) => [p.teamId, i + 1])), [ranked]);
   const levelByNumber = useMemo(() => new Map(levels.map((l) => [l.number, l])), [levels]);
   const cardsOf = useMemo(() => {
     const m = new Map<string, number>();
-    for (const c of bundle.yellowCards) m.set(c.teamId, (m.get(c.teamId) ?? 0) + 1);
+    for (const c of live.yellowCards) m.set(c.teamId, (m.get(c.teamId) ?? 0) + 1);
     return m;
-  }, [bundle.yellowCards]);
+  }, [live.yellowCards]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   // Mode zombies : quand un zombie touche un coeur, c'est le serveur qui tranche ; l'ecran se contente de
   // demander une relecture (une seule par rattrapage, pas a chaque seconde).
@@ -129,9 +172,9 @@ export function LevelClient({
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
-      router.refresh();
+      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) setLive(l); });
     }
-  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, router]);
+  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, sessionId]);
 
   function refresh() {
     router.refresh();
@@ -163,12 +206,22 @@ export function LevelClient({
     const key = `${teamId}_${level}_${card}`;
     setError("");
     setOptimistic((m) => new Map(m).set(key, !done));
-    startTransition(async () => {
-      const res = done ? await untickCardAction(sessionId, teamId, level, card) : await tickCardAction(sessionId, teamId, level, card);
+    // Pas de useTransition ici : les taps rapides partent en parallele, chacun remplace la ligne de son equipe.
+    void (done ? untickCardAction(sessionId, teamId, level, card) : tickCardAction(sessionId, teamId, level, card)).then((res) => {
       if ("error" in res) {
         setError(res.error);
         setOptimistic((m) => { const n = new Map(m); n.delete(key); return n; });
-      } else refresh();
+        return;
+      }
+      mergeTeam(res.team);
+      if (res.caught) setError(`Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.`);
+    });
+  }
+  function yellow(teamId: string, delta: 1 | -1) {
+    setError("");
+    void levelYellowCardAction(sessionId, teamId, delta).then((res) => {
+      if ("error" in res) setError(res.error);
+      else mergeTeam(res.team);
     });
   }
 
@@ -267,7 +320,7 @@ export function LevelClient({
                     raceMs={liveMs}
                     running={phase === "run" && !isPaused}
                     onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
-                    onYellow={(delta) => run(() => levelYellowCardAction(sessionId, t.id, delta))}
+                    onYellow={(delta) => yellow(t.id, delta)}
                   />
                 ))}
               </div>
@@ -278,7 +331,7 @@ export function LevelClient({
         {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelByNumber={levelByNumber} cardsOf={cardsOf} />}
         {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={levels} />}
         {view === "ladder" && (bundle.frozen ? (
-          <LevelLadderEditor sessionId={sessionId} levels={levels} catalog={bundle.catalog} ticks={bundle.ticks} onSaved={refresh} />
+          <LevelLadderEditor sessionId={sessionId} levels={levels} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />
         ) : (
           <LadderPreview levels={levels} />
         ))}
@@ -328,6 +381,10 @@ export function LevelClient({
       </footer>
     </div>
   );
+}
+
+function liveFromBundle(b: LevelBundle): LevelLive {
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs };
 }
 
 // Colonnes d'exercices du recap : ordre de premiere apparition dans l'echelle.

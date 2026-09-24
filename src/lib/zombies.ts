@@ -25,7 +25,7 @@ export function absoluteFromRace(startedAtMs: number, pauses: { from: number; to
   return abs;
 }
 
-export async function applyZombieCatches(sessionId: string): Promise<number> {
+export async function applyZombieCatches(sessionId: string, onlyTeamId?: string): Promise<number> {
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session || session.wodType !== "LEVEL" || !readZombies(session.settings) || session.raceEndedAt) return 0;
   const levels = readFrozenFromSettings(session.settings);
@@ -38,9 +38,10 @@ export async function applyZombieCatches(sessionId: string): Promise<number> {
   const nowMs = Date.now();
   const nowRace = elapsed(startedAtMs, pauses, nowMs) ?? 0;
 
-  const teams = await db.orm.public.Team.where({ sessionId }).all();
-  const rawTicks = await db.orm.public.LevelTick.where({ sessionId }).all();
-  const rawLosses = await db.orm.public.LevelLoss.where({ sessionId }).all();
+  // Une coche ne verifie que son equipe (4 requetes legeres) ; le pouls et le rendu verifient tout le monde.
+  const teams = onlyTeamId ? [{ id: onlyTeamId }] : await db.orm.public.Team.where({ sessionId }).all();
+  const rawTicks = onlyTeamId ? await db.orm.public.LevelTick.where({ sessionId, teamId: onlyTeamId }).all() : await db.orm.public.LevelTick.where({ sessionId }).all();
+  const rawLosses = onlyTeamId ? await db.orm.public.LevelLoss.where({ sessionId, teamId: onlyTeamId }).all() : await db.orm.public.LevelLoss.where({ sessionId }).all();
   let ticks: (Tick & { id: string })[] = rawTicks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
   const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;
