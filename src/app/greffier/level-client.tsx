@@ -57,6 +57,19 @@ export function LevelClient({
   const isPaused = pauses.some((p) => p.to === null);
   const phase: "pre" | "run" | "post" = startedAtMs === null ? "pre" : endedAtMs !== null ? "post" : "run";
   const [view, setView] = useState<View>(phase === "pre" && memberCount === 0 ? "teams" : "race");
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Mode « course » : une fois le WOD lance, l'ecran ne garde que l'essentiel (chrono, tuiles, boutons vitaux).
+  const focus = phase === "run";
+  function toggleFullscreen(force?: boolean) {
+    if (typeof document === "undefined") return;
+    const on = force ?? !document.fullscreenElement;
+    try {
+      if (on && !document.fullscreenElement) void document.documentElement.requestFullscreen?.();
+      else if (!on && document.fullscreenElement) void document.exitFullscreen?.();
+    } catch {
+      /* navigateur sans plein ecran : tant pis */
+    }
+  }
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -121,6 +134,7 @@ export function LevelClient({
       return;
     }
     if (!bundle.frozen && !confirm(`Figer l'échelle (${levels.length} niveaux) dans cette séance et lancer le chrono ?`)) return;
+    toggleFullscreen(true); // geste utilisateur : le navigateur accepte le plein ecran ici
     run(() => startLevelAction(sessionId));
   }
   function handleEnd() {
@@ -173,34 +187,44 @@ export function LevelClient({
   return (
     <div className={`${ui.page} pb-28`}>
       <RefereeRequestsPopup sessionId={sessionId} initial={pendingRequests} />
-      <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4 py-2">
+      <header className={cx("sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4", focus ? "py-1" : "py-2")}>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="min-w-0">
-            <span className={ui.eyebrow}>Greffier · Level</span>
-            <div className="flex items-center gap-2 min-w-0">
-              <SessionStep to={olderSession} dir="older" />
-              {sessionOptions.length > 1 ? (
-                <select value={sessionId} onChange={(e) => router.push(`/greffier?session=${e.target.value}`)} className={`${ui.input} w-auto max-w-[280px] py-1.5 font-bold`}>
-                  {sessionOptions.map((o) => (
-                    <option key={o.id} value={o.id}>{o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? " — ouverte" : ` — ${sessionDay(o.dateMs)}`}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm font-bold leading-tight">{sessionLabel}{classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}</p>
-              )}
-              <SessionStep to={newerSession} dir="newer" />
-            </div>
+            {focus ? (
+              <p className="text-sm font-bold leading-tight truncate">{sessionLabel}{classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}</p>
+            ) : (
+              <>
+                <span className={ui.eyebrow}>Greffier · Level</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <SessionStep to={olderSession} dir="older" />
+                  {sessionOptions.length > 1 ? (
+                    <select value={sessionId} onChange={(e) => router.push(`/greffier?session=${e.target.value}`)} className={`${ui.input} w-auto max-w-[280px] py-1.5 font-bold`}>
+                      {sessionOptions.map((o) => (
+                        <option key={o.id} value={o.id}>{o.label}{o.classes.length ? ` · ${o.classes.join(", ")}` : ""}{o.open ? " — ouverte" : ` — ${sessionDay(o.dateMs)}`}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm font-bold leading-tight">{sessionLabel}{classes.length > 0 && <span className="text-ink-2 font-semibold"> · {classes.join(", ")}</span>}</p>
+                  )}
+                  <SessionStep to={newerSession} dir="newer" />
+                </div>
+              </>
+            )}
           </div>
           <div className="text-center">
-            <p className={cx("font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : timeUp || redZone ? "text-danger" : "text-ink")}>{fmt(liveMs) || "0:00"}</p>
+            <p className={cx("font-display font-extrabold leading-none tracking-tight tabular-nums", focus ? "text-[3rem]" : "text-[3.4rem]", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : timeUp || redZone ? "text-danger" : "text-ink")}>{fmt(liveMs) || "0:00"}</p>
             {restMs !== null && phase !== "pre" && (
               <p className={cx("text-sm font-bold tabular-nums", timeUp ? "text-danger" : redZone ? "text-danger" : "text-ink-2")}>{timeUp ? "⏱ TEMPS ÉCOULÉ" : `reste ${fmt(Math.max(0, restMs))}`}</p>
             )}
           </div>
           <div className="text-right">
             <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : timeUp ? "Temps écoulé — déclare la fin du WOD" : "WOD en cours"}</p>
-            <button type="button" onClick={handleCap} disabled={pending || phase === "post"} className={ui.hint + " underline"} title="Temps imposé (minutes de chrono), vide = libre">⏱ {bundle.capMin !== null ? `temps imposé : ${bundle.capMin} min` : "temps libre"}</button>
-            <p className={ui.hint}>Échelle : {levels.length} niveau{levels.length > 1 ? "x" : ""}{bundle.frozen ? " · figée" : " · vive (figée au départ)"}</p>
+            {!focus && (
+              <>
+                <button type="button" onClick={handleCap} disabled={pending || phase === "post"} className={ui.hint + " underline"} title="Temps imposé (minutes de chrono), vide = libre">⏱ {bundle.capMin !== null ? `temps imposé : ${bundle.capMin} min` : "temps libre"}</button>
+                <p className={ui.hint}>Échelle : {levels.length} niveau{levels.length > 1 ? "x" : ""}{bundle.frozen ? " · figée" : " · vive (figée au départ)"}</p>
+              </>
+            )}
           </div>
         </div>
         {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
@@ -209,24 +233,10 @@ export function LevelClient({
       <main className="max-w-[1800px] mx-auto p-3 sm:p-4">
         {view === "race" && (
           <>
-            {ranked.length > 0 && phase !== "pre" && (
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {ranked.map((p, i) => {
-                  const t = teamById.get(p.teamId)!;
-                  const l = p.currentLevel ? levelByNumber.get(p.currentLevel) : null;
-                  return (
-                    <span key={p.teamId} className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold", i === 0 ? "bg-accent text-ink" : i < 3 ? "bg-ink text-white" : "bg-card border border-line text-ink")}>
-                      <span className="opacity-70">#{i + 1}</span> {t.name} <span className={cx("font-black", l?.boss && "text-danger")}>{p.currentLevel ? levelLabel(l) : "🏁"}</span>
-                      {p.currentLevel && <span className="opacity-70">{p.currentDone}/{p.currentTotal}</span>}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
             {teams.length === 0 ? (
               <p className={`${ui.cardPad} ${ui.muted}`}>Aucune équipe : compose-les dans l&apos;onglet « Équipes &amp; arbitres ».</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+              <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
                 {teams.map((t) => (
                   <TeamCard
                     key={t.id}
@@ -259,24 +269,24 @@ export function LevelClient({
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
       </main>
 
-      <footer className="fixed bottom-0 inset-x-0 z-20 bg-card/95 backdrop-blur border-t border-line px-3 py-2">
-        <div className="max-w-[1800px] mx-auto flex flex-wrap items-center gap-2">
-          <div className={`${ui.segmented} flex-wrap`}>
+      <footer className="fixed bottom-0 inset-x-0 z-20 bg-card/95 backdrop-blur border-t border-line px-2 py-1.5">
+        <div className="max-w-[1800px] mx-auto flex flex-nowrap items-center gap-2 overflow-x-auto">
+          <div className={`${ui.segmented} flex-nowrap flex-shrink-0`}>
             <button onClick={() => setView("race")} className={tabBtn(view === "race")}>Course</button>
             <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Classement</button>
-            <button onClick={() => setView("recap")} className={tabBtn(view === "recap")}>Reps par exo</button>
+            <button onClick={() => setView("recap")} className={tabBtn(view === "recap")}>Reps</button>
             <button onClick={() => setView("ladder")} className={tabBtn(view === "ladder")}>Échelle</button>
-            <button onClick={() => setView("records")} className={tabBtn(view === "records")}>🏆 Records</button>
+            <button onClick={() => setView("records")} className={tabBtn(view === "records")}>🏆</button>
             <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
               Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{bundle.evaluations.length}</span>
             </button>
-            <button onClick={() => setView("settings")} className={tabBtn(view === "settings")}>⚙️ Réglages</button>
+            <button onClick={() => setView("settings")} className={tabBtn(view === "settings")}>⚙️</button>
             <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
-              Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
+              Équipes <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
               {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>💣 {referees.length}</span>}
             </button>
           </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-nowrap items-center gap-2 flex-shrink-0 relative">
             {phase === "pre" && <button onClick={handleStart} disabled={pending || teams.length === 0} className={btn.lgSuccess}>Lancer le WOD</button>}
             {phase === "run" && (
               <>
@@ -285,9 +295,15 @@ export function LevelClient({
               </>
             )}
             {phase === "post" && <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>}
-            <button onClick={exportCsv} className={btn.lgDark}>Exporter</button>
-            <a href={`/touche-coule?session=${sessionId}`} className={btn.lgGhost} title="Ouvrir le démineur des arbitres pour cette séance">💣 Arbitrer</a>
-            <LogoutButton />
+            <button type="button" onClick={() => setMoreOpen((v) => !v)} className={btn.lgGhost} aria-label="Plus d'actions" title="Exporter, arbitrer, plein écran, déconnexion">⋯</button>
+            {moreOpen && (
+              <div className="absolute bottom-full right-0 mb-2 w-56 rounded-2xl bg-card border border-line shadow-pop p-2 flex flex-col gap-1" onMouseLeave={() => setMoreOpen(false)}>
+                <button type="button" onClick={() => { setMoreOpen(false); exportCsv(); }} className={btn.ghost}>📤 Exporter (CSV)</button>
+                <a href={`/touche-coule?session=${sessionId}`} className={btn.ghost} title="Ouvrir le démineur des arbitres pour cette séance">💣 Arbitrer</a>
+                <button type="button" onClick={() => { setMoreOpen(false); toggleFullscreen(); }} className={btn.ghost}>⛶ Plein écran</button>
+                <LogoutButton />
+              </div>
+            )}
           </div>
         </div>
       </footer>
@@ -317,37 +333,39 @@ function TeamCard({ team, progress: p, level, rank, yellow, canTick, pendingKeys
 }) {
   const finished = p.currentLevel === null;
   const boss = !!level?.boss;
+  // Fiches par reps croissantes : plus intuitif pour le greffier (l'index reste celui de l'echelle).
+  const cards = level ? [...activeCards(level)].sort((a, b) => a.card.reps - b.card.reps || a.index - b.index) : [];
   return (
-    <section className={cx(ui.card, "p-3 flex flex-col gap-2", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40")}>
-      <div className="flex items-start gap-2">
-        <span className="inline-flex items-center rounded-lg bg-ink text-white font-display font-extrabold text-sm px-2 py-0.5 uppercase tracking-wide">{team.name}</span>
-        {rank > 0 && <span className={cx(ui.chip, rank === 1 ? ui.chipAccent : rank <= 3 ? ui.chipBrand : ui.chipMuted)}>#{rank}</span>}
-        <span className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => onYellow(-1)} disabled={!canTick || yellow === 0} className="w-6 h-6 rounded-full bg-paper text-ink-2 hover:bg-line text-sm font-bold leading-none disabled:opacity-30" aria-label="Retirer une carte jaune">−</button>
-          <span className="text-sm font-bold tabular-nums" title="Cartes jaunes">🟨 {yellow}</span>
-          <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="w-6 h-6 rounded-full bg-paper text-ink-2 hover:bg-line text-sm font-bold leading-none disabled:opacity-30" aria-label="Donner une carte jaune">+</button>
+    <section
+      title={team.members.map((m) => m.name).join(", ")}
+      className={cx(ui.card, "p-2 flex flex-col gap-1.5 min-w-0", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40")}
+    >
+      <div className="flex items-center gap-1 min-w-0">
+        <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
+        {rank > 0 && <span className={cx(ui.chip, "px-1.5", rank === 1 ? ui.chipAccent : rank <= 3 ? ui.chipBrand : ui.chipMuted)}>#{rank}</span>}
+        <span className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+          {yellow > 0 && <button type="button" onClick={() => onYellow(-1)} disabled={!canTick} className="w-5 h-5 rounded-full bg-paper text-ink-2 hover:bg-line text-xs font-bold leading-none disabled:opacity-30" aria-label="Retirer une carte jaune">−</button>}
+          <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="h-5 rounded-full bg-paper hover:bg-line px-1.5 text-xs font-bold tabular-nums leading-none disabled:opacity-30" title="Donner une carte jaune">🟨{yellow}</button>
         </span>
       </div>
-      {team.members.length > 0 && <p className="text-[11px] text-ink-2 leading-tight truncate" title={team.members.map((m) => m.name).join(", ")}>{team.members.map((m) => m.name).join(", ")}</p>}
 
       {finished ? (
-        <div className="py-3 text-center">
-          <div className="text-3xl">🏁</div>
-          <p className="font-display font-extrabold text-success-ink">Échelle bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</p>
-          <p className={ui.hint}>{p.completedLevels} niveaux · {p.reps} reps</p>
+        <div className="py-2 text-center">
+          <div className="text-2xl">🏁</div>
+          <p className="font-display font-extrabold text-success-ink text-sm leading-tight">Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</p>
+          <p className={ui.hint}>{p.completedLevels} niv. · {p.reps} reps</p>
         </div>
       ) : level ? (
         <>
-          <div className="flex items-baseline gap-2">
-            <span className={cx("font-display font-extrabold text-2xl leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niveau"} {level.number}</span>
-            {level.name && <span className="text-xs text-ink-2 truncate">{level.name.replace(/^BOSS · /, "")}</span>}
-            <span className="ml-auto text-xs font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
+          <div className="flex items-baseline gap-1 min-w-0" title={level.name ?? undefined}>
+            <span className={cx("font-display font-extrabold text-lg leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
+            <span className="ml-auto text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
           </div>
-          <div className="h-1.5 rounded-full bg-line overflow-hidden">
+          <div className="h-1 rounded-full bg-line overflow-hidden">
             <div className={cx("h-full transition-all", boss ? "bg-danger" : "bg-brand")} style={{ width: `${p.currentTotal ? (100 * p.currentDone) / p.currentTotal : 0}%` }} />
           </div>
           <div className="space-y-1">
-            {activeCards(level).map(({ card, index }) => {
+            {cards.map(({ card, index }) => {
               const done = p.doneCards.has(`${level.number}_${index}`);
               const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
               return (
@@ -356,21 +374,21 @@ function TeamCard({ team, progress: p, level, rank, yellow, canTick, pendingKeys
                   type="button"
                   disabled={!canTick || busy}
                   onClick={() => onToggle(level.number, index, done)}
+                  title={`${card.reps} ${cap(card.label)}`}
                   className={cx(
-                    "w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-left border transition active:scale-[.98]",
+                    "w-full flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left border transition active:scale-[.98] min-w-0",
                     done ? "bg-success text-white border-success" : "bg-card border-line-2 hover:border-brand",
                     (!canTick || busy) && "opacity-60"
                   )}
                 >
-                  <span className={cx("w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0", done ? "border-white bg-white text-success" : "border-line-2")}>{done ? "✓" : ""}</span>
-                  <span className="font-display font-extrabold text-base tabular-nums">{card.reps}</span>
-                  <span className="font-bold text-sm truncate">{cap(card.label)}</span>
-                  <span className={cx("ml-auto text-[11px] tabular-nums", done ? "text-white/80" : "text-ink-3")}>{boss ? `${fmtTheoretical((card.reps * card.weight) / 5)} à 5` : fmtTheoretical(card.reps * card.weight)}</span>
+                  <span className={cx("w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px] font-black flex-shrink-0", done ? "border-white bg-white text-success" : "border-line-2")}>{done ? "✓" : ""}</span>
+                  <span className="font-display font-extrabold text-sm tabular-nums flex-shrink-0">{card.reps}</span>
+                  <span className="font-bold text-xs truncate">{cap(card.label)}</span>
                 </button>
               );
             })}
           </div>
-          <p className={`${ui.hint} tabular-nums`}>≈ {fmtTheoretical(estimateSeconds(activeCards(level).map(({ card }) => ({ reps: card.reps, weight: card.weight })), boss))} · {p.completedLevels} bouclé{p.completedLevels > 1 ? "s" : ""} · {p.reps} reps</p>
+          <p className={`${ui.hint} tabular-nums`}>{p.completedLevels} bouclé{p.completedLevels > 1 ? "s" : ""} · {p.reps} reps</p>
         </>
       ) : (
         <p className={ui.hint}>Échelle vide.</p>
