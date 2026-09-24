@@ -94,14 +94,33 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
               run={run}
             />
           ))}
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run(`Niveau ${levels.length + 1} ajouté.`, () => createLevelAction())}
-            className={btn.primary}
-          >
-            + Ajouter le niveau {levels.length + 1}{isBoss(levels.length + 1) ? " (BOSS)" : ""}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(`Niveau ${levels.length + 1} ajouté.`, () => createLevelAction())}
+              className={btn.primary}
+            >
+              + Ajouter le niveau {levels.length + 1}{isBoss(levels.length + 1) ? " (BOSS)" : ""}
+            </button>
+            {isMaster && levels.length > 0 && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  confirm("Remplacer TOUTE l'échelle par la proposition de 20 niveaux ? Les niveaux actuels sont perdus (les séances déjà lancées gardent leur copie).") &&
+                  run("Échelle remplacée par la proposition (20 niveaux).", async () => {
+                    const r = await loadProposalAction(true);
+                    return "error" in r ? r : { ok: true };
+                  })
+                }
+                className={btn.smDanger}
+                title="Repart de la proposition de 20 niveaux"
+              >
+                Remplacer par la proposition
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
