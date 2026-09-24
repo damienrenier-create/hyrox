@@ -3,7 +3,7 @@ import { listExercises, seedDefaultExercises } from "@/lib/level";
 import { readSessionClasses } from "@/lib/session-roles";
 import { readChild } from "@/lib/level-context";
 import { FINISHER_EMOM, FINISHER_SERIES, WARMUP_SERIES, childLabel, staggeredOrder, type ChildKind } from "@/lib/level-warmup";
-import { isBoss, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { isBoss, EMOM_ZOMBIE_SPEED, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 // Seance ENFANT d'un WOD Level (echauffement ou finisher) : memes equipes et membres copies, echelle figee
@@ -55,7 +55,8 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
       levels,
       ...(order ? { levelOrder: order } : {}),
       ...(kind === "warmup" ? { zombieSpeed: 1 } : {}),
-      ...(kind === "finisher" ? { emom: { waveMinutes: FINISHER_EMOM.map((w) => w.minutes) }, zombies: false } : { zombies: true }),
+      // Zombies partout (Sartay 25/09) : palier 1 a l'echauffement, palier 10 au finisher (un par vague).
+      ...(kind === "finisher" ? { emom: { waveMinutes: FINISHER_EMOM.map((w) => w.minutes) }, zombies: true, zombieSpeed: EMOM_ZOMBIE_SPEED } : { zombies: true }),
       child: { kind, parentId },
     })),
   });
@@ -76,5 +77,8 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
     await db.orm.public.Session.where({ id: child.id }).update({ settings: JSON.parse(JSON.stringify({ ...s, levelOrder: remapped })) });
   }
   await db.orm.public.RaceState.create({ sessionId: child.id, noStartExerciseIds: [], startedAt: Temporal.Now.instant() });
+  // Le parent connait ses enfants : classement, reps et records additionnent echauffement + WOD + finisher.
+  const prevChildren = (prev.children && typeof prev.children === "object" ? prev.children : {}) as Record<string, unknown>;
+  await db.orm.public.Session.where({ id: parentId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, children: { ...prevChildren, [kind]: child.id } })) });
   return { ok: true, id: child.id };
 }

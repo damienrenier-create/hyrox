@@ -16,9 +16,12 @@ import { DEFAULT_EXERCISES } from "./level-catalog";
 
 export type Identity = "cardio" | "jambes" | "bras" | "tronc" | "full";
 export type ProposedLevel = { name: string; identity: Identity; cards: [label: string, reps: number][] };
-type Spec = { identity: Identity; name: string; exos: string[] } | { boss: true; identity: Identity; name: string; label: string; reps: number };
+type Spec =
+  | { identity: Identity; name: string; exos: string[] }
+  | { boss: true; identity: Identity; name: string; label: string; reps: number }
+  | { fixed: true; identity: Identity; name: string; cards: [label: string, reps: number][] }; // fiches ecrites a la main (F)
 export type Proposal = {
-  key: "A" | "B" | "C" | "D" | "E";
+  key: "A" | "B" | "C" | "D" | "E" | "F";
   title: string;
   philosophy: string;
   strengths: string[];
@@ -58,6 +61,7 @@ export function repsFor(label: string, seconds: number): number {
 }
 
 const L = (identity: Identity, name: string, ...exos: string[]): Spec => ({ identity, name, exos });
+const FX = (identity: Identity, name: string, ...cards: [string, number][]): Spec => ({ fixed: true, identity, name, cards });
 const BOSS = (identity: Identity, name: string, label: string, reps: number): Spec => ({ boss: true, identity, name, label, reps });
 
 // Rampe standard : 55 s au premier niveau, 205 s au dix-neuvieme (les BOSS ont leur propre duree).
@@ -72,6 +76,7 @@ export function materialize(p: Proposal): ProposedLevel[] {
   let i = 0;
   return p.specs.map((s, idx) => {
     if ("boss" in s) return { name: `BOSS · ${s.name}`, identity: s.identity, cards: [[s.label, s.reps]] };
+    if ("fixed" in s) return { name: s.name, identity: s.identity, cards: s.cards.map((c) => [...c] as [string, number]) };
     const D = p.ramp[i++];
     const per = D * Math.min(1, 5 / s.exos.length); // six fiches : le plus rapide en prend deux
     const nextBoss = p.specs.slice(idx + 1).find((x) => "boss" in x);
@@ -288,5 +293,66 @@ export const PROPOSALS: Proposal[] = [
     ],
   },
 ];
+
+// Familles de points (Sartay, 25/09) : deux fiches de meme famille (reps x ponderation voisines) sont
+// interchangeables au sein d'un niveau. Reps rondes : dizaines (ponderation <= 3), multiples de 5 (4 a 8),
+// unites pour les trois exercices lourds (aller-retour, one rep, tire tapis).
+export function roundReps(label: string, seconds: number): number {
+  const w = weightOf(label);
+  const step = w <= 3 ? 10 : w <= 8 ? 5 : 1;
+  return Math.max(step, Math.round(seconds / w / step) * step);
+}
+export const POINT_FAMILIES = [30, 60, 90, 120, 150, 180, 240] as const;
+
+// Proposition F (25/09/2026, sur les remarques de Sartay apres A-E) : fiches ecrites a la main, reps rondes,
+// 3 a 8 fiches par niveau, un SOCLE bras + jambes + cardio dans chaque niveau ordinaire, et, entre deux BOSS,
+// les niveaux tournent sur les familles de points (le niveau 6 met les bras au commando, le 7 aux tractions,
+// le 8 aux pompes...) pour que les equipes, etalees sur les niveaux d'un bloc, ne se marchent pas dessus.
+// Les 21 exercices sont tous en jeu avant le BOSS 10 ; niveaux courts a peu de fiches (3-4) faits de fiches
+// courtes et egales (le relais de toute l'equipe sur une seule longue fiche est evite) ; le temps de la fiche
+// la plus longue et le temps total montent a chaque niveau.
+PROPOSALS.push({
+  key: "F",
+  title: "Socle & rotation",
+  philosophy:
+    "Chaque niveau ordinaire tient sur un socle bras + jambes + cardio, complete par 0 a 5 fiches de tronc, full body ou exercices lourds, pour 3 a 8 fiches au total. Dans un bloc, les niveaux sont des variantes d'un meme squelette : les memes roles, mais des exercices differents d'un niveau a l'autre (familles de points interchangeables), pour etaler les equipes sur les ateliers. Reps rondes, tout le catalogue en jeu des le bloc 2, montee continue du temps total et de la fiche la plus longue.",
+  strengths: [
+    "Un socle bras + jambes + cardio a chaque niveau : personne ne fait quatre niveaux de suite sans haut du corps ni sans cardio.",
+    "Les niveaux voisins n'utilisent pas les memes ateliers : les equipes etalees sur un bloc ne se disputent ni les barres, ni les tapis, ni les kettlebells.",
+    "Reps rondes (dizaines, multiples de 5, unites pour les exercices lourds) : lisibles sur la fiche, faciles a compter, faciles a arbitrer.",
+    "Les 21 exercices sont tous utilises avant le BOSS 10, et chacun revient au moins trois fois : la seance montre tout le catalogue, meme aux equipes lentes.",
+    "Nombre de fiches variable (3 a 8) : niveaux courts et compacts pour lancer la seance, gros niveaux a 7-8 ateliers en fin de bloc ou chacun a sa fiche.",
+    "Les fiches d'un meme niveau court sont courtes et egales : l'equipe ne s'entasse jamais en relais sur une seule longue fiche.",
+  ],
+  weaknesses: [
+    "L'intensite (ponderation moyenne d'une rep) monte par bloc mais zigzague d'un niveau a l'autre : une fiche de corde de 60 a 90 reps fait mecaniquement baisser le chiffre du niveau, sans que le niveau soit plus facile.",
+    "Les niveaux a 3-4 fiches laissent un ou deux membres en relais : l'equilibre affiche (52 a 80 %) est plus bas que dans E, c'est le prix des petits niveaux voulus.",
+    "Sept fiches SKILL (smash down, wall ball) sur 16 niveaux : une par niveau au plus, mais plus que dans E ; a surveiller si les balles manquent.",
+    "Les trois exercices lourds (aller-retour, one rep, tire tapis) pesent lourd dans l'intensite des niveaux 9, 14, 18 et 19 : si ONE REP se revele plus long que 15 s, ces niveaux s'allongent.",
+  ],
+  ramp: [],
+  specs: [
+    FX("cardio", "Premiers pas", ["CORDE", 50], ["SQUATS JUMP", 20], ["COMMANDO BRAS", 20]),
+    FX("jambes", "Tour de chauffe", ["ALLER-RETOUR", 4], ["FENTES DISK", 30], ["POMPES", 20], ["KB TOUR", 60]),
+    FX("bras", "Cadence", ["BOX JUMP", 20], ["MONKEY SLIDE", 20], ["TRACTIONS", 15], ["KB SWING", 40]),
+    FX("tronc", "Plein régime", ["CORDE", 60], ["SQUATS JUMP", 40], ["POMPES", 30], ["PLANK SLIDE", 30], ["SMASH DOWN", 30]),
+    BOSS("full", "Burpees", "BURPEES", 75),
+    FX("full", "Reprise", ["ALLER-RETOUR", 6], ["FENTES DISK", 50], ["COMMANDO BRAS", 50], ["WALL BALL SHOT", 30]),
+    FX("cardio", "Éventail", ["BOX JUMP", 30], ["MONKEY SLIDE", 30], ["TRACTIONS", 20], ["CORDE", 90], ["KB SNATCH", 30], ["TOUR DE POUTRE", 20]),
+    FX("jambes", "Du lourd", ["BURPEES", 15], ["SQUATS JUMP", 60], ["POMPES", 40], ["FLIP TAPIS", 30], ["BREAK DANCE", 15]),
+    FX("bras", "Grand huit", ["CORDE", 60], ["TIRE TAPIS AR", 3], ["COMMANDO BRAS", 60], ["POMPES", 30], ["ONE REP", 6], ["SMASH DOWN", 30], ["FENTES DISK", 60]),
+    BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 50),
+    FX("bras", "Relance", ["SQUATS JUMP", 70], ["POMPES", 50], ["KB SNATCH", 50], ["BURPEES", 20]),
+    FX("jambes", "Cinq ateliers", ["KB TOUR", 100], ["ALLER-RETOUR", 10], ["FENTES DISK", 70], ["COMMANDO BRAS", 70], ["FLIP TAPIS", 40]),
+    FX("tronc", "Marathon des ateliers", ["CORDE", 60], ["MONKEY SLIDE", 30], ["POMPES", 40], ["PLANK SLIDE", 30], ["WALL BALL SHOT", 30], ["TOUR DE POUTRE", 20], ["BREAK DANCE", 20], ["KB SWING", 60]),
+    FX("full", "Dernière ligne droite", ["POMPES", 30], ["TIRE TAPIS AR", 4], ["COMMANDO BRAS", 60], ["BURPEES", 25], ["SQUATS JUMP", 60], ["ONE REP", 8], ["SMASH DOWN", 40]),
+    BOSS("bras", "Tractions", "TRACTIONS", 100),
+    FX("bras", "Retour de flamme", ["COMMANDO BRAS", 40], ["TRACTIONS", 30], ["FENTES DISK", 90], ["BURPEES", 25], ["KB SNATCH", 50], ["PLANK SLIDE", 50]),
+    FX("full", "Tour du gymnase", ["KB TOUR", 80], ["MONKEY SLIDE", 40], ["POMPES", 40], ["BOX JUMP", 40], ["SMASH DOWN", 40], ["FLIP TAPIS", 45], ["ONE REP", 8], ["TOUR DE POUTRE", 25]),
+    FX("cardio", "Cinq costauds", ["ALLER-RETOUR", 12], ["TIRE TAPIS AR", 6], ["TRACTIONS", 40], ["BREAK DANCE", 25], ["KB SWING", 100]),
+    FX("tronc", "Apothéose", ["WALL BALL SHOT", 40], ["FENTES DISK", 60], ["COMMANDO BRAS", 60], ["BURPEES", 30], ["KB SNATCH", 40], ["PLANK SLIDE", 40], ["TIRE TAPIS AR", 4], ["ONE REP", 8]),
+    BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
+  ],
+});
 
 export const proposalByKey = (key: string) => PROPOSALS.find((p) => p.key === key) ?? null;

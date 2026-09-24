@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { attemptEvents, cardsForTeam, orderedLevels, progressOf, readFixedZombie, readLevelOrder, readPenalties, zombieSim, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, attemptEvents, cardSeconds, cardsForTeam, emomSchedule, emomWaveEvents, emomZombieSim, orderedLevels, progressOf, readEmom, readFixedZombie, readLevelOrder, readPenalties, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -65,6 +65,29 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const order = readLevelOrder(session.settings);
   const fixed = readFixedZombie(session.settings);
   const penalties = readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined }));
+
+  // Finisher (EMOM) : une vie perdue par vague non bouclee a sa fin ; les coches restent (les vagues
+  // s'enchainent au chrono, rien a rejouer).
+  const emom = readEmom(session.settings);
+  if (emom) {
+    const speed = fixed ?? EMOM_ZOMBIE_SPEED;
+    for (const t of teams) {
+      for (const w of emomSchedule(emom.waveMinutes)) {
+        if (nowRace < w.startMs) break;
+        const level = levels.find((l) => l.number === w.wave);
+        if (!level) continue;
+        const cards = activeCards(level);
+        if (!cards.length || losses.some((l) => l.teamId === t.id && l.level === w.wave)) continue;
+        const sim = emomZombieSim(w.endMs - w.startMs, cards.length, cards.reduce((s, x) => s + cardSeconds(x.card), 0), emomWaveEvents(level, t.id, ticks, w), nowRace - w.startMs, speed);
+        if (sim.catchAtMs === null) continue;
+        const deadline = w.startMs + sim.catchAtMs;
+        await db.orm.public.LevelLoss.create({ sessionId, teamId: t.id, level: w.wave, at: Temporal.Instant.fromEpochMilliseconds(Math.round(absoluteFromRace(startedAtMs, pauses, deadline, nowMs))) });
+        losses.push({ teamId: t.id, level: w.wave, atMs: deadline });
+        applied++;
+      }
+    }
+    return applied;
+  }
 
   for (const t of teams) {
     const mine = orderedLevels(levels, order?.[t.id]);

@@ -2,7 +2,7 @@ import { buildRaceContext, teamFinishedAtMs } from "@/lib/race-context";
 import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { standings, total, finishAt, startOf, fmt, timeline } from "@/lib/wod-engines/templates/pyramide-engine";
 import { teamRows, fmt as ffFmt, colorOf } from "@/lib/wod-engines/templates/fete-foraine-engine";
-import { buildLevelBundle, levelStandings, teamFinishedAbsMs } from "@/lib/level-context";
+import { buildLevelBundle, levelStandings, phaseExtras, teamFinishedAbsMs } from "@/lib/level-context";
 import { levelLabel } from "@/lib/wod-engines/templates/level-engine";
 
 // Classement « generique » d'une seance, quel que soit son moteur (Pyramide = tours, Fete Foraine = ateliers/score),
@@ -49,8 +49,8 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
         time: p.finishedMs !== null ? fmt(p.finishedMs) : p.lastTickMs !== null ? fmt(p.lastTickMs) : null,
         late: null,
         start: cur ? `${levelLabel(cur)} · ${p.currentDone}/${p.currentTotal}` : "🏁",
-        reps: p.reps,
-        cards: b.yellowCards.filter((c) => c.teamId === p.teamId).length,
+        reps: p.reps + phaseExtras(b, t?.order ?? -1).reps,
+        cards: b.yellowCards.filter((c) => c.teamId === p.teamId).length + phaseExtras(b, t?.order ?? -1).cards,
         done: p.finishedMs !== null,
       };
     });

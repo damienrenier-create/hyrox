@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { orderedLevels, progressOf, rankTeams, readEmom, readEmomScores, readFixedZombie, readLevelOrder, readPenalties, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { orderedLevels, progressOf, rankTeams, readEmom, readEmomScores, readFixedZombie, readLevelOrder, readPenalties, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -34,7 +34,48 @@ export type LevelBundle = {
   penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
   emom: EmomSettings | null; // finisher : vagues cadencees
   emomScores: Record<string, number>;
+  phases: PhaseTotals[]; // echauffement et finisher de ce WOD (vide pour une seance enfant) : totaux par equipe
 };
+
+// Totaux d'une seance enfant (echauffement ou finisher), par NUMERO d'equipe (les enfants copient les
+// equipes du parent avec de nouveaux identifiants mais le meme numero).
+export type PhaseTeamTotals = { reps: number; work: number; repsByExercise: Record<string, number>; losses: number; cards: number; score: number | null; levels: number };
+export type PhaseTotals = { kind: "warmup" | "finisher"; sessionId: string; label: string; startedAtMs: number | null; byOrder: Record<number, PhaseTeamTotals> };
+export const PHASE_LABEL: Record<PhaseTotals["kind"], string> = { warmup: "Échauffement", finisher: "Finisher" };
+
+export function readChildren(settings: unknown): { warmup?: string; finisher?: string } {
+  const c = (settings as { children?: { warmup?: unknown; finisher?: unknown } } | null)?.children;
+  return { ...(typeof c?.warmup === "string" ? { warmup: c.warmup } : {}), ...(typeof c?.finisher === "string" ? { finisher: c.finisher } : {}) };
+}
+
+async function phaseTotals(kind: PhaseTotals["kind"], sessionId: string): Promise<PhaseTotals | null> {
+  const s = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!s) return null;
+  const levels = readFrozenFromSettings(s.settings);
+  const [teams, rs, rawTicks, rawLosses] = await Promise.all([
+    db.orm.public.Team.where({ sessionId }).all(),
+    db.orm.public.RaceState.where({ sessionId }).first(),
+    db.orm.public.LevelTick.where({ sessionId }).all(),
+    db.orm.public.LevelLoss.where({ sessionId }).all(),
+  ]);
+  const [pausesRaw, cards] = await Promise.all([
+    rs ? db.orm.public.RacePause.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+    rs ? db.orm.public.YellowCard.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+  ]);
+  const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
+  const pauses = pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
+  const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
+  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const order = readLevelOrder(s.settings);
+  const penalties = readPenalties(s.settings);
+  const scores = readEmomScores(s.settings);
+  const byOrder: Record<number, PhaseTeamTotals> = {};
+  for (const t of teams) {
+    const p = progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks, losses, penalties);
+    byOrder[t.order ?? 0] = { reps: p.reps, work: p.weighted, repsByExercise: p.repsByExercise, losses: p.losses, cards: cards.filter((c) => c.teamId === t.id).length, score: scores[t.id] ?? null, levels: p.completedLevels };
+  }
+  return { kind, sessionId, label: s.label ?? PHASE_LABEL[kind], startedAtMs, byOrder };
+}
 
 export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
   const s = settings as { child?: { kind?: unknown; parentId?: unknown } } | null;
@@ -57,6 +98,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
   const frozen = frozenLevels.length > 0;
   const childRef = readChild(session.settings);
   const parent = childRef ? await db.orm.public.Session.where({ id: childRef.parentId }).first() : null;
+  const children = childRef ? {} : readChildren(session.settings);
+  const phases = (await Promise.all([children.warmup ? phaseTotals("warmup", children.warmup) : null, children.finisher ? phaseTotals("finisher", children.finisher) : null])).filter((p): p is PhaseTotals => !!p);
   const [levels, catalog, rawTeams, rs] = await Promise.all([
     frozen ? Promise.resolve(frozenLevels) : freezeLevels(),
     listExercises(),
@@ -136,7 +179,21 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     penalties: readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     emom: readEmom(session.settings),
     emomScores: readEmomScores(session.settings),
+    phases,
   };
+}
+
+// Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe.
+export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals {
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0 };
+  for (const ph of bundle.phases) {
+    const x = ph.byOrder[order];
+    if (!x) continue;
+    agg.reps += x.reps; agg.work += x.work; agg.losses += x.losses; agg.cards += x.cards; agg.levels += x.levels;
+    for (const [k, v] of Object.entries(x.repsByExercise)) agg.repsByExercise[k] = (agg.repsByExercise[k] ?? 0) + v;
+    if (ph.kind === "finisher") agg.score = x.score;
+  }
+  return agg;
 }
 
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.

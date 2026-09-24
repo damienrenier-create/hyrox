@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, fmtIntensity, fmtTheoretical, progressOf, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, fmtIntensity, fmtTheoretical, progressOf, readEmomScores, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
@@ -33,9 +33,11 @@ type Row = {
   bossMs: number | null; // BOSS le plus rapide (du dernier coche du niveau precedent a la coche du BOSS)
   bossNumber: number | null;
   cards: number;
+  score: number | null; // finisher : maximum de cordes
 };
 
 export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsResult> {
+  const phase = f.phase ?? "wod";
   const sessions = await db.orm.public.Session.where({ wodType: "LEVEL" }).all();
   const allIds = sessions.map((s) => s.id);
   const raceStates = allIds.length ? await db.orm.public.RaceState.where((r) => r.sessionId.in(allIds)).all() : [];
@@ -45,11 +47,12 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     return rs?.startedAt ? toMs(rs.startedAt) : s.opensAt ? toMs(s.opensAt) : toMs(s.createdAt);
   };
   const range = periodRange(f.period ?? "all");
+  // « Cette seance » depuis le WOD principal : ses enfants comptent aussi (phase echauffement / finisher).
   const kept = sessions
-    .filter((s) => (f.period === "session" && f.sessionId ? s.id === f.sessionId : true))
+    .filter((s) => (f.period === "session" && f.sessionId ? s.id === f.sessionId || readChild(s.settings)?.parentId === f.sessionId : true))
     .filter((s) => (range ? dateOf(s) >= range[0] && dateOf(s) < range[1] : true))
     .filter((s) => !!rsBySession.get(s.id)?.startedAt)
-    .filter((s) => !readChild(s.settings)) // echauffements et finishers : hors palmares
+    .filter((s) => (phase === "wod" ? !readChild(s.settings) : readChild(s.settings)?.kind === phase)) // une phase a la fois
     .sort((a, b) => dateOf(b) - dateOf(a));
   if (!kept.length) return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
 
@@ -100,12 +103,14 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     const sessionLabel = s.label ?? wodLabel(s.wodType);
     const dateMs = dateOf(s);
     const excludedIds = new Set(readExcludedFromRecords(s.settings));
+    const scores = readEmomScores(s.settings);
     const cardWeight = new Map<string, { reps: number; weight: number }>();
     for (const l of levels) for (const { card, index } of activeCards(l)) cardWeight.set(`${l.number}_${index}`, { reps: card.reps, weight: card.weight });
 
     for (const t of teams) {
       const p = progressOf(levels, t.id, ticks, losses, readPenalties(s.settings));
-      if (p.reps === 0 && p.losses === 0) continue;
+      const score = scores[t.id] ?? null;
+      if (p.reps === 0 && p.losses === 0 && score === null) continue;
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
       if (!mem.length) continue;
       if (mem.some((u) => isTestClass(u!.className))) continue; // classe de test : jamais dans un palmares
@@ -145,9 +150,10 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
       rows.push({
         base,
         grade: (() => { const gs = new Set(mem.map((u) => gradeOf(u!.className)).filter((g): g is number => g !== null)); return gs.size === 1 ? [...gs][0] : null; })(),
-        levels: p.completedLevels, currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
+        // Une vague « max » (sans fiche) compte comme bouclee d'office : on ne compte que les niveaux a fiches.
+        levels: Math.min(p.completedLevels, levels.filter((l) => activeCards(l).length > 0).length), currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
         reps: p.reps, work: p.weighted, intensity: p.reps >= MIN_REPS_FOR_INTENSITY ? p.weighted / p.reps : null,
-        work30, reps30, bossMs, bossNumber, cards: (cardsBy.get(rs.id) ?? []).filter((c) => c.teamId === t.id).length,
+        work30, reps30, bossMs, bossNumber, cards: (cardsBy.get(rs.id) ?? []).filter((c) => c.teamId === t.id).length, score,
       });
     }
   }
@@ -163,10 +169,18 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
   };
   const lvlTie = (a: Row, b: Row) => a.losses - b.losses || b.currentDone - a.currentDone || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity);
 
-  const boards: RecordBoard[] = [
-    top("levels", "🧗 Le niveau le plus haut", "niveaux bouclés, puis le moins de vies perdues, puis le plus rapide", (r) => r.levels, false, (v, r) => `${r.finishMs !== null ? `🏁 ${v} en ${fmt(r.finishMs)}` : `${v} niv. + ${r.currentDone} fiche${r.currentDone > 1 ? "s" : ""}`}${r.losses ? ` · 💔 ${r.losses}` : ""}`, lvlTie),
-    top("lives", "🧟 Le plus loin sans perdre de vie", "niveaux bouclés sans jamais être rattrapé", (r) => (r.losses === 0 && r.levels > 0 ? r.levels : null), false, (v) => `${v} niv. · 💔 0`, (a, b) => b.currentDone - a.currentDone),
-    top("finish", "🏁 L'échelle bouclée le plus vite", "équipes arrivées au bout", (r) => r.finishMs, true, (v) => fmt(v)),
+  const unit = phase === "warmup" ? "série" : phase === "finisher" ? "vague" : "niv.";
+  const boards: RecordBoard[] = phase === "finisher" ? [
+    top("score", "🪢 Le plus de cordes au finisher", "maximum de cordes de la dernière vague", (r) => r.score, false, (v) => `${v} cordes`),
+    top("levels", "🌊 Le plus de vagues bouclées", "vagues entièrement cochées, puis le moins de vagues perdues", (r) => (r.levels > 0 ? r.levels : null), false, (v, r) => `${v} vague${v > 1 ? "s" : ""}${r.losses ? ` · 💔 ${r.losses}` : ""}`, lvlTie),
+    top("reps", "💪 Le plus de reps", "fiches entières validées pendant le finisher", (r) => (r.reps > 0 ? r.reps : null), false, (v) => `${v} reps`),
+    top("work", "⚖️ Le plus de travail", "reps × pondération cumulées", (r) => (r.work > 0 ? r.work : null), false, (v) => fmtTheoretical(v)),
+    top("lives", "🧟 Sans vague perdue", "vagues bouclées sans jamais être rattrapé", (r) => (r.losses === 0 && r.levels > 0 ? r.levels : null), false, (v) => `${v} vague${v > 1 ? "s" : ""} · 💔 0`),
+    top("cards", "🟨 Le plus de cartes jaunes", "le palmarès dont on se passerait", (r) => (r.cards > 0 ? r.cards : null), false, (v) => `${v} carte${v > 1 ? "s" : ""}`),
+  ] : [
+    top("levels", phase === "warmup" ? "🔥 Le plus de séries bouclées" : "🧗 Le niveau le plus haut", `${unit === "niv." ? "niveaux" : "séries"} bouclé(e)s, puis le moins de vies perdues, puis le plus rapide`, (r) => r.levels, false, (v, r) => `${r.finishMs !== null ? `🏁 ${v} en ${fmt(r.finishMs)}` : `${v} ${unit} + ${r.currentDone} fiche${r.currentDone > 1 ? "s" : ""}`}${r.losses ? ` · 💔 ${r.losses}` : ""}`, lvlTie),
+    top("lives", "🧟 Le plus loin sans perdre de vie", `${unit === "niv." ? "niveaux" : "séries"} bouclé(e)s sans jamais être rattrapé`, (r) => (r.losses === 0 && r.levels > 0 ? r.levels : null), false, (v) => `${v} ${unit} · 💔 0`, (a, b) => b.currentDone - a.currentDone),
+    top("finish", phase === "warmup" ? "🏁 L'échauffement bouclé le plus vite" : "🏁 L'échelle bouclée le plus vite", "équipes arrivées au bout", (r) => r.finishMs, true, (v) => fmt(v)),
     top("reps", "💪 Le plus de reps", "fiches entières validées", (r) => r.reps, false, (v) => `${v} reps`),
     top("work", "⚖️ Le plus de travail", "reps × pondération cumulées", (r) => r.work, false, (v) => fmtTheoretical(v)),
     top("intensity", "🔥 L'intensité la plus haute", `pondération moyenne par rep, dès ${MIN_REPS_FOR_INTENSITY} reps`, (r) => r.intensity, false, (v) => fmtIntensity(v)),

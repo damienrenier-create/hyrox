@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { motion } from "framer-motion";
 import { excludeFromRecordsAction, levelRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
 // Types uniquement : importer une valeur de `pyramide-records` embarquerait la base dans le paquet client.
-import type { RecordEntry, RecordPeriod, RecordsResult, TeamSex } from "@/lib/pyramide-records";
+import type { RecordEntry, RecordPeriod, RecordPhase, RecordsResult, TeamSex } from "@/lib/pyramide-records";
 import { btn, cx, ui } from "@/lib/ui";
 
 const SEXES: (TeamSex | "")[] = ["", "F", "M", "OPEN"];
@@ -16,6 +16,8 @@ const LABELS: Record<TeamSex | "", string> = {
 };
 const PERIODS: RecordPeriod[] = ["session", "day", "week", "all"];
 const PERIOD_LABELS: Record<RecordPeriod, string> = { session: "Cette séance", day: "Aujourd'hui", week: "Cette semaine", all: "Depuis toujours" };
+const PHASES: RecordPhase[] = ["warmup", "wod", "finisher"];
+const PHASE_LABELS: Record<RecordPhase, string> = { warmup: "🔥 Échauffement", wod: "🧗 WOD", finisher: "🪢 Finisher" };
 const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 // Onglet « Records » : palmares du WOD Pyramide, toutes classes et toutes seances confondues.
@@ -28,7 +30,8 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
   const [sex, setSex] = useState<TeamSex | "">("");
   const [grade, setGrade] = useState<number | null>(null);
   const [period, setPeriod] = useState<RecordPeriod>("all");
-  const filters = useMemo(() => ({ sex, grade, period, sessionId }), [sex, grade, period, sessionId]);
+  const [phase, setPhase] = useState<RecordPhase>("wod");
+  const filters = useMemo(() => ({ sex, grade, period, sessionId, ...(wod === "level" ? { phase } : {}) }), [sex, grade, period, sessionId, phase, wod]);
   const [data, setData] = useState<RecordsResult | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -61,6 +64,16 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
   return (
     <div className="space-y-4">
       <div className={`${ui.cardPad} flex flex-wrap items-center gap-4`}>
+        {wod === "level" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={ui.eyebrow}>Phase</span>
+            {PHASES.map((p) => (
+              <button key={p} type="button" onClick={() => setPhase(p)} className={cx(ui.pill, phase === p ? ui.pillOn : ui.pillOff)}>
+                {PHASE_LABELS[p]}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <span className={ui.eyebrow}>Période</span>
           {PERIODS.filter((p) => p !== "session" || sessionId).map((p) => (

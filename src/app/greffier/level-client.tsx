@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieSim, zombieSpeedLevel, zombieTier, HEART_BITES, PENALTY_STEPS, ZOMBIE_ZONE,
-  type FrozenLevel, type TeamPenalty, type TeamProgress, type Tick,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieSim, zombieSpeedLevel, zombieTier, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ZOMBIE_ZONE,
+  type EmomTeam, type EmomWave, type FrozenLevel, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
-import type { LevelBundle, LevelTeam } from "@/lib/level-context";
+import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
 import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setEmomScoreAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
@@ -176,6 +176,16 @@ export function LevelClient({
     return m;
   }, [live.yellowCards]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
+  // Totaux des phases (echauffement + finisher) par equipe : classement, reps et export les additionnent au WOD.
+  const extras = useMemo(() => new Map(teams.map((t) => [t.id, extrasFor(bundle.phases, t.order)])), [teams, bundle.phases]);
+  // Finisher : a chaque changement de vague, relecture apres 1,5 s (le serveur constate les vagues perdues a leur fin).
+  const emomWaveNo = bundle.emom ? (emomWaveAt(bundle.emom.waveMinutes, liveMs)?.wave ?? (liveMs >= emomTotalMs(bundle.emom.waveMinutes) ? 99 : 0)) : -1;
+  useEffect(() => {
+    if (emomWaveNo <= 1 || phase !== "run") return;
+    const h = setTimeout(() => { void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); }); }, 1500);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emomWaveNo, phase, sessionId]);
   // Mode zombies : quand un zombie touche un coeur, c'est le serveur qui tranche ; l'ecran se contente de
   // demander une relecture (une seule par rattrapage, pas a chaque seconde).
   const [caughtRefreshAt, setCaughtRefreshAt] = useState(0);
@@ -245,14 +255,16 @@ export function LevelClient({
   }
 
   function exportCsv() {
-    const exercises = exerciseColumns(levels);
-    const head = ["Rang", "Équipe", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Échelle bouclée à", ...exercises];
+    const exercises = exerciseColumnsWith(levels, extras);
+    const hasPhases = bundle.phases.length > 0;
+    const head = ["Rang", "Équipe", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
     const lines = ranked.map((p) => {
       const t = teamById.get(p.teamId)!;
+      const ex = extras.get(p.teamId) ?? extrasFor([], 0);
       return [
         rankOf.get(p.teamId), t.name, t.members.map((m) => m.name).join(" / "), p.completedLevels, p.currentLevel ?? "terminé",
-        p.currentLevel ? `${p.currentDone}/${p.currentTotal}` : "", p.lastTickMs !== null ? fmt(p.lastTickMs) : "", p.reps, Math.round(p.weighted), cardsOf.get(p.teamId) ?? 0,
-        p.finishedMs !== null ? fmt(p.finishedMs) : "", ...exercises.map((e) => p.repsByExercise[e] ?? 0),
+        p.currentLevel ? `${p.currentDone}/${p.currentTotal}` : "", p.lastTickMs !== null ? fmt(p.lastTickMs) : "", p.reps + ex.reps, Math.round(p.weighted + ex.work), (cardsOf.get(p.teamId) ?? 0) + ex.cards, p.losses + ex.losses,
+        p.finishedMs !== null ? fmt(p.finishedMs) : "", ...(hasPhases ? [p.reps, ...bundle.phases.map((ph) => ph.byOrder[t.order]?.reps ?? 0), ex.score ?? ""] : []), ...exercises.map((e) => (p.repsByExercise[e] ?? 0) + (ex.repsByExercise[e] ?? 0)),
       ];
     });
     const csv = [head, ...lines].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
@@ -336,9 +348,13 @@ export function LevelClient({
                 teams={teams}
                 ticks={ticks}
                 scores={live.emomScores}
+                losses={live.losses}
                 raceMs={liveMs}
                 canTick={canTick}
                 pendingKeys={optimistic}
+                zombies={bundle.zombies}
+                zombieSpeed={bundle.zombieSpeed ?? EMOM_ZOMBIE_SPEED}
+                running={phase === "run" && !isPaused}
                 onToggle={toggleCard}
                 onScore={(teamId, reps) => { setError(""); void setEmomScoreAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
               />
@@ -370,8 +386,8 @@ export function LevelClient({
           </>
         )}
 
-        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelByNumber={levelByNumber} cardsOf={cardsOf} />}
-        {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={levels} />}
+        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelByNumber={levelByNumber} cardsOf={cardsOf} extras={extras} phases={bundle.phases} />}
+        {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={levels} extras={extras} phases={bundle.phases} />}
         {view === "ladder" && (bundle.frozen ? (
           <LevelLadderEditor sessionId={sessionId} levels={levels} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />
         ) : (
@@ -458,22 +474,26 @@ function liveFromBundle(b: LevelBundle): LevelLive {
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
-function EmomBoard({ waveMinutes, levels, teams, ticks, scores, raceMs, canTick, pendingKeys, onToggle, onScore }: {
+function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
   waveMinutes: number[];
   levels: FrozenLevel[];
   teams: LevelTeam[];
   ticks: Tick[];
+  losses: { teamId: string; level: number; atMs: number }[];
   scores: Record<string, number>;
   raceMs: number;
   canTick: boolean;
   pendingKeys: Map<string, boolean>;
+  zombies: boolean;
+  zombieSpeed: number;
+  running: boolean;
   onToggle: (teamId: string, level: number, card: number, done: boolean) => void;
   onScore: (teamId: string, reps: number) => void;
 }) {
   const wave = emomWaveAt(waveMinutes, raceMs);
   const schedule = emomSchedule(waveMinutes);
   const over = raceMs >= emomTotalMs(waveMinutes);
-  const progress = teams.map((t) => emomProgress(levels, t.id, ticks, scores));
+  const progress = teams.map((t) => emomProgress(levels, t.id, ticks, scores, losses));
   const ranked = emomRank(progress);
   const rankOf = new Map(ranked.map((p, i) => [p.teamId, i + 1]));
   const current = wave ? levels.find((l) => l.number === wave.wave) ?? null : null;
@@ -495,44 +515,117 @@ function EmomBoard({ waveMinutes, levels, teams, ticks, scores, raceMs, canTick,
         )}
       </div>
       <div className="flex flex-col gap-1.5">
-        {teams.map((t) => {
-          const p = progress.find((x) => x.teamId === t.id)!;
-          const rank = rankOf.get(t.id) ?? 0;
-          const next = current && !isMax ? emomNextCard(current, t.id, ticks) : null;
-          const doneCards = current ? activeCards(current).filter(({ index }) => ticks.some((k) => k.teamId === t.id && k.level === current.number && k.card === index)) : [];
-          return (
-            <section key={t.id} title={t.members.map((m) => m.name).join(", ")} className={cx(ui.card, "px-2 py-1.5 flex items-center gap-3 min-w-0 h-20")}>
-              <span className={cx("w-11 h-11 rounded-xl flex items-center justify-center font-display font-black text-lg flex-shrink-0", rankStyle(rank))}>{p.score !== null || p.wavesDone > 0 ? `#${rank}` : "—"}</span>
-              <div className="w-[190px] flex-shrink-0 min-w-0">
-                <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{t.name}</span>
-                <p className="text-[11px] text-ink-2 tabular-nums mt-0.5">{p.wavesDone} vague{p.wavesDone > 1 ? "s" : ""} bouclée{p.wavesDone > 1 ? "s" : ""}{p.score !== null && <> · <b className="text-ink">{p.score} cordes</b></>}</p>
-                <p className="text-[10px] text-ink-3 tabular-nums">{levels.slice(0, -1).map((l, i) => `V${l.number} ${p.doneByWave[i]}/${activeCards(l).length}`).join(" · ")}</p>
-              </div>
-              <div className="flex-1 min-w-0 flex items-center gap-2">
-                {current && !isMax && (
-                  <>
-                    {doneCards.map(({ card, index }) => <span key={index} className={cx(ui.chip, ui.chipOk)}>✓ {card.reps} {cap(card.label)}</span>)}
-                    {next ? (
-                      <button type="button" disabled={!canTick || pendingKeys.has(`${t.id}_${current.number}_${next.index}`)} onClick={() => onToggle(t.id, current.number, next.index, false)} className="flex-1 min-w-0 max-w-[360px] h-14 rounded-xl border-2 border-brand bg-card hover:bg-brand-soft flex items-center gap-2 px-3 text-left active:scale-[.98] disabled:opacity-50">
-                        <span className="font-display font-extrabold text-2xl tabular-nums">{next.card.reps}</span>
-                        <span className="font-bold text-sm">{cap(next.card.label)}</span>
-                        <span className={`${ui.hint} ml-auto`}>fiche {doneCards.length + 1}/{activeCards(current).length}</span>
-                      </button>
-                    ) : (
-                      <span className={cx(ui.chip, ui.chipOk, "text-sm px-3 py-1")}>🏁 Vague {current.number} bouclée</span>
-                    )}
-                    {doneCards.length > 0 && <button type="button" disabled={!canTick} onClick={() => onToggle(t.id, current.number, doneCards[doneCards.length - 1].index, true)} className="text-[10px] text-ink-3 underline">annuler</button>}
-                  </>
-                )}
-                {(isMax || over) && <ScoreInput value={p.score} disabled={!canTick && !over} onSubmit={(n) => onScore(t.id, n)} />}
-                {!current && !over && <span className={ui.hint}>En attente du départ.</span>}
-              </div>
-            </section>
-          );
-        })}
+        {teams.map((t) => (
+          <EmomRow
+            key={t.id}
+            team={t}
+            progress={progress.find((x) => x.teamId === t.id)!}
+            rank={rankOf.get(t.id) ?? 0}
+            wave={wave}
+            current={current}
+            isMax={isMax}
+            over={over}
+            ticks={ticks}
+            raceMs={raceMs}
+            canTick={canTick}
+            pendingKeys={pendingKeys}
+            zombies={zombies}
+            zombieSpeed={zombieSpeed}
+            running={running}
+            onToggle={onToggle}
+            onScore={onScore}
+          />
+        ))}
       </div>
-      <p className={ui.hint}>Les vagues s&apos;enchaînent au chrono, qu&apos;une équipe ait fini ou non. Dans une vague, la fiche suivante n&apos;apparaît qu&apos;une fois la précédente cochée. La dernière vague est un maximum de cordes : saisis le total, c&apos;est le score final.</p>
+      <p className={ui.hint}>Les vagues s&apos;enchaînent au chrono, qu&apos;une équipe ait fini ou non. Dans une vague, la fiche suivante n&apos;apparaît qu&apos;une fois la précédente cochée. La dernière vague est un maximum de cordes : saisis le total, c&apos;est le score final.{zombies && <> Un zombie du palier {zombieTier(zombieSpeed)} part à chaque vague : il dévore le cœur si la vague n&apos;est pas bouclée à sa fin (💔 une vie).</>}</p>
     </div>
+  );
+}
+
+// Une equipe du finisher : rang, vagues, zombie de la vague en cours (palier 10), fiches a decouvrir.
+function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+  team: LevelTeam;
+  progress: EmomTeam;
+  rank: number;
+  wave: EmomWave | null;
+  current: FrozenLevel | null;
+  isMax: boolean;
+  over: boolean;
+  ticks: Tick[];
+  raceMs: number;
+  canTick: boolean;
+  pendingKeys: Map<string, boolean>;
+  zombies: boolean;
+  zombieSpeed: number;
+  running: boolean;
+  onToggle: (teamId: string, level: number, card: number, done: boolean) => void;
+  onScore: (teamId: string, reps: number) => void;
+}) {
+  const next = current && !isMax ? emomNextCard(current, t.id, ticks) : null;
+  const cards = current ? activeCards(current) : [];
+  const doneCards = current ? cards.filter(({ index }) => ticks.some((k) => k.teamId === t.id && k.level === current.number && k.card === index)) : [];
+  const sim = zombies && wave && current ? emomZombieSim(wave.endMs - wave.startMs, cards.length, cards.reduce((s, x) => s + cardSeconds(x.card), 0), emomWaveEvents(current, t.id, ticks, wave), raceMs - wave.startMs, zombieSpeed) : null;
+  // Vague perdue : coeur zombifie et ligne rouge pendant 3 s quand une vie tombe.
+  const [lostFlash, setLostFlash] = useState(false);
+  const prevLosses = useRef(p.losses);
+  useEffect(() => {
+    if (p.losses > prevLosses.current) {
+      prevLosses.current = p.losses;
+      setLostFlash(true);
+      const h = setTimeout(() => setLostFlash(false), 3000);
+      return () => clearTimeout(h);
+    }
+    prevLosses.current = p.losses;
+  }, [p.losses]);
+  const danger = !!sim && (sim.contact || (!sim.done && cards.length > 0 && sim.remainingMs <= 20_000));
+  return (
+    <section title={t.members.map((m) => m.name).join(", ")} className={cx(ui.card, "px-2 py-1.5 flex items-center gap-3 min-w-0 h-20 transition-colors", danger && "ring-2 ring-danger", lostFlash && "bg-danger-soft animate-pulse")}>
+      <span className={cx("w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement du finisher">
+        {p.score !== null || p.wavesDone > 0 ? (
+          <>
+            <span className="text-[9px] font-bold tracking-widest opacity-70">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "RANG"}</span>
+            <span className="text-2xl">#<Odometer value={rank} /></span>
+          </>
+        ) : "—"}
+      </span>
+      <div className="w-[190px] flex-shrink-0 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{t.name}</span>
+          {zombies && <span className="text-xs font-bold tabular-nums" title="Vagues perdues">💔<Odometer value={p.losses} /></span>}
+        </div>
+        <p className="text-[11px] text-ink-2 tabular-nums mt-0.5">{p.wavesDone} vague{p.wavesDone > 1 ? "s" : ""} bouclée{p.wavesDone > 1 ? "s" : ""}{p.score !== null && <> · <b className="text-ink">{p.score} cordes</b></>}</p>
+        <p className="text-[10px] text-ink-3 tabular-nums">{p.doneByWave.map((n, i) => `V${i + 1} ${n}`).join(" · ")}</p>
+      </div>
+      {sim && (
+        <div className="relative w-[220px] h-full flex-shrink-0" title={sim.done ? "Vague bouclée : le zombie s'arrête" : sim.contact ? `Le zombie dévore le cœur : boucle la vague avant ${fmt(Math.max(0, sim.remainingMs))}` : cards.length ? `Le zombie mord dans ${fmt(Math.max(0, sim.remainingMs - sim.eatMs))}` : "Vague MAX : le zombie arrive à la fin, sans mordre"}>
+          <div className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${(lostFlash ? sim.heart : sim.zombie) * 100}% - 24px)`, transition: "left 1s linear" }}>
+            <Zombie kind={zombieTier(zombieSpeed)} moving={running && !sim.contact && !sim.done && !lostFlash} />
+          </div>
+          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${sim.heart * 100}%` }}>
+            <Heart state={lostFlash ? HEART_STATES - 1 : sim.bites} beating={sim.contact || lostFlash} />
+          </div>
+        </div>
+      )}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        {current && !isMax && (
+          <>
+            {doneCards.map(({ card, index }) => <span key={index} className={cx(ui.chip, ui.chipOk)}>✓ {card.reps} {cap(card.label)}</span>)}
+            {next ? (
+              <button type="button" disabled={!canTick || pendingKeys.has(`${t.id}_${current.number}_${next.index}`)} onClick={() => onToggle(t.id, current.number, next.index, false)} className="flex-1 min-w-0 max-w-[360px] h-14 rounded-xl border-2 border-brand bg-card hover:bg-brand-soft flex items-center gap-2 px-3 text-left active:scale-[.98] disabled:opacity-50">
+                <span className="font-display font-extrabold text-2xl tabular-nums">{next.card.reps}</span>
+                <span className="font-bold text-sm">{cap(next.card.label)}</span>
+                <span className={`${ui.hint} ml-auto`}>fiche {doneCards.length + 1}/{cards.length}</span>
+              </button>
+            ) : (
+              <span className={cx(ui.chip, ui.chipOk, "text-sm px-3 py-1")}>🏁 Vague {current.number} bouclée</span>
+            )}
+            {doneCards.length > 0 && <button type="button" disabled={!canTick} onClick={() => onToggle(t.id, current.number, doneCards[doneCards.length - 1].index, true)} className="text-[10px] text-ink-3 underline">annuler</button>}
+          </>
+        )}
+        {(isMax || over) && <ScoreInput value={p.score} disabled={!canTick && !over} onSubmit={(n) => onScore(t.id, n)} />}
+        {!current && !over && <span className={ui.hint}>En attente du départ.</span>}
+      </div>
+    </section>
   );
 }
 
@@ -553,6 +646,11 @@ function ScoreInput({ value, disabled, onSubmit }: { value: number | null; disab
 function exerciseColumns(levels: FrozenLevel[]): string[] {
   const out: string[] = [];
   for (const l of levels) for (const c of l.cards) if (!c.off && !out.includes(c.label)) out.push(c.label);
+  return out;
+}
+function exerciseColumnsWith(levels: FrozenLevel[], extras: Map<string, PhaseTeamTotals>): string[] {
+  const out = exerciseColumns(levels);
+  for (const ex of extras.values()) for (const label of Object.keys(ex.repsByExercise)) if (!out.includes(label)) out.push(label);
   return out;
 }
 
@@ -830,19 +928,41 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
   );
 }
 
-function ResultsTable({ ranked, teamById, levelByNumber, cardsOf }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelByNumber: Map<number, FrozenLevel>; cardsOf: Map<string, number> }) {
+// Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe. Copie client de
+// phaseExtras (level-context est un module serveur).
+function extrasFor(phases: LevelBundle["phases"], order: number): PhaseTeamTotals {
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0 };
+  for (const ph of phases) {
+    const x = ph.byOrder[order];
+    if (!x) continue;
+    agg.reps += x.reps; agg.work += x.work; agg.losses += x.losses; agg.cards += x.cards; agg.levels += x.levels;
+    for (const [k, v] of Object.entries(x.repsByExercise)) agg.repsByExercise[k] = (agg.repsByExercise[k] ?? 0) + v;
+    if (ph.kind === "finisher") agg.score = x.score;
+  }
+  return agg;
+}
+const PHASE_NAMES: Record<"warmup" | "finisher", string> = { warmup: "échauffement", finisher: "finisher" };
+// Detail « WOD + echauffement + finisher » pour l'infobulle d'un total.
+function phaseBreakdown(phases: LevelBundle["phases"], order: number, main: number, pick: (x: PhaseTeamTotals) => number): string {
+  return [`WOD ${main}`, ...phases.map((ph) => `${PHASE_NAMES[ph.kind]} ${ph.byOrder[order] ? pick(ph.byOrder[order]) : 0}`)].join(" + ");
+}
+
+function ResultsTable({ ranked, teamById, levelByNumber, cardsOf, extras, phases }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelByNumber: Map<number, FrozenLevel>; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"] }) {
+  const hasFinisher = phases.some((ph) => ph.kind === "finisher");
+  const hasPhases = phases.length > 0;
   return (
     <div className={`${ui.card} overflow-x-auto`}>
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>
+            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
           </tr>
         </thead>
         <tbody>
           {ranked.map((p, i) => {
             const t = teamById.get(p.teamId)!;
             const l = p.currentLevel ? levelByNumber.get(p.currentLevel) : null;
+            const ex = extras.get(p.teamId) ?? extrasFor([], 0);
             return (
               <tr key={p.teamId} className={ui.tr}>
                 <td className="p-2 font-display font-extrabold">{i + 1}</td>
@@ -851,23 +971,26 @@ function ResultsTable({ ranked, teamById, levelByNumber, cardsOf }: { ranked: Te
                 <td className="p-2 text-right tabular-nums font-bold">{p.completedLevels}</td>
                 <td className="p-2">{p.currentLevel ? <span className={cx(l?.boss && "text-danger-ink font-bold")}>{levelLabel(l)} · {p.currentDone}/{p.currentTotal}</span> : <span className="text-success-ink font-bold">🏁 {p.finishedMs !== null ? fmt(p.finishedMs) : ""}</span>}</td>
                 <td className="p-2 text-right tabular-nums">{p.lastTickMs !== null ? fmt(p.lastTickMs) : "—"}</td>
-                <td className="p-2 text-right tabular-nums">{p.reps}</td>
-                <td className="p-2 text-right tabular-nums">{fmtTheoretical(p.weighted)}</td>
-                <td className="p-2 text-right tabular-nums">{p.losses}</td>
-                <td className="p-2 text-right tabular-nums">{cardsOf.get(p.teamId) ?? 0}</td>
+                <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.reps, (x) => x.reps) : undefined}>{p.reps + ex.reps}</td>
+                <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, Math.round(p.weighted), (x) => Math.round(x.work)) : undefined}>{fmtTheoretical(p.weighted + ex.work)}</td>
+                <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.losses, (x) => x.losses) : undefined}>{p.losses + ex.losses}</td>
+                <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, cardsOf.get(p.teamId) ?? 0, (x) => x.cards) : undefined}>{(cardsOf.get(p.teamId) ?? 0) + ex.cards}</td>
+                {hasFinisher && <td className="p-2 text-right tabular-nums font-bold">{ex.score !== null ? `${ex.score} cordes` : "—"}</td>}
               </tr>
             );
           })}
-          {ranked.length === 0 && <tr><td colSpan={10} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
+          {ranked.length === 0 && <tr><td colSpan={11} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
         </tbody>
       </table>
+      {hasPhases && <p className={`${ui.hint} p-2`}>Reps, travail, 💔 et 🟨 additionnent le WOD et {phases.map((ph) => `l'${PHASE_NAMES[ph.kind]}`).join(" et ").replace("l'finisher", "le finisher")} (survole une valeur pour le détail). Le classement, lui, reste celui du WOD : niveaux bouclés, puis vies perdues, puis fiches, puis rapidité.</p>}
     </div>
   );
 }
 
-function RecapTable({ ranked, teamById, levels }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levels: FrozenLevel[] }) {
-  const cols = exerciseColumns(levels);
-  const totals = cols.map((c) => ranked.reduce((s, p) => s + (p.repsByExercise[c] ?? 0), 0));
+function RecapTable({ ranked, teamById, levels, extras, phases }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levels: FrozenLevel[]; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"] }) {
+  const cols = exerciseColumnsWith(levels, extras);
+  const repsOf = (p: TeamProgress, c: string) => (p.repsByExercise[c] ?? 0) + (extras.get(p.teamId)?.repsByExercise[c] ?? 0);
+  const totals = cols.map((c) => ranked.reduce((s, p) => s + repsOf(p, c), 0));
   return (
     <div className={`${ui.card} overflow-x-auto`}>
       <table className="w-full text-sm">
@@ -882,8 +1005,8 @@ function RecapTable({ ranked, teamById, levels }: { ranked: TeamProgress[]; team
           {ranked.map((p) => (
             <tr key={p.teamId} className={ui.tr}>
               <td className="p-2 font-bold whitespace-nowrap">{teamById.get(p.teamId)?.name}</td>
-              {cols.map((c) => <td key={c} className="p-2 text-right tabular-nums">{p.repsByExercise[c] ?? ""}</td>)}
-              <td className="p-2 text-right tabular-nums font-bold">{p.reps}</td>
+              {cols.map((c) => <td key={c} className="p-2 text-right tabular-nums">{repsOf(p, c) || ""}</td>)}
+              <td className="p-2 text-right tabular-nums font-bold">{p.reps + (extras.get(p.teamId)?.reps ?? 0)}</td>
             </tr>
           ))}
           <tr className="bg-paper">
@@ -893,7 +1016,7 @@ function RecapTable({ ranked, teamById, levels }: { ranked: TeamProgress[]; team
           </tr>
         </tbody>
       </table>
-      <p className={`${ui.hint} p-2`}>Reps validées par le greffier (fiches entières). Les reps observées par les arbitres, élève par élève, sont dans le démineur.</p>
+      <p className={`${ui.hint} p-2`}>Reps validées par le greffier (fiches entières){phases.length > 0 && <>, WOD + {phases.map((ph) => PHASE_NAMES[ph.kind]).join(" + ")} additionnés</>}. Les reps observées par les arbitres, élève par élève, sont dans le démineur.</p>
     </div>
   );
 }

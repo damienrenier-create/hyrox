@@ -37,7 +37,9 @@ export type RecordBoard = { id: string; title: string; hint: string; rows: Recor
 // « annee » = le degre scolaire (1re a 6e), lu sur le premier chiffre du nom de classe (« 5GTb » -> 5).
 // « periode » : cette seance, la journee, la semaine (lundi-dimanche) ou depuis toujours, en heure de Bruxelles.
 export type RecordPeriod = "session" | "day" | "week" | "all";
-export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null };
+// « phase » (Level seulement) : le WOD principal, ou ses seances enfant echauffement / finisher.
+export type RecordPhase = "wod" | "warmup" | "finisher";
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase };
 // `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
 // visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
 export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };

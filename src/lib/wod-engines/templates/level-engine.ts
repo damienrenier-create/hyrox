@@ -401,22 +401,59 @@ export type EmomTeam = {
   doneByWave: number[]; // fiches cochees par vague
   score: number | null; // reps de la vague « max »
   lastTickMs: number | null;
+  losses: number; // vagues perdues (zombie du finisher)
 };
-export function emomProgress(levels: FrozenLevel[], teamId: string, ticks: Tick[], scores: Record<string, number>): EmomTeam {
+export function emomProgress(levels: FrozenLevel[], teamId: string, ticks: Tick[], scores: Record<string, number>, losses: Loss[] = []): EmomTeam {
   const mine = ticks.filter((t) => t.teamId === teamId);
   const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
   const doneByWave = levels.map((l) => activeCards(l).filter(({ index }) => done.has(`${l.number}_${index}`)).length);
   const wavesDone = levels.filter((l, i) => activeCards(l).length > 0 && doneByWave[i] === activeCards(l).length).length;
-  return { teamId, wavesDone, doneByWave, score: scores[teamId] ?? null, lastTickMs: mine.length ? Math.max(...mine.map((t) => t.atMs)) : null };
+  return { teamId, wavesDone, doneByWave, score: scores[teamId] ?? null, lastTickMs: mine.length ? Math.max(...mine.map((t) => t.atMs)) : null, losses: losses.filter((l) => l.teamId === teamId).length };
 }
 // Prochaine fiche a decouvrir dans une vague (null = vague bouclee ou sans fiche).
 export function emomNextCard(level: FrozenLevel, teamId: string, ticks: Tick[]): { card: FrozenCard; index: number } | null {
   const done = new Set(ticks.filter((t) => t.teamId === teamId && t.level === level.number).map((t) => t.card));
   return activeCards(level).find(({ index }) => !done.has(index)) ?? null;
 }
-// Classement du finisher : score (max de reps) puis vagues bouclees, puis la derniere coche la plus tot.
+// Classement du finisher : score (max de reps) puis vagues bouclees, puis le moins de vagues perdues, puis la
+// derniere coche la plus tot.
 export function emomRank(list: EmomTeam[]): EmomTeam[] {
-  return [...list].sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.wavesDone - a.wavesDone || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity));
+  return [...list].sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.wavesDone - a.wavesDone || a.losses - b.losses || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity));
+}
+
+// ===== Zombies du finisher (Sartay 25/09) : un zombie du palier 10 par vague =====
+// Le zombie part de la gauche au debut de chaque vague et atteint le coeur `eatMs` avant la fin de la
+// vague ; il le devore (vie perdue, LevelLoss niveau = vague) si l'equipe n'a pas coche toutes les fiches
+// de la vague quand elle se termine. Une vague bouclee fige le zombie sur place. La vague « max » n'a pas de
+// fiche : le zombie se contente d'arriver au coeur a la fin, sans mordre. Chaque fiche cochee eloigne le
+// coeur (fraction par duree), comme dans le WOD principal.
+export const EMOM_ZOMBIE_SPEED = 20; // palier 10 (zombieTier(20) = 10)
+export type EmomZombieSim = { zombie: number; heart: number; contact: boolean; bites: number; eatMs: number; eatenMs: number; catchAtMs: number | null; done: boolean; remainingMs: number };
+export function emomWaveEvents(level: FrozenLevel, teamId: string, ticks: Tick[], wave: EmomWave): { atMs: number; sec: number }[] {
+  const secOf = new Map(activeCards(level).map((x) => [x.index, cardSeconds(x.card)]));
+  return ticks
+    .filter((t) => t.teamId === teamId && t.level === level.number && t.atMs >= wave.startMs && t.atMs <= wave.endMs && secOf.has(t.card))
+    .map((t) => ({ atMs: t.atMs - wave.startMs, sec: secOf.get(t.card)! }))
+    .sort((a, b) => a.atMs - b.atMs);
+}
+export function emomZombieSim(waveMs: number, n: number, totalSec: number, events: { atMs: number; sec: number }[], sinceMs: number, speedLevel = EMOM_ZOMBIE_SPEED): EmomZombieSim {
+  const eatMs = zombieEatMs(speedLevel);
+  const since = Math.max(0, Math.min(sinceMs, waveMs));
+  const seen = [...events].sort((a, b) => a.atMs - b.atMs).filter((e) => e.atMs <= since);
+  const doneSec = seen.reduce((s, e) => s + e.sec, 0);
+  const done = n > 0 && seen.length >= n;
+  const doneAt = done ? seen[n - 1].atMs : null;
+  const arrival = n === 0 ? waveMs : Math.max(0, waveMs - eatMs);
+  const stopAt = doneAt !== null ? Math.min(since, doneAt) : since;
+  const walked = Math.min(stopAt, arrival);
+  const frac = totalSec > 0 ? Math.min(1, doneSec / totalSec) : 0;
+  const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * frac;
+  const zombie = arrival > 0 ? (walked / arrival) * heart : heart;
+  const contact = !done && n > 0 && since >= arrival;
+  const eaten = contact ? Math.min(eatMs, since - arrival) : 0;
+  const bites = Math.min(HEART_BITES, Math.floor((eaten / eatMs) * HEART_BITES));
+  const catchAt = !done && n > 0 && sinceMs >= waveMs ? waveMs : null;
+  return { zombie, heart, contact, bites, eatMs, eatenMs: eaten, catchAtMs: catchAt, done, remainingMs: done ? Infinity : Math.max(0, waveMs - since) };
 }
 
 // Libelle court d'un niveau pour les tuiles et les classements.

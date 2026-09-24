@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
-import { buildPyramideRecords, type RecordPeriod, type TeamSex } from "@/lib/pyramide-records";
+import { buildPyramideRecords, type RecordPeriod, type RecordPhase, type TeamSex } from "@/lib/pyramide-records";
 import { buildLevelRecords } from "@/lib/level-records";
 import { TopBar } from "../../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
@@ -20,11 +20,16 @@ const PERIODS: { v: RecordPeriod; q: string; label: string }[] = [
   { v: "week", q: "semaine", label: "Cette semaine" },
   { v: "all", q: "", label: "Depuis toujours" },
 ];
+const PHASES: { v: RecordPhase; q: string; label: string }[] = [
+  { v: "warmup", q: "echauffement", label: "🔥 Échauffement" },
+  { v: "wod", q: "", label: "🧗 WOD" },
+  { v: "finisher", q: "finisher", label: "🪢 Finisher" },
+];
 const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 // Records du WOD Pyramide vus par les eleves : le meme palmares que le greffier, en lecture seule,
 // avec les memes filtres (composition de l'equipe, degre). Tout passe par l'URL, donc partageable.
-export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string }> }) {
+export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/");
   const sp = await searchParams;
@@ -33,11 +38,14 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
   const periodQ = PERIODS.find((p) => p.q && p.q === sp.periode)?.q ?? "";
   const period = PERIODS.find((p) => p.q === periodQ)?.v ?? "all";
   const wod = sp.wod === "level" ? "level" : "pyramide";
-  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period }) : await buildPyramideRecords({ sex, grade, period });
-  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string }) => {
+  const phaseQ = PHASES.find((p) => p.q && p.q === sp.phase)?.q ?? "";
+  const phase = PHASES.find((p) => p.q === phaseQ)?.v ?? "wod";
+  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase }) : await buildPyramideRecords({ sex, grade, period });
+  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string }) => {
     const p = new URLSearchParams();
-    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", ...patch };
+    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", phase: wod === "level" ? phaseQ : "", ...patch };
     if (v.wod) p.set("wod", v.wod);
+    if (v.wod === "level" && v.phase) p.set("phase", v.phase);
     if (v.sexe) p.set("sexe", v.sexe);
     if (v.degre) p.set("degre", v.degre);
     if (v.periode) p.set("periode", v.periode);
@@ -56,6 +64,16 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
             <Link href={href({ wod: "" })} className={cx(ui.pill, wod === "pyramide" ? ui.pillOn : ui.pillOff)}>Pyramide</Link>
             <Link href={href({ wod: "level" })} className={cx(ui.pill, wod === "level" ? ui.pillOn : ui.pillOff)}>Level</Link>
           </div>
+          {wod === "level" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={ui.eyebrow}>Phase</span>
+              {PHASES.map((p) => (
+                <Link key={p.v} href={href({ phase: p.q })} className={cx(ui.pill, phase === p.v ? ui.pillOn : ui.pillOff)}>
+                  {p.label}
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <span className={ui.eyebrow}>Période</span>
             {PERIODS.map((p) => (
