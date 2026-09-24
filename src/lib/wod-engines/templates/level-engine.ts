@@ -77,7 +77,7 @@ export const activeCards = (l: FrozenLevel) => l.cards.map((c, i) => ({ card: c,
 // Session.settings.penalties et portent un index >= 100 (jamais en collision avec les fiches de l'echelle).
 export const PENALTY_STEPS = [10, 20, 30, 40, 50, 100, 200, 300, 400, 500, 1000];
 export const PENALTY_INDEX0 = 100;
-export type TeamPenalty = { teamId: string; level: number; index: number; reps: number; label: string; weight: number };
+export type TeamPenalty = { teamId: string; level: number; index: number; reps: number; label: string; weight: number; at?: number; atMs?: number }; // at = epoch ms de la carte, atMs = chrono de course (derive)
 export function readPenalties(settings: unknown): TeamPenalty[] {
   const raw = (settings as { penalties?: unknown } | null)?.penalties;
   if (!Array.isArray(raw)) return [];
@@ -185,10 +185,11 @@ export type ZombieSim = {
   catchAtMs: number | null; // instant (depuis le depart de la tentative) de la chute, s'il est deja passe ou fixe
   remainingMs: number; // avant la chute si le coeur n'est plus eloigne (marche restante + repas restant)
 };
+export type AttemptEvent = { atMs: number; sec: number; kind: "tick" | "penalty" }; // ms depuis le depart de la tentative
 export function zombieSim(
   level: FrozenLevel,
-  cardsTotalSec: number,
-  tickEvents: { atMs: number; sec: number }[], // fiches cochees de la tentative (ms depuis son depart, duree de la fiche)
+  cardsTotalSec: number, // duree totale des fiches PRESENTES au depart de la tentative
+  tickEvents: AttemptEvent[], // fiches cochees (doneSec augmente) et penalites ajoutees (total augmente)
   sinceMs: number,
   speedLevel = level.number,
   n = activeCards(level).length
@@ -203,10 +204,10 @@ export function zombieSim(
     return 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * (walked - approachMs)) / (bandMs - approachMs);
   };
   const events = [...tickEvents].filter((e) => e.atMs >= 0).sort((a, b) => a.atMs - b.atMs);
-  let walked = 0, eaten = 0, t = 0, doneSec = 0, catchAt: number | null = null;
+  let walked = 0, eaten = 0, t = 0, doneSec = 0, totalSec = total, catchAt: number | null = null;
   const advance = (until: number) => {
     // De t a until, avec le coeur a la fraction courante : marche puis repas.
-    const target = arrivalFor(doneSec / total);
+    const target = arrivalFor(doneSec / Math.max(1, totalSec));
     let dt = Math.max(0, until - t);
     if (walked < target) { const w = Math.min(dt, target - walked); walked += w; dt -= w; }
     if (dt > 0 && catchAt === null) {
@@ -220,10 +221,11 @@ export function zombieSim(
     if (e.atMs > sinceMs) break;
     advance(e.atMs);
     if (catchAt !== null) break;
-    doneSec += e.sec;
+    if (e.kind === "penalty") totalSec += e.sec; // le coeur recule : si le zombie est deja la, il mange tout de suite
+    else doneSec += e.sec;
   }
   if (catchAt === null) advance(sinceMs);
-  const frac = doneSec / total;
+  const frac = doneSec / Math.max(1, totalSec);
   const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * Math.min(1, Math.max(0, frac));
   const target = arrivalFor(frac);
   const contact = catchAt === null && walked >= target - 1e-6;
@@ -231,12 +233,19 @@ export function zombieSim(
   const remainingMs = catchAt !== null ? 0 : Math.max(0, target - walked) + (eatMs - eaten);
   return { zombie: Math.max(0, Math.min(heart, posFor(walked))), heart, contact, bites, eatenMs: eaten, eatMs, catchAtMs: catchAt, remainingMs };
 }
-// Evenements de coche d'une tentative pour la simulation : fiches du niveau en cours cochees depuis le depart.
-export function attemptEvents(level: FrozenLevel, teamId: string, ticks: Tick[], attemptStartMs: number, penalties: TeamPenalty[] = []): { atMs: number; sec: number }[] {
-  const secOf = new Map(cardsForTeam(level, teamId, penalties).map((x) => [x.index, cardSeconds(x.card)]));
-  return ticks
-    .filter((t) => t.teamId === teamId && t.level === level.number && t.atMs >= attemptStartMs && secOf.has(t.card))
-    .map((t) => ({ atMs: t.atMs - attemptStartMs, sec: secOf.get(t.card)! }));
+// Evenements d'une tentative pour la simulation : fiches du niveau en cours cochees depuis le depart, et
+// penalites ajoutees pendant la tentative. Renvoie aussi la duree des fiches presentes AU DEPART.
+export function attemptEvents(level: FrozenLevel, teamId: string, ticks: Tick[], attemptStartMs: number, penalties: TeamPenalty[] = []): { events: AttemptEvent[]; initialTotalSec: number } {
+  const cards = cardsForTeam(level, teamId, penalties);
+  const secOf = new Map(cards.map((x) => [x.index, cardSeconds(x.card)]));
+  const mine = penalties.filter((p) => p.teamId === teamId && p.level === level.number);
+  const later = mine.filter((p) => typeof p.atMs === "number" && p.atMs >= attemptStartMs);
+  const initialTotalSec = cards.reduce((s, x) => s + cardSeconds(x.card), 0) - later.reduce((s, p) => s + p.reps * p.weight, 0);
+  const events: AttemptEvent[] = [
+    ...ticks.filter((t) => t.teamId === teamId && t.level === level.number && t.atMs >= attemptStartMs && secOf.has(t.card)).map((t): AttemptEvent => ({ atMs: t.atMs - attemptStartMs, sec: secOf.get(t.card)!, kind: "tick" })),
+    ...later.map((p): AttemptEvent => ({ atMs: (p.atMs as number) - attemptStartMs, sec: p.reps * p.weight, kind: "penalty" })),
+  ];
+  return { events, initialTotalSec };
 }
 
 export type ZombieGeometry = { zombie: number; heart: number; remainingMs: number; contact: boolean; bites: number; eatMs: number };

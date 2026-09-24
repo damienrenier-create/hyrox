@@ -185,7 +185,9 @@ export function LevelClient({
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
       const l = levelByNumber.get(p.currentLevel);
-      return !!l && zombieSim(l, p.currentTotalSec, attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties), raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length).catchAtMs !== null;
+      if (!l) return false;
+      const ev = attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties);
+      return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length).catchAtMs !== null;
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
@@ -672,14 +674,16 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
   const finished = p.currentLevel === null;
   const boss = !!level?.boss;
   const all = level ? cardsForTeam(level, team.id, penalties) : [];
-  // Fiches restantes : par reps croissantes, les penalites en dernier (elles arrivent a droite).
+  // Fiches restantes : les penalites EN PREMIER (elles s'intercalent entre le coeur et la premiere fiche, et
+  // font reculer le coeur vers le zombie), puis par reps croissantes.
   const remaining = all
     .filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`))
-    .sort((a, b) => Number(a.penalty) - Number(b.penalty) || a.card.reps - b.card.reps || a.index - b.index);
+    .sort((a, b) => Number(b.penalty) - Number(a.penalty) || a.card.reps - b.card.reps || a.index - b.index);
   const remainingSec = remaining.reduce((s, x) => s + cardSeconds(x.card), 0);
   const totalSec = Math.max(1, p.currentTotalSec);
   const speedLevel = level ? (fixedSpeed ?? zombieSpeedLevel(level.number, p.losses)) : 1;
-  const geo = level && zombies ? zombieSim(level, p.currentTotalSec, attemptEvents(level, team.id, ticks, p.attemptStartMs, penalties), Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length) : null;
+  const ev = level ? attemptEvents(level, team.id, ticks, p.attemptStartMs, penalties) : null;
+  const geo = level && zombies && ev ? zombieSim(level, ev.initialTotalSec, ev.events, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length) : null;
   const danger = !!geo && (geo.contact || geo.remainingMs <= 20_000);
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
   const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? zombieSpeedLevel(level.number - 4 + i, p.losses))).sort((a, b) => a - b) : [];
@@ -731,8 +735,13 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
     >
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
       <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
-        <span className={cx("w-11 h-11 rounded-xl flex items-center justify-center font-display font-black text-lg flex-shrink-0", rankStyle(rank))} title="Classement">
-          {rank > 0 ? <>#<Odometer value={rank} /></> : "—"}
+        <span className={cx("w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
+          {rank > 0 ? (
+            <>
+              <span className="text-[9px] font-bold tracking-widest opacity-70">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "RANG"}</span>
+              <span className="text-2xl">#<Odometer value={rank} /></span>
+            </>
+          ) : "—"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 min-w-0">
@@ -757,7 +766,10 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
 
       {/* Piste : numero en filigrane, zombie a gauche, coeur devant les fiches restantes (largeur = duree). */}
       <div className="relative flex-1 h-full min-w-0">
-        <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 font-display font-black text-[3.2rem] leading-none text-ink/10 select-none pointer-events-none">{team.order}</span>
+        <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-0 flex items-baseline gap-1 select-none pointer-events-none">
+          <span className="font-display font-black text-[0.9rem] tracking-[0.2em] text-ink/35 uppercase">Équipe</span>
+          <span className="font-display font-black text-[3rem] leading-none text-ink/35">{team.order}</span>
+        </span>
         {!finished && level && (
           <>
             {geo && (

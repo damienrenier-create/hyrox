@@ -133,7 +133,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     levelOrder: readLevelOrder(session.settings),
     zombieSpeed: readFixedZombie(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
-    penalties: readPenalties(session.settings),
+    penalties: readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     emom: readEmom(session.settings),
     emomScores: readEmomScores(session.settings),
   };

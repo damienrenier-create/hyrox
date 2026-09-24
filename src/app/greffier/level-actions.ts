@@ -61,7 +61,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
   return {
     teamId,
     at,
-    penalties: readPenalties(settings).filter((p) => p.teamId === teamId),
+    penalties: readPenalties(settings).filter((p) => p.teamId === teamId).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     score: readEmomScores(settings)[teamId] ?? null,
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
@@ -100,7 +100,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     raceEndedAtMs: ctx.session.raceEndedAt ? toMs(ctx.session.raceEndedAt) : null,
     structure,
     at,
-    penalties: readPenalties(ctx.session.settings),
+    penalties: readPenalties(ctx.session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     emomScores: readEmomScores(ctx.session.settings),
   };
 }
@@ -328,7 +328,7 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
     const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), penalties);
     if (p.currentLevel !== null) {
       const k = mine.length;
-      penalties = [...penalties, { teamId, level: p.currentLevel, index: PENALTY_INDEX0 + k, reps: PENALTY_STEPS[Math.min(k, PENALTY_STEPS.length - 1)], label: "CORDE", weight: 1 }];
+      penalties = [...penalties, { teamId, level: p.currentLevel, index: PENALTY_INDEX0 + k, reps: PENALTY_STEPS[Math.min(k, PENALTY_STEPS.length - 1)], label: "CORDE", weight: 1, at: Date.now() }];
     }
   } else {
     const last = await db.orm.public.YellowCard.where({ raceStateId: gate.rsId, teamId }).orderBy((c) => c.at.desc()).first();

@@ -64,7 +64,7 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   let applied = 0;
   const order = readLevelOrder(session.settings);
   const fixed = readFixedZombie(session.settings);
-  const penalties = readPenalties(session.settings);
+  const penalties = readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined }));
 
   for (const t of teams) {
     const mine = orderedLevels(levels, order?.[t.id]);
@@ -75,7 +75,8 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
       if (!level) break;
       // Rattrape = coeur mange en entier (3 bouchees), bouchees conservees entre deux fiches (simulation).
       const cards = cardsForTeam(level, t.id, penalties);
-      const sim = zombieSim(level, p.currentTotalSec, attemptEvents(level, t.id, ticks, p.attemptStartMs, penalties), nowRace - p.attemptStartMs, fixed ?? zombieSpeedLevel(level.number, p.losses), cards.length);
+      const ev = attemptEvents(level, t.id, ticks, p.attemptStartMs, penalties);
+      const sim = zombieSim(level, ev.initialTotalSec, ev.events, nowRace - p.attemptStartMs, fixed ?? zombieSpeedLevel(level.number, p.losses), cards.length);
       if (sim.catchAtMs === null) break;
       const deadline = p.attemptStartMs + sim.catchAtMs;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.
