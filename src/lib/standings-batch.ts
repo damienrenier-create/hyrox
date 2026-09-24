@@ -7,7 +7,7 @@ import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/template
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
 import { toMs } from "@/lib/scheduling";
 import { readFrozenFromSettings } from "@/lib/level";
-import { levelLabel, progressOf, rankTeams, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { levelLabel, orderedLevels, progressOf, rankTeams, readLevelOrder, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Classements de PLUSIEURS seances en une poignee de requetes groupees (.in) au lieu d'une cascade par
 // seance / par equipe / par eleve. La page Resultats passait 14 s a faire ~520 allers-retours.
@@ -160,7 +160,8 @@ function levelStandingsBatch(
   const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
   const lastAbs = new Map<string, number>();
   for (const t of rawTicks) lastAbs.set(t.teamId, Math.max(lastAbs.get(t.teamId) ?? 0, toMs(t.at)));
-  const ranked = rankTeams(rawTeams.map((t) => progressOf(levels, t.id, ticks)));
+  const order = readLevelOrder(session.settings);
+  const ranked = rankTeams(rawTeams.map((t) => progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks)));
   const teamName = new Map(rawTeams.map((t) => [t.id, t.name]));
   const finishedAtMs: Record<string, number> = {};
   const rows: StandingRow[] = ranked.map((p, i) => {

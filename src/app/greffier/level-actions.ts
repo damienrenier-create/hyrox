@@ -3,7 +3,9 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, isBoss, readFrozenLevels, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, isBoss, orderedLevels, readFrozenLevels, readLevelOrder, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { createChildSession } from "@/lib/level-child";
+import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
@@ -202,6 +204,12 @@ export async function resetLevelAction(sessionId: string): Promise<Res> {
   return "error" in r ? r : { ok: true };
 }
 
+// Echauffement / finisher : seance enfant (memes equipes, series figees, chrono lance) ; l'ecran y navigue.
+export async function startChildAction(sessionId: string, kind: ChildKind): Promise<{ error: string } | { ok: true; id: string }> {
+  const { user } = await requireLevelStaff(sessionId);
+  return createChildSession(sessionId, kind, user.name);
+}
+
 // Mode zombies (vies, retour au niveau precedent) pour cette seance.
 export async function setZombiesAction(sessionId: string, on: boolean): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
@@ -247,8 +255,8 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   const done = new Set(ticks.map((t) => `${t.level}_${t.card}`));
   let refused: string | null = null;
   // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
-  for (const prev of levels) {
-    if (prev.number >= level) break;
+  for (const prev of orderedLevels(levels, readLevelOrder(session.settings)?.[teamId])) {
+    if (prev.number === level) break;
     if (activeCards(prev).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
   }
   if (refused && !caught) return { error: refused };

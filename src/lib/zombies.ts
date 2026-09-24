@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { progressOf, zombieDeadlineMs, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { orderedLevels, progressOf, readFixedZombie, readLevelOrder, zombieDeadlineMs, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -62,20 +62,27 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   let ticks: (Tick & { id: string })[] = ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
   const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;
+  const order = readLevelOrder(session.settings);
+  const fixed = readFixedZombie(session.settings);
 
   for (const t of teams) {
+    const mine = orderedLevels(levels, order?.[t.id]);
     for (let guard = 0; guard < 20; guard++) {
-      const p = progressOf(levels, t.id, ticks, losses);
+      const p = progressOf(mine, t.id, ticks, losses);
       if (p.currentLevel === null) break;
       const level = levels.find((l) => l.number === p.currentLevel);
       if (!level) break;
-      const deadline = p.attemptStartMs + zombieDeadlineMs(level, p.currentDone, zombieSpeedLevel(level.number, p.losses));
+      const deadline = p.attemptStartMs + zombieDeadlineMs(level, p.currentDone, fixed ?? zombieSpeedLevel(level.number, p.losses));
       if (nowRace < deadline) break;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.
       const catchAbs = absoluteFromRace(startedAtMs, pauses, deadline, nowMs);
       await db.orm.public.LevelLoss.create({ sessionId, teamId: t.id, level: p.currentLevel, at: Temporal.Instant.fromEpochMilliseconds(Math.round(catchAbs)) });
-      const floor = Math.max(1, p.currentLevel - 1);
-      const doomed = ticks.filter((x) => x.teamId === t.id && x.level >= floor);
+      // Retour au niveau precedent DANS L'ORDRE DE L'EQUIPE : on efface les fiches du niveau en cours et du
+      // precedent de sa sequence (au premier niveau de la sequence, seulement le niveau en cours).
+      const seq = mine.map((l) => l.number);
+      const at = seq.indexOf(p.currentLevel);
+      const doomedLevels = new Set(at > 0 ? [seq[at - 1], p.currentLevel] : [p.currentLevel]);
+      const doomed = ticks.filter((x) => x.teamId === t.id && doomedLevels.has(x.level));
       for (const x of doomed) await db.orm.public.LevelTick.where({ id: x.id }).delete();
       ticks = ticks.filter((x) => !doomed.includes(x));
       losses.push({ teamId: t.id, level: p.currentLevel, atMs: deadline });

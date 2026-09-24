@@ -46,6 +46,29 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
   return out.sort((a, b) => a.number - b.number);
 }
 
+// Ordre des niveaux propre a une equipe (echauffement en differe) : les numeros manquants sont ajoutes a la fin.
+export function orderedLevels(levels: FrozenLevel[], order?: number[] | null): FrozenLevel[] {
+  if (!order || !order.length) return levels;
+  const by = new Map(levels.map((l) => [l.number, l]));
+  const out: FrozenLevel[] = [];
+  for (const n of order) { const l = by.get(n); if (l && !out.includes(l)) out.push(l); }
+  for (const l of levels) if (!out.includes(l)) out.push(l);
+  return out;
+}
+export type LevelOrder = Record<string, number[]>;
+export function readLevelOrder(settings: unknown): LevelOrder | null {
+  const raw = (settings as { levelOrder?: unknown } | null)?.levelOrder;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: LevelOrder = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (Array.isArray(v)) out[k] = v.filter((n): n is number => typeof n === "number");
+  return out;
+}
+// Vitesse de zombie imposee (echauffement : palier 1 pour tout le monde), null = regle normale.
+export function readFixedZombie(settings: unknown): number | null {
+  const v = (settings as { zombieSpeed?: unknown } | null)?.zombieSpeed;
+  return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.round(v) : null;
+}
+
 // Fiches encore en jeu d'un niveau, avec leur index d'origine (les coches referencent cet index).
 export const activeCards = (l: FrozenLevel) => l.cards.map((c, i) => ({ card: c, index: i })).filter((x) => !x.card.off);
 

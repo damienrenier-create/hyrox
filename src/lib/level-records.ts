@@ -5,6 +5,7 @@ import { activeCards, fmtIntensity, fmtTheoretical, progressOf, type Loss, type 
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
+import { readChild } from "@/lib/level-context";
 import {
   BK_WINDOW, gradeOf, periodRange, readExcludedFromRecords,
   type RecordBoard, type RecordEntry, type RecordFilters, type RecordsResult, type TeamSex,
@@ -48,6 +49,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     .filter((s) => (f.period === "session" && f.sessionId ? s.id === f.sessionId : true))
     .filter((s) => (range ? dateOf(s) >= range[0] && dateOf(s) < range[1] : true))
     .filter((s) => !!rsBySession.get(s.id)?.startedAt)
+    .filter((s) => !readChild(s.settings)) // echauffements et finishers : hors palmares
     .sort((a, b) => dateOf(b) - dateOf(a));
   if (!kept.length) return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
 

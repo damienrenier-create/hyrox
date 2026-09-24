@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, ZOMBIE_ZONE,
+  activeCards, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, ZOMBIE_ZONE,
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
-import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -162,7 +162,7 @@ export function LevelClient({
     }
     return out;
   }, [live.ticks, optimistic, liveMs]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(levels, t.id, ticks, live.losses)])), [teams, levels, ticks, live.losses]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(orderedLevels(levels, bundle.levelOrder?.[t.id]), t.id, ticks, live.losses)])), [teams, levels, ticks, live.losses, bundle.levelOrder]);
   const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
   const rankOf = useMemo(() => new Map(ranked.map((p, i) => [p.teamId, i + 1])), [ranked]);
   const levelByNumber = useMemo(() => new Map(levels.map((l) => [l.number, l])), [levels]);
@@ -181,7 +181,7 @@ export function LevelClient({
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
       const l = levelByNumber.get(p.currentLevel);
-      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs, zombieSpeedLevel(l.number, p.losses)).remainingMs <= 0;
+      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses)).remainingMs <= 0;
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
@@ -309,6 +309,12 @@ export function LevelClient({
             )}
           </div>
         </div>
+        {bundle.child && (
+          <p className={`${ui.alertInfo} mt-2 flex flex-wrap items-center gap-2`}>
+            <b>{bundle.child.kind === "warmup" ? "🔥 Échauffement" : "🏁 Finisher"}</b> de « {bundle.child.parentLabel} »{bundle.child.kind === "warmup" && <> · départs en différé (une série par équipe), zombies du palier 1, BOSS = horde</>}.
+            <a href={`/greffier?session=${bundle.child.parentId}`} className={`${btn.smPrimary} ml-auto`}>← Retour au WOD principal</a>
+          </p>
+        )}
         {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
       </header>
 
@@ -330,6 +336,7 @@ export function LevelClient({
                     canTick={canTick}
                     pendingKeys={optimistic}
                     zombies={bundle.zombies}
+                    fixedSpeed={bundle.zombieSpeed}
                     raceMs={liveMs}
                     running={phase === "run" && !isPaused}
                     onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
@@ -372,6 +379,34 @@ export function LevelClient({
             </button>
           </div>
           <div className="ml-auto flex flex-nowrap items-center gap-2 flex-shrink-0 relative">
+            {!bundle.child && phase !== "run" && (
+              <button
+                onClick={() => confirm(`Lancer l'${phase === "pre" ? "échauffement" : "échauffement (le WOD principal est terminé)"} ? Une séance à part s'ouvre avec les mêmes équipes : 5 séries en différé + BOSS.`) && run(async () => {
+                  const r = await startChildAction(sessionId, "warmup");
+                  if ("ok" in r) router.push(`/greffier?session=${r.id}`);
+                  return r;
+                })}
+                disabled={pending || teams.length === 0}
+                className={btn.lgGhost}
+                title="Échauffement : 5 séries (A-E) en différé + BOSS, zombies du palier 1, sur une séance à part"
+              >
+                🔥 Échauffement
+              </button>
+            )}
+            {!bundle.child && phase === "post" && (
+              <button
+                onClick={() => confirm("Lancer le finisher ? Une séance à part s'ouvre avec les mêmes équipes.") && run(async () => {
+                  const r = await startChildAction(sessionId, "finisher");
+                  if ("ok" in r) router.push(`/greffier?session=${r.id}`);
+                  return r;
+                })}
+                disabled={pending || teams.length === 0}
+                className={btn.lgGhost}
+                title="Finisher : une séance à part avec les mêmes équipes"
+              >
+                🏁 Finisher
+              </button>
+            )}
             {phase === "pre" && <button onClick={handleStart} disabled={pending || teams.length === 0} className={btn.lgSuccess}>Lancer le WOD</button>}
             {phase === "run" && (
               <>
@@ -451,7 +486,7 @@ function Zombie({ kind, moving }: { kind: ZombieKind; moving: boolean }) {
   return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block", animationDuration: `${walkSeconds(kind) / 2}s` }} title={title}>{kind === "boss" ? "👹" : "🧟"}</span>;
 }
 
-function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys, zombies, raceMs, running, onToggle, onYellow }: {
+function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, raceMs, running, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
@@ -460,6 +495,7 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
   canTick: boolean;
   pendingKeys: Map<string, boolean>;
   zombies: boolean;
+  fixedSpeed?: number | null;
   raceMs: number;
   running: boolean;
   onToggle: (level: number, card: number, done: boolean) => void;
@@ -470,12 +506,13 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
   const act = level ? activeCards(level) : [];
   const n = Math.max(1, act.length);
   const remaining = [...act].filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`)).sort((a, b) => a.card.reps - b.card.reps || a.index - b.index);
-  const speedLevel = level ? zombieSpeedLevel(level.number, p.losses) : 1;
+  const speedLevel = level ? (fixedSpeed ?? zombieSpeedLevel(level.number, p.losses)) : 1;
   const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs), speedLevel) : null;
   const danger = !!geo && geo.remainingMs <= 30_000;
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
   // Horde du BOSS : paliers des niveaux du bloc (L-4 .. L-1), avec la penalite de vitesse de l'equipe.
-  const horde = boss && level ? [...new Set(Array.from({ length: 4 }, (_, i) => zombieTier(zombieSpeedLevel(level.number - 4 + i, p.losses))))].sort((a, b) => a - b) : [];
+  // Horde du BOSS : un zombie par niveau du bloc (L-4 .. L-1), doublons compris (echauffement = quatre z1).
+  const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? zombieSpeedLevel(level.number - 4 + i, p.losses))).sort((a, b) => a - b) : [];
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}

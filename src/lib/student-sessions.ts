@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
+import { readChild } from "@/lib/level-context";
 
 export const WOD_LABELS: Record<string, string> = {
   PYRAMIDE_CLASSIQUE: "WOD Pyramide",
@@ -37,7 +38,7 @@ export async function sessionsForStudent(userId: string): Promise<StudentSession
     const team = await db.orm.public.Team.where({ id: m.teamId }).first();
     if (!team) continue;
     const session = await db.orm.public.Session.where({ id: team.sessionId }).first();
-    if (!session) continue;
+    if (!session || readChild(session.settings)) continue; // echauffement / finisher : pas une seance a part entiere pour l'eleve
     rows.push({
       sessionId: session.id,
       wodType: session.wodType,

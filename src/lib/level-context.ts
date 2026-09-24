@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { progressOf, rankTeams, type FrozenLevel, type Loss, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { orderedLevels, progressOf, rankTeams, readFixedZombie, readLevelOrder, type FrozenLevel, type LevelOrder, type Loss, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -28,7 +28,17 @@ export type LevelBundle = {
   refereeMode: boolean; // activite des dispenses (demineur)
   zombies: boolean; // mode zombies (vies, retour au niveau precedent)
   losses: (Loss & { id: string })[];
+  levelOrder: LevelOrder | null; // echauffement en differe : ordre des niveaux par equipe
+  zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale
+  child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
 };
+
+export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
+  const s = settings as { child?: { kind?: unknown; parentId?: unknown } } | null;
+  const c = s?.child;
+  if (!c || (c.kind !== "warmup" && c.kind !== "finisher") || typeof c.parentId !== "string") return null;
+  return { kind: c.kind, parentId: c.parentId };
+}
 
 export function readLevelCap(settings: unknown): number | null {
   const v = (settings as { levelCapMin?: unknown } | null)?.levelCapMin;
@@ -42,6 +52,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
 
   const frozenLevels = readFrozenFromSettings(session.settings);
   const frozen = frozenLevels.length > 0;
+  const childRef = readChild(session.settings);
+  const parent = childRef ? await db.orm.public.Session.where({ id: childRef.parentId }).first() : null;
   const [levels, catalog, rawTeams, rs] = await Promise.all([
     frozen ? Promise.resolve(frozenLevels) : freezeLevels(),
     listExercises(),
@@ -115,12 +127,15 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     refereeMode: session.refereeMode,
     zombies: readZombies(session.settings),
     losses,
+    levelOrder: readLevelOrder(session.settings),
+    zombieSpeed: readFixedZombie(session.settings),
+    child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
   };
 }
 
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
-  return rankTeams(bundle.teams.map((t) => progressOf(bundle.levels, t.id, bundle.ticks, bundle.losses)));
+  return rankTeams(bundle.teams.map((t) => progressOf(orderedLevels(bundle.levels, bundle.levelOrder?.[t.id]), t.id, bundle.ticks, bundle.losses)));
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.
