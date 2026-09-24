@@ -70,6 +70,15 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
     startTransition(async () => {
       const res = await teamDeletionPreviewAction(teamId);
       if ("error" in res) { setError(res.error); return; }
+      // Equipe vide (personne dedans) : elle part tout de suite, sans double confirmation.
+      if (res.counts.members === 0) {
+        const done = await deleteTeamAction(teamId);
+        if ("error" in done) { setError(done.error); return; }
+        setTeams((ts) => ts.filter((t) => t.id !== teamId));
+        if (activeTeamId === teamId) setActiveTeamId(null);
+        router.refresh();
+        return;
+      }
       setDel({ id: teamId, name: res.name, counts: res.counts as unknown as Record<string, number> });
       setDelStage(1);
     });
@@ -348,6 +357,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
                     ["évaluations reçues", del.counts.evaluations],
                     ["tirs qui la visaient", del.counts.shots],
                     ["cases de bateaux sur sa ligne", del.counts.placements],
+                    ["fiches Level cochées", del.counts.ticks ?? 0],
                   ] as [string, number][]).map(([label, n]) => (
                     <li key={label} className={`${ui.inset} px-3 py-1.5 flex justify-between text-sm`}>
                       <span className="text-ink-2">{label}</span>

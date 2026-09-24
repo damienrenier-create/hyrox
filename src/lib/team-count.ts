@@ -44,17 +44,18 @@ export async function setTeamCount(sessionId: string, n: number): Promise<{ erro
 // tirs qui la visaient, bateaux poses sur sa ligne. Les equipes suivantes ne sont pas renumerotees
 // (« Équipe 7 » reste « Équipe 7 »), mais la carte du Touche-Coule retrecit d'une ligne, donc les
 // navires hors champ sont re-poses ailleurs par reconcileFleets.
-export type DeleteTeamCount = { members: number; laps: number; cards: number; evaluations: number; shots: number; placements: number };
+export type DeleteTeamCount = { members: number; laps: number; cards: number; evaluations: number; shots: number; placements: number; ticks: number };
 
 export async function teamDeletionPreview(teamId: string): Promise<{ error: string } | { ok: true; name: string; counts: DeleteTeamCount }> {
   const team = await db.orm.public.Team.where({ id: teamId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const rs = await db.orm.public.RaceState.where({ sessionId: team.sessionId }).first();
-  const [members, evaluations, shots, placements] = await Promise.all([
+  const [members, evaluations, shots, placements, ticks] = await Promise.all([
     db.orm.public.TeamMember.where({ teamId }).all(),
     db.orm.public.Evaluation.where({ teamId }).all(),
     db.orm.public.Shot.where({ sessionId: team.sessionId, targetTeamId: teamId }).all(),
     db.orm.public.BoatPlacement.where({ sessionId: team.sessionId, teamId }).all(),
+    db.orm.public.LevelTick.where({ sessionId: team.sessionId, teamId }).all(),
   ]);
   const [laps, cards] = rs
     ? await Promise.all([
@@ -65,7 +66,7 @@ export async function teamDeletionPreview(teamId: string): Promise<{ error: stri
   return {
     ok: true,
     name: team.name,
-    counts: { members: members.length, laps: laps.length, cards: cards.length, evaluations: evaluations.length, shots: shots.length, placements: placements.length },
+    counts: { members: members.length, laps: laps.length, cards: cards.length, evaluations: evaluations.length, shots: shots.length, placements: placements.length, ticks: ticks.length },
   };
 }
 
@@ -84,6 +85,9 @@ export async function deleteTeam(teamId: string): Promise<{ error: string } | { 
   }
   for (const p of await db.orm.public.BoatPlacement.where({ sessionId, teamId }).all()) {
     await db.orm.public.BoatPlacement.where({ id: p.id }).delete();
+  }
+  for (const t of await db.orm.public.LevelTick.where({ sessionId, teamId }).all()) {
+    await db.orm.public.LevelTick.where({ id: t.id }).delete();
   }
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (rs) {

@@ -107,6 +107,13 @@ async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: 
   return { rsId: rs.id };
 }
 
+// Activite des dispenses (demineur) pour cette seance, modifiable a tout moment.
+export async function setLevelRefereeModeAction(sessionId: string, on: boolean): Promise<Res> {
+  await requireLevelStaff(sessionId);
+  await db.orm.public.Session.where({ id: sessionId }).update({ refereeMode: on });
+  return { ok: true };
+}
+
 // Temps impose (minutes de chrono), modifiable avant ou pendant le WOD ; null = temps libre.
 export async function setLevelCapAction(sessionId: string, minutes: number | null): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);

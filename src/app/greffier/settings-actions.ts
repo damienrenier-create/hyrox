@@ -11,7 +11,7 @@ type Result = { error: string } | { ok: true };
 // Tous les reglages de seance sont modifiables par le greffier AVANT le depart, puis verrouilles (verifie serveur).
 async function requirePreStart(sessionId: string) {
   const user = await getSession();
-  if (!user || !["MASTER_ADMIN", "GREFFIER"].includes(user.role)) throw new Error("Accès refusé.");
+  if (!user || !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(user.role)) throw new Error("Accès refusé.");
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) throw new Error("Séance introuvable.");
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();

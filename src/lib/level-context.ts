@@ -24,6 +24,7 @@ export type LevelBundle = {
   catalog: { id: string; label: string; weight: number; active: boolean }[];
   evaluations: LevelEval[]; // demineur : une par case jouee (eleve x exercice)
   capMin: number | null; // temps impose (minutes de chrono), null = libre
+  refereeMode: boolean; // activite des dispenses (demineur)
 };
 
 export function readLevelCap(settings: unknown): number | null {
@@ -105,6 +106,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     catalog: catalog.map((e) => ({ id: e.id, label: e.label, weight: e.weight, active: e.active })),
     evaluations,
     capMin: readLevelCap(session.settings),
+    refereeMode: session.refereeMode,
   };
 }
 
