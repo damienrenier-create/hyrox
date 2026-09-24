@@ -1,9 +1,10 @@
 // Transforme une image Gemini (4 frames sur faux damier gris, JPEG) en feuille de sprites PNG transparente :
 // 4 cases de FRAME x FRAME cote a cote, personnage centre, pieds sur la meme ligne de base.
-// Usage : node scripts/_sprite.mjs <entree.jpg> <sortie.png> [FRAME=128]
+// Usage : node scripts/sprite-sheet.mjs <entree.jpg> <sortie.png> [FRAME=128] [ordre des colonnes, ex. 1,4,3,4]
 import sharp from "sharp";
 
-const [, , input, output, frameArg] = process.argv;
+const [, , input, output, frameArg, mapArg] = process.argv;
+const FRAME_MAP = (mapArg ?? "1,2,3,4").split(",").map((s) => Number(s) - 1);
 const FRAME = Number(frameArg ?? 128);
 if (!input || !output) throw new Error("usage : node scripts/_sprite.mjs entree.jpg sortie.png [taille]");
 
@@ -140,7 +141,7 @@ const baseline = Math.max(...boxes.map((b) => b.maxY));
 const sheet = sharp({ create: { width: FRAME * cols, height: FRAME, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } });
 const composites = [];
 for (let f = 0; f < cols; f++) {
-  const b = boxes[f];
+  const b = boxes[FRAME_MAP[f] ?? f];
   const frame = await sharp(data, { raw: { width: W, height: H, channels: C } })
     .extract({ left: b.minX, top: b.minY, width: b.w, height: b.h })
     .resize({ width: Math.max(1, Math.round(b.w * scale)), height: Math.max(1, Math.round(b.h * scale)), fit: "fill", kernel: "lanczos3" })
