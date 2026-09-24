@@ -776,7 +776,7 @@ export function GreffierClient({
         ) : view === "score" ? (
           <ScoreTable ctx={ctx} phase={phase} teamNames={teamNames} tl={tl} ord={ord} membersByTeam={membersByTeam} />
         ) : view === "records" ? (
-          <RecordsTab isMaster={isMaster} />
+          <RecordsTab isMaster={isMaster} sessionId={sessionId} />
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (

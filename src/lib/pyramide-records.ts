@@ -4,7 +4,7 @@ import {
   cardsOf, elapsed, finalScores, finishAt, lapsOf, medalOrder, peakIndex, pyramid, timeline, total,
   type RaceContext,
 } from "@/lib/wod-engines/templates/pyramide-engine";
-import { toMs } from "@/lib/scheduling";
+import { toMs, TZ } from "@/lib/scheduling";
 import { wodLabel } from "@/lib/student-sessions";
 
 // Records du WOD Pyramide, toutes classes et toutes seances confondues. Calcule a la demande (onglet
@@ -34,7 +34,9 @@ export const BK_WINDOW: [number, number] = [0.2, 0.8];
 
 export type RecordBoard = { id: string; title: string; hint: string; rows: RecordEntry[] };
 // « annee » = le degre scolaire (1re a 6e), lu sur le premier chiffre du nom de classe (« 5GTb » -> 5).
-export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null };
+// « periode » : cette seance, la journee, la semaine (lundi-dimanche) ou depuis toujours, en heure de Bruxelles.
+export type RecordPeriod = "session" | "day" | "week" | "all";
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null };
 // `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
 // visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
 export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };
@@ -48,6 +50,14 @@ export function gradeOf(className: string | null | undefined): number | null {
   const m = (className ?? "").match(/\d/);
   const n = m ? Number(m[0]) : NaN;
   return Number.isFinite(n) && n >= 1 && n <= 7 ? n : null;
+}
+
+// Bornes [de, a[ d'une periode calendaire a Bruxelles ; null = pas de borne (cette seance, depuis toujours).
+export function periodRange(period: RecordPeriod, nowMs = Date.now()): [number, number] | null {
+  if (period !== "day" && period !== "week") return null;
+  const now = Temporal.Instant.fromEpochMilliseconds(nowMs).toZonedDateTimeISO(TZ);
+  const start = period === "day" ? now.startOfDay() : now.startOfDay().subtract({ days: now.dayOfWeek - 1 });
+  return [start.epochMilliseconds, start.add({ days: period === "day" ? 1 : 7 }).epochMilliseconds];
 }
 
 const fmtMs = (ms: number) => {
@@ -72,18 +82,26 @@ type Row = {
 };
 
 export async function buildPyramideRecords(f: RecordFilters = {}): Promise<RecordsResult> {
-  const sessions = (await db.orm.public.Session.where({ wodType: "PYRAMIDE_CLASSIQUE" }).all()).sort(
-    (a, b) => toMs(b.createdAt) - toMs(a.createdAt)
-  );
-  const kept = sessions;
+  const sessions = await db.orm.public.Session.where({ wodType: "PYRAMIDE_CLASSIQUE" }).all();
+  const allIds = sessions.map((s) => s.id);
+  const raceStates = allIds.length ? await db.orm.public.RaceState.where((r) => r.sessionId.in(allIds)).all() : [];
+  const rsBySession = new Map(raceStates.map((r) => [r.sessionId, r]));
+  // Date d'une seance = son coup d'envoi : une seance programmee par le journal est creee la veille.
+  const dateOf = (s: (typeof sessions)[number]) => {
+    const rs = rsBySession.get(s.id);
+    return rs?.startedAt ? toMs(rs.startedAt) : s.opensAt ? toMs(s.opensAt) : toMs(s.createdAt);
+  };
+  const range = periodRange(f.period ?? "all");
+  const kept = sessions
+    .filter((s) => (f.period === "session" && f.sessionId ? s.id === f.sessionId : true))
+    .filter((s) => (range ? dateOf(s) >= range[0] && dateOf(s) < range[1] : true))
+    .sort((a, b) => dateOf(b) - dateOf(a));
   if (!kept.length) return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
 
   const ids = kept.map((s) => s.id);
-  const [raceStates, allTeams] = await Promise.all([
-    db.orm.public.RaceState.where((r) => r.sessionId.in(ids)).all(),
-    db.orm.public.Team.where((t) => t.sessionId.in(ids)).all(),
-  ]);
-  const rsIds = raceStates.map((r) => r.id);
+  const keptIds = new Set(ids);
+  const allTeams = await db.orm.public.Team.where((t) => t.sessionId.in(ids)).all();
+  const rsIds = raceStates.filter((r) => keptIds.has(r.sessionId)).map((r) => r.id);
   const teamIds = allTeams.map((t) => t.id);
   const [allLaps, allCards, allPauses, allMembers] = await Promise.all([
     rsIds.length ? db.orm.public.Lap.where((l) => l.raceStateId.in(rsIds)).orderBy((l) => l.at.asc()).all() : Promise.resolve([]),
@@ -111,7 +129,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
   let sessionsScanned = 0;
 
   for (const s of kept) {
-    const rs = raceStates.find((r) => r.sessionId === s.id);
+    const rs = rsBySession.get(s.id);
     if (!rs || !rs.startedAt) continue; // une seance jamais lancee n'a aucun record a donner
     sessionsScanned++;
 
@@ -146,7 +164,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
     const p = pyramid(ctx.settings);
     const apexIdx = peakIndex(ctx.settings);
     const sessionLabel = s.label ?? wodLabel(s.wodType);
-    const dateMs = toMs(s.createdAt);
+    const dateMs = dateOf(s);
     const excludedIds = new Set(readExcludedFromRecords(s.settings));
 
     for (const t of teams) {

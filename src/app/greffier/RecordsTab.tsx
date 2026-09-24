@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { excludeFromRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
 // Types uniquement : importer une valeur de `pyramide-records` embarquerait la base dans le paquet client.
-import type { RecordEntry, RecordsResult, TeamSex } from "@/lib/pyramide-records";
+import type { RecordEntry, RecordPeriod, RecordsResult, TeamSex } from "@/lib/pyramide-records";
 import { btn, cx, ui } from "@/lib/ui";
 
 const SEXES: (TeamSex | "")[] = ["", "F", "M", "OPEN"];
@@ -14,22 +14,26 @@ const LABELS: Record<TeamSex | "", string> = {
   M: "Équipes de gars",
   OPEN: "Équipes mixtes",
 };
+const PERIODS: RecordPeriod[] = ["session", "day", "week", "all"];
+const PERIOD_LABELS: Record<RecordPeriod, string> = { session: "Cette séance", day: "Aujourd'hui", week: "Cette semaine", all: "Depuis toujours" };
 const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 // Onglet « Records » : palmares du WOD Pyramide, toutes classes et toutes seances confondues.
 // Le calcul part d'un appel explicite (et repart a chaque changement de filtre) : rien n'est charge
 // tant que l'onglet n'est pas ouvert. DAMZER peut ecarter une equipe du palmares (greffier qui a
 // tape trop vite ou trop tard) sans rien effacer de ce que les eleves ont fait, et la retablir.
-export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
+export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: boolean; sessionId?: string | null }) {
   const [sex, setSex] = useState<TeamSex | "">("");
   const [grade, setGrade] = useState<number | null>(null);
+  const [period, setPeriod] = useState<RecordPeriod>("all");
+  const filters = useMemo(() => ({ sex, grade, period, sessionId }), [sex, grade, period, sessionId]);
   const [data, setData] = useState<RecordsResult | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
   const reload = useCallback(() => {
-    startTransition(async () => setData(await pyramideRecordsAction({ sex, grade })));
-  }, [sex, grade]);
+    startTransition(async () => setData(await pyramideRecordsAction(filters)));
+  }, [filters]);
   useEffect(() => reload(), [reload]);
 
   function invalidate(e: RecordEntry) {
@@ -38,7 +42,7 @@ export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
     startTransition(async () => {
       const res = await excludeFromRecordsAction(e.sessionId, e.teamId);
       if ("error" in res) setError(res.error);
-      else setData(await pyramideRecordsAction({ sex, grade }));
+      else setData(await pyramideRecordsAction(filters));
     });
   }
   function restore(e: RecordEntry) {
@@ -46,7 +50,7 @@ export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
     startTransition(async () => {
       const res = await restoreToRecordsAction(e.sessionId, e.teamId);
       if ("error" in res) setError(res.error);
-      else setData(await pyramideRecordsAction({ sex, grade }));
+      else setData(await pyramideRecordsAction(filters));
     });
   }
 
@@ -55,6 +59,14 @@ export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
   return (
     <div className="space-y-4">
       <div className={`${ui.cardPad} flex flex-wrap items-center gap-4`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={ui.eyebrow}>Période</span>
+          {PERIODS.filter((p) => p !== "session" || sessionId).map((p) => (
+            <button key={p} type="button" onClick={() => setPeriod(p)} className={cx(ui.pill, period === p ? ui.pillOn : ui.pillOff)}>
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={ui.eyebrow}>Équipes</span>
           {SEXES.map((s) => (

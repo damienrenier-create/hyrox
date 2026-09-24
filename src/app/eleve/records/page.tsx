@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
-import { buildPyramideRecords, type TeamSex } from "@/lib/pyramide-records";
+import { buildPyramideRecords, type RecordPeriod, type TeamSex } from "@/lib/pyramide-records";
 import { TopBar } from "../../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
 
@@ -13,22 +13,31 @@ const SEXES: { v: TeamSex | ""; label: string }[] = [
   { v: "M", label: "Gars" },
   { v: "OPEN", label: "Mixtes" },
 ];
+// Periode lue dans l'URL (« periode=jour|semaine »), sans valeur = depuis toujours.
+const PERIODS: { v: RecordPeriod; q: string; label: string }[] = [
+  { v: "day", q: "jour", label: "Aujourd'hui" },
+  { v: "week", q: "semaine", label: "Cette semaine" },
+  { v: "all", q: "", label: "Depuis toujours" },
+];
 const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
 // Records du WOD Pyramide vus par les eleves : le meme palmares que le greffier, en lecture seule,
 // avec les memes filtres (composition de l'equipe, degre). Tout passe par l'URL, donc partageable.
-export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string }> }) {
+export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/");
   const sp = await searchParams;
   const sex = (["F", "M", "OPEN"].includes(sp.sexe ?? "") ? sp.sexe : "") as TeamSex | "";
   const grade = sp.degre && /^\d$/.test(sp.degre) ? Number(sp.degre) : null;
-  const data = await buildPyramideRecords({ sex, grade });
-  const href = (patch: { sexe?: string; degre?: string }) => {
+  const periodQ = PERIODS.find((p) => p.q && p.q === sp.periode)?.q ?? "";
+  const period = PERIODS.find((p) => p.q === periodQ)?.v ?? "all";
+  const data = await buildPyramideRecords({ sex, grade, period });
+  const href = (patch: { sexe?: string; degre?: string; periode?: string }) => {
     const p = new URLSearchParams();
-    const v = { sexe: sex, degre: grade ? String(grade) : "", ...patch };
+    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, ...patch };
     if (v.sexe) p.set("sexe", v.sexe);
     if (v.degre) p.set("degre", v.degre);
+    if (v.periode) p.set("periode", v.periode);
     const q = p.toString();
     return `/eleve/records${q ? `?${q}` : ""}`;
   };
@@ -39,6 +48,14 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
 
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         <div className={`${ui.cardPad} space-y-2`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={ui.eyebrow}>Période</span>
+            {PERIODS.map((p) => (
+              <Link key={p.v} href={href({ periode: p.q })} className={cx(ui.pill, period === p.v ? ui.pillOn : ui.pillOff)}>
+                {p.label}
+              </Link>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={ui.eyebrow}>Équipes</span>
             {SEXES.map((s) => (
