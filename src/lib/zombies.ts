@@ -25,25 +25,42 @@ export function absoluteFromRace(startedAtMs: number, pauses: { from: number; to
   return abs;
 }
 
-export async function applyZombieCatches(sessionId: string, onlyTeamId?: string): Promise<number> {
-  const session = await db.orm.public.Session.where({ id: sessionId }).first();
-  if (!session || session.wodType !== "LEVEL" || !readZombies(session.settings) || session.raceEndedAt) return 0;
+// Donnees deja chargees par l'appelant (pouls, coche) : aucune relecture, seules les ecritures touchent la base.
+export type ZombieContext = {
+  session: { wodType: string; settings: unknown; raceEndedAt: unknown | null };
+  rs: { id: string; startedAt: unknown | null; endedAt: unknown | null } | null;
+  pauses: { from: number; to: number | null }[];
+  teams: { id: string }[];
+  ticks: { id: string; teamId: string; level: number; card: number; at: unknown }[];
+  losses: { teamId: string; level: number; at: unknown }[];
+};
+
+export async function loadZombieContext(sessionId: string, onlyTeamId?: string): Promise<ZombieContext | null> {
+  const [session, rs] = await Promise.all([db.orm.public.Session.where({ id: sessionId }).first(), db.orm.public.RaceState.where({ sessionId }).first()]);
+  if (!session) return null;
+  const [pausesRaw, teams, ticks, losses] = await Promise.all([
+    rs ? db.orm.public.RacePause.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+    onlyTeamId ? Promise.resolve([{ id: onlyTeamId }]) : db.orm.public.Team.where({ sessionId }).all(),
+    onlyTeamId ? db.orm.public.LevelTick.where({ sessionId, teamId: onlyTeamId }).all() : db.orm.public.LevelTick.where({ sessionId }).all(),
+    onlyTeamId ? db.orm.public.LevelLoss.where({ sessionId, teamId: onlyTeamId }).all() : db.orm.public.LevelLoss.where({ sessionId }).all(),
+  ]);
+  return { session, rs, pauses: pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })), teams, ticks, losses };
+}
+
+export async function applyZombieCatches(sessionId: string, onlyTeamId?: string, preloaded?: ZombieContext | null): Promise<number> {
+  const ctx = preloaded ?? (await loadZombieContext(sessionId, onlyTeamId));
+  if (!ctx) return 0;
+  const { session, rs, pauses, teams } = ctx;
+  if (session.wodType !== "LEVEL" || !readZombies(session.settings) || session.raceEndedAt) return 0;
   const levels = readFrozenFromSettings(session.settings);
   if (!levels.length) return 0;
-  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs?.startedAt || rs.endedAt) return 0;
   const startedAtMs = toMs(rs.startedAt);
-  const pauses = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
   if (pauses.some((p) => p.to === null)) return 0; // en pause : le chrono n'avance pas, le zombie non plus
   const nowMs = Date.now();
   const nowRace = elapsed(startedAtMs, pauses, nowMs) ?? 0;
-
-  // Une coche ne verifie que son equipe (4 requetes legeres) ; le pouls et le rendu verifient tout le monde.
-  const teams = onlyTeamId ? [{ id: onlyTeamId }] : await db.orm.public.Team.where({ sessionId }).all();
-  const rawTicks = onlyTeamId ? await db.orm.public.LevelTick.where({ sessionId, teamId: onlyTeamId }).all() : await db.orm.public.LevelTick.where({ sessionId }).all();
-  const rawLosses = onlyTeamId ? await db.orm.public.LevelLoss.where({ sessionId, teamId: onlyTeamId }).all() : await db.orm.public.LevelLoss.where({ sessionId }).all();
-  let ticks: (Tick & { id: string })[] = rawTicks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  let ticks: (Tick & { id: string })[] = ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
+  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;
 
   for (const t of teams) {

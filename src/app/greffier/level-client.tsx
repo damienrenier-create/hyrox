@@ -8,7 +8,7 @@ import {
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
-import { endLevelAction, levelLiveAction, levelPauseAction, levelPulseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -88,10 +88,11 @@ export function LevelClient({
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [phase, isPaused]);
-  // Pouls : compteurs seulement. Si la structure a bouge (equipes, membres, echelle, temps impose, depart,
-  // fin) -> page entiere ; sinon -> juste l'etat vivant (6 requetes). Aucun rendu si rien n'a change.
-  const lastPulse = useCallback(() => levelPulseAction(sessionId), [sessionId]);
-  const lastSig = useRef<string | null>(null);
+  // Pouls : UN appel toutes les 8 s (8 requetes en parallele) qui rend l'etat vivant + une signature de
+  // structure. Structure changee (equipes, membres, echelle, temps impose, depart, fin) -> page entiere ;
+  // etat identique -> aucun rendu ; sinon -> remplacement local. Onglet cache : rien du tout.
+  const lastLive = useRef<string | null>(null);
+  const lastStructure = useRef<string | null>(null);
   useEffect(() => {
     if (phase === "post") return;
     let stop = false;
@@ -100,18 +101,12 @@ export function LevelClient({
       if (stop || busy || (typeof document !== "undefined" && document.visibilityState !== "visible")) return;
       busy = true;
       try {
-        const sig = await lastPulse();
-        if (stop || !sig) return;
-        if (lastSig.current === null) { lastSig.current = sig; return; }
-        if (sig === lastSig.current) return;
-        const a = lastSig.current.split("|"), b = sig.split("|");
-        lastSig.current = sig;
-        const structural = [2, 3, 5, 6, 7, 8].some((i) => a[i] !== b[i]);
-        if (structural) router.refresh();
-        else {
-          const l = await levelLiveAction(sessionId);
-          if (!("error" in l)) setLive(l);
-        }
+        const l = await levelLiveAction(sessionId);
+        if (stop || "error" in l) return;
+        if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); return; }
+        lastStructure.current = l.structure;
+        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
+        if (key !== lastLive.current) { lastLive.current = key; setLive(l); }
       } catch {
         /* reseau : prochain tick */
       } finally {
@@ -120,7 +115,7 @@ export function LevelClient({
     };
     const t = setInterval(tick, 8000);
     return () => { stop = true; clearInterval(t); };
-  }, [phase, lastPulse, sessionId, router]);
+  }, [phase, sessionId, router]);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;
@@ -384,7 +379,7 @@ export function LevelClient({
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "" };
 }
 
 // Colonnes d'exercices du recap : ordre de premiere apparition dans l'echelle.
@@ -413,6 +408,20 @@ function useSprite(kind: ZombieKind): boolean | null {
     img.src = spriteFile(kind);
   }, [kind, key]);
   return ok;
+}
+
+// BOSS : pas de sprite special, une HORDE des zombies vaincus depuis le dernier BOSS (les paliers des quatre
+// niveaux du bloc), decalee en profondeur.
+function Horde({ tiers, moving }: { tiers: number[]; moving: boolean }) {
+  return (
+    <span className="relative block h-12" style={{ width: 48 + (tiers.length - 1) * 14 }}>
+      {tiers.map((t, i) => (
+        <span key={`${t}_${i}`} className="absolute bottom-0" style={{ left: (tiers.length - 1 - i) * 14, zIndex: i, transform: `scale(${0.82 + 0.06 * i})`, transformOrigin: "bottom center" }}>
+          <Zombie kind={t} moving={moving} />
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function Zombie({ kind, moving }: { kind: ZombieKind; moving: boolean }) {
@@ -447,6 +456,8 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
   const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs), speedLevel) : null;
   const danger = !!geo && geo.remainingMs <= 30_000;
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
+  // Horde du BOSS : paliers des niveaux du bloc (L-4 .. L-1), avec la penalite de vitesse de l'equipe.
+  const horde = boss && level ? [...new Set(Array.from({ length: 4 }, (_, i) => zombieTier(zombieSpeedLevel(level.number - 4 + i, p.losses))))].sort((a, b) => a - b) : [];
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
@@ -485,7 +496,7 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
               <>
                 {/* Un zombie par niveau : la cle change avec le niveau, il repart simplement du coin gauche. */}
                 <div key={level.number} className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}>
-                  <Zombie kind={kind} moving={running} />
+                  {boss ? <Horde tiers={horde} moving={running} /> : <Zombie kind={kind} moving={running} />}
                 </div>
                 <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full text-2xl leading-none transition-[left] duration-300", danger && "heartbeat")} style={{ left: `${geo.heart * 100}%` }} title={geo.remainingMs > 0 ? `Le zombie arrive dans ${fmt(geo.remainingMs)}` : "Rattrapée !"}>❤️</div>
               </>

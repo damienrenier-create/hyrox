@@ -15,11 +15,26 @@ const idx = (x, y) => (y * W + x) * C;
 
 // Damier : pixels neutres (R ~ G ~ B) de gris moyen. Le JPEG bave : tolerance large, mais on ne retire que
 // ce qui est RELIE au bord (remplissage), pour ne jamais trouer le personnage.
+// Couleur du fond = mediane des quatre coins (fond uni ou damier gris) ; un pixel est « fond » s'il en est
+// proche (tolerance par canal), et seulement s'il est RELIE au bord. Une peau grise ou une chemise claire, plus
+// eloignees de cette couleur precise, ne sont plus mangees.
+const BG_TOL = 26;
+const corners = [];
+for (const [cx, cy] of [[0, 0], [W - 12, 0], [0, H - 12], [W - 12, H - 12]]) {
+  for (let y = cy; y < cy + 12; y++) for (let x = cx; x < cx + 12; x++) { const i = idx(x, y); corners.push([data[i], data[i + 1], data[i + 2]]); }
+}
+const med = (k) => { const v = corners.map((c) => c[k]).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+const BG = [med(0), med(1), med(2)];
+// Damier : deux gris ; on accepte aussi le second ton s'il est present dans les coins.
+const tones = new Set(corners.map((c) => Math.round((c[0] + c[1] + c[2]) / 3 / 8)));
 const isGray = (i) => {
   const r = data[i], g = data[i + 1], b = data[i + 2];
-  const lum = (r + g + b) / 3;
-  return Math.abs(r - g) <= 14 && Math.abs(g - b) <= 14 && Math.abs(r - b) <= 14 && lum >= 70 && lum <= 238;
+  const neutral = Math.abs(r - g) <= 12 && Math.abs(g - b) <= 12 && Math.abs(r - b) <= 12;
+  const near = Math.abs(r - BG[0]) <= BG_TOL && Math.abs(g - BG[1]) <= BG_TOL && Math.abs(b - BG[2]) <= BG_TOL;
+  const tone = tones.has(Math.round((r + g + b) / 3 / 8));
+  return neutral && (near || tone);
 };
+console.log(`fond echantillonne : rgb(${BG.join(",")}), ${tones.size} ton(s)`);
 const bg = new Uint8Array(W * H);
 const stack = [];
 for (let x = 0; x < W; x++) { stack.push(x, 0, x, H - 1); }

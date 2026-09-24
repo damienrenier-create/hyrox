@@ -6,7 +6,7 @@ import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level
 import { activeCards, isBoss, readFrozenLevels, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
-import { applyZombieCatches } from "@/lib/zombies";
+import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 
@@ -28,6 +28,8 @@ export type LevelLive = {
   startedAtMs: number | null;
   endedAtMs: number | null;
   raceEndedAtMs: number | null;
+  // Signature de la structure (equipes, membres, echelle, temps impose) : si elle change, l'ecran recharge la page.
+  structure: string;
 };
 export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[] };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
@@ -58,17 +60,26 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
   };
 }
 
-// Tout l'etat vivant (6 requetes) : appele par le pouls quand seuls les compteurs de course ont bouge.
+// L'unique appel du pouls (8 requetes, en parallele) : rattrapages calcules sur ces memes donnees (ecriture
+// seulement s'il y en a), etat vivant complet et signature de structure. Si rien n'a bouge, l'ecran ne rend rien.
 export async function levelLiveAction(sessionId: string): Promise<LevelLive | { error: string }> {
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return { error: "Accès refusé." };
-  await applyZombieCatches(sessionId);
-  const [{ rs, startedAtMs, pauses }, session] = await Promise.all([raceClock(sessionId), db.orm.public.Session.where({ id: sessionId }).first()]);
-  const [ticks, losses, cards] = await Promise.all([
-    db.orm.public.LevelTick.where({ sessionId }).all(),
-    db.orm.public.LevelLoss.where({ sessionId }).all(),
+  const ctx = await loadZombieContext(sessionId);
+  if (!ctx) return { error: "Séance introuvable." };
+  const caught = await applyZombieCatches(sessionId, undefined, ctx);
+  const { rs, pauses } = ctx;
+  const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
+  const teamIds = ctx.teams.map((t) => t.id);
+  const [cards, members, ticks, losses] = await Promise.all([
     rs ? db.orm.public.YellowCard.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+    teamIds.length ? db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).aggregate((a) => ({ n: a.count() })).catch(() => ({ n: -1 })) : Promise.resolve({ n: 0 }),
+    // Un rattrapage vient de modifier les coches : on relit ; sinon les donnees du contexte suffisent.
+    caught > 0 ? db.orm.public.LevelTick.where({ sessionId }).all() : Promise.resolve(ctx.ticks as { id: string; teamId: string; level: number; card: number; at: unknown; by: string }[]),
+    caught > 0 ? db.orm.public.LevelLoss.where({ sessionId }).all() : Promise.resolve(ctx.losses as { id: string; teamId: string; level: number; at: unknown }[]),
   ]);
+  const s = ctx.session.settings as { levels?: unknown; levelCapMin?: unknown } | null;
+  const structure = `${teamIds.length}|${members.n}|${JSON.stringify(s?.levels ?? "").length}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   return {
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
@@ -76,7 +87,8 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     pauses,
     startedAtMs,
     endedAtMs: rs?.endedAt ? toMs(rs.endedAt) : null,
-    raceEndedAtMs: session?.raceEndedAt ? toMs(session.raceEndedAt) : null,
+    raceEndedAtMs: ctx.session.raceEndedAt ? toMs(ctx.session.raceEndedAt) : null,
+    structure,
   };
 }
 
@@ -220,11 +232,13 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   const { user, session } = await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
-  const caught = (await applyZombieCatches(sessionId, teamId)) > 0;
+  // Contexte de l'equipe charge une fois : rattrapage en memoire, puis verification du niveau en cours.
+  const ctx = await loadZombieContext(sessionId, teamId);
+  const caught = (await applyZombieCatches(sessionId, teamId, ctx)) > 0;
   const levels = readFrozenFromSettings(session.settings);
   const l = levels.find((x) => x.number === level);
   if (!l || !l.cards[card] || l.cards[card].off) return { error: "Cette fiche n'est plus en jeu." };
-  const ticks = await db.orm.public.LevelTick.where({ sessionId, teamId }).all();
+  const ticks = caught ? await db.orm.public.LevelTick.where({ sessionId, teamId }).all() : (ctx?.ticks ?? []);
   const done = new Set(ticks.map((t) => `${t.level}_${t.card}`));
   let refused: string | null = null;
   // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
