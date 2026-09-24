@@ -17,7 +17,7 @@ const idx = (x, y) => (y * W + x) * C;
 const isGray = (i) => {
   const r = data[i], g = data[i + 1], b = data[i + 2];
   const lum = (r + g + b) / 3;
-  return Math.abs(r - g) <= 14 && Math.abs(g - b) <= 14 && Math.abs(r - b) <= 14 && lum >= 70 && lum <= 200;
+  return Math.abs(r - g) <= 14 && Math.abs(g - b) <= 14 && Math.abs(r - b) <= 14 && lum >= 70 && lum <= 238;
 };
 const bg = new Uint8Array(W * H);
 const stack = [];
@@ -66,6 +66,58 @@ for (let p = 0; p < W * H; p++) data[p * C + 3] = bg[p] ? 0 : 255;
       const p = y * W + x;
       if (!bg[p] && label[p] !== best) { bg[p] = 1; data[p * C + 3] = 0; }
     }
+  }
+}
+
+// Trait de sol : Gemini dessine parfois une ligne sombre continue sous les pieds. Par colonne, les rangees du
+// bas qui sont une ligne pleine et sombre (> 60 % de la largeur du personnage, remplie a 90 %) sont effacees.
+{
+  const cols0 = 4;
+  const colW0 = Math.floor(W / cols0);
+  const lum = (i) => (data[i] + data[i + 1] + data[i + 2]) / 3;
+  for (let f = 0; f < cols0; f++) {
+    let minX = W, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) for (let x = f * colW0; x < (f + 1) * colW0; x++) if (!bg[y * W + x]) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y > maxY) maxY = y; }
+    if (maxY < 0) continue;
+    const charW = maxX - minX + 1;
+    let rows = 0;
+    for (let y = maxY; y >= 0 && rows < Math.round(H * 0.04); y--) {
+      let first = -1, last = -1, filled = 0, dark = 0;
+      for (let x = f * colW0; x < (f + 1) * colW0; x++) {
+        const p = y * W + x;
+        if (bg[p]) continue;
+        if (first < 0) first = x;
+        last = x; filled++;
+        if (lum(p * C) < 90) dark++;
+      }
+      if (first < 0) break;
+      const span = last - first + 1;
+      const isLine = span >= 0.6 * charW && filled >= 0.9 * span && dark >= 0.8 * filled;
+      if (!isLine) break;
+      for (let x = first; x <= last; x++) { const p = y * W + x; bg[p] = 1; data[p * C + 3] = 0; }
+      rows++;
+    }
+  }
+}
+
+// Seconde passe de remplissage : le gris enferme entre les jambes et le trait de sol est desormais relie au
+// fond (le trait a saute), on le retire aussi. Meme regle : uniquement ce qui touche une zone de fond.
+{
+  const st = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (bg[y * W + x]) {
+    if (x + 1 < W && !bg[y * W + x + 1]) st.push(x + 1, y);
+    if (x > 0 && !bg[y * W + x - 1]) st.push(x - 1, y);
+    if (y + 1 < H && !bg[(y + 1) * W + x]) st.push(x, y + 1);
+    if (y > 0 && !bg[(y - 1) * W + x]) st.push(x, y - 1);
+  }
+  while (st.length) {
+    const y = st.pop(), x = st.pop();
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    const p = y * W + x;
+    if (bg[p] || !isGray(idx(x, y))) continue;
+    bg[p] = 1;
+    data[p * C + 3] = 0;
+    st.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
   }
 }
 
