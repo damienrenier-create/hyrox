@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams, zombieGeometry, zombieTier,
+  activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, ZOMBIE_ZONE,
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
@@ -125,7 +126,7 @@ export function LevelClient({
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
       const l = levelByNumber.get(p.currentLevel);
-      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs).remainingMs <= 0;
+      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs, zombieSpeedLevel(l.number, p.losses)).remainingMs <= 0;
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
@@ -380,9 +381,10 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
   const act = level ? activeCards(level) : [];
   const n = Math.max(1, act.length);
   const remaining = [...act].filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`)).sort((a, b) => a.card.reps - b.card.reps || a.index - b.index);
-  const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs)) : null;
-  const danger = !!geo && geo.remainingMs <= 60_000;
-  const tier = level ? zombieTier(level.number) : 1;
+  const speedLevel = level ? zombieSpeedLevel(level.number, p.losses) : 1;
+  const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs), speedLevel) : null;
+  const danger = !!geo && geo.remainingMs <= 30_000;
+  const tier = zombieTier(speedLevel);
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
@@ -419,13 +421,25 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
           <>
             {geo && (
               <>
-                <div className="absolute top-1/2 -translate-y-1/2 transition-[left] duration-1000 ease-linear" style={{ left: `calc(${geo.zombie * 100}% - 24px)` }}>
-                  <Zombie tier={tier} moving={running} />
-                </div>
+                {/* Le trou d'ou sort chaque nouveau zombie, tout a gauche de la piste. */}
+                <span aria-hidden className="absolute left-0 top-1/2 translate-y-2 w-12 h-3 rounded-[50%] bg-ink/70" />
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={`${level.number}_${p.attemptStartMs}`}
+                    initial={{ opacity: 0, y: 26, scale: 0.6 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8, filter: "blur(2px)" }}
+                    transition={{ duration: 0.6 }}
+                    className="absolute top-1/2 -translate-y-1/2"
+                    style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}
+                  >
+                    <Zombie tier={tier} moving={running} />
+                  </motion.div>
+                </AnimatePresence>
                 <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full text-2xl leading-none transition-[left] duration-300", danger && "heartbeat")} style={{ left: `${geo.heart * 100}%` }} title={geo.remainingMs > 0 ? `Le zombie arrive dans ${fmt(geo.remainingMs)}` : "Rattrapée !"}>❤️</div>
               </>
             )}
-            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${(remaining.length / n) * 50}%` }}>
+            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${(remaining.length / n) * ZOMBIE_ZONE * 100}%` }}>
               {remaining.map(({ card, index }) => {
                 const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
                 return (
@@ -435,10 +449,10 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
                     disabled={!canTick || busy}
                     onClick={() => onToggle(level.number, index, false)}
                     title={`${card.reps} ${cap(card.label)} — cocher quand c'est fait`}
-                    className={cx("flex-1 min-w-0 rounded-lg border px-1 text-left flex flex-col justify-center leading-tight transition active:scale-[.98] bg-card border-line-2 hover:border-brand", (!canTick || busy) && "opacity-60")}
+                    className={cx("flex-1 min-w-0 rounded-lg border px-1.5 text-left flex items-center gap-1.5 leading-tight transition active:scale-[.98] bg-card border-line-2 hover:border-brand", (!canTick || busy) && "opacity-60")}
                   >
-                    <span className="font-display font-extrabold text-base tabular-nums">{card.reps}</span>
-                    <span className="font-bold text-[10px] truncate">{cap(card.label)}</span>
+                    <span className="font-display font-extrabold text-xl tabular-nums flex-shrink-0">{card.reps}</span>
+                    <span className="font-bold text-sm truncate">{cap(card.label)}</span>
                   </button>
                 );
               })}

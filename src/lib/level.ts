@@ -29,7 +29,14 @@ export async function listLevels(): Promise<LevelRow[]> {
 
 // Ajoute les exercices du listing qui manquent (par libelle), sans toucher aux existants ni a leur ponderation.
 export async function seedDefaultExercises(by: string): Promise<number> {
-  const existing = new Set((await db.orm.public.LevelExercise.where({}).all()).map((r) => r.label.trim().toUpperCase()));
+  // Renommage du 24/09 : « AR » s'ecrit « ALLER-RETOUR » partout.
+  const rows = await db.orm.public.LevelExercise.where({}).all();
+  const ar = rows.find((r) => r.label.trim().toUpperCase() === "AR");
+  if (ar && !rows.some((r) => r.label.trim().toUpperCase() === "ALLER-RETOUR")) {
+    await db.orm.public.LevelExercise.where({ id: ar.id }).update({ label: "ALLER-RETOUR" });
+    ar.label = "ALLER-RETOUR";
+  }
+  const existing = new Set(rows.map((r) => r.label.trim().toUpperCase()));
   let n = 0;
   for (const [i, e] of DEFAULT_EXERCISES.entries()) {
     if (existing.has(e.label)) continue;

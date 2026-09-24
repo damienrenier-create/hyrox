@@ -29,7 +29,7 @@ export type Proposal = {
 
 export const IDENTITY_LABEL: Record<Identity, string> = { cardio: "Cardio", jambes: "Jambes", bras: "Bras", tronc: "Tronc", full: "Full body" };
 export const IDENTITY_OF: Record<string, Identity[]> = {
-  CORDE: ["cardio"], AR: ["cardio"], "BOX JUMP": ["cardio", "jambes"], BURPEES: ["cardio", "full"],
+  CORDE: ["cardio"], "ALLER-RETOUR": ["cardio"], "BOX JUMP": ["cardio", "jambes"], BURPEES: ["cardio", "full"],
   "SQUATS JUMP": ["jambes"], "FENTES DISK": ["jambes"], "MONKEY SLIDE": ["jambes"], "TIRE TAPIS AR": ["jambes"],
   POMPES: ["bras"], TRACTIONS: ["bras"], "COMMANDO BRAS": ["bras", "tronc"],
   "PLANK SLIDE": ["tronc"], "KB TOUR": ["tronc"],
@@ -64,13 +64,21 @@ const BOSS = (identity: Identity, name: string, label: string, reps: number): Sp
 const STD = [55, 65, 80, 95, 100, 110, 120, 130, 140, 150, 160, 170, 175, 185, 195, 205];
 const scale = (k: number) => STD.map((d) => Math.round((d * k) / 5) * 5);
 
+// Fiche « ouverture » (Sartay, mode zombies) : un exercice tres facile, connu, au nom court et sans materiel,
+// pour ecarter vite la premiere fiche du zombie. Tournante, jamais l'exercice du BOSS du bloc en cours.
+export const OPENERS: [string, number][] = [["SQUATS JUMP", 20], ["POMPES", 20], ["CORDE", 20], ["ALLER-RETOUR", 2], ["TRACTIONS", 10], ["TIRE TAPIS AR", 1]];
+
 export function materialize(p: Proposal): ProposedLevel[] {
   let i = 0;
-  return p.specs.map((s) => {
+  return p.specs.map((s, idx) => {
     if ("boss" in s) return { name: `BOSS · ${s.name}`, identity: s.identity, cards: [[s.label, s.reps]] };
     const D = p.ramp[i++];
     const per = D * Math.min(1, 5 / s.exos.length); // six fiches : le plus rapide en prend deux
-    return { name: s.name, identity: s.identity, cards: s.exos.map((x) => [x, repsFor(x, per)] as [string, number]) };
+    const nextBoss = p.specs.slice(idx + 1).find((x) => "boss" in x);
+    const bossLabel = nextBoss && "boss" in nextBoss ? nextBoss.label : null;
+    let opener = OPENERS[idx % OPENERS.length];
+    for (let k = 0; k < OPENERS.length && (opener[0] === bossLabel || s.exos.includes(opener[0])); k++) opener = OPENERS[(idx + k + 1) % OPENERS.length];
+    return { name: s.name, identity: s.identity, cards: [opener, ...s.exos.map((x) => [x, repsFor(x, per)] as [string, number])] };
   });
 }
 
@@ -93,25 +101,25 @@ export const PROPOSALS: Proposal[] = [
     ],
     ramp: scale(1),
     specs: [
-      L("cardio", "Mise en route", "CORDE", "AR", "BOX JUMP", "SQUATS JUMP"),
+      L("cardio", "Mise en route", "CORDE", "ALLER-RETOUR", "BOX JUMP", "SQUATS JUMP"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "MONKEY SLIDE", "BOX JUMP", "CORDE"),
       L("bras", "Bras", "POMPES", "COMMANDO BRAS", "TRACTIONS", "CORDE"),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE"),
       BOSS("full", "Burpees", "BURPEES", 75),
       L("full", "Full body", "KB SWING", "FLIP TAPIS", "SMASH DOWN", "BREAK DANCE", "CORDE"),
-      L("cardio", "Cardio", "CORDE", "AR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR"),
       L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE", "KB TOUR"),
-      BOSS("cardio", "AR", "AR", 50),
+      BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 50),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE"),
       L("full", "Full body", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "WALL BALL SHOT", "ONE REP"),
-      L("cardio", "Cardio", "CORDE", "AR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR"),
       BOSS("bras", "Tractions", "TRACTIONS", 100),
       L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE"),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE"),
       L("full", "Full body", "KB SWING", "KB SNATCH", "SMASH DOWN", "BREAK DANCE", "FLIP TAPIS", "TOUR DE POUTRE"),
-      L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "AR"),
+      L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "ALLER-RETOUR"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
     ],
   },
@@ -135,10 +143,10 @@ export const PROPOSALS: Proposal[] = [
     ramp: scale(1),
     specs: [
       L("cardio", "Cardio & jambes I", "CORDE", "BOX JUMP", "SQUATS JUMP", "FENTES DISK"),
-      L("jambes", "Cardio & jambes II", "CORDE", "AR", "MONKEY SLIDE", "FENTES DISK", "SQUATS JUMP"),
+      L("jambes", "Cardio & jambes II", "CORDE", "ALLER-RETOUR", "MONKEY SLIDE", "FENTES DISK", "SQUATS JUMP"),
       L("cardio", "Cardio & jambes III", "BOX JUMP", "SQUATS JUMP", "CORDE", "BURPEES", "MONKEY SLIDE"),
       L("jambes", "Cardio & jambes IV", "MONKEY SLIDE", "FENTES DISK", "CORDE", "BOX JUMP", "SQUATS JUMP"),
-      BOSS("cardio", "AR", "AR", 40),
+      BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 40),
       L("bras", "Bras & tronc I", "POMPES", "COMMANDO BRAS", "KB TOUR", "PLANK SLIDE"),
       L("tronc", "Bras & tronc II", "PLANK SLIDE", "COMMANDO BRAS", "POMPES", "KB TOUR", "CORDE"),
       L("bras", "Bras & tronc III", "POMPES", "PLANK SLIDE", "COMMANDO BRAS", "KB TOUR"),
@@ -149,9 +157,9 @@ export const PROPOSALS: Proposal[] = [
       L("full", "Full body III", "KB SNATCH", "ONE REP", "TOUR DE POUTRE", "FLIP TAPIS", "BREAK DANCE"),
       L("full", "Full body IV", "KB SWING", "BREAK DANCE", "WALL BALL SHOT", "ONE REP", "SMASH DOWN"),
       BOSS("full", "Burpees", "BURPEES", 100),
-      L("cardio", "Finale I", "CORDE", "POMPES", "FENTES DISK", "PLANK SLIDE", "AR"),
+      L("cardio", "Finale I", "CORDE", "POMPES", "FENTES DISK", "PLANK SLIDE", "ALLER-RETOUR"),
       L("bras", "Finale II", "BOX JUMP", "TRACTIONS", "KB SWING", "COMMANDO BRAS", "CORDE"),
-      L("tronc", "Finale III", "MONKEY SLIDE", "POMPES", "KB SNATCH", "PLANK SLIDE", "AR"),
+      L("tronc", "Finale III", "MONKEY SLIDE", "POMPES", "KB SNATCH", "PLANK SLIDE", "ALLER-RETOUR"),
       L("full", "Finale IV", "BURPEES", "TIRE TAPIS AR", "FENTES DISK", "COMMANDO BRAS", "ONE REP"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
     ],
@@ -183,19 +191,19 @@ export const PROPOSALS: Proposal[] = [
       BOSS("cardio", "Corde marathon", "CORDE", 600),
       L("jambes", "Jambes", "MONKEY SLIDE", "BOX JUMP", "FENTES DISK", "CORDE"),
       L("bras", "Bras", "POMPES", "COMMANDO BRAS", "KB TOUR", "CORDE"),
-      L("cardio", "Cardio", "CORDE", "BOX JUMP", "AR", "MONKEY SLIDE"),
+      L("cardio", "Cardio", "CORDE", "BOX JUMP", "ALLER-RETOUR", "MONKEY SLIDE"),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 400),
       L("full", "Full body", "FLIP TAPIS", "WALL BALL SHOT", "CORDE", "SMASH DOWN", "MONKEY SLIDE"),
       L("jambes", "Jambes", "FENTES DISK", "MONKEY SLIDE", "BOX JUMP", "CORDE", "SQUATS JUMP"),
       L("bras", "Bras", "POMPES", "COMMANDO BRAS", "TRACTIONS", "CORDE", "PLANK SLIDE"),
-      L("cardio", "Cardio", "CORDE", "AR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
       BOSS("tronc", "KB tour", "KB TOUR", 800),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE"),
       L("full", "Full body", "KB SWING", "KB SNATCH", "FLIP TAPIS", "WALL BALL SHOT", "CORDE"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE"),
       L("bras", "Bras & tronc", "POMPES", "COMMANDO BRAS", "PLANK SLIDE", "KB TOUR", "CORDE"),
-      BOSS("cardio", "AR", "AR", 80),
+      BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 80),
     ],
   },
   {
@@ -223,18 +231,18 @@ export const PROPOSALS: Proposal[] = [
       L("full", "Full body", "KB SNATCH", "FLIP TAPIS", "BREAK DANCE", "KB SWING"),
       BOSS("full", "Burpees", "BURPEES", 75),
       L("tronc", "Tronc", "PLANK SLIDE", "COMMANDO BRAS", "KB TOUR", "BREAK DANCE"),
-      L("cardio", "Cardio", "BURPEES", "AR", "BOX JUMP", "MONKEY SLIDE"),
+      L("cardio", "Cardio", "BURPEES", "ALLER-RETOUR", "BOX JUMP", "MONKEY SLIDE"),
       L("bras", "Bras", "TRACTIONS", "POMPES", "COMMANDO BRAS", "SMASH DOWN", "WALL BALL SHOT"),
       L("full", "Full body", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "ONE REP", "KB SWING"),
       BOSS("jambes", "Tire tapis", "TIRE TAPIS AR", 20),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR"),
-      L("cardio", "Cardio", "BURPEES", "AR", "BOX JUMP", "KB SWING"),
+      L("cardio", "Cardio", "BURPEES", "ALLER-RETOUR", "BOX JUMP", "KB SWING"),
       L("full", "Full body", "KB SWING", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "ONE REP"),
       L("tronc", "Tronc", "PLANK SLIDE", "COMMANDO BRAS", "KB TOUR", "BREAK DANCE", "WALL BALL SHOT"),
       BOSS("bras", "Tractions", "TRACTIONS", 120),
       L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "SMASH DOWN", "BURPEES"),
       L("jambes", "Jambes", "TIRE TAPIS AR", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE"),
-      L("cardio", "Cardio", "BURPEES", "AR", "BOX JUMP", "KB SNATCH", "BREAK DANCE"),
+      L("cardio", "Cardio", "BURPEES", "ALLER-RETOUR", "BOX JUMP", "KB SNATCH", "BREAK DANCE"),
       L("full", "Full body", "KB SNATCH", "KB SWING", "BREAK DANCE", "FLIP TAPIS", "TOUR DE POUTRE", "SMASH DOWN"),
       BOSS("full", "One rep", "ONE REP", 50),
     ],
@@ -257,25 +265,25 @@ export const PROPOSALS: Proposal[] = [
     ],
     ramp: scale(1),
     specs: [
-      L("cardio", "Mise en route", "CORDE", "AR", "BOX JUMP", "SQUATS JUMP", "COMMANDO BRAS"),
+      L("cardio", "Mise en route", "CORDE", "ALLER-RETOUR", "BOX JUMP", "SQUATS JUMP", "COMMANDO BRAS"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "MONKEY SLIDE", "BOX JUMP", "CORDE"),
       L("bras", "Bras", "POMPES", "COMMANDO BRAS", "TRACTIONS", "CORDE", "KB TOUR"),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE", "MONKEY SLIDE"),
       BOSS("full", "Burpees", "BURPEES", 75),
       L("full", "Full body", "KB SWING", "FLIP TAPIS", "SMASH DOWN", "TOUR DE POUTRE", "CORDE"),
-      L("cardio", "Cardio", "CORDE", "AR", "BOX JUMP", "BURPEES", "FENTES DISK"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "FENTES DISK"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "CORDE"),
       L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE", "PLANK SLIDE"),
-      BOSS("cardio", "AR", "AR", 50),
+      BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 50),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE", "MONKEY SLIDE"),
       L("full", "Full body", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "WALL BALL SHOT", "ONE REP"),
-      L("cardio", "Cardio", "CORDE", "AR", "BOX JUMP", "BURPEES", "SQUATS JUMP"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "SQUATS JUMP"),
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR"),
       BOSS("bras", "Tractions", "TRACTIONS", 100),
       L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE", "KB SWING"),
       L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "CORDE", "BOX JUMP"),
       L("full", "Full body", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "SMASH DOWN", "TOUR DE POUTRE", "ONE REP"),
-      L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "AR"),
+      L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "ALLER-RETOUR"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
     ],
   },

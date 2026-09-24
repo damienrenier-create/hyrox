@@ -86,7 +86,7 @@ button,
 }
 
 /* WOD Level, mode zombies : sprite 4 frames en ligne (voir public/zombies/z01.png .. z10.png) */
-@keyframes zwalk { from { background-position-x: 0%; } to { background-position-x: -400%; } }
+@keyframes zwalk { from { background-position-x: 0%; } to { background-position-x: 133.3333%; } }
 .zwalk { animation: zwalk 0.8s steps(4) infinite; }
 @keyframes zbob { 0%, 100% { transform: translateY(0) scaleX(-1); } 50% { transform: translateY(-3px) scaleX(-1); } }
 .zbob { animation: zbob 0.5s ease-in-out infinite; display: inline-block; }

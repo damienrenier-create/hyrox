@@ -78,26 +78,50 @@ export function fmtTheoretical(sec: number): string {
   return r ? `${m} min ${String(r).padStart(2, "0")} s` : `${m} min`;
 }
 
-// ===== Mode zombies =====
-export const ZOMBIE_GRACE_S = 180; // le zombie met « duree estimee du niveau + 3 min » a atteindre le coeur
-// Delai (ms de chrono) entre le depart d'une tentative et le rattrapage : chaque fiche cochee eloigne le
-// coeur d'un cran (les fiches occupent la moitie droite de la piste, une fiche = 1/n de cette moitie).
-export function zombieDeadlineMs(level: FrozenLevel, done: number): number {
-  const act = activeCards(level);
-  const base = (estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss) + ZOMBIE_GRACE_S) * 1000;
-  return act.length ? base * (1 + done / act.length) : base;
+// ===== Mode zombies (regles de Sartay, 24/09) =====
+// - Le zombie atteint la premiere fiche en 1 minute (ZOMBIE_APPROACH_S), puis traverse la zone des fiches de
+//   sorte que la bande complete lui prenne « duree estimee du niveau + marge ».
+// - La marge fond avec le niveau : +3 min au niveau 1, -2 min au niveau 20 (lineaire).
+// - Une vie perdue fait redescendre la vitesse du zombie de 3 paliers (niveau de vitesse = niveau - 3 x vies).
+// - Les fiches occupent les 62 % droits de la piste (ZOMBIE_ZONE) ; le coeur est devant la premiere restante.
+export const ZOMBIE_APPROACH_S = 60;
+export const ZOMBIE_ZONE = 0.62;
+export const ZOMBIE_MARGIN_FIRST_S = 180;
+export const ZOMBIE_MARGIN_LAST_S = -120;
+export const ZOMBIE_LOSS_PENALTY = 3;
+const MIN_ZONE_S = 15;
+
+export const zombieSpeedLevel = (levelNumber: number, losses: number) => Math.max(1, levelNumber - ZOMBIE_LOSS_PENALTY * losses);
+export function zombieMarginS(speedLevel: number): number {
+  const t = Math.min(1, Math.max(0, (speedLevel - 1) / 19));
+  return ZOMBIE_MARGIN_FIRST_S + t * (ZOMBIE_MARGIN_LAST_S - ZOMBIE_MARGIN_FIRST_S);
 }
-// Position du zombie (0..1 de la piste) et du coeur pour l'ecran : la moitie gauche de la piste est
-// parcourue en « base » ms ; le coeur part au milieu et recule d'une demi-fiche par fiche cochee.
-export function zombieGeometry(level: FrozenLevel, done: number, sinceMs: number): { zombie: number; heart: number; remainingMs: number } {
+// Bande complete (ms de chrono) et approche : avec une seule fiche (BOSS), le zombie traverse tout d'un
+// mouvement uniforme ; sinon il touche la premiere fiche a 1 min, puis la zone en (bande - 1 min).
+export function zombieTimeline(level: FrozenLevel, speedLevel: number): { approachMs: number; bandMs: number; n: number } {
   const act = activeCards(level);
   const n = Math.max(1, act.length);
-  const base = zombieDeadlineMs(level, 0);
-  const heart = 0.5 + (0.5 * done) / n;
-  const zombie = Math.min(heart, base > 0 ? (0.5 * sinceMs) / base : 0);
-  return { zombie, heart, remainingMs: zombieDeadlineMs(level, done) - sinceMs };
+  const est = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss);
+  const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000;
+  return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 : 0, bandMs: band, n };
 }
-export const zombieTier = (levelNumber: number) => Math.max(1, Math.min(10, Math.ceil(levelNumber / 2)));
+// Rattrapage : instant (depuis le depart de la tentative) ou le zombie atteint le coeur, `done` fiches cochees.
+export function zombieDeadlineMs(level: FrozenLevel, done: number, speedLevel = level.number): number {
+  const { approachMs, bandMs, n } = zombieTimeline(level, speedLevel);
+  if (n <= 1) return bandMs;
+  return approachMs + (Math.min(done, n) * (bandMs - approachMs)) / n;
+}
+// Positions (0..1 de la piste) du zombie et du coeur pour l'ecran, et temps restant avant le rattrapage.
+export function zombieGeometry(level: FrozenLevel, done: number, sinceMs: number, speedLevel = level.number): { zombie: number; heart: number; remainingMs: number } {
+  const { approachMs, bandMs, n } = zombieTimeline(level, speedLevel);
+  const heart = 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * Math.min(done, n)) / n;
+  let zombie: number;
+  if (n <= 1) zombie = (sinceMs / bandMs) * (1 - ZOMBIE_ZONE);
+  else if (sinceMs <= approachMs) zombie = (sinceMs / approachMs) * (1 - ZOMBIE_ZONE);
+  else zombie = 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * (sinceMs - approachMs)) / (bandMs - approachMs);
+  return { zombie: Math.max(0, Math.min(heart, zombie)), heart, remainingMs: zombieDeadlineMs(level, done, speedLevel) - sinceMs };
+}
+export const zombieTier = (speedLevel: number) => Math.max(1, Math.min(10, Math.ceil(speedLevel / 2)));
 
 // ===== Progression d'une equipe =====
 export type Tick = { teamId: string; level: number; card: number; atMs: number };

@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { progressOf, zombieDeadlineMs, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { progressOf, zombieDeadlineMs, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -51,7 +51,7 @@ export async function applyZombieCatches(sessionId: string): Promise<number> {
       if (p.currentLevel === null) break;
       const level = levels.find((l) => l.number === p.currentLevel);
       if (!level) break;
-      const deadline = p.attemptStartMs + zombieDeadlineMs(level, p.currentDone);
+      const deadline = p.attemptStartMs + zombieDeadlineMs(level, p.currentDone, zombieSpeedLevel(level.number, p.losses));
       if (nowRace < deadline) break;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.
       const catchAbs = absoluteFromRace(startedAtMs, pauses, deadline, nowMs);
