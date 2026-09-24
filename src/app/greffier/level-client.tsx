@@ -611,8 +611,7 @@ function Heart({ state, beating }: { state: number; beating: boolean }) {
   if (ok) {
     return (
       <span className="relative block w-10 h-10">
-        <span className={cx("block w-10 h-10", beating && "heartbeat")} style={{ backgroundImage: "url(/zombies/heart.png)", backgroundSize: `${HEART_STATES * 100}% 100%`, backgroundRepeat: "no-repeat", backgroundPositionX: `${(s * 100) / (HEART_STATES - 1)}%`, filter: tarnish }} title={lost ? "Cœur zombifié : niveau perdu" : beating ? "Le zombie dévore le cœur !" : "Cœur de l'équipe"} />
-        {lost && <span className="absolute -right-2 -top-1 text-sm animate-bounce" aria-hidden>🐛</span>}
+        <span className={cx("block w-10 h-10", beating && "heartbeat")} style={{ backgroundImage: "url(/zombies/heart.png)", backgroundSize: `${HEART_STATES * 100}% 100%`, backgroundRepeat: "no-repeat", backgroundPositionX: `${(s * 100) / (HEART_STATES - 1)}%` }} title={lost ? "Cœur zombifié : niveau perdu" : beating ? "Le zombie dévore le cœur !" : "Cœur de l'équipe"} />
       </span>
     );
   }
