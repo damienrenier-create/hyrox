@@ -6,6 +6,7 @@ import {
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs, TZ } from "@/lib/scheduling";
 import { wodLabel } from "@/lib/student-sessions";
+import { isTestClass } from "@/lib/session-roles";
 
 // Records du WOD Pyramide, toutes classes et toutes seances confondues. Calcule a la demande (onglet
 // Records du greffier), jamais au rendu de la page : ce balayage lit TOUTES les seances Pyramide et n'a
@@ -173,6 +174,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
 
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
       if (!mem.length) continue; // pas de membres encodes : le record ne serait attribuable a personne
+      if (mem.some((u) => isTestClass(u!.className))) continue; // classe de test : jamais dans un palmares
       const sexes = new Set(mem.map((u) => u!.sex ?? "?"));
       const sex: TeamSex = sexes.size === 1 && sexes.has("F") ? "F" : sexes.size === 1 && sexes.has("M") ? "M" : "OPEN";
 

@@ -4,6 +4,7 @@ import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import { activeCards, fmtIntensity, fmtTheoretical, progressOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
+import { isTestClass } from "@/lib/session-roles";
 import {
   BK_WINDOW, gradeOf, periodRange, readExcludedFromRecords,
   type RecordBoard, type RecordEntry, type RecordFilters, type RecordsResult, type TeamSex,
@@ -101,6 +102,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
       if (p.reps === 0) continue;
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
       if (!mem.length) continue;
+      if (mem.some((u) => isTestClass(u!.className))) continue; // classe de test : jamais dans un palmares
       const sexes = new Set(mem.map((u) => u!.sex ?? "?"));
       const sex: TeamSex = sexes.size === 1 && sexes.has("F") ? "F" : sexes.size === 1 && sexes.has("M") ? "M" : "OPEN";
       const wodMs = p.finishedMs ?? endMs ?? p.lastTickMs ?? 0;

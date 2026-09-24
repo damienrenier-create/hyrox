@@ -2,6 +2,11 @@
 // 6 depuis le 23/09 : les groupes AC Sport de DAMZER (2Ce, 2Cf, 2Cg, 2Sb, 2Sd, 2Se) comptent six classes.
 export const MAX_CLASSES = 6;
 
+// Classes de TEST (7A : 20 eleves fictifs, PIN 1234) : elles servent a tout essayer et n'entrent JAMAIS dans
+// une statistique ou un palmares. Une classe est « test » si elle commence par 7 (il n'y a pas de 7e annee).
+export const TEST_CLASS_PREFIX = "7";
+export const isTestClass = (className: string | null | undefined): boolean => !!className && className.trim().startsWith(TEST_CLASS_PREFIX);
+
 // Motif obligatoire pour arbitrer : un eleve qui arbitre au lieu de jouer dit pourquoi.
 export const REFEREE_REASONS = ["Blessé(e)", "Abandon (DNF)", "Pas de tenue", "Sanctionné(e)", "Autre"] as const;
 export type RefereeReason = (typeof REFEREE_REASONS)[number];
