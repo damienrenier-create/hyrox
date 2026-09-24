@@ -19,10 +19,17 @@ export const WARMUP_SERIES: SeriesDef[] = [
   { name: "BOSS · Horde", boss: true, cards: [["BURPEES", 60]] },
 ];
 
-// Finisher : contenu provisoire en attendant celui de Sartay (une seule serie cardio, tous ensemble).
-export const FINISHER_SERIES: SeriesDef[] = [
-  { name: "Finisher", cards: [["CORDE", 300], ["ALLER-RETOUR", 10], ["BURPEES", 50], ["SQUATS JUMP", 100], ["POMPES", 50]] },
+// Finisher (Sartay) : EMOM en cinq vagues cadencees par le chrono. Dans une vague les fiches se decouvrent
+// une a une ; la 5e vague est un maximum de cordes en 5 min, qui fait le score final.
+export type EmomWaveDef = { minutes: number; cards: [label: string, reps: number][]; max?: string };
+export const FINISHER_EMOM: EmomWaveDef[] = [
+  { minutes: 1, cards: [["TIRE TAPIS AR", 1]] },
+  { minutes: 2, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40]] },
+  { minutes: 3, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
+  { minutes: 4, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
+  { minutes: 5, cards: [], max: "CORDE" },
 ];
+export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · MAX de ${w.max.toLowerCase()} (${w.minutes} min)` : `Vague ${i + 1} (${w.minutes} min)`, cards: w.cards }));
 
 // Ordre des niveaux par equipe : depart decale d'une serie par equipe, boucle sur les series ordinaires,
 // BOSS en dernier pour tout le monde. Les numeros de niveau sont ceux de l'echelle figee (1..n).

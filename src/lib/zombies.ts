@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { cardsForTeam, orderedLevels, progressOf, readFixedZombie, readLevelOrder, readPenalties, zombieDeadlineMs, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { attemptEvents, cardsForTeam, orderedLevels, progressOf, readFixedZombie, readLevelOrder, readPenalties, zombieSim, zombieSpeedLevel, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -73,9 +73,11 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
       if (p.currentLevel === null) break;
       const level = levels.find((l) => l.number === p.currentLevel);
       if (!level) break;
-      // Rattrape = arrive au coeur ET coeur mange en entier (3 bouchees).
-      const deadline = p.attemptStartMs + zombieDeadlineMs(level, p.currentFrac, fixed ?? zombieSpeedLevel(level.number, p.losses), cardsForTeam(level, t.id, penalties).length);
-      if (nowRace < deadline) break;
+      // Rattrape = coeur mange en entier (3 bouchees), bouchees conservees entre deux fiches (simulation).
+      const cards = cardsForTeam(level, t.id, penalties);
+      const sim = zombieSim(level, p.currentTotalSec, attemptEvents(level, t.id, ticks, p.attemptStartMs, penalties), nowRace - p.attemptStartMs, fixed ?? zombieSpeedLevel(level.number, p.losses), cards.length);
+      if (sim.catchAtMs === null) break;
+      const deadline = p.attemptStartMs + sim.catchAtMs;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.
       const catchAbs = absoluteFromRace(startedAtMs, pauses, deadline, nowMs);
       await db.orm.public.LevelLoss.create({ sessionId, teamId: t.id, level: p.currentLevel, at: Temporal.Instant.fromEpochMilliseconds(Math.round(catchAbs)) });

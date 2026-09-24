@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { orderedLevels, progressOf, rankTeams, readFixedZombie, readLevelOrder, readPenalties, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { orderedLevels, progressOf, rankTeams, readEmom, readEmomScores, readFixedZombie, readLevelOrder, readPenalties, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -32,6 +32,8 @@ export type LevelBundle = {
   zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale
   child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
   penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
+  emom: EmomSettings | null; // finisher : vagues cadencees
+  emomScores: Record<string, number>;
 };
 
 export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
@@ -132,6 +134,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     zombieSpeed: readFixedZombie(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
     penalties: readPenalties(session.settings),
+    emom: readEmom(session.settings),
+    emomScores: readEmomScores(session.settings),
   };
 }
 

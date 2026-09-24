@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, cardsForTeam, isBoss, orderedLevels, progressOf, readFrozenLevels, readLevelOrder, readPenalties, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, type FrozenLevel, type Loss, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, orderedLevels, progressOf, readEmom, readEmomScores, readFrozenLevels, readLevelOrder, readPenalties, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, type FrozenLevel, type Loss, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
@@ -34,8 +34,9 @@ export type LevelLive = {
   structure: string;
   at: number; // heure serveur de la lecture : l'ecran n'applique jamais un etat plus ancien qu'un deja applique
   penalties: TeamPenalty[];
+  emomScores: Record<string, number>;
 };
-export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; at: number };
+export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; score: number | null; at: number };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
 
 async function raceClock(sessionId: string) {
@@ -61,6 +62,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
     teamId,
     at,
     penalties: readPenalties(settings).filter((p) => p.teamId === teamId),
+    score: readEmomScores(settings)[teamId] ?? null,
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
     yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
@@ -99,7 +101,22 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     structure,
     at,
     penalties: readPenalties(ctx.session.settings),
+    emomScores: readEmomScores(ctx.session.settings),
   };
+}
+
+// Finisher EMOM : score de la vague « max » (reps), saisi par le greffier, modifiable jusqu'a la fin du WOD.
+export async function setEmomScoreAction(sessionId: string, teamId: string, reps: number): Promise<TeamRes> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (!readEmom(session.settings)) return { error: "Cette séance n'est pas un EMOM." };
+  if (!Number.isInteger(reps) || reps < 0 || reps > 5000) return { error: "Nombre de reps invalide." };
+  const { rs, startedAtMs, pauses } = await raceClock(sessionId);
+  if (!rs?.startedAt) return { error: "Lance d'abord la course." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const scores = { ...readEmomScores(session.settings), [teamId]: reps };
+  const settings = JSON.parse(JSON.stringify({ ...prev, emomScores: scores }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings });
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, startedAtMs, pauses, rs.id, settings) };
 }
 
 async function requireLevelStaff(sessionId: string) {
@@ -258,10 +275,22 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   const ticks = caught ? await db.orm.public.LevelTick.where({ sessionId, teamId }).all() : (ctx?.ticks ?? []);
   const done = new Set(ticks.map((t) => `${t.level}_${t.card}`));
   let refused: string | null = null;
-  // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
-  for (const prev of orderedLevels(levels, readLevelOrder(session.settings)?.[teamId])) {
-    if (prev.number === level) break;
-    if (cardsForTeam(prev, teamId, penalties).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
+  const emom = readEmom(session.settings);
+  if (emom) {
+    // EMOM : seule la vague EN COURS (chrono) accepte des coches, et seulement sa prochaine fiche.
+    const wave = emomWaveAt(emom.waveMinutes, elapsed(gate.startedAtMs, gate.pauses, Date.now()) ?? 0);
+    if (!wave) refused = "L'EMOM est terminé.";
+    else if (wave.wave !== level) refused = `On est dans la vague ${wave.wave}, pas la ${level}.`;
+    else {
+      const next = emomNextCard(l, teamId, ticks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: 0 })));
+      if (next && next.index !== card) refused = "Les fiches se cochent dans l'ordre.";
+    }
+  } else {
+    // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
+    for (const prev of orderedLevels(levels, readLevelOrder(session.settings)?.[teamId])) {
+      if (prev.number === level) break;
+      if (cardsForTeam(prev, teamId, penalties).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
+    }
   }
   if (refused && !caught) return { error: refused };
   if (!refused && !done.has(`${level}_${card}`)) {

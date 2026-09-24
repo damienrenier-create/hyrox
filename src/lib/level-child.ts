@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { listExercises, seedDefaultExercises } from "@/lib/level";
 import { readSessionClasses } from "@/lib/session-roles";
 import { readChild } from "@/lib/level-context";
-import { FINISHER_SERIES, WARMUP_SERIES, childLabel, staggeredOrder, type ChildKind } from "@/lib/level-warmup";
+import { FINISHER_EMOM, FINISHER_SERIES, WARMUP_SERIES, childLabel, staggeredOrder, type ChildKind } from "@/lib/level-warmup";
 import { isBoss, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
@@ -55,7 +55,7 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
       levels,
       ...(order ? { levelOrder: order } : {}),
       ...(kind === "warmup" ? { zombieSpeed: 1 } : {}),
-      zombies: true,
+      ...(kind === "finisher" ? { emom: { waveMinutes: FINISHER_EMOM.map((w) => w.minutes) }, zombies: false } : { zombies: true }),
       child: { kind, parentId },
     })),
   });

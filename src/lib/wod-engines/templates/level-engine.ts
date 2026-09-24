@@ -172,6 +172,73 @@ export function zombieArrivalMs(level: FrozenLevel, frac: number, speedLevel = l
 export function zombieDeadlineMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length): number {
   return zombieArrivalMs(level, frac, speedLevel, n) + zombieEatMs(speedLevel);
 }
+// Simulation d'une tentative (regle de Sartay : le coeur RESTE croque). Le zombie marche vers le coeur ; au
+// contact il mange ; si une fiche cochee eloigne le coeur, il repart marcher et reprend le repas ou il en
+// etait. Chute quand le temps de repas cumule atteint zombieEatMs. Deterministe a partir des coches.
+export type ZombieSim = {
+  zombie: number; // position 0..1
+  heart: number;
+  contact: boolean;
+  bites: number; // morceaux manges (0..3)
+  eatenMs: number; // temps de repas cumule
+  eatMs: number; // repas complet
+  catchAtMs: number | null; // instant (depuis le depart de la tentative) de la chute, s'il est deja passe ou fixe
+  remainingMs: number; // avant la chute si le coeur n'est plus eloigne (marche restante + repas restant)
+};
+export function zombieSim(
+  level: FrozenLevel,
+  cardsTotalSec: number,
+  tickEvents: { atMs: number; sec: number }[], // fiches cochees de la tentative (ms depuis son depart, duree de la fiche)
+  sinceMs: number,
+  speedLevel = level.number,
+  n = activeCards(level).length
+): ZombieSim {
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+  const eatMs = zombieEatMs(speedLevel);
+  const total = Math.max(1, cardsTotalSec);
+  const arrivalFor = (frac: number) => (n <= 1 ? bandMs : approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs));
+  const posFor = (walked: number) => {
+    if (n <= 1) return (walked / bandMs) * (1 - ZOMBIE_ZONE);
+    if (walked <= approachMs) return (walked / approachMs) * (1 - ZOMBIE_ZONE);
+    return 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * (walked - approachMs)) / (bandMs - approachMs);
+  };
+  const events = [...tickEvents].filter((e) => e.atMs >= 0).sort((a, b) => a.atMs - b.atMs);
+  let walked = 0, eaten = 0, t = 0, doneSec = 0, catchAt: number | null = null;
+  const advance = (until: number) => {
+    // De t a until, avec le coeur a la fraction courante : marche puis repas.
+    const target = arrivalFor(doneSec / total);
+    let dt = Math.max(0, until - t);
+    if (walked < target) { const w = Math.min(dt, target - walked); walked += w; dt -= w; }
+    if (dt > 0 && catchAt === null) {
+      const need = eatMs - eaten;
+      if (dt >= need) { catchAt = until - (dt - need); eaten = eatMs; }
+      else eaten += dt;
+    }
+    t = until;
+  };
+  for (const e of events) {
+    if (e.atMs > sinceMs) break;
+    advance(e.atMs);
+    if (catchAt !== null) break;
+    doneSec += e.sec;
+  }
+  if (catchAt === null) advance(sinceMs);
+  const frac = doneSec / total;
+  const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * Math.min(1, Math.max(0, frac));
+  const target = arrivalFor(frac);
+  const contact = catchAt === null && walked >= target - 1e-6;
+  const bites = Math.min(HEART_BITES, Math.floor((eaten / eatMs) * HEART_BITES));
+  const remainingMs = catchAt !== null ? 0 : Math.max(0, target - walked) + (eatMs - eaten);
+  return { zombie: Math.max(0, Math.min(heart, posFor(walked))), heart, contact, bites, eatenMs: eaten, eatMs, catchAtMs: catchAt, remainingMs };
+}
+// Evenements de coche d'une tentative pour la simulation : fiches du niveau en cours cochees depuis le depart.
+export function attemptEvents(level: FrozenLevel, teamId: string, ticks: Tick[], attemptStartMs: number, penalties: TeamPenalty[] = []): { atMs: number; sec: number }[] {
+  const secOf = new Map(cardsForTeam(level, teamId, penalties).map((x) => [x.index, cardSeconds(x.card)]));
+  return ticks
+    .filter((t) => t.teamId === teamId && t.level === level.number && t.atMs >= attemptStartMs && secOf.has(t.card))
+    .map((t) => ({ atMs: t.atMs - attemptStartMs, sec: secOf.get(t.card)! }));
+}
+
 export type ZombieGeometry = { zombie: number; heart: number; remainingMs: number; contact: boolean; bites: number; eatMs: number };
 // Positions (0..1 de la piste) du zombie et du coeur pour l'ecran, contact, morceaux manges, temps restant.
 export function zombieGeometry(level: FrozenLevel, frac: number, sinceMs: number, speedLevel = level.number, n = activeCards(level).length): ZombieGeometry {
@@ -288,6 +355,59 @@ export function rankTeams(progress: TeamProgress[]): TeamProgress[] {
       b.currentDone - a.currentDone ||
       (a.lastTickMs ?? Number.POSITIVE_INFINITY) - (b.lastTickMs ?? Number.POSITIVE_INFINITY)
   );
+}
+
+// ===== EMOM (finisher, Sartay 24/09) =====
+// Vagues cadencees par le chrono : la vague k dure waveMinutes[k] minutes et commence quand la precedente se
+// termine, que l'equipe ait fini ou non. Dans une vague les fiches se decouvrent UNE A UNE (la suivante
+// apparait quand la precedente est cochee). La derniere vague est un « maximum de reps » saisi par le
+// greffier : c'est le score final. Les coches restent des LevelTick (niveau = vague).
+export type EmomSettings = { waveMinutes: number[] };
+export function readEmom(settings: unknown): EmomSettings | null {
+  const raw = (settings as { emom?: { waveMinutes?: unknown } } | null)?.emom;
+  if (!raw || !Array.isArray(raw.waveMinutes)) return null;
+  const waveMinutes = raw.waveMinutes.filter((n): n is number => typeof n === "number" && n > 0);
+  return waveMinutes.length ? { waveMinutes } : null;
+}
+export function readEmomScores(settings: unknown): Record<string, number> {
+  const raw = (settings as { emomScores?: unknown } | null)?.emomScores;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === "number" && v >= 0) out[k] = v;
+  return out;
+}
+export type EmomWave = { wave: number; startMs: number; endMs: number };
+export function emomSchedule(waveMinutes: number[]): EmomWave[] {
+  let t = 0;
+  return waveMinutes.map((m, i) => { const w = { wave: i + 1, startMs: t, endMs: t + m * 60_000 }; t += m * 60_000; return w; });
+}
+export const emomTotalMs = (waveMinutes: number[]) => waveMinutes.reduce((s, m) => s + m * 60_000, 0);
+// Vague en cours a un instant du chrono ; null = EMOM termine.
+export function emomWaveAt(waveMinutes: number[], raceMs: number): EmomWave | null {
+  return emomSchedule(waveMinutes).find((w) => raceMs >= w.startMs && raceMs < w.endMs) ?? null;
+}
+export type EmomTeam = {
+  teamId: string;
+  wavesDone: number; // vagues entierement bouclees (hors vague « max »)
+  doneByWave: number[]; // fiches cochees par vague
+  score: number | null; // reps de la vague « max »
+  lastTickMs: number | null;
+};
+export function emomProgress(levels: FrozenLevel[], teamId: string, ticks: Tick[], scores: Record<string, number>): EmomTeam {
+  const mine = ticks.filter((t) => t.teamId === teamId);
+  const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
+  const doneByWave = levels.map((l) => activeCards(l).filter(({ index }) => done.has(`${l.number}_${index}`)).length);
+  const wavesDone = levels.filter((l, i) => activeCards(l).length > 0 && doneByWave[i] === activeCards(l).length).length;
+  return { teamId, wavesDone, doneByWave, score: scores[teamId] ?? null, lastTickMs: mine.length ? Math.max(...mine.map((t) => t.atMs)) : null };
+}
+// Prochaine fiche a decouvrir dans une vague (null = vague bouclee ou sans fiche).
+export function emomNextCard(level: FrozenLevel, teamId: string, ticks: Tick[]): { card: FrozenCard; index: number } | null {
+  const done = new Set(ticks.filter((t) => t.teamId === teamId && t.level === level.number).map((t) => t.card));
+  return activeCards(level).find(({ index }) => !done.has(index)) ?? null;
+}
+// Classement du finisher : score (max de reps) puis vagues bouclees, puis la derniere coche la plus tot.
+export function emomRank(list: EmomTeam[]): EmomTeam[] {
+  return [...list].sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.wavesDone - a.wavesDone || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity));
 }
 
 // Libelle court d'un niveau pour les tuiles et les classements.
