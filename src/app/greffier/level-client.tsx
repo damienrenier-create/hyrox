@@ -8,7 +8,7 @@ import {
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
-import { endLevelAction, levelPauseAction, levelPulseAction, levelYellowCardAction, startLevelAction, tickCardAction, untickCardAction } from "./level-actions";
+import { endLevelAction, levelPauseAction, levelPulseAction, levelYellowCardAction, setLevelCapAction, startLevelAction, tickCardAction, untickCardAction } from "./level-actions";
 import { usePulse } from "../_components/usePulse";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
@@ -69,6 +69,18 @@ export function LevelClient({
     if (phase === "pre") return 0;
     return elapsed(startedAtMs, pauses, phase === "post" ? endedAtMs! : now) ?? 0;
   }, [phase, startedAtMs, endedAtMs, pauses, now]);
+  // Temps impose : compte a rebours, rouge dans les 10 dernieres minutes, « temps ecoule » au bout.
+  const capMs = bundle.capMin !== null ? bundle.capMin * 60_000 : null;
+  const restMs = capMs !== null ? capMs - liveMs : null;
+  const timeUp = phase === "run" && restMs !== null && restMs <= 0;
+  const redZone = phase === "run" && restMs !== null && restMs > 0 && restMs <= 10 * 60_000;
+  function handleCap() {
+    const v = prompt("Temps imposé en minutes de chrono (vide = temps libre) :", bundle.capMin !== null ? String(bundle.capMin) : "");
+    if (v === null) return;
+    const n = v.trim() === "" ? null : Number(v.replace(",", "."));
+    if (n !== null && !Number.isFinite(n)) { setError("Nombre de minutes invalide."); return; }
+    run(() => setLevelCapAction(sessionId, n));
+  }
 
   // Coches effectives = base + optimistes (ajouts et retraits en attente).
   const ticks: Tick[] = useMemo(() => {
@@ -155,7 +167,7 @@ export function LevelClient({
   }
 
   const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
-  const canTick = phase === "run" && !isPaused;
+  const canTick = phase === "run" && !isPaused && !timeUp;
 
   return (
     <div className={`${ui.page} pb-28`}>
@@ -178,9 +190,15 @@ export function LevelClient({
               <SessionStep to={newerSession} dir="newer" />
             </div>
           </div>
-          <p className={cx("font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums text-center", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : "text-ink")}>{fmt(liveMs) || "0:00"}</p>
+          <div className="text-center">
+            <p className={cx("font-display text-[3.4rem] font-extrabold leading-none tracking-tight tabular-nums", phase === "pre" ? "text-line-2" : isPaused ? "text-accent" : timeUp || redZone ? "text-danger" : "text-ink")}>{fmt(liveMs) || "0:00"}</p>
+            {restMs !== null && phase !== "pre" && (
+              <p className={cx("text-sm font-bold tabular-nums", timeUp ? "text-danger" : redZone ? "text-danger" : "text-ink-2")}>{timeUp ? "⏱ TEMPS ÉCOULÉ" : `reste ${fmt(Math.max(0, restMs))}`}</p>
+            )}
+          </div>
           <div className="text-right">
-            <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : "WOD en cours"}</p>
+            <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : timeUp ? "Temps écoulé — déclare la fin du WOD" : "WOD en cours"}</p>
+            <button type="button" onClick={handleCap} disabled={pending || phase === "post"} className={ui.hint + " underline"} title="Temps imposé (minutes de chrono), vide = libre">⏱ {bundle.capMin !== null ? `temps imposé : ${bundle.capMin} min` : "temps libre"}</button>
             <p className={ui.hint}>Échelle : {levels.length} niveau{levels.length > 1 ? "x" : ""}{bundle.frozen ? " · figée" : " · vive (figée au départ)"}</p>
           </div>
         </div>
@@ -429,7 +447,7 @@ function LadderPreview({ levels }: { levels: FrozenLevel[] }) {
   return (
     <div className="space-y-2">
       <p className={`${ui.cardPad} ${ui.muted}`}>
-        Échelle commune de l&apos;atelier, figée dans la séance au coup d&apos;envoi. Pour la modifier avant le départ : <a href="/admin/level" className="underline font-bold">atelier Level</a>. Une fois lancée, elle se retouche ici, pour cette séance seulement.
+        Échelle commune de l&apos;atelier, figée dans la séance au coup d&apos;envoi. Pour la modifier avant le départ : <a href="/admin/level" className="underline font-bold">atelier Level</a>. Une fois lancée, elle se retouche ici, pour cette séance seulement. <a href="/admin/level/fiches" target="_blank" className="underline font-bold">🖨️ Imprimer les fiches</a>.
       </p>
       {levels.length === 0 && <p className={ui.alertWarn}>Aucun niveau : l&apos;atelier Level est vide.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">

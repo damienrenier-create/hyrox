@@ -54,6 +54,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
           Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {DEFAULT_TEAM} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
         </span>
         {pending && <span className={ui.hint}>Enregistrement…</span>}
+        <a href="/admin/level/fiches" target="_blank" className={btn.smGhost} title="Fiches à imprimer et découper (3 × 4 par page A4)">🖨️ Fiches</a>
       </div>
 
       {msg && <p className={msg.kind === "ok" ? ui.alertOk : ui.alertErr}>{msg.text}</p>}

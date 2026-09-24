@@ -53,6 +53,7 @@ export function LevelLadderEditor({ sessionId, levels, catalog, ticks, onSaved }
           <b className="text-ink">Échelle de cette séance</b>
           <p className={ui.hint}>Figée au coup d&apos;envoi. Tu peux corriger les reps, changer un exercice, ajouter une fiche, retirer une fiche (elle reste dans l&apos;historique) ou ajouter un niveau. L&apos;échelle commune de l&apos;atelier ne bouge pas.</p>
         </div>
+        <a href={`/admin/level/fiches?session=${sessionId}`} target="_blank" className={btn.ghost}>🖨️ Fiches</a>
         <button type="button" onClick={save} disabled={!dirty || pending} className={dirty ? btn.primary : btn.soft}>
           {pending ? "Enregistrement…" : dirty ? "Enregistrer" : "Enregistré"}
         </button>

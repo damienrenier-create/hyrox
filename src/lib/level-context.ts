@@ -23,7 +23,13 @@ export type LevelBundle = {
   pauses: { from: number; to: number | null }[];
   catalog: { id: string; label: string; weight: number; active: boolean }[];
   evaluations: LevelEval[]; // demineur : une par case jouee (eleve x exercice)
+  capMin: number | null; // temps impose (minutes de chrono), null = libre
 };
+
+export function readLevelCap(settings: unknown): number | null {
+  const v = (settings as { levelCapMin?: unknown } | null)?.levelCapMin;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : null;
+}
 
 export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> {
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
@@ -98,6 +104,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     pauses,
     catalog: catalog.map((e) => ({ id: e.id, label: e.label, weight: e.weight, active: e.active })),
     evaluations,
+    capMin: readLevelCap(session.settings),
   };
 }
 

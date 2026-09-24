@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { activeCards, isBoss, readFrozenLevels, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { readLevelCap } from "@/lib/level-context";
+import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 
 // Actions du WOD Level. Profs, coachs ET greffier cochent (les BOSS se valident a plusieurs sur la meme
 // seance) ; l'unicite en base rend le double-tap et deux appareils sur la meme fiche inoffensifs.
@@ -44,7 +46,7 @@ export async function levelPulseAction(sessionId: string): Promise<string> {
     rs ? count(() => db.orm.public.RacePause.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
   ]);
   const version = JSON.stringify((session?.settings as { levels?: unknown } | null)?.levels ?? "").length;
-  return `${ticks}|${cards}|${members}|${teams.length}|${pauses}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${version}`;
+  return `${ticks}|${cards}|${members}|${teams.length}|${pauses}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${version}|${readLevelCap(session?.settings) ?? 0}`;
 }
 
 // Coup d'envoi : l'echelle est FIGEE dans la seance (copie des fiches avec libelle et ponderation), puis le
@@ -96,9 +98,25 @@ async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: 
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs || !rs.startedAt) return { error: "Lance d'abord la course." };
   if (rs.endedAt) return { error: "La course est terminée." };
-  const paused = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).some((p) => p.to === null);
-  if (paused) return { error: "Chrono en pause : reprends la course avant de cocher." };
+  const pauses = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: new Date(String(p.from)).getTime(), to: p.to ? new Date(String(p.to)).getTime() : null }));
+  if (pauses.some((p) => p.to === null)) return { error: "Chrono en pause : reprends la course avant de cocher." };
+  // Temps impose : une fois le chrono au bout, plus aucune coche ni carte (le greffier declare la fin du WOD).
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  const cap = readLevelCap(session?.settings);
+  if (cap !== null && (elapsed(new Date(String(rs.startedAt)).getTime(), pauses, Date.now()) ?? 0) >= cap * 60_000) return { error: "Temps écoulé : déclare la fin du WOD." };
   return { rsId: rs.id };
+}
+
+// Temps impose (minutes de chrono), modifiable avant ou pendant le WOD ; null = temps libre.
+export async function setLevelCapAction(sessionId: string, minutes: number | null): Promise<Res> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (minutes !== null && (!Number.isFinite(minutes) || minutes < 1 || minutes > 180)) return { error: "Entre 1 et 180 minutes, ou vide pour un temps libre." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const settings = { ...prev };
+  if (minutes === null) delete settings.levelCapMin;
+  else settings.levelCapMin = Math.round(minutes);
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(settings)) });
+  return { ok: true };
 }
 
 // Cocher une fiche : uniquement une fiche en jeu du niveau EN COURS de l'equipe (pas d'avance sur les niveaux
