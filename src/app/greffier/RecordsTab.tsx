@@ -109,6 +109,7 @@ export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
                         {r.classes || "sans classe"} · {r.sessionLabel} · {day(r.dateMs)}
                       </span>
                     </span>
+                    {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
                     <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{r.display}</span>
                     {isMaster && (
                       <button
@@ -142,7 +143,7 @@ export function RecordsTab({ isMaster = false }: { isMaster?: boolean }) {
               <li key={e.key} className={`${ui.inset} px-3 py-1.5 flex flex-wrap items-center gap-2 text-xs`}>
                 <span className="min-w-0 flex-1">
                   <b className="text-ink">{e.members.join(", ") || e.teamName}</b>
-                  <span className="text-ink-3"> · {e.teamName} · {e.classes || "sans classe"} · {e.sessionLabel} · {day(e.dateMs)} · {e.display}</span>
+                  <span className="text-ink-3"> · {e.teamName} · {e.classes || "sans classe"} · {e.sessionLabel} · {day(e.dateMs)} · {e.display}{e.bk ? " · BK" : ""}</span>
                 </span>
                 {isMaster && (
                   <button type="button" onClick={() => restore(e)} disabled={pending} className={btn.smGhost}>

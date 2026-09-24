@@ -149,6 +149,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Greffier</Link>
+                      {/* Un deuxieme prof arbitre pendant que le premier tient le greffier : chacun son ecran. */}
+                      {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>🏴‍☠️ Arbitrer</Link>}
                       {s.refereeMode && (
                         <form action={runGenerateGhostFleets.bind(null, s.id)}>
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>

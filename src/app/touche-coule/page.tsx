@@ -72,7 +72,13 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
   // Profs, coachs et greffier n'ont jamais a re-placer huit bateaux : leur flotte est reprise de la derniere
   // seance du meme type de WOD, sinon tiree au hasard, puis verrouillee automatiquement (src/lib/fleet-autopilot.ts).
   // Les eleves gardent l'ecran de placement (le rituel fait partie du jeu), avec reprise et tirage au sort en un tap.
-  if (evaluator.role !== "STUDENT") await ensureFleet(session.id, evaluator.id);
+  if (evaluator.role !== "STUDENT") {
+    try {
+      await ensureFleet(session.id, evaluator.id);
+    } catch (e) {
+      console.error("ensureFleet a échoué, écran de placement manuel :", e);
+    }
+  }
 
   const fleet = await db.orm.public.RefereeFleet.where({
     sessionId: session.id,

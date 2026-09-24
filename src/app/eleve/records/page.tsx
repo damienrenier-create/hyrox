@@ -58,7 +58,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
               ))}
             </div>
           )}
-          <p className={ui.hint}>{data.teamsScanned} équipe(s) sur {data.sessionsScanned} séance(s). Le palmarès change à chaque WOD : à toi de jouer.</p>
+          <p className={ui.hint}>{data.teamsScanned} équipe(s) sur {data.sessionsScanned} séance(s). Le palmarès change à chaque WOD : à toi de jouer. <b>BK</b> = une pause du chrono est tombée en plein WOD.</p>
         </div>
 
         {data.teamsScanned === 0 ? (
@@ -89,6 +89,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
                             <span className="block font-bold text-ink truncate">{r.members.join(", ") || r.teamName}</span>
                             <span className="block text-ink-3 text-[10px] truncate">{r.classes || "sans classe"} · {day(r.dateMs)}</span>
                           </span>
+                          {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
                           <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{r.display}</span>
                         </li>
                       );

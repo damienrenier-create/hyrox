@@ -827,6 +827,7 @@ export function GreffierClient({
                 {canCorrect && <button onClick={() => setFixOpen(true)} disabled={pending} className={btn.lgGhost}>Annuler un tour…</button>}
               </>
             )}
+            {board && <a href={`/touche-coule?session=${sessionId}`} className={btn.lgGhost} title="Arbitrer cette séance (Touché-Coulé) sans quitter le greffier à quelqu'un d'autre">🏴‍☠️ Arbitrer</a>}
             <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
           </div>
         </div>

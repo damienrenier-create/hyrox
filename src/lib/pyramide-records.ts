@@ -24,8 +24,13 @@ export type RecordEntry = {
   classes: string;
   sessionLabel: string;
   dateMs: number;
+  // BK (break) : une pause du chronometre est tombee entre 20 et 80 % du WOD de cette equipe. Le temps de
+  // course, lui, ne compte pas la pause ; mais l'equipe a souffle en plein effort, et le record le dit.
+  bk: boolean;
   display: string;
 };
+
+export const BK_WINDOW: [number, number] = [0.2, 0.8];
 
 export type RecordBoard = { id: string; title: string; hint: string; rows: RecordEntry[] };
 // « annee » = le degre scolaire (1re a 6e), lu sur le premier chiffre du nom de classe (« 5GTb » -> 5).
@@ -112,6 +117,8 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
 
     const startedAtMs = toMs(rs.startedAt);
     const pauses = (pausesBy.get(rs.id) ?? []).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
+    // Instant (sur le chronometre de course) ou chaque pause a commence.
+    const pauseMarks = pauses.map((p) => elapsed(startedAtMs, pauses, p.from) ?? 0);
     const teams = (teamsBy.get(s.id) ?? []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const startOverride = new Map<string, string>();
     const endOverride = new Map<string, string | "NONE">();
@@ -156,10 +163,14 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
       const times = ctx.laps.filter((l) => l.teamId === t.id).map((l) => l.at).sort((a, b) => a - b);
       const durations = times.map((at, i) => at - (i === 0 ? 0 : times[i - 1]));
 
+      const finishMs = finishAt(ctx, t.id);
+      const wodMs = finishMs ?? tl.end;
+      const bk = wodMs > 0 && pauseMarks.some((m) => m >= BK_WINDOW[0] * wodMs && m <= BK_WINDOW[1] * wodMs);
       const base = {
         key: `${s.id}_${t.id}`,
         sessionId: s.id,
         teamId: t.id,
+        bk,
         teamName: t.name,
         members: mem.map((u) => `${u!.firstName ?? ""}`.trim()).filter(Boolean),
         sex,
@@ -180,7 +191,7 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
         })(),
         medals1: (ord[t.id] ?? []).filter((m) => m && m.pos === 1).length,
         cards: cardsOf(ctx, t.id),
-        finishMs: finishAt(ctx, t.id),
+        finishMs,
         scoreMs: scores.get(t.id)?.totalMs ?? Number.POSITIVE_INFINITY,
         fastestLapMs: durations.length ? Math.min(...durations) : null,
         firstLapMs: durations[0] ?? null,
