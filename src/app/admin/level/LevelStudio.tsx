@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ExerciseRow, LevelRow } from "@/lib/level";
 import {
-  BOSS_EVERY, MAX_CARDS, fmtIntensity, fmtTheoretical, isBoss, statsOf, type LevelCard,
+  BOSS_EVERY, DEFAULT_TEAM, MAX_CARDS, estimateSeconds, fmtIntensity, fmtTheoretical, isBoss, statsOf, type LevelCard,
 } from "@/lib/wod-engines/templates/level-engine";
+import { PROPOSALS } from "@/lib/level-proposals";
 import {
   createExerciseAction, createLevelAction, deleteExerciseAction, deleteLevelAction, moveLevelAction,
   saveLevelAction, seedExercisesAction, updateExerciseAction,
@@ -20,6 +21,7 @@ const fmtW = (w: number) => String(w).replace(".", ",");
 // les 5 niveaux, un seul exercice). Chaque niveau se modifie en local puis s'enregistre d'un coup.
 export function LevelStudio({ exercises, levels, isMaster }: { exercises: ExerciseRow[]; levels: LevelRow[]; isMaster: boolean }) {
   const [tab, setTab] = useState<"levels" | "catalog">(levels.length || exercises.length ? "levels" : "catalog");
+  const [proposal, setProposal] = useState("E");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const weightOf = useMemo(() => new Map(exercises.map((e) => [e.id, e.weight])), [exercises]);
@@ -33,7 +35,8 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
 
   const totals = useMemo(() => {
     const all = levels.flatMap((l) => l.cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })));
-    return statsOf(all);
+    const seconds = levels.reduce((s, l) => s + estimateSeconds(l.cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), isBoss(l.number)), 0);
+    return { ...statsOf(all), seconds };
   }, [levels, weightOf]);
 
   return (
@@ -48,7 +51,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
           </button>
         </div>
         <span className={ui.hint}>
-          Échelle complète : {totals.reps} reps · temps théorique {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · BOSS tous les {BOSS_EVERY} niveaux
+          Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {DEFAULT_TEAM} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
         </span>
         {pending && <span className={ui.hint}>Enregistrement…</span>}
       </div>
@@ -65,19 +68,22 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
           {levels.length === 0 && (
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
               <div className="flex-1 min-w-[240px]">
-                <b className="text-ink">Partir de la proposition de 20 niveaux</b>
-                <p className={ui.hint}>Équipes de 5, difficulté croissante, identités cardio / jambes / bras / tronc / full body qui tournent entre les BOSS. Tout reste modifiable ensuite.</p>
+                <b className="text-ink">Partir d'une proposition de 20 niveaux</b>
+                <p className={ui.hint}>Équipes de 5, difficulté croissante, BOSS aux niveaux 5, 10, 15 et 20. Tout reste modifiable ensuite.</p>
               </div>
+              <select value={proposal} onChange={(e) => setProposal(e.target.value)} className={`${ui.input} max-w-[260px]`}>
+                {PROPOSALS.map((p) => <option key={p.key} value={p.key}>{p.key} · {p.title}</option>)}
+              </select>
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run("Proposition chargée : 20 niveaux.", async () => {
-                  const r = await loadProposalAction();
+                onClick={() => run(`Proposition ${proposal} chargée : 20 niveaux.`, async () => {
+                  const r = await loadProposalAction(proposal);
                   return "error" in r ? r : { ok: true };
                 })}
                 className={btn.accent}
               >
-                Charger les 20 niveaux
+                Charger
               </button>
             </div>
           )}
@@ -104,21 +110,26 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
               + Ajouter le niveau {levels.length + 1}{isBoss(levels.length + 1) ? " (BOSS)" : ""}
             </button>
             {isMaster && levels.length > 0 && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  confirm("Remplacer TOUTE l'échelle par la proposition de 20 niveaux ? Les niveaux actuels sont perdus (les séances déjà lancées gardent leur copie).") &&
-                  run("Échelle remplacée par la proposition (20 niveaux).", async () => {
-                    const r = await loadProposalAction(true);
-                    return "error" in r ? r : { ok: true };
-                  })
-                }
-                className={btn.smDanger}
-                title="Repart de la proposition de 20 niveaux"
-              >
-                Remplacer par la proposition
-              </button>
+              <>
+                <select value={proposal} onChange={(e) => setProposal(e.target.value)} className={`${ui.input} max-w-[240px]`}>
+                  {PROPOSALS.map((p) => <option key={p.key} value={p.key}>{p.key} · {p.title}</option>)}
+                </select>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    confirm(`Remplacer TOUTE l'échelle par la proposition ${proposal} ? Les niveaux actuels sont perdus (les séances déjà lancées gardent leur copie).`) &&
+                    run(`Échelle remplacée par la proposition ${proposal}.`, async () => {
+                      const r = await loadProposalAction(proposal, true);
+                      return "error" in r ? r : { ok: true };
+                    })
+                  }
+                  className={btn.smDanger}
+                  title="Repart d'une proposition de 20 niveaux"
+                >
+                  Remplacer par la proposition
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -251,6 +262,7 @@ function LevelEditor({ level, exercises, labelOf, weightOf, isFirst, isLast, isM
   }, [level, dirty]);
 
   const stats = statsOf(cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })));
+  const estimate = estimateSeconds(cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), boss);
   const options = exercises.filter((e) => e.active || cards.some((c) => c.exerciseId === e.id));
   const maxCards = boss ? 1 : MAX_CARDS;
   const edit = (i: number, patch: Partial<LevelCard>) => { setDirty(true); setCards((cs) => cs.map((c, k) => (k === i ? { ...c, ...patch } : c))); };
@@ -275,7 +287,7 @@ function LevelEditor({ level, exercises, labelOf, weightOf, isFirst, isLast, isM
         {boss && <span className={cx(ui.chip, ui.chipErr)}>BOSS</span>}
         <input value={name} onChange={(e) => { setDirty(true); setName(e.target.value); }} placeholder={boss ? "Nom du boss (facultatif)" : "Nom (facultatif)"} className={`${ui.input} max-w-[220px]`} maxLength={40} />
         <span className={`${ui.hint} ml-auto tabular-nums`}>
-          {cards.length} fiche{cards.length > 1 ? "s" : ""} · {stats.reps} reps · {fmtTheoretical(stats.weighted)} · intensité <b className="text-ink">{fmtIntensity(stats.intensity)}</b>
+          {cards.length} fiche{cards.length > 1 ? "s" : ""} · {stats.reps} reps · travail {fmtTheoretical(stats.weighted)} · intensité <b className="text-ink">{fmtIntensity(stats.intensity)}</b> · <b className="text-ink" title={boss ? "BOSS : toute l'équipe en même temps, travail ÷ 5" : "Les membres travaillent en parallèle : le niveau dure sa fiche la plus longue (ou le travail ÷ 5 s'il y a plus de fiches que de bras)"}>≈ {fmtTheoretical(estimate)}</b>
         </span>
       </div>
 

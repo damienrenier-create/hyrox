@@ -46,11 +46,21 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
 
 // Statistiques d'un lot de fiches : reps totales, temps theorique (somme reps x ponderation, en secondes)
 // et intensite = ponderation moyenne par rep (fiche de pure corde = 1, de purs burpees = 7).
-export type CardStats = { reps: number; weighted: number; intensity: number };
+export type CardStats = { reps: number; weighted: number; intensity: number; critical: number };
 export function statsOf(cards: { reps: number; weight: number }[]): CardStats {
   const reps = cards.reduce((s, c) => s + c.reps, 0);
   const weighted = cards.reduce((s, c) => s + c.reps * c.weight, 0);
-  return { reps, weighted, intensity: reps > 0 ? weighted / reps : 0 };
+  const critical = cards.reduce((m, c) => Math.max(m, c.reps * c.weight), 0);
+  return { reps, weighted, intensity: reps > 0 ? weighted / reps : 0, critical };
+}
+
+// Duree reelle estimee d'un niveau (regle de Sartay) : les membres travaillent EN PARALLELE, en relais sur
+// les exos, donc le niveau dure le temps de sa fiche la plus longue, ou du travail total partage entre les
+// membres s'il y a plus de fiches que de bras. Un BOSS (tous sur le meme exo en meme temps) = travail / equipe.
+export function estimateSeconds(cards: { reps: number; weight: number }[], boss: boolean, team = DEFAULT_TEAM): number {
+  const { weighted, critical } = statsOf(cards);
+  if (team <= 0) return weighted;
+  return boss ? weighted / team : Math.max(critical, weighted / team);
 }
 
 export const fmtIntensity = (x: number) => (Math.round(x * 100) / 100).toFixed(2).replace(".", ",");
