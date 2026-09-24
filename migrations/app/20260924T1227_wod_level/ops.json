@@ -1,0 +1,902 @@
+[
+  {
+    "id": "dropCheckConstraint.cyclePlan.cyclePlan_wodType_check_686f9918",
+    "label": "Drop check constraint \"cyclePlan_wodType_check_686f9918\" on \"cyclePlan\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_686f9918",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_686f9918\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_686f9918",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"cyclePlan_wodType_check_686f9918\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" DROP CONSTRAINT \"cyclePlan_wodType_check_686f9918\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_686f9918\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_686f9918",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_686f9918",
+    "label": "Drop check constraint \"session_wodType_check_686f9918\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_686f9918",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_686f9918\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_686f9918",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_686f9918\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_686f9918\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_686f9918\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_686f9918",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.level",
+    "label": "Create table \"level\"",
+    "summary": "Creates table \"level\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "level"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"level\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"level\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"level\"",
+        "sql": "CREATE TABLE \"public\".\"level\" (\n  \"cards\" json DEFAULT '\"[]\"'::json NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"name\" text,\n  \"number\" int4 NOT NULL,\n  \"updatedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"level\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"level\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.levelExercise",
+    "label": "Create table \"levelExercise\"",
+    "summary": "Creates table \"levelExercise\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "levelExercise"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"levelExercise\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelExercise\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"levelExercise\"",
+        "sql": "CREATE TABLE \"public\".\"levelExercise\" (\n  \"active\" bool DEFAULT true NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdBy\" text,\n  \"id\" text NOT NULL,\n  \"label\" text NOT NULL,\n  \"order\" int4 DEFAULT 0 NOT NULL,\n  \"updatedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"weight\" float8 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"levelExercise\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelExercise\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.levelTick",
+    "label": "Create table \"levelTick\"",
+    "summary": "Creates table \"levelTick\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "levelTick"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"levelTick\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"levelTick\"",
+        "sql": "CREATE TABLE \"public\".\"levelTick\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"by\" text NOT NULL,\n  \"card\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"level\" int4 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"levelTick\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.mineBoard",
+    "label": "Create table \"mineBoard\"",
+    "summary": "Creates table \"mineBoard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "mineBoard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"mineBoard\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"mineBoard\"",
+        "sql": "CREATE TABLE \"public\".\"mineBoard\" (\n  \"cols\" json NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"mines\" json NOT NULL,\n  \"rows\" json NOT NULL,\n  \"seed\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"mineBoard\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.mineReveal",
+    "label": "Create table \"mineReveal\"",
+    "summary": "Creates table \"mineReveal\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "mineReveal"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"mineReveal\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"mineReveal\"",
+        "sql": "CREATE TABLE \"public\".\"mineReveal\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"col\" int4 NOT NULL,\n  \"evaluationId\" text,\n  \"id\" text NOT NULL,\n  \"refereeId\" text NOT NULL,\n  \"row\" int4 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"mineReveal\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.evaluation.targetUserId",
+    "label": "Add column \"targetUserId\" to \"evaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "targetUserId",
+        "table": "evaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"targetUserId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "targetUserId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"targetUserId\"",
+        "sql": "ALTER TABLE \"public\".\"evaluation\" ADD COLUMN \"targetUserId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"targetUserId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "targetUserId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.cyclePlan.cyclePlan_wodType_check_da837c10",
+    "label": "Add check constraint \"cyclePlan_wodType_check_da837c10\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_da837c10",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_da837c10\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_da837c10",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"cyclePlan_wodType_check_da837c10\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" ADD CONSTRAINT \"cyclePlan_wodType_check_da837c10\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_da837c10\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_da837c10",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.level.level_number_key",
+    "label": "Add unique constraint on \"level\" (number)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "level_number_key",
+        "table": "level"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"level_number_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"level_number_key\"",
+        "sql": "ALTER TABLE \"public\".\"level\" ADD CONSTRAINT \"level_number_key\" UNIQUE (\"number\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"level_number_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.levelExercise.levelExercise_label_key",
+    "label": "Add unique constraint on \"levelExercise\" (label)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "levelExercise_label_key",
+        "table": "levelExercise"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"levelExercise_label_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelExercise_label_key",
+          "public",
+          "\"public\".\"levelExercise\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"levelExercise_label_key\"",
+        "sql": "ALTER TABLE \"public\".\"levelExercise\" ADD CONSTRAINT \"levelExercise_label_key\" UNIQUE (\"label\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"levelExercise_label_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelExercise_label_key",
+          "public",
+          "\"public\".\"levelExercise\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.levelTick.levelTick_sessionId_teamId_level_card_key",
+    "label": "Add unique constraint on \"levelTick\" (sessionId, teamId, level, card)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "levelTick_sessionId_teamId_level_card_key",
+        "table": "levelTick"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"levelTick_sessionId_teamId_level_card_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelTick_sessionId_teamId_level_card_key",
+          "public",
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"levelTick_sessionId_teamId_level_card_key\"",
+        "sql": "ALTER TABLE \"public\".\"levelTick\" ADD CONSTRAINT \"levelTick_sessionId_teamId_level_card_key\" UNIQUE (\"sessionId\", \"teamId\", \"level\", \"card\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"levelTick_sessionId_teamId_level_card_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelTick_sessionId_teamId_level_card_key",
+          "public",
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.mineBoard.mineBoard_sessionId_key",
+    "label": "Add unique constraint on \"mineBoard\" (sessionId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "mineBoard_sessionId_key",
+        "table": "mineBoard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"mineBoard_sessionId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineBoard_sessionId_key",
+          "public",
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"mineBoard_sessionId_key\"",
+        "sql": "ALTER TABLE \"public\".\"mineBoard\" ADD CONSTRAINT \"mineBoard_sessionId_key\" UNIQUE (\"sessionId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"mineBoard_sessionId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineBoard_sessionId_key",
+          "public",
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.mineReveal.mineReveal_evaluationId_key",
+    "label": "Add unique constraint on \"mineReveal\" (evaluationId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "mineReveal_evaluationId_key",
+        "table": "mineReveal"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"mineReveal_evaluationId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_evaluationId_key",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"mineReveal_evaluationId_key\"",
+        "sql": "ALTER TABLE \"public\".\"mineReveal\" ADD CONSTRAINT \"mineReveal_evaluationId_key\" UNIQUE (\"evaluationId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"mineReveal_evaluationId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_evaluationId_key",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.mineReveal.mineReveal_sessionId_refereeId_row_col_key",
+    "label": "Add unique constraint on \"mineReveal\" (sessionId, refereeId, row, col)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "mineReveal_sessionId_refereeId_row_col_key",
+        "table": "mineReveal"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"mineReveal_sessionId_refereeId_row_col_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_sessionId_refereeId_row_col_key",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"mineReveal_sessionId_refereeId_row_col_key\"",
+        "sql": "ALTER TABLE \"public\".\"mineReveal\" ADD CONSTRAINT \"mineReveal_sessionId_refereeId_row_col_key\" UNIQUE (\"sessionId\", \"refereeId\", \"row\", \"col\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"mineReveal_sessionId_refereeId_row_col_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_sessionId_refereeId_row_col_key",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_da837c10",
+    "label": "Add check constraint \"session_wodType_check_da837c10\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_da837c10",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_da837c10\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_da837c10",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_da837c10\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_da837c10\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_da837c10\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_da837c10",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.evaluation.evaluation_targetUserId_idx_e0d638f0",
+    "label": "Create index \"evaluation_targetUserId_idx_e0d638f0\" on \"evaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "evaluation_targetUserId_idx_e0d638f0",
+        "table": "evaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"evaluation_targetUserId_idx_e0d638f0\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"evaluation_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"evaluation_targetUserId_idx_e0d638f0\"",
+        "sql": "CREATE INDEX \"evaluation_targetUserId_idx_e0d638f0\" ON \"public\".\"evaluation\" (\"targetUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"evaluation_targetUserId_idx_e0d638f0\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"evaluation_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.levelTick.levelTick_sessionId_idx_29f415d4",
+    "label": "Create index \"levelTick_sessionId_idx_29f415d4\" on \"levelTick\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "levelTick_sessionId_idx_29f415d4",
+        "table": "levelTick"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"levelTick_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelTick_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"levelTick_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"levelTick_sessionId_idx_29f415d4\" ON \"public\".\"levelTick\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"levelTick_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelTick_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.mineReveal.mineReveal_sessionId_idx_29f415d4",
+    "label": "Create index \"mineReveal_sessionId_idx_29f415d4\" on \"mineReveal\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "mineReveal_sessionId_idx_29f415d4",
+        "table": "mineReveal"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"mineReveal_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineReveal_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"mineReveal_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"mineReveal_sessionId_idx_29f415d4\" ON \"public\".\"mineReveal\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"mineReveal_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"mineReveal_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.levelTick.levelTick_sessionId_fkey",
+    "label": "Add foreign key \"levelTick_sessionId_fkey\" on \"levelTick\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "levelTick_sessionId_fkey",
+        "table": "levelTick"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"levelTick_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelTick_sessionId_fkey",
+          "public",
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"levelTick_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"levelTick\"\nADD CONSTRAINT \"levelTick_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"levelTick_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelTick_sessionId_fkey",
+          "public",
+          "\"public\".\"levelTick\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.mineBoard.mineBoard_sessionId_fkey",
+    "label": "Add foreign key \"mineBoard_sessionId_fkey\" on \"mineBoard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "mineBoard_sessionId_fkey",
+        "table": "mineBoard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"mineBoard_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineBoard_sessionId_fkey",
+          "public",
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"mineBoard_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"mineBoard\"\nADD CONSTRAINT \"mineBoard_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"mineBoard_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineBoard_sessionId_fkey",
+          "public",
+          "\"public\".\"mineBoard\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.mineReveal.mineReveal_sessionId_fkey",
+    "label": "Add foreign key \"mineReveal_sessionId_fkey\" on \"mineReveal\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "mineReveal_sessionId_fkey",
+        "table": "mineReveal"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"mineReveal_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_sessionId_fkey",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"mineReveal_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"mineReveal\"\nADD CONSTRAINT \"mineReveal_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"mineReveal_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "mineReveal_sessionId_fkey",
+          "public",
+          "\"public\".\"mineReveal\""
+        ]
+      }
+    ]
+  }
+]

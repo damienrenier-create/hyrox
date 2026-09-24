@@ -14,6 +14,7 @@ enum WodTemplate {
   RELAIS_SPRINT = "RELAIS_SPRINT"
   TOUCHE_COULE_HYROX = "TOUCHE_COULE_HYROX"
   FETE_FORAINE = "FETE_FORAINE"
+  LEVEL = "LEVEL"
 }
 
 enum Visibility {
@@ -143,6 +144,9 @@ model Session {
   selfEvaluations SelfEvaluation[]
   referees        SessionReferee[]
   stationEvents   StationEvent[]
+  levelTicks      LevelTick[]
+  mineBoard       MineBoard?
+  mineReveals     MineReveal[]
 }
 
 // Arbitres encodes par le greffier pour une seance, modifiable pendant tout le WOD :
@@ -250,6 +254,7 @@ model Evaluation {
   repsObserved Int
   note         Int      @default(0) // 5(TB), 4(B), 3(S), 0(I), -1(TI)
   isValidated  Boolean  @default(false)
+  targetUserId String?  // WOD Level : eleve evalue individuellement (demineur) ; null = evaluation d'equipe
   createdAt    DateTime @default(now())
 
   shot Shot?
@@ -257,6 +262,7 @@ model Evaluation {
   @@index([sessionId])
   @@index([teamId])
   @@index([evaluatorId])
+  @@index([targetUserId])
 }
 
 model BoatPlacement {
@@ -385,4 +391,73 @@ model Shot {
   @@unique([sessionId, refereeId, targetTeamId, targetExerciseId])
   @@index([sessionId, targetTeamId, targetExerciseId])
   @@index([refereeId])
+}
+
+// ===== WOD LEVEL =====
+// Catalogue d'exercices ponderes : weight = temps theorique d'une rep (secondes). Edite par les profs et le
+// greffier depuis /admin/level. Un exercice desactive reste en base (les niveaux figes y font reference).
+model LevelExercise {
+  id        String   @id @default(uuid())
+  label     String   @unique
+  weight    Float
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+}
+
+// Echelle commune des niveaux, ordonnee par number (boss si number % 5 == 0).
+// cards = [{ exerciseId, reps }] ; l'echelle est figee dans Session.settings.levels au coup d'envoi.
+model Level {
+  id        String   @id @default(uuid())
+  number    Int      @unique
+  name      String?
+  cards     Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+}
+
+// Fiche cochee (greffier ou prof) pour une equipe : niveau + index de la fiche dans l'echelle figee.
+// L'unicite rend le double-tap et deux profs qui cochent la meme fiche inoffensifs.
+model LevelTick {
+  id        String   @id @default(uuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  teamId    String
+  level     Int
+  card      Int
+  by        String
+  at        DateTime @default(now())
+
+  @@unique([sessionId, teamId, level, card])
+  @@index([sessionId])
+}
+
+// Demineur des arbitres (WOD Level) : une carte par seance — lignes = eleves, colonnes = exercices,
+// mines = [[row, col]] — identique pour tous les arbitres, chacun ayant ses propres cases revelees.
+model MineBoard {
+  id        String   @id @default(uuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String   @unique
+  rows      Json
+  cols      Json
+  mines     Json
+  seed      String
+  createdAt DateTime @default(now())
+}
+
+// Case revelee par un arbitre, adossee a l'evaluation individuelle encodee juste avant le « feu ».
+model MineReveal {
+  id           String   @id @default(uuid())
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId    String
+  refereeId    String
+  row          Int
+  col          Int
+  evaluationId String?  @unique
+  at           DateTime @default(now())
+
+  @@unique([sessionId, refereeId, row, col])
+  @@index([sessionId])
 }

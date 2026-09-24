@@ -5,6 +5,8 @@ export const WOD_LABELS: Record<string, string> = {
   PYRAMIDE_CLASSIQUE: "WOD Pyramide",
   RELAIS_SPRINT: "Relais sprint",
   TOUCHE_COULE_HYROX: "Touché-Coulé",
+  FETE_FORAINE: "WOD Fête Foraine",
+  LEVEL: "WOD Level",
 };
 
 export function wodLabel(wodType: string): string {
