@@ -145,6 +145,8 @@ export function LevelClient({
   }, [phase, startedAtMs, endedAtMs, pauses, now]);
   // Temps impose : compte a rebours, rouge dans les 10 dernieres minutes, « temps ecoule » au bout.
   const capMs = bundle.capMin !== null ? bundle.capMin * 60_000 : null;
+  // Horloge des zombies : figee au temps impose (le serveur ne constate plus de rattrapage au-dela).
+  const zombieMs = capMs !== null ? Math.min(liveMs, capMs) : liveMs;
   const restMs = capMs !== null ? capMs - liveMs : null;
   const timeUp = phase === "run" && restMs !== null && restMs <= 0;
   const redZone = phase === "run" && restMs !== null && restMs > 0 && restMs <= 10 * 60_000;
@@ -191,7 +193,7 @@ export function LevelClient({
   const [caughtRefreshAt, setCaughtRefreshAt] = useState(0);
   useEffect(() => {
     if (!bundle.zombies || phase !== "run" || isPaused) return;
-    const raceNow = liveMs;
+    const raceNow = zombieMs;
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
       const l = levelByNumber.get(p.currentLevel);
@@ -203,7 +205,7 @@ export function LevelClient({
       setCaughtRefreshAt(Date.now());
       void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     }
-  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, sessionId, live.penalties, ticks]);
+  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelByNumber, caughtRefreshAt, sessionId, live.penalties, ticks]);
 
   function refresh() {
     router.refresh();
@@ -243,7 +245,7 @@ export function LevelClient({
         return;
       }
       mergeTeam(res.team, key);
-      if (res.caught) setError(`Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.`);
+      if (res.caught) setError(bundle.emom ? `Le zombie a dévoré le cœur de ${teamById.get(teamId)?.name ?? "l'équipe"} : vague perdue.` : `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.`);
     });
   }
   function yellow(teamId: string, delta: 1 | -1) {
@@ -330,7 +332,25 @@ export function LevelClient({
         {bundle.child && (
           <p className={`${ui.alertInfo} mt-2 flex flex-wrap items-center gap-2`}>
             <b>{bundle.child.kind === "warmup" ? "🔥 Échauffement" : "🏁 Finisher"}</b> de « {bundle.child.parentLabel} »{bundle.child.kind === "warmup" && <> · départs en différé (une série par équipe), zombies du palier 1, BOSS = horde</>}.
-            <a href={`/greffier?session=${bundle.child.parentId}`} className={`${btn.smPrimary} ml-auto`}>← Retour au WOD principal</a>
+            {phase === "run" ? (
+              <>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => confirm(`Terminer ${bundle.child?.kind === "warmup" ? "l'échauffement" : "le finisher"} (chrono arrêté, classement figé) et revenir au WOD principal ?`) && run(async () => {
+                    const r = await endLevelAction(sessionId);
+                    if ("ok" in r) router.push(`/greffier?session=${bundle.child!.parentId}`);
+                    return r;
+                  })}
+                  className={`${btn.smPrimary} ml-auto`}
+                >
+                  🏁 Terminer et revenir au WOD principal
+                </button>
+                <a href={`/greffier?session=${bundle.child.parentId}`} className={btn.smGhost} title="Le chrono de cette séance continue">revenir sans terminer</a>
+              </>
+            ) : (
+              <a href={`/greffier?session=${bundle.child.parentId}`} className={`${btn.smPrimary} ml-auto`}>← Retour au WOD principal</a>
+            )}
           </p>
         )}
         {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
@@ -375,8 +395,8 @@ export function LevelClient({
                     fixedSpeed={bundle.zombieSpeed}
                     penalties={live.penalties.filter((x) => x.teamId === t.id)}
                     ticks={ticks}
-                    raceMs={liveMs}
-                    running={phase === "run" && !isPaused}
+                    raceMs={zombieMs}
+                    running={phase === "run" && !isPaused && !timeUp}
                     onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
                     onYellow={(delta) => yellow(t.id, delta)}
                   />

@@ -11,6 +11,7 @@ import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
+import { hash32 } from "@/lib/mine-core";
 
 // Actions du WOD Level. Profs, coachs ET greffier cochent (les BOSS se valident a plusieurs sur la meme
 // seance) ; l'unicite en base rend le double-tap et deux appareils sur la meme fiche inoffensifs.
@@ -89,7 +90,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     caught > 0 ? db.orm.public.LevelLoss.where({ sessionId }).all() : Promise.resolve(ctx.losses as { id: string; teamId: string; level: number; at: unknown }[]),
   ]);
   const s = ctx.session.settings as { levels?: unknown; levelCapMin?: unknown } | null;
-  const structure = `${teamIds.length}|${members.n}|${JSON.stringify(s?.levels ?? "").length}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
+  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify(s?.levels ?? ""))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   return {
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
@@ -154,7 +155,7 @@ export async function levelPulseAction(sessionId: string): Promise<string> {
     teamIds.length ? count(() => db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     rs ? count(() => db.orm.public.RacePause.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
   ]);
-  const version = JSON.stringify((session?.settings as { levels?: unknown } | null)?.levels ?? "").length;
+  const version = hash32(JSON.stringify((session?.settings as { levels?: unknown } | null)?.levels ?? ""));
   return `${ticks}|${cards}|${members}|${teams.length}|${pauses}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${version}|${readLevelCap(session?.settings) ?? 0}|${losses}`;
 }
 

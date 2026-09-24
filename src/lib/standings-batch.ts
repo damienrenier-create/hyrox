@@ -7,7 +7,7 @@ import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/template
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
 import { toMs } from "@/lib/scheduling";
 import { readFrozenFromSettings } from "@/lib/level";
-import { levelLabel, orderedLevels, progressOf, rankTeams, readLevelOrder, readPenalties, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { levelLabel, orderedLevels, progressOf, rankTeams, readLevelOrder, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Classements de PLUSIEURS seances en une poignee de requetes groupees (.in) au lieu d'une cascade par
 // seance / par equipe / par eleve. La page Resultats passait 14 s a faire ~520 allers-retours.
@@ -27,7 +27,11 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
       ? db.orm.public.StationEvent.where((e) => e.sessionId.in(ids)).all()
       : Promise.resolve([] as Awaited<ReturnType<typeof db.orm.public.StationEvent.where>> extends never ? never[] : { sessionId: string; teamId: string; stationId: string; at: unknown }[]),
   ]);
-  const levelTicks = sessions.some((s) => s.wodType === "LEVEL") ? await db.orm.public.LevelTick.where((t) => t.sessionId.in(ids)).all() : [];
+  const hasLevel = sessions.some((s) => s.wodType === "LEVEL");
+  const [levelTicks, levelLosses] = await Promise.all([
+    hasLevel ? db.orm.public.LevelTick.where((t) => t.sessionId.in(ids)).all() : Promise.resolve([]),
+    hasLevel ? db.orm.public.LevelLoss.where((l) => l.sessionId.in(ids)).all() : Promise.resolve([]),
+  ]);
   const rsIds = raceStates.map((r) => r.id);
   const teamIds = teams.map((t) => t.id);
   const [pauses, laps, cards, members] = await Promise.all([
@@ -49,6 +53,7 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
   const teamsBySession = bySession(teams);
   const eventsBySession = bySession(stationEvents as { sessionId: string; teamId: string; stationId: string; at: unknown }[]);
   const ticksBySession = bySession(levelTicks);
+  const lossesBySession = bySession(levelLosses);
   const rsBySession = new Map(raceStates.map((r) => [r.sessionId, r]));
   const byRaceState = <T extends { raceStateId: string }>(rows: T[]) => {
     const m = new Map<string, T[]>();
@@ -68,7 +73,7 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
     const sessionPauses = rs ? (pausesByRs.get(rs.id) ?? []).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })) : [];
 
     if (session.wodType === "LEVEL") {
-      out.set(session.id, levelStandingsBatch(session, rawTeams, ticksBySession.get(session.id) ?? [], rs ? cardsByRs.get(rs.id) ?? [] : [], startedAtMs, sessionPauses));
+      out.set(session.id, levelStandingsBatch(session, rawTeams, ticksBySession.get(session.id) ?? [], lossesBySession.get(session.id) ?? [], rs ? cardsByRs.get(rs.id) ?? [] : [], startedAtMs, sessionPauses));
       continue;
     }
     if (session.wodType === "FETE_FORAINE") {
@@ -152,17 +157,19 @@ function levelStandingsBatch(
   session: SessionLike,
   rawTeams: TeamRow[],
   rawTicks: { teamId: string; level: number; card: number; at: unknown }[],
+  rawLosses: { teamId: string; level: number; at: unknown }[],
   rawCards: { teamId: string }[],
   startedAtMs: number | null,
   pauses: { from: number; to: number | null }[]
 ): SessionStandings {
   const levels = readFrozenFromSettings(session.settings);
   const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
+  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const lastAbs = new Map<string, number>();
   for (const t of rawTicks) lastAbs.set(t.teamId, Math.max(lastAbs.get(t.teamId) ?? 0, toMs(t.at)));
   const order = readLevelOrder(session.settings);
   const penalties = readPenalties(session.settings);
-  const ranked = rankTeams(rawTeams.map((t) => progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks, [], penalties)));
+  const ranked = rankTeams(rawTeams.map((t) => progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks, losses, penalties)));
   const teamName = new Map(rawTeams.map((t) => [t.id, t.name]));
   const finishedAtMs: Record<string, number> = {};
   const rows: StandingRow[] = ranked.map((p, i) => {

@@ -58,7 +58,11 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const startedAtMs = toMs(rs.startedAt);
   if (pauses.some((p) => p.to === null)) return 0; // en pause : le chrono n'avance pas, le zombie non plus
   const nowMs = Date.now();
-  const nowRace = elapsed(startedAtMs, pauses, nowMs) ?? 0;
+  // Temps impose : au bout du chrono plus aucune coche n'est acceptee, donc plus aucun rattrapage non plus
+  // (le zombie se fige avec le chrono, il ne devore pas les coeurs pendant que le greffier declare la fin).
+  const capMin = (session.settings as { levelCapMin?: unknown } | null)?.levelCapMin;
+  const capMs = typeof capMin === "number" && Number.isFinite(capMin) && capMin > 0 ? Math.round(capMin) * 60_000 : null;
+  const nowRace = Math.min(elapsed(startedAtMs, pauses, nowMs) ?? 0, capMs ?? Number.POSITIVE_INFINITY);
   let ticks: (Tick & { id: string })[] = ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
   const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;

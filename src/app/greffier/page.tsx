@@ -7,7 +7,7 @@ import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { LevelClient } from "./level-client";
-import { buildLevelBundle } from "@/lib/level-context";
+import { buildLevelBundle, readChild } from "@/lib/level-context";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { isBirthdayToday } from "@/lib/birthday";
 import { teammatePairs } from "@/lib/teammates";
@@ -34,7 +34,9 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const open = await listOpenSessions();
   const { session: requested } = await searchParams;
   let session = requested ? await db.orm.public.Session.where({ id: requested }).first() : null;
-  if (!session) session = open[0] ?? null;
+  // Sans ?session= : la seance ouverte la plus recente qui n'est pas un echauffement ou un finisher (ceux-ci
+  // se rejoignent depuis le greffier de leur WOD), sinon la plus recente tout court.
+  if (!session) session = open.find((s) => !readChild(s.settings)) ?? open[0] ?? null;
   if (!session) session = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).first();
 
   if (!session) {
