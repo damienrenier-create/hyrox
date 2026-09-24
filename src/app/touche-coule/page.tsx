@@ -9,6 +9,9 @@ import { ensureFleet } from "@/lib/fleet-autopilot";
 import { listOpenSessions, openSessionsForStudent } from "@/lib/scheduling";
 import { FleetPlacement } from "./FleetPlacement";
 import { ToucheCouleClient } from "./client";
+import { DemineurClient } from "./DemineurClient";
+import { mineViewFor } from "@/lib/mine";
+import { wodLabel } from "@/lib/student-sessions";
 import type { BoardShip } from "./Board";
 import { btn, ui } from "@/lib/ui";
 
@@ -59,6 +62,34 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
           <a href="/eleve" className={btn.primary}>← Mon espace</a>
         </div>
       </div>
+    );
+  }
+
+  // WOD Level : pas de flotte ni de tirs, un demineur eleves x exercices (une carte par seance, figee avec
+  // l'echelle au coup d'envoi). Tant que le WOD n'est pas lance, la carte n'existe pas encore.
+  if (session.wodType === "LEVEL") {
+    const view = await mineViewFor(session.id, evaluator.id);
+    if (!view) {
+      return (
+        <div className={`${ui.page} flex items-center justify-center p-6 text-center`}>
+          <div className={`${ui.cardPad} max-w-sm`}>
+            <div className="text-5xl mb-3">💣</div>
+            <h1 className={`${ui.h2} mb-2`}>Le démineur s&apos;ouvre au coup d&apos;envoi</h1>
+            <p className={`${ui.muted} mb-6`}>La carte (élèves × exercices) est tirée au sort quand le greffier lance le WOD Level. Reviens dans un instant.</p>
+            <a href={evaluator.role === "STUDENT" ? "/eleve" : "/admin"} className={btn.primary}>← Retour</a>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <DemineurClient
+        sessionId={session.id}
+        sessionLabel={session.label ?? wodLabel(session.wodType)}
+        evaluator={{ id: evaluator.id, role: evaluator.role, name: evaluator.name }}
+        view={view}
+        ended={!!session.raceEndedAt}
+        ownTeamId={access.teamId}
+      />
     );
   }
 

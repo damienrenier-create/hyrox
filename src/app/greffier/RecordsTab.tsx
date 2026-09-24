@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { excludeFromRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
+import { excludeFromRecordsAction, levelRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
 // Types uniquement : importer une valeur de `pyramide-records` embarquerait la base dans le paquet client.
 import type { RecordEntry, RecordPeriod, RecordsResult, TeamSex } from "@/lib/pyramide-records";
 import { btn, cx, ui } from "@/lib/ui";
@@ -22,7 +22,9 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-d
 // Le calcul part d'un appel explicite (et repart a chaque changement de filtre) : rien n'est charge
 // tant que l'onglet n'est pas ouvert. DAMZER peut ecarter une equipe du palmares (greffier qui a
 // tape trop vite ou trop tard) sans rien effacer de ce que les eleves ont fait, et la retablir.
-export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: boolean; sessionId?: string | null }) {
+export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide" }: { isMaster?: boolean; sessionId?: string | null; wod?: "pyramide" | "level" }) {
+  const fetchRecords = wod === "level" ? levelRecordsAction : pyramideRecordsAction;
+  const wodName = wod === "level" ? "Level" : "Pyramide";
   const [sex, setSex] = useState<TeamSex | "">("");
   const [grade, setGrade] = useState<number | null>(null);
   const [period, setPeriod] = useState<RecordPeriod>("all");
@@ -32,8 +34,8 @@ export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: 
   const [pending, startTransition] = useTransition();
 
   const reload = useCallback(() => {
-    startTransition(async () => setData(await pyramideRecordsAction(filters)));
-  }, [filters]);
+    startTransition(async () => setData(await fetchRecords(filters)));
+  }, [filters, fetchRecords]);
   useEffect(() => reload(), [reload]);
 
   function invalidate(e: RecordEntry) {
@@ -42,7 +44,7 @@ export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: 
     startTransition(async () => {
       const res = await excludeFromRecordsAction(e.sessionId, e.teamId);
       if ("error" in res) setError(res.error);
-      else setData(await pyramideRecordsAction(filters));
+      else setData(await fetchRecords(filters));
     });
   }
   function restore(e: RecordEntry) {
@@ -50,7 +52,7 @@ export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: 
     startTransition(async () => {
       const res = await restoreToRecordsAction(e.sessionId, e.teamId);
       if ("error" in res) setError(res.error);
-      else setData(await pyramideRecordsAction(filters));
+      else setData(await fetchRecords(filters));
     });
   }
 
@@ -87,7 +89,7 @@ export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: 
           ))}
         </div>
         <span className={ui.hint}>
-          {pending ? "Calcul en cours…" : data ? `${data.teamsScanned} équipe(s) sur ${data.sessionsScanned} séance(s) Pyramide` : ""}
+          {pending ? "Calcul en cours…" : data ? `${data.teamsScanned} équipe(s) sur ${data.sessionsScanned} séance(s) ${wodName}` : ""}
         </span>
       </div>
 
@@ -168,7 +170,7 @@ export function RecordsTab({ isMaster = false, sessionId = null }: { isMaster?: 
         </section>
       )}
 
-      {!data && pending && <p className={ui.muted}>Lecture de toutes les séances Pyramide…</p>}
+      {!data && pending && <p className={ui.muted}>Lecture de toutes les séances {wodName}…</p>}
       <button type="button" onClick={reload} disabled={pending} className={btn.smGhost}>
         ↻ Recalculer
       </button>

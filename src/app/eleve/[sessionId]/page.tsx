@@ -6,6 +6,7 @@ import { exercisesFor } from "@/lib/session-exercises";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
+import { listExercises } from "@/lib/level";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
 import { TopBar } from "../../_components/TopBar";
 import { ui } from "@/lib/ui";
@@ -46,7 +47,10 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
     exerciseNumber[e.id] = e.number;
     exerciseLabels[e.id] = e.label;
   }
-  const evals = await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
+  if (session.wodType === "LEVEL") for (const e of await listExercises()) { exerciseNumber[e.id] = 0; exerciseLabels[e.id] = e.label; }
+  const evals = session.wodType === "LEVEL"
+    ? await db.orm.public.Evaluation.where({ sessionId, targetUserId: user.id }).all()
+    : await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
   const refereeEvals: RefereeEvalRow[] = evals
     .map((e) => ({
       exerciseId: e.exerciseId,

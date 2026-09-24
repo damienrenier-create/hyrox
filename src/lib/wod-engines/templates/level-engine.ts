@@ -8,8 +8,10 @@ export const MAX_TEAM = 6;
 export const DEFAULT_TEAM = 5;
 
 export type LevelCard = { exerciseId: string; reps: number };
-// Fiche resolue : la ponderation et le libelle sont figes avec elle (l'echelle d'une seance ne bouge plus).
-export type FrozenCard = LevelCard & { label: string; weight: number };
+// Fiche figee dans une seance : la ponderation et le libelle sont copies avec elle (l'echelle d'une seance ne
+// depend plus du catalogue). `off` = fiche retiree par le greffier en cours de WOD : elle ne compte plus,
+// sans decaler les index des fiches voisines (les coches y font reference par index).
+export type FrozenCard = LevelCard & { label: string; weight: number; off?: boolean };
 export type FrozenLevel = { number: number; name: string | null; boss: boolean; cards: FrozenCard[] };
 
 export const isBoss = (number: number) => number > 0 && number % BOSS_EVERY === 0;
@@ -35,17 +37,20 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
     if (typeof o.number !== "number") continue;
     const cards: FrozenCard[] = [];
     for (const c of Array.isArray(o.cards) ? o.cards : []) {
-      const k = c as { exerciseId?: unknown; reps?: unknown; label?: unknown; weight?: unknown };
+      const k = c as { exerciseId?: unknown; reps?: unknown; label?: unknown; weight?: unknown; off?: unknown };
       if (typeof k.exerciseId !== "string" || typeof k.reps !== "number" || typeof k.label !== "string" || typeof k.weight !== "number") continue;
-      cards.push({ exerciseId: k.exerciseId, reps: k.reps, label: k.label, weight: k.weight });
+      cards.push({ exerciseId: k.exerciseId, reps: k.reps, label: k.label, weight: k.weight, ...(k.off === true ? { off: true } : {}) });
     }
     out.push({ number: o.number, name: typeof o.name === "string" ? o.name : null, boss: isBoss(o.number), cards });
   }
   return out.sort((a, b) => a.number - b.number);
 }
 
-// Statistiques d'un lot de fiches : reps totales, temps theorique (somme reps x ponderation, en secondes)
-// et intensite = ponderation moyenne par rep (fiche de pure corde = 1, de purs burpees = 7).
+// Fiches encore en jeu d'un niveau, avec leur index d'origine (les coches referencent cet index).
+export const activeCards = (l: FrozenLevel) => l.cards.map((c, i) => ({ card: c, index: i })).filter((x) => !x.card.off);
+
+// Statistiques d'un lot de fiches : reps totales, travail (somme reps x ponderation, en secondes), intensite
+// (ponderation moyenne par rep : pure corde = 1, purs burpees = 7) et duree critique (la fiche la plus longue).
 export type CardStats = { reps: number; weighted: number; intensity: number; critical: number };
 export function statsOf(cards: { reps: number; weight: number }[]): CardStats {
   const reps = cards.reduce((s, c) => s + c.reps, 0);
@@ -80,58 +85,61 @@ export type TeamProgress = {
   completedLevels: number; // niveaux entierement valides, dans l'ordre
   currentLevel: number | null; // niveau en cours (null = echelle terminee)
   currentDone: number; // fiches cochees dans le niveau en cours
-  currentTotal: number;
+  currentTotal: number; // fiches en jeu dans le niveau en cours
   lastTickMs: number | null; // instant (chrono de course) de la derniere fiche cochee
   finishedMs: number | null; // instant ou l'echelle entiere a ete bouclee
   reps: number; // reps validees (fiches entieres), toutes fiches confondues
-  weighted: number; // ponderation cumulee des fiches validees
-  repsByExercise: Record<string, number>;
+  weighted: number; // travail cumule (reps x ponderation) des fiches validees
+  repsByExercise: Record<string, number>; // par libelle d'exercice
   doneCards: Set<string>; // `${level}_${card}`
 };
 
-// Une equipe avance niveau par niveau : le niveau N+1 n'est « en cours » que quand toutes les fiches de N
-// sont cochees. Des coches orphelines (fiche d'un niveau plus loin) comptent dans les reps mais pas dans
-// la progression : elles n'arrivent que par une annulation en arriere, et se resorbent d'elles-memes.
+// Une equipe avance niveau par niveau : le niveau N+1 n'est « en cours » que quand toutes les fiches en jeu
+// de N sont cochees. Un niveau sans aucune fiche en jeu est franchi d'office. Des coches orphelines (fiche
+// d'un niveau plus loin, ou fiche retiree) comptent dans rien : elles n'arrivent que par une annulation en
+// arriere ou un retrait de fiche, et se resorbent d'elles-memes.
 export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[]): TeamProgress {
   const mine = ticks.filter((t) => t.teamId === teamId);
   const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
-  const atOf = new Map(mine.map((t) => [`${t.level}_${t.card}`, t.atMs]));
   let completed = 0;
   let current: FrozenLevel | null = null;
   let currentDone = 0;
-  let finishedMs: number | null = null;
+  let currentTotal = 0;
   for (const l of levels) {
-    const n = l.cards.filter((_, i) => done.has(`${l.number}_${i}`)).length;
-    if (n === l.cards.length && l.cards.length > 0) {
+    const act = activeCards(l);
+    const n = act.filter(({ index }) => done.has(`${l.number}_${index}`)).length;
+    if (n === act.length) {
       completed++;
       continue;
     }
     current = l;
     currentDone = n;
+    currentTotal = act.length;
     break;
   }
-  if (!current && levels.length) {
-    finishedMs = Math.max(...mine.map((t) => t.atMs));
-  }
+  const finished = !current && levels.length > 0;
   let reps = 0;
   let weighted = 0;
   const repsByExercise: Record<string, number> = {};
+  const counted: number[] = [];
   for (const l of levels) {
-    l.cards.forEach((c, i) => {
-      if (!done.has(`${l.number}_${i}`)) return;
-      reps += c.reps;
-      weighted += c.reps * c.weight;
-      repsByExercise[c.exerciseId] = (repsByExercise[c.exerciseId] ?? 0) + c.reps;
-    });
+    for (const { card, index } of activeCards(l)) {
+      if (!done.has(`${l.number}_${index}`)) continue;
+      reps += card.reps;
+      weighted += card.reps * card.weight;
+      repsByExercise[card.label] = (repsByExercise[card.label] ?? 0) + card.reps;
+      const t = mine.find((x) => x.level === l.number && x.card === index);
+      if (t) counted.push(t.atMs);
+    }
   }
   return {
     teamId,
     completedLevels: completed,
     currentLevel: current?.number ?? null,
     currentDone,
-    currentTotal: current?.cards.length ?? 0,
-    lastTickMs: mine.length ? Math.max(...mine.map((t) => t.atMs)) : null,
-    finishedMs,
+    currentTotal,
+    lastTickMs: counted.length ? Math.max(...counted) : null,
+    finishedMs: finished && counted.length ? Math.max(...counted) : null,
     reps,
     weighted,
     repsByExercise,
@@ -139,7 +147,7 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[])
   };
 }
 
-// Classement : niveaux bouclés, puis fiches cochees dans le niveau en cours, puis la derniere coche la plus
+// Classement : niveaux boucles, puis fiches cochees dans le niveau en cours, puis la derniere coche la plus
 // tot (a egalite de travail, la plus rapide gagne). Une equipe sans aucune coche est derniere.
 export function rankTeams(progress: TeamProgress[]): TeamProgress[] {
   return [...progress].sort(
@@ -148,4 +156,10 @@ export function rankTeams(progress: TeamProgress[]): TeamProgress[] {
       b.currentDone - a.currentDone ||
       (a.lastTickMs ?? Number.POSITIVE_INFINITY) - (b.lastTickMs ?? Number.POSITIVE_INFINITY)
   );
+}
+
+// Libelle court d'un niveau pour les tuiles et les classements.
+export function levelLabel(l: FrozenLevel | null | undefined): string {
+  if (!l) return "🏁";
+  return `${l.boss ? "BOSS " : "Niv. "}${l.number}`;
 }

@@ -6,6 +6,8 @@ import { buildBoardData } from "@/lib/referee-board";
 import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
+import { LevelClient } from "./level-client";
+import { buildLevelBundle } from "@/lib/level-context";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { isBirthdayToday } from "@/lib/birthday";
 import { teammatePairs } from "@/lib/teammates";
@@ -67,7 +69,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   await ensureRaceStateAction(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
-  const board = session.refereeMode ? await buildBoardData(session.id) : null;
+  const board = session.refereeMode && session.wodType !== "LEVEL" ? await buildBoardData(session.id) : null;
 
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
   // Les eleves sont charges UNE fois (une requete) et les membres de toutes les equipes en parallele :
@@ -121,7 +123,28 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
   const picker: PickerData = { roster, pairs: await teammatePairs(inScope.map((u) => u.id)) };
 
-  // Chaque seance-type a son greffier : Fete Foraine (ateliers + corde + Finisher) ou Pyramide (tours).
+  // Chaque seance-type a son greffier : Level (niveaux de fiches), Fete Foraine (ateliers + corde + Finisher)
+  // ou Pyramide (tours).
+  if (session.wodType === "LEVEL") {
+    const levelBundle = await buildLevelBundle(session.id);
+    return (
+      <LevelClient
+        sessionId={session.id}
+        sessionLabel={session.label ?? wodLabel(session.wodType)}
+        sessionOptions={options}
+        olderSession={olderSession}
+        newerSession={newerSession}
+        bundle={levelBundle}
+        isMaster={evaluator.role === "MASTER_ADMIN"}
+        teamsWithMembers={teamsWithMembers}
+        classes={classes}
+        allClasses={allClasses}
+        referees={referees}
+        pendingRequests={pendingRequests}
+        picker={picker}
+      />
+    );
+  }
   if (session.wodType === "FETE_FORAINE") {
     const ffBundle = await buildFFBundle(session.id);
     return (

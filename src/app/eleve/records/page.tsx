@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { buildPyramideRecords, type RecordPeriod, type TeamSex } from "@/lib/pyramide-records";
+import { buildLevelRecords } from "@/lib/level-records";
 import { TopBar } from "../../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
 
@@ -23,7 +24,7 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-d
 
 // Records du WOD Pyramide vus par les eleves : le meme palmares que le greffier, en lecture seule,
 // avec les memes filtres (composition de l'equipe, degre). Tout passe par l'URL, donc partageable.
-export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string }> }) {
+export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/");
   const sp = await searchParams;
@@ -31,10 +32,12 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
   const grade = sp.degre && /^\d$/.test(sp.degre) ? Number(sp.degre) : null;
   const periodQ = PERIODS.find((p) => p.q && p.q === sp.periode)?.q ?? "";
   const period = PERIODS.find((p) => p.q === periodQ)?.v ?? "all";
-  const data = await buildPyramideRecords({ sex, grade, period });
-  const href = (patch: { sexe?: string; degre?: string; periode?: string }) => {
+  const wod = sp.wod === "level" ? "level" : "pyramide";
+  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period }) : await buildPyramideRecords({ sex, grade, period });
+  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string }) => {
     const p = new URLSearchParams();
-    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, ...patch };
+    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", ...patch };
+    if (v.wod) p.set("wod", v.wod);
     if (v.sexe) p.set("sexe", v.sexe);
     if (v.degre) p.set("degre", v.degre);
     if (v.periode) p.set("periode", v.periode);
@@ -44,10 +47,15 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
 
   return (
     <div className={ui.page}>
-      <TopBar brand={false} back={{ href: user.role === "STUDENT" ? "/eleve" : "/admin", label: "Retour" }} title="🏆 Records" subtitle="WOD Pyramide · toutes classes confondues" />
+      <TopBar brand={false} back={{ href: user.role === "STUDENT" ? "/eleve" : "/admin", label: "Retour" }} title="🏆 Records" subtitle={`WOD ${wod === "level" ? "Level" : "Pyramide"} · toutes classes confondues`} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         <div className={`${ui.cardPad} space-y-2`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={ui.eyebrow}>WOD</span>
+            <Link href={href({ wod: "" })} className={cx(ui.pill, wod === "pyramide" ? ui.pillOn : ui.pillOff)}>Pyramide</Link>
+            <Link href={href({ wod: "level" })} className={cx(ui.pill, wod === "level" ? ui.pillOn : ui.pillOff)}>Level</Link>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={ui.eyebrow}>Période</span>
             {PERIODS.map((p) => (

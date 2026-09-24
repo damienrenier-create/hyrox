@@ -6,6 +6,8 @@ import { readFFSettings } from "@/lib/fete-foraine-context";
 import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/templates/fete-foraine-engine";
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
 import { toMs } from "@/lib/scheduling";
+import { readFrozenFromSettings } from "@/lib/level";
+import { levelLabel, progressOf, rankTeams, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Classements de PLUSIEURS seances en une poignee de requetes groupees (.in) au lieu d'une cascade par
 // seance / par equipe / par eleve. La page Resultats passait 14 s a faire ~520 allers-retours.
@@ -25,6 +27,7 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
       ? db.orm.public.StationEvent.where((e) => e.sessionId.in(ids)).all()
       : Promise.resolve([] as Awaited<ReturnType<typeof db.orm.public.StationEvent.where>> extends never ? never[] : { sessionId: string; teamId: string; stationId: string; at: unknown }[]),
   ]);
+  const levelTicks = sessions.some((s) => s.wodType === "LEVEL") ? await db.orm.public.LevelTick.where((t) => t.sessionId.in(ids)).all() : [];
   const rsIds = raceStates.map((r) => r.id);
   const teamIds = teams.map((t) => t.id);
   const [pauses, laps, cards, members] = await Promise.all([
@@ -45,6 +48,7 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
   };
   const teamsBySession = bySession(teams);
   const eventsBySession = bySession(stationEvents as { sessionId: string; teamId: string; stationId: string; at: unknown }[]);
+  const ticksBySession = bySession(levelTicks);
   const rsBySession = new Map(raceStates.map((r) => [r.sessionId, r]));
   const byRaceState = <T extends { raceStateId: string }>(rows: T[]) => {
     const m = new Map<string, T[]>();
@@ -63,6 +67,10 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
     const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
     const sessionPauses = rs ? (pausesByRs.get(rs.id) ?? []).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })) : [];
 
+    if (session.wodType === "LEVEL") {
+      out.set(session.id, levelStandingsBatch(session, rawTeams, ticksBySession.get(session.id) ?? [], rs ? cardsByRs.get(rs.id) ?? [] : [], startedAtMs, sessionPauses));
+      continue;
+    }
     if (session.wodType === "FETE_FORAINE") {
       out.set(session.id, ffStandings(session, rawTeams, membersByTeam, userById, eventsBySession.get(session.id) ?? [], startedAtMs, sessionPauses));
       continue;
@@ -137,6 +145,42 @@ function pyramidStandings(
     done: s.done,
   }));
   return { columns: { laps: "Tours", time: "Temps", reps: "Reps", cards: "🟨", start: "Départ" }, rows, finishedAtMs };
+}
+
+// Level : niveaux boucles, fiches du niveau en cours, derniere coche ; l'echelle vient de la copie figee.
+function levelStandingsBatch(
+  session: SessionLike,
+  rawTeams: TeamRow[],
+  rawTicks: { teamId: string; level: number; card: number; at: unknown }[],
+  rawCards: { teamId: string }[],
+  startedAtMs: number | null,
+  pauses: { from: number; to: number | null }[]
+): SessionStandings {
+  const levels = readFrozenFromSettings(session.settings);
+  const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
+  const lastAbs = new Map<string, number>();
+  for (const t of rawTicks) lastAbs.set(t.teamId, Math.max(lastAbs.get(t.teamId) ?? 0, toMs(t.at)));
+  const ranked = rankTeams(rawTeams.map((t) => progressOf(levels, t.id, ticks)));
+  const teamName = new Map(rawTeams.map((t) => [t.id, t.name]));
+  const finishedAtMs: Record<string, number> = {};
+  const rows: StandingRow[] = ranked.map((p, i) => {
+    if (p.finishedMs !== null && lastAbs.has(p.teamId)) finishedAtMs[p.teamId] = lastAbs.get(p.teamId)!;
+    const cur = p.currentLevel ? levels.find((l) => l.number === p.currentLevel) ?? null : null;
+    return {
+      rank: i + 1,
+      teamId: p.teamId,
+      teamName: teamName.get(p.teamId) ?? p.teamId,
+      laps: p.completedLevels,
+      lapsTotal: levels.length,
+      time: p.finishedMs !== null ? fmt(p.finishedMs) : p.lastTickMs !== null ? fmt(p.lastTickMs) : null,
+      late: null,
+      start: cur ? `${levelLabel(cur)} · ${p.currentDone}/${p.currentTotal}` : "🏁",
+      reps: p.reps,
+      cards: rawCards.filter((c) => c.teamId === p.teamId).length,
+      done: p.finishedMs !== null,
+    };
+  });
+  return { columns: { laps: "Niveaux", time: "Dernière coche", reps: "Reps", cards: "🟨", start: "En cours" }, rows, finishedAtMs };
 }
 
 function ffStandings(

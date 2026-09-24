@@ -2,6 +2,7 @@
 
 import { getSession } from "@/lib/session-server";
 import { buildPyramideRecords, type RecordFilters, type RecordsResult } from "@/lib/pyramide-records";
+import { buildLevelRecords } from "@/lib/level-records";
 
 // Les records balaient TOUTES les seances Pyramide : on ne les calcule qu'a la demande, quand l'onglet
 // est ouvert, jamais au rendu de la page greffier qui tourne pendant la course.
@@ -11,6 +12,14 @@ export async function pyramideRecordsAction(filters: RecordFilters): Promise<Rec
     return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
   }
   return buildPyramideRecords(filters);
+}
+
+export async function levelRecordsAction(filters: RecordFilters): Promise<RecordsResult> {
+  const user = await getSession();
+  if (!user || !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(user.role)) {
+    return { boards: [], excluded: [], grades: [], teamsScanned: 0, sessionsScanned: 0 };
+  }
+  return buildLevelRecords(filters);
 }
 
 // ===== Invalidation d'un record (DAMZER seul) =====

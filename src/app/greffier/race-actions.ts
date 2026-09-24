@@ -6,7 +6,7 @@ import { getWodEngine } from "@/lib/wod-engines";
 
 async function requireGreffierAccess(sessionId: string) {
   const user = await getSession();
-  if (!user || !["MASTER_ADMIN", "GREFFIER"].includes(user.role)) throw new Error("Accès refusé.");
+  if (!user || !["MASTER_ADMIN", "ADMIN", "GREFFIER"].includes(user.role)) throw new Error("Accès refusé.");
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) throw new Error("Séance introuvable.");
   return { user, session };
