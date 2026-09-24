@@ -10,6 +10,7 @@ import { progressOf, rankTeams, type FrozenLevel, type TeamProgress } from "@/li
 
 export type LevelTeam = { id: string; name: string; order: number; members: { id: string; name: string }[] };
 export type LevelTickRow = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
+export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; atMs: number };
 export type LevelBundle = {
   levels: FrozenLevel[];
   frozen: boolean; // true = echelle figee dans la seance (course lancee) ; false = echelle vive de l'atelier
@@ -21,6 +22,7 @@ export type LevelBundle = {
   raceEndedAtMs: number | null;
   pauses: { from: number; to: number | null }[];
   catalog: { id: string; label: string; weight: number; active: boolean }[];
+  evaluations: LevelEval[]; // demineur : une par case jouee (eleve x exercice)
 };
 
 export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> {
@@ -68,6 +70,22 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
   });
   const yellowCards = rawCards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 }));
 
+  // Evaluations individuelles (demineur) : noms des arbitres et des eleves cibles en une requete de plus.
+  const rawEvals = (await db.orm.public.Evaluation.where({ sessionId }).all()).filter((e) => !!e.targetUserId);
+  const extraIds = [...new Set(rawEvals.flatMap((e) => [e.evaluatorId, e.targetUserId as string]).filter((id) => !userById.has(id)))];
+  for (const u of extraIds.length ? await db.orm.public.User.where((x) => x.id.in(extraIds)).all() : []) userById.set(u.id, u);
+  const labelOf = new Map<string, string>(catalog.map((e) => [e.id, e.label]));
+  for (const l of levels) for (const c of l.cards) labelOf.set(c.exerciseId, c.label);
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const nameOf = (id: string) => { const u = userById.get(id); return u ? memberNames(u).firstName + (memberNames(u).lastName ? " " + memberNames(u).lastName.charAt(0) + "." : "") : "?"; };
+  const evaluations: LevelEval[] = rawEvals
+    .map((e) => ({
+      id: e.id, targetUserId: e.targetUserId as string, targetName: nameOf(e.targetUserId as string), teamId: e.teamId, teamName: teamName.get(e.teamId) ?? "?",
+      exerciseId: e.exerciseId, exerciseLabel: labelOf.get(e.exerciseId) ?? e.exerciseId, reps: e.repsObserved, note: e.note,
+      refereeName: nameOf(e.evaluatorId), atMs: elapsed(startedAtMs, pauses, toMs(e.createdAt)) ?? 0,
+    }))
+    .sort((a, b) => a.atMs - b.atMs);
+
   return {
     levels,
     frozen,
@@ -79,6 +97,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     raceEndedAtMs: session.raceEndedAt ? toMs(session.raceEndedAt) : null,
     pauses,
     catalog: catalog.map((e) => ({ id: e.id, label: e.label, weight: e.weight, active: e.active })),
+    evaluations,
   };
 }
 

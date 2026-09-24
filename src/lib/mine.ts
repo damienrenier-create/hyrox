@@ -76,15 +76,51 @@ function parseBoard(row: { rows: unknown; cols: unknown; mines: unknown }): Mine
 // viennent de l'echelle de la seance, les lignes des equipes du moment). null = pas encore possible.
 export async function ensureMineBoard(sessionId: string): Promise<MineBoardData | null> {
   const existing = await db.orm.public.MineBoard.where({ sessionId }).first();
-  if (existing) return parseBoard(existing);
-
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) return null;
   const levels = readFrozenFromSettings(session.settings);
-  if (!levels.length) return null;
+  if (!levels.length) return existing ? parseBoard(existing) : null;
   const cols: MineCol[] = [];
   for (const l of levels) for (const c of l.cards) if (!c.off && !cols.some((x) => x.exerciseId === c.exerciseId)) cols.push({ exerciseId: c.exerciseId, label: c.label });
+  const rows = await currentRows(sessionId);
 
+  if (existing) {
+    // Eleve ou exercice arrive apres le coup d'envoi : on AJOUTE des lignes / colonnes (jamais de retrait ni
+    // de reordonnancement, les cases revelees referencent les index), avec des mines tirees a la meme densite.
+    const cur = parseBoard(existing);
+    const newRows = rows.filter((r) => !cur.rows.some((x) => x.userId === r.userId));
+    const newCols = cols.filter((c) => !cur.cols.some((x) => x.exerciseId === c.exerciseId));
+    if (!newRows.length && !newCols.length) return cur;
+    const allRows = [...cur.rows, ...newRows];
+    const allCols = [...cur.cols, ...newCols];
+    const mines: [number, number][] = [];
+    cur.mines.forEach((row, r) => row.forEach((m, c) => { if (m) mines.push([r, c]); }));
+    const fresh: [number, number][] = [];
+    for (let r = 0; r < allRows.length; r++) for (let c = 0; c < allCols.length; c++) if (r >= cur.rows.length || c >= cur.cols.length) fresh.push([r, c]);
+    const rnd = mulberry32(hash32(`${existing.seed}#ext#${allRows.length}x${allCols.length}`));
+    for (let i = fresh.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [fresh[i], fresh[j]] = [fresh[j], fresh[i]]; }
+    mines.push(...fresh.slice(0, Math.round(fresh.length * MINE_DENSITY)));
+    await db.orm.public.MineBoard.where({ id: existing.id }).update({ rows: allRows, cols: allCols, mines });
+    return parseBoard({ rows: allRows, cols: allCols, mines });
+  }
+
+  if (!rows.length || !cols.length) return null;
+
+  // « Parmi l'une des 4 cartes au hasard » : quatre dispositions possibles, une tiree au sort par seance.
+  const pick = hash32(`${sessionId}#pick`) % MINE_LAYOUTS;
+  const seed = `${sessionId}#${pick}`;
+  const mines = layoutMines(rows.length, cols.length, seed);
+  try {
+    await db.orm.public.MineBoard.create({ sessionId, rows, cols, mines, seed });
+  } catch {
+    /* deux arbitres en meme temps : la carte de l'autre gagne */
+  }
+  const created = await db.orm.public.MineBoard.where({ sessionId }).first();
+  return created ? parseBoard(created) : null;
+}
+
+// Lignes de la carte = membres des equipes de la seance, par equipe puis par nom.
+async function currentRows(sessionId: string): Promise<MineRow[]> {
   const teams = (await db.orm.public.Team.where({ sessionId }).all()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const teamIds = teams.map((t) => t.id);
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
@@ -101,19 +137,7 @@ export async function ensureMineBoard(sessionId: string): Promise<MineBoardData 
       .sort((a, b) => a.name.localeCompare(b.name, "fr"));
     rows.push(...names);
   }
-  if (!rows.length || !cols.length) return null;
-
-  // « Parmi l'une des 4 cartes au hasard » : quatre dispositions possibles, une tiree au sort par seance.
-  const pick = hash32(`${sessionId}#pick`) % MINE_LAYOUTS;
-  const seed = `${sessionId}#${pick}`;
-  const mines = layoutMines(rows.length, cols.length, seed);
-  try {
-    await db.orm.public.MineBoard.create({ sessionId, rows, cols, mines, seed });
-  } catch {
-    /* deux arbitres en meme temps : la carte de l'autre gagne */
-  }
-  const created = await db.orm.public.MineBoard.where({ sessionId }).first();
-  return created ? parseBoard(created) : null;
+  return rows;
 }
 
 export type MineCell = null | { mine: boolean; n: number };

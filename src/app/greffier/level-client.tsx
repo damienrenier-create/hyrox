@@ -14,12 +14,13 @@ import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData }
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
 import { RecordsTab } from "./RecordsTab";
+import { LevelArbitrage } from "./LevelArbitrage";
 import { LogoutButton } from "../_components/LogoutButton";
 import type { PendingRequest } from "./referee-decisions";
 import { SessionStep, sessionDay, type SessionOption } from "./client";
 import { btn, cx, ui } from "@/lib/ui";
 
-type View = "race" | "results" | "recap" | "ladder" | "records" | "teams";
+type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | "teams";
 
 // Greffier « Level » (PC projete, mais aussi telephone d'un prof qui valide un BOSS) : chrono centre, une
 // tuile par equipe avec son niveau en cours et ses fiches a cocher, classement en direct, recap des reps
@@ -234,6 +235,7 @@ export function LevelClient({
           <LadderPreview levels={levels} />
         ))}
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
+        {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
       </main>
 
@@ -245,6 +247,9 @@ export function LevelClient({
             <button onClick={() => setView("recap")} className={tabBtn(view === "recap")}>Reps par exo</button>
             <button onClick={() => setView("ladder")} className={tabBtn(view === "ladder")}>Échelle</button>
             <button onClick={() => setView("records")} className={tabBtn(view === "records")}>🏆 Records</button>
+            <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
+              Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{bundle.evaluations.length}</span>
+            </button>
             <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
               Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
               {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>💣 {referees.length}</span>}

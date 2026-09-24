@@ -11,7 +11,7 @@ import { wodLabel } from "@/lib/student-sessions";
 import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 import {
-  addPlanAction, closeSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
+  addPlanAction, closeSessionAction, reopenSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
   openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
@@ -154,15 +154,17 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Greffier</Link>
                       {/* Un deuxieme prof arbitre pendant que le premier tient le greffier : chacun son ecran. */}
                       {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>🏴‍☠️ Arbitrer</Link>}
-                      {s.refereeMode && (
+                      {s.refereeMode && s.wodType !== "LEVEL" && (
                         <form action={runGenerateGhostFleets.bind(null, s.id)}>
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>
                         </form>
                       )}
-                      <form action={closeSessionAction}>
-                        <input type="hidden" name="id" value={s.id} />
-                        <button type="submit" className={btn.smDanger}>Fermer</button>
-                      </form>
+                      {canDelete && (
+                        <form action={closeSessionAction}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <button type="submit" className={btn.smDanger} title="Coupe la séance pour tout le monde (réservé à DAMZER)">Fermer</button>
+                        </form>
+                      )}
                     </div>
                   </li>
                 );
@@ -197,7 +199,13 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Résultats</Link>
                       <Link href={`/admin/resultats?session=${s.id}`} className={btn.smGhost}>Consultation</Link>
                       <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
-                      {s.refereeMode && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                      {s.refereeMode && s.wodType !== "LEVEL" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                      {!s.isActive && (!s.closesAt || toMs(s.closesAt) > Date.now()) && (
+                        <form action={reopenSessionAction}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <button type="submit" className={btn.smSuccess} title="Fermée avant la fin de son créneau : la remettre dans les séances ouvertes">Rouvrir</button>
+                        </form>
+                      )}
                     </div>
                   </li>
                 );

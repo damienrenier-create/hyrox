@@ -38,6 +38,7 @@ type Props = {
   sessionId: string;
   ended: boolean;
   myTeamName: string;
+  individual?: boolean; // WOD Level : evaluations de l'eleve lui-meme, pas de son equipe
   columns: ResultColumns;
   results: ResultRow[];
   refereeEvals: RefereeEvalRow[];
@@ -48,7 +49,7 @@ type Props = {
   review?: { answers: Record<string, string> | null; comment: string | null; reviewerName: string } | null;
 };
 
-export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null }: Props) {
+export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null, individual = false }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -126,10 +127,10 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
       {tab === "referees" && (
         <div>
           <p className={`${ui.hint} mb-3`}>
-            Ce que les arbitres ont observé sur <b className="text-ink">{myTeamName}</b>, exercice par exercice (reps comptées et qualité d&apos;exécution).
+            {individual ? <>Ce que les arbitres ont observé <b className="text-ink">sur toi</b>, exercice par exercice (reps comptées et qualité d&apos;exécution).</> : <>Ce que les arbitres ont observé sur <b className="text-ink">{myTeamName}</b>, exercice par exercice (reps comptées et qualité d&apos;exécution).</>}
           </p>
           {refereeEvals.length === 0 ? (
-            <p className={`${ui.cardPad} ${ui.muted}`}>Aucun arbitre n&apos;a encore évalué ton équipe.</p>
+            <p className={`${ui.cardPad} ${ui.muted}`}>{individual ? "Aucun arbitre ne t'a encore évalué." : "Aucun arbitre n'a encore évalué ton équipe."}</p>
           ) : (
             <div className={`${ui.card} overflow-hidden`}>
               <table className="w-full text-sm">

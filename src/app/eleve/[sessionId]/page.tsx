@@ -104,6 +104,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
             submittedAt: existing ? new Date(String(existing.submittedAt)).getTime() : null,
           }}
           review={review}
+          individual={session.wodType === "LEVEL"}
         />
       </main>
     </div>

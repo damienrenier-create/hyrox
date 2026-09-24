@@ -274,8 +274,20 @@ export async function unprepareSessionAction(formData: FormData) {
   done("Préparation annulée.");
 }
 
+// Fermer coupe la seance pour tout le monde (greffier, arbitres, eleves) : reserve a DAMZER, un coach qui
+// cherchait le bouton « Arbitrer » a deja ferme une seance en cours par erreur.
 export async function closeSessionAction(formData: FormData) {
-  await requireStaff();
+  await requireMaster();
   await db.orm.public.Session.where({ id: str(formData, "id") }).update({ isActive: false });
   done("Séance fermée.");
+}
+
+// Rouvrir une seance fermee trop tot : possible tant que sa fenetre n'est pas passee (ou sans fenetre).
+export async function reopenSessionAction(formData: FormData) {
+  await requireStaff();
+  const s = await db.orm.public.Session.where({ id: str(formData, "id") }).first();
+  if (!s) fail("Séance introuvable.");
+  if (s.closesAt && new Date(String(s.closesAt)).getTime() <= Date.now()) fail("Le créneau de cette séance est passé : ouvre-en une nouvelle.");
+  await db.orm.public.Session.where({ id: s.id }).update({ isActive: true });
+  done("Séance rouverte.");
 }
