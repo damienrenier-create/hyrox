@@ -86,8 +86,16 @@ button,
 }
 
 /* WOD Level, mode zombies : sprite 4 frames en ligne (voir public/zombies/z01.png .. z10.png) */
-@keyframes zwalk { from { background-position-x: 0%; } to { background-position-x: 133.3333%; } }
-.zwalk { animation: zwalk 0.8s steps(4) infinite; }
+@keyframes zwalk {
+  0% { background-position-x: 0%; }
+  16.66% { background-position-x: 33.3333%; }
+  33.33% { background-position-x: 66.6667%; }
+  50% { background-position-x: 100%; }
+  66.66% { background-position-x: 66.6667%; }
+  83.33% { background-position-x: 33.3333%; }
+  100% { background-position-x: 0%; }
+}
+.zwalk { animation: zwalk 1.2s steps(1, end) infinite; }
 @keyframes zbob { 0%, 100% { transform: translateY(0) scaleX(-1); } 50% { transform: translateY(-3px) scaleX(-1); } }
 .zbob { animation: zbob 0.5s ease-in-out infinite; display: inline-block; }
 @keyframes heartbeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }

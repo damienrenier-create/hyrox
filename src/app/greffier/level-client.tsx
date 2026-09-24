@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
   activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, ZOMBIE_ZONE,
@@ -340,26 +339,32 @@ function exerciseColumns(levels: FrozenLevel[]): string[] {
 
 const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
-// Sprites : public/zombies/z01.png .. z10.png (4 frames en ligne, transparent). Absent -> emoji.
-const spriteCache = new Map<number, boolean>();
-function useSprite(tier: number): boolean | null {
-  const [ok, setOk] = useState<boolean | null>(spriteCache.get(tier) ?? null);
+// Sprites : public/zombies/z01.png .. z10.png et boss.png (4 frames en ligne, transparent). Absent -> emoji.
+// Cadence de marche : lente pour les premiers paliers (zombies kawaii qui trainent la patte), plus vive ensuite.
+type ZombieKind = number | "boss";
+const spriteFile = (kind: ZombieKind) => `/zombies/${kind === "boss" ? "boss" : "z" + String(kind).padStart(2, "0")}.png`;
+const walkSeconds = (kind: ZombieKind) => (kind === "boss" ? 0.9 : kind <= 3 ? 1.5 : kind <= 7 ? 1.1 : 0.75);
+const spriteCache = new Map<string, boolean>();
+function useSprite(kind: ZombieKind): boolean | null {
+  const key = String(kind);
+  const [ok, setOk] = useState<boolean | null>(spriteCache.get(key) ?? null);
   useEffect(() => {
-    if (spriteCache.has(tier)) { setOk(spriteCache.get(tier)!); return; }
+    if (spriteCache.has(key)) { setOk(spriteCache.get(key)!); return; }
     const img = new Image();
-    img.onload = () => { spriteCache.set(tier, true); setOk(true); };
-    img.onerror = () => { spriteCache.set(tier, false); setOk(false); };
-    img.src = `/zombies/z${String(tier).padStart(2, "0")}.png`;
-  }, [tier]);
+    img.onload = () => { spriteCache.set(key, true); setOk(true); };
+    img.onerror = () => { spriteCache.set(key, false); setOk(false); };
+    img.src = spriteFile(kind);
+  }, [kind, key]);
   return ok;
 }
 
-function Zombie({ tier, moving }: { tier: number; moving: boolean }) {
-  const ok = useSprite(tier);
+function Zombie({ kind, moving }: { kind: ZombieKind; moving: boolean }) {
+  const ok = useSprite(kind);
+  const title = kind === "boss" ? "Zombie BOSS" : `Zombie palier ${kind}`;
   if (ok) {
-    return <span className={cx("block w-12 h-12", moving && "zwalk")} style={{ backgroundImage: `url(/zombies/z${String(tier).padStart(2, "0")}.png)`, backgroundSize: "400% 100%", backgroundRepeat: "no-repeat" }} title={`Zombie niveau ${tier}`} />;
+    return <span className={cx("block", kind === "boss" ? "w-14 h-14" : "w-12 h-12", moving && "zwalk")} style={{ backgroundImage: `url(${spriteFile(kind)})`, backgroundSize: "400% 100%", backgroundRepeat: "no-repeat", animationDuration: `${walkSeconds(kind)}s` }} title={title} />;
   }
-  return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block" }} title={`Zombie niveau ${tier}`}>🧟</span>;
+  return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block", animationDuration: `${walkSeconds(kind) / 2}s` }} title={title}>{kind === "boss" ? "👹" : "🧟"}</span>;
 }
 
 function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys, zombies, raceMs, running, onToggle, onYellow }: {
@@ -384,7 +389,7 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
   const speedLevel = level ? zombieSpeedLevel(level.number, p.losses) : 1;
   const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs), speedLevel) : null;
   const danger = !!geo && geo.remainingMs <= 30_000;
-  const tier = zombieTier(speedLevel);
+  const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
@@ -421,21 +426,10 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
           <>
             {geo && (
               <>
-                {/* Le trou d'ou sort chaque nouveau zombie, tout a gauche de la piste. */}
-                <span aria-hidden className="absolute left-0 top-1/2 translate-y-2 w-12 h-3 rounded-[50%] bg-ink/70" />
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div
-                    key={`${level.number}_${p.attemptStartMs}`}
-                    initial={{ opacity: 0, y: 26, scale: 0.6 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8, filter: "blur(2px)" }}
-                    transition={{ duration: 0.6 }}
-                    className="absolute top-1/2 -translate-y-1/2"
-                    style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}
-                  >
-                    <Zombie tier={tier} moving={running} />
-                  </motion.div>
-                </AnimatePresence>
+                {/* Un zombie par niveau : la cle change avec le niveau, il repart simplement du coin gauche. */}
+                <div key={level.number} className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}>
+                  <Zombie kind={kind} moving={running} />
+                </div>
                 <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full text-2xl leading-none transition-[left] duration-300", danger && "heartbeat")} style={{ left: `${geo.heart * 100}%` }} title={geo.remainingMs > 0 ? `Le zombie arrive dans ${fmt(geo.remainingMs)}` : "Rattrapée !"}>❤️</div>
               </>
             )}
