@@ -16,7 +16,7 @@ import { ffColorAction, ffFinisherAction, ffPenaltyAction, ffResetColorsAction, 
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
-import { TeamsManager, type TeamWithMembers, type RefereeView } from "./TeamsManager";
+import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { ArbitrageTab } from "./ArbitrageTab";
 import { SettingsPanel } from "./SettingsPanel";
@@ -30,7 +30,7 @@ type View = "race" | "results" | "runners" | "teams" | "arbitrage";
 // avec les identifiants permanents (coureurs = membres d'equipe), la persistance Postgres et les onglets communs
 // (Equipes & arbitres, Arbitrage). Ecran PC projete.
 export function FeteForaineClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll, picker,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -45,6 +45,7 @@ export function FeteForaineClient({
   pendingRequests: PendingRequest[];
   board: BoardData | null;
   exercisesAll: { id: string; label: string; number: number }[];
+  picker: PickerData;
 }) {
   const router = useRouter();
   const { ctx, startedAtMs, endedAtMs, pauses } = bundle;
@@ -230,7 +231,7 @@ export function FeteForaineClient({
 
         {view === "results" && <ResultsView ctx={ctx} sessionId={sessionId} onChanged={refresh} hasData={phase !== "pre" || ctx.events.length > 0} />}
         {view === "runners" && <RunnersView ctx={ctx} onChanged={refresh} hasData={phase !== "pre" || ctx.events.length > 0} />}
-        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} />}
+        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
         {view === "arbitrage" && board && <ArbitrageTab board={board} />}
       </main>
 

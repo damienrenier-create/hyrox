@@ -22,3 +22,27 @@ export function displayName(user: { name?: string | null; firstName?: string | n
 export function displayPseudo(pseudo: string): string {
   return STAFF_DISPLAY[pseudo.trim().toUpperCase()] ?? pseudo;
 }
+
+// Les profs peuvent etre encodes dans une equipe comme n'importe quel eleve, par leur NOM DE FAMILLE et
+// quelle que soit la classe : DAMZER = Renier, GUIZER = Tasquin, SIMZER = Baugnee, AXEZER = Pirlot, RACZER = Mme.
+const STAFF_PERSON: Record<string, { firstName: string; lastName: string }> = {
+  DAMZER: { firstName: "D.", lastName: "Renier" },
+  "DAMIEN RENIER": { firstName: "D.", lastName: "Renier" },
+  GUIZER: { firstName: "G.", lastName: "Tasquin" },
+  AXEZER: { firstName: "A.", lastName: "Pirlot" },
+  SIMZER: { firstName: "S.", lastName: "Baugnée" },
+  RACZER: { firstName: "", lastName: "Mme" },
+};
+
+export const STAFF_ROLES = ["ADMIN", "MASTER_ADMIN"];
+export const STAFF_CLASS_LABEL = "prof";
+
+// Prenom / nom tels qu'ils s'affichent dans une equipe : un eleve garde les siens, un prof prend son nom d'usage.
+export function memberNames(user: { name?: string | null; firstName?: string | null; lastName?: string | null; role?: string | null }): { firstName: string; lastName: string } {
+  const staff = STAFF_PERSON[(user.name ?? "").trim().toUpperCase()];
+  if (staff) return staff;
+  return { firstName: user.firstName ?? "", lastName: user.lastName ?? "" };
+}
+
+// Compare sans accents ni majuscules : « baugnee » trouve « Baugnée ».
+export const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();

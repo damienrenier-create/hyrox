@@ -32,7 +32,7 @@ import {
   type FinalScore,
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import type { RaceContextBundle } from "@/lib/race-context";
-import { TeamsManager, type TeamWithMembers, type RefereeView, type TeamMemberView } from "./TeamsManager";
+import { TeamsManager, type TeamWithMembers, type RefereeView, type TeamMemberView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { SettingsPanel } from "./SettingsPanel";
 import { ArbitrageTab } from "./ArbitrageTab";
@@ -345,7 +345,7 @@ export function SessionStep({ to, dir }: { to: SessionOption | null; dir: "older
 }
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, canCorrect = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, canCorrect = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -353,6 +353,7 @@ export function GreffierClient({
   olderSession: SessionOption | null;
   newerSession: SessionOption | null;
   isMaster?: boolean;
+  picker: PickerData; // roster precharge + coequipiers habituels (voir TeamsManager)
   canCorrect?: boolean; // DAMZER et GREFFIER : retirer un tour precis (les coachs ne suppriment rien)
   bundle: RaceContextBundle;
   teamsWithMembers: TeamWithMembers[];
@@ -779,7 +780,7 @@ export function GreffierClient({
         ) : view === "arbitrage" && board ? (
           <ArbitrageTab board={board} />
         ) : (
-          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} />
+          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} picker={picker} />
         )}
       </main>
 

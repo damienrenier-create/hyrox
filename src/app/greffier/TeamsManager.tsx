@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   addRefereeAction,
   addTeamMemberAction,
   removeRefereeAction,
   removeTeamMemberAction,
-  searchAllStudentsAction,
   setSessionClassesAction,
   teamDeletionPreviewAction,
   deleteTeamAction,
@@ -17,6 +16,11 @@ import { decideRefereeAction } from "./referee-decisions";
 import { MAX_CLASSES, REFEREE_REASONS } from "@/lib/session-roles";
 import { btn, cx, ui } from "@/lib/ui";
 import { cake } from "@/lib/birthday";
+import { fold } from "@/lib/staff-names";
+import type { PairHit } from "@/lib/teammates";
+
+// Tout ce dont le selecteur a besoin, precharge par la page : plus aucune requete pendant la frappe.
+export type PickerData = { roster: StudentHit[]; pairs: Record<string, PairHit[]> };
 
 export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null; birthday?: boolean };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
@@ -30,6 +34,7 @@ type Props = {
   referees: RefereeView[];
   phase: "pre" | "run" | "post";
   startByTeam?: Record<string, { number: number; label: string }>; // Pyramide : atelier de depart, annonce aux eleves
+  picker: PickerData;
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -37,7 +42,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -276,6 +281,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
           title={active.name}
           start={startByTeam?.[active.id] ?? null}
           classes={classes}
+          picker={picker}
           onClose={() => setActiveTeamId(null)}
           nextLabel={activeIndex >= 0 && activeIndex < teams.length - 1 ? `${teams[activeIndex + 1].name} →` : null}
           onNext={() => activeIndex >= 0 && activeIndex < teams.length - 1 && setActiveTeamId(teams[activeIndex + 1].id)}
@@ -301,6 +307,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
         <StudentPicker
           title="Ajouter un arbitre"
           classes={classes}
+          picker={picker}
           onClose={() => setRefereeOpen(false)}
           nextLabel={null}
           onNext={() => {}}
@@ -378,11 +385,12 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
 // Modale de saisie intelligente : recherche (prefixe prenom/nom) restreinte aux classes choisies.
 function StudentPicker({
-  title, start = null, classes, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote,
+  title, start = null, classes, picker, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote,
 }: {
   title: string;
   start?: { number: number; label: string } | null; // atelier de depart, annonce en grand aux eleves
   classes: string[];
+  picker: PickerData;
   onClose: () => void;
   nextLabel: string | null;
   onNext: () => void;
@@ -393,8 +401,30 @@ function StudentPicker({
   withNote?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<StudentHit[]>([]);
   const [note, setNote] = useState<string>(REFEREE_REASONS[0]);
+  // Coequipiers habituels des personnes deja dans la liste, sans doublon ni personne deja presente.
+  const memberKey = list.map((m) => m.id).join(",");
+  const suggested = useMemo(() => {
+    const seen = new Set(memberKey ? memberKey.split(",") : []);
+    const out: PairHit[] = [];
+    for (const id of [...seen]) for (const p of picker.pairs[id] ?? []) if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    return out;
+  }, [memberKey, picker.pairs]);
+  const pairOf = useMemo(() => new Map(suggested.map((p) => [p.id, p])), [suggested]);
+  // Sans saisie : les coequipiers habituels. Avec saisie : le roster precharge, coequipiers en tete.
+  const hits = useMemo<StudentHit[]>(() => {
+    const qf = fold(query.trim());
+    if (!qf) return suggested.slice(0, 6).map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, className: p.className }));
+    const rank = new Map(suggested.map((p, i) => [p.id, i]));
+    return picker.roster
+      .filter((h) => {
+        const first = fold(h.firstName);
+        const last = fold(h.lastName);
+        return first.startsWith(qf) || last.startsWith(qf) || `${first} ${last}`.startsWith(qf) || `${last} ${first}`.startsWith(qf);
+      })
+      .sort((a, b) => (rank.get(a.id) ?? 99) - (rank.get(b.id) ?? 99) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
+      .slice(0, 12);
+  }, [query, picker.roster, suggested]);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -402,23 +432,6 @@ function StudentPicker({
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [title]);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 1) {
-      setHits([]);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      const res = await searchAllStudentsAction(q, classes);
-      if (!cancelled) setHits(res);
-    }, 150);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [query, classes]);
 
   function pick(h: StudentHit) {
     setError("");
@@ -429,7 +442,6 @@ function StudentPicker({
         return;
       }
       setQuery("");
-      setHits([]);
       setTimeout(() => inputRef.current?.focus(), 50);
     });
   }
@@ -486,7 +498,10 @@ function StudentPicker({
           spellCheck={false}
           className={`${ui.input} text-base py-3`}
         />
-        <p className={`${ui.hint} mt-1`}>Recherche dans : {classes.length ? classes.join(", ") : "toutes les classes (aucune classe sélectionnée)"}.</p>
+        <p className={`${ui.hint} mt-1`}>
+          Recherche dans : {classes.length ? classes.join(", ") : "toutes les classes (aucune classe sélectionnée)"}, et les profs par nom de famille.
+          {suggested.length > 0 && !query.trim() && <> · <b>Coéquipiers habituels</b> proposés d&apos;abord ; en <span className="text-red-700 font-bold">rouge</span>, ceux dont la dernière équipe commune a fini dans les 3 moins bons scores ou avec une auto-évaluation sous 3/5.</>}
+        </p>
         {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
         {hits.length > 0 && (
           <ul className="mt-2 border border-line rounded-xl divide-y divide-line max-h-64 overflow-auto">
@@ -497,9 +512,20 @@ function StudentPicker({
                   <button
                     onClick={() => pick(h)}
                     disabled={pending || st.disabled}
-                    className={cx("w-full text-left p-2 text-sm flex justify-between items-center gap-2 transition", st.disabled ? "text-ink-3" : "hover:bg-brand-soft")}
+                    title={pairOf.get(h.id)?.why || undefined}
+                    className={cx(
+                      "w-full text-left p-2 text-sm flex justify-between items-center gap-2 transition",
+                      st.disabled ? "text-ink-3" : pairOf.get(h.id)?.red ? "bg-red-50 text-red-800 hover:bg-red-100" : "hover:bg-brand-soft"
+                    )}
                   >
-                    <span><span className="font-bold">{h.lastName}</span> {h.firstName}</span>
+                    <span>
+                      <span className="font-bold">{h.lastName}</span> {h.firstName}
+                      {pairOf.get(h.id) && (
+                        <span className={cx(ui.chip, "ml-2", pairOf.get(h.id)!.red ? "bg-red-600 text-white" : ui.chipBrand)}>
+                          {pairOf.get(h.id)!.red ? "⚠ à l'œil" : "coéquipier habituel"} ×{pairOf.get(h.id)!.count}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-xs text-ink-3 text-right">{h.className ?? "?"}{st.label ? ` · ${st.label}` : ""}</span>
                   </button>
                 </li>
@@ -507,7 +533,7 @@ function StudentPicker({
             })}
           </ul>
         )}
-        {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Aucun élève trouvé.</p>}
+        {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Personne ne correspond dans ces classes (ni chez les profs).</p>}
 
         <p className={`${ui.label} mt-4`}>Déjà dans {title.startsWith("Ajouter") ? "la liste" : title} ({list.length})</p>
         <ul className="divide-y divide-line border border-line rounded-xl">

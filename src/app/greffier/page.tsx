@@ -8,6 +8,9 @@ import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { isBirthdayToday } from "@/lib/birthday";
+import { teammatePairs } from "@/lib/teammates";
+import { STAFF_CLASS_LABEL, STAFF_ROLES, memberNames } from "@/lib/staff-names";
+import type { PickerData } from "./TeamsManager";
 import { readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
@@ -69,13 +72,19 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
   // Les eleves sont charges UNE fois (une requete) et les membres de toutes les equipes en parallele :
   // la page greffier est re-rendue a chaque rafraichissement, elle doit rester legere.
-  const [rawTeams, students, refereeRows, classes] = await Promise.all([
+  const [rawTeams, users, refereeRows, classes] = await Promise.all([
     db.orm.public.Team.where({ sessionId: session.id }).all(),
-    db.orm.public.User.where({ role: "STUDENT" }).all(),
+    db.orm.public.User.where({}).all(),
     db.orm.public.SessionReferee.where({ sessionId: session.id }).orderBy((r) => r.createdAt.asc()).all(),
     getSessionClasses(session.id),
   ]);
-  const studentById = new Map(students.map((u) => [u.id, u]));
+  const students = users.filter((u) => u.role === "STUDENT");
+  // Les profs jouent aussi : membres et arbitres sont cherches parmi TOUS les comptes.
+  const studentById = new Map(users.filter((u) => u.role === "STUDENT" || STAFF_ROLES.includes(u.role as string)).map((u) => [u.id, u]));
+  const view = (u: (typeof users)[number]) => {
+    const n = memberNames(u);
+    return { id: u.id, firstName: n.firstName, lastName: n.lastName, className: u.role === "STUDENT" ? u.className ?? null : STAFF_CLASS_LABEL };
+  };
   const sortedTeams = [...rawTeams].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const membersByTeam = await Promise.all(sortedTeams.map((t) => db.orm.public.TeamMember.where({ teamId: t.id }).all()));
   const teamsWithMembers: TeamWithMembers[] = [];
@@ -85,7 +94,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     for (const m of membersByTeam[i]) {
       const u = studentById.get(m.userId);
       if (u) {
-        views.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, birthday: isBirthdayToday(u.dateOfBirth) });
+        views.push({ ...view(u), birthday: isBirthdayToday(u.dateOfBirth) });
         teamOfStudent.set(u.id, t.name);
       }
     }
@@ -96,13 +105,21 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const referees: RefereeView[] = [];
   for (const r of refereeRows) {
     const u = studentById.get(r.userId) ?? (await db.orm.public.User.where({ id: r.userId }).first());
-    if (u) referees.push({ id: u.id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", className: u.className ?? null, note: r.note ?? null, status: r.status, teamName: teamOfStudent.get(u.id) ?? null });
+    if (u) referees.push({ ...view(u), note: r.note ?? null, status: r.status, teamName: teamOfStudent.get(u.id) ?? null });
   }
   const pendingRequests: PendingRequest[] = referees
     .filter((r) => r.status === "PENDING")
     .map((r) => ({ userId: r.id, name: `${r.firstName} ${r.lastName}`.trim(), className: r.className, note: r.note, teamName: r.teamName, since: 0 }));
 
   const allClasses = [...new Set(students.map((u) => u.className).filter((c): c is string => !!c))].sort();
+
+  // Selecteur d'eleves PRECHARGE : les eleves des classes de la seance (toutes si aucune) + les profs, et pour
+  // chacun ses coequipiers habituels. Plus aucune requete pendant la frappe : la suggestion est immediate.
+  const inScope = classes.length ? students.filter((u) => u.className && classes.includes(u.className)) : students;
+  const roster = [...inScope, ...users.filter((u) => STAFF_ROLES.includes(u.role as string))]
+    .map(view)
+    .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
+  const picker: PickerData = { roster, pairs: await teammatePairs(inScope.map((u) => u.id)) };
 
   // Chaque seance-type a son greffier : Fete Foraine (ateliers + corde + Finisher) ou Pyramide (tours).
   if (session.wodType === "FETE_FORAINE") {
@@ -121,6 +138,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         referees={referees}
         pendingRequests={pendingRequests}
         board={board}
+        picker={picker}
         exercisesAll={exercisesFor(session)}
       />
     );
@@ -143,6 +161,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
       referees={referees}
       pendingRequests={pendingRequests}
       board={board}
+      picker={picker}
     />
   );
 }

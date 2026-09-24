@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
 import { deleteTeam, teamDeletionPreview } from "@/lib/team-count";
+import { STAFF_CLASS_LABEL, STAFF_ROLES, fold, memberNames } from "@/lib/staff-names";
 
 async function requireGreffier() {
   const user = await getSession();
@@ -36,17 +37,22 @@ export async function searchAllStudentsAction(query: string, classes: string[] =
   const q = query.trim().toLowerCase();
   if (q.length < 1) return [];
   const allowed = new Set(classes);
-  const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
-  return students
-    .filter((s) => allowed.size === 0 || (s.className && allowed.has(s.className)))
-    .filter((s) => {
-      const first = (s.firstName ?? "").toLowerCase();
-      const last = (s.lastName ?? "").toLowerCase();
-      return first.startsWith(q) || last.startsWith(q) || `${first} ${last}`.startsWith(q) || `${last} ${first}`.startsWith(q);
+  const qf = fold(q);
+  // Eleves des classes choisies + les profs, par nom de famille et quelle que soit la classe.
+  const users = await db.orm.public.User.where({}).all();
+  return users
+    .filter((u) => (u.role === "STUDENT" && (allowed.size === 0 || (u.className && allowed.has(u.className)))) || STAFF_ROLES.includes(u.role as string))
+    .map((u) => {
+      const n = memberNames(u);
+      return { id: u.id, firstName: n.firstName, lastName: n.lastName, className: u.role === "STUDENT" ? u.className ?? null : STAFF_CLASS_LABEL };
     })
-    .sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? "") || (a.firstName ?? "").localeCompare(b.firstName ?? ""))
-    .slice(0, 10)
-    .map((s) => ({ id: s.id, firstName: s.firstName ?? "", lastName: s.lastName ?? "", className: s.className ?? null }));
+    .filter((h) => {
+      const first = fold(h.firstName);
+      const last = fold(h.lastName);
+      return first.startsWith(qf) || last.startsWith(qf) || `${first} ${last}`.startsWith(qf) || `${last} ${first}`.startsWith(qf);
+    })
+    .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
+    .slice(0, 10);
 }
 
 // ===== Membres d'equipe : un eleve = une seule equipe par seance, persiste par identifiant =====
@@ -60,8 +66,10 @@ export async function addTeamMemberAction(teamId: string, userId: string): Promi
   const team = await db.orm.public.Team.where({ id: teamId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const student = await db.orm.public.User.where({ id: userId }).first();
-  if (!student || student.role !== "STUDENT") return { error: "Élève introuvable." };
-  const member: MemberView = { id: student.id, firstName: student.firstName ?? "", lastName: student.lastName ?? "", className: student.className ?? null };
+  // Un prof peut jouer dans une equipe comme un eleve ; le compte GREFFIER, lui, n'est pas une personne.
+  if (!student || !(student.role === "STUDENT" || STAFF_ROLES.includes(student.role as string))) return { error: "Élève introuvable." };
+  const names = memberNames(student);
+  const member: MemberView = { id: student.id, firstName: names.firstName, lastName: names.lastName, className: student.role === "STUDENT" ? student.className ?? null : STAFF_CLASS_LABEL };
 
   const sessionTeams = await db.orm.public.Team.where({ sessionId: team.sessionId }).all();
   const teamIds = new Set(sessionTeams.map((t) => t.id));
@@ -70,7 +78,7 @@ export async function addTeamMemberAction(teamId: string, userId: string): Promi
   if (existing) {
     if (existing.teamId === teamId) return { ok: true, member };
     const other = sessionTeams.find((t) => t.id === existing.teamId);
-    return { error: `${student.firstName} ${student.lastName} est déjà dans ${other?.name ?? "une autre équipe"}.` };
+    return { error: `${names.firstName} ${names.lastName} est déjà dans ${other?.name ?? "une autre équipe"}.` };
   }
 
   await db.orm.public.TeamMember.create({ teamId, userId });
