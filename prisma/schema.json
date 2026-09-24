@@ -28,6 +28,26 @@
       "model": "Lap",
       "namespace": "public"
     },
+    "level": {
+      "model": "Level",
+      "namespace": "public"
+    },
+    "levelExercise": {
+      "model": "LevelExercise",
+      "namespace": "public"
+    },
+    "levelTick": {
+      "model": "LevelTick",
+      "namespace": "public"
+    },
+    "mineBoard": {
+      "model": "MineBoard",
+      "namespace": "public"
+    },
+    "mineReveal": {
+      "model": "MineReveal",
+      "namespace": "public"
+    },
     "racePause": {
       "model": "RacePause",
       "namespace": "public"
@@ -188,6 +208,10 @@
               {
                 "name": "FETE_FORAINE",
                 "value": "FETE_FORAINE"
+              },
+              {
+                "name": "LEVEL",
+                "value": "LEVEL"
               }
             ]
           }
@@ -687,6 +711,13 @@
                   "kind": "scalar"
                 }
               },
+              "targetUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "teamId": {
                 "nullable": false,
                 "type": {
@@ -787,6 +818,9 @@
                 "sessionId": {
                   "column": "sessionId"
                 },
+                "targetUserId": {
+                  "column": "targetUserId"
+                },
                 "teamId": {
                   "column": "teamId"
                 }
@@ -861,6 +895,462 @@
               },
               "namespaceId": "public",
               "table": "lap"
+            }
+          },
+          "Level": {
+            "fields": {
+              "cards": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "number": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "cards": {
+                  "column": "cards"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "number": {
+                  "column": "number"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "level"
+            }
+          },
+          "LevelExercise": {
+            "fields": {
+              "active": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "label": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "weight": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/float8@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "active": {
+                  "column": "active"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdBy": {
+                  "column": "createdBy"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "label": {
+                  "column": "label"
+                },
+                "order": {
+                  "column": "order"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "weight": {
+                  "column": "weight"
+                }
+              },
+              "namespaceId": "public",
+              "table": "levelExercise"
+            }
+          },
+          "LevelTick": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "by": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "card": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "level": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "teamId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "by": {
+                  "column": "by"
+                },
+                "card": {
+                  "column": "card"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "level": {
+                  "column": "level"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "teamId": {
+                  "column": "teamId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "levelTick"
+            }
+          },
+          "MineBoard": {
+            "fields": {
+              "cols": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "mines": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "rows": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "seed": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "cols": {
+                  "column": "cols"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "mines": {
+                  "column": "mines"
+                },
+                "rows": {
+                  "column": "rows"
+                },
+                "seed": {
+                  "column": "seed"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "mineBoard"
+            }
+          },
+          "MineReveal": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "col": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "evaluationId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "refereeId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "row": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "col": {
+                  "column": "col"
+                },
+                "evaluationId": {
+                  "column": "evaluationId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "refereeId": {
+                  "column": "refereeId"
+                },
+                "row": {
+                  "column": "row"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "mineReveal"
             }
           },
           "RacePause": {
@@ -1813,6 +2303,52 @@
                 },
                 "to": {
                   "model": "Evaluation",
+                  "namespace": "public"
+                }
+              },
+              "levelTicks": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "LevelTick",
+                  "namespace": "public"
+                }
+              },
+              "mineBoard": {
+                "cardinality": "1:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "MineBoard",
+                  "namespace": "public"
+                }
+              },
+              "mineReveals": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "MineReveal",
                   "namespace": "public"
                 }
               },
@@ -3144,8 +3680,8 @@
             "cyclePlan": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE')",
-                  "name": "cyclePlan_wodType_check_686f9918",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL')",
+                  "name": "cyclePlan_wodType_check_da837c10",
                   "prefix": "cyclePlan_wodType_check"
                 }
               ],
@@ -3312,6 +3848,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "targetUserId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "teamId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3383,6 +3924,14 @@
                   ],
                   "name": "evaluation_sessionId_idx_29f415d4",
                   "prefix": "evaluation_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "targetUserId"
+                  ],
+                  "name": "evaluation_targetUserId_idx_e0d638f0",
+                  "prefix": "evaluation_targetUserId_idx",
                   "unique": false
                 },
                 {
@@ -3472,6 +4021,394 @@
                 ]
               },
               "uniques": []
+            },
+            "level": {
+              "columns": {
+                "cards": {
+                  "codecId": "pg/json@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "[]"
+                  },
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "number": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "number"
+                  ]
+                }
+              ]
+            },
+            "levelExercise": {
+              "columns": {
+                "active": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdBy": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "label": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "weight": {
+                  "codecId": "pg/float8@1",
+                  "nativeType": "float8",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "label"
+                  ]
+                }
+              ]
+            },
+            "levelTick": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "by": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "card": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "level": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "teamId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "levelTick"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "levelTick_sessionId_idx_29f415d4",
+                  "prefix": "levelTick_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId",
+                    "teamId",
+                    "level",
+                    "card"
+                  ]
+                }
+              ]
+            },
+            "mineBoard": {
+              "columns": {
+                "cols": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "mines": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "rows": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "seed": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "mineBoard"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ]
+                }
+              ]
+            },
+            "mineReveal": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "col": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "evaluationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "refereeId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "row": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "mineReveal"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "mineReveal_sessionId_idx_29f415d4",
+                  "prefix": "mineReveal_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "evaluationId"
+                  ]
+                },
+                {
+                  "columns": [
+                    "sessionId",
+                    "refereeId",
+                    "row",
+                    "col"
+                  ]
+                }
+              ]
             },
             "racePause": {
               "columns": {
@@ -4140,8 +5077,8 @@
             "session": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE')",
-                  "name": "session_wodType_check_686f9918",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL')",
+                  "name": "session_wodType_check_da837c10",
                   "prefix": "session_wodType_check"
                 }
               ],
@@ -5079,7 +6016,8 @@
                 "PYRAMIDE_CLASSIQUE",
                 "RELAIS_SPRINT",
                 "TOUCHE_COULE_HYROX",
-                "FETE_FORAINE"
+                "FETE_FORAINE",
+                "LEVEL"
               ]
             }
           }
@@ -5088,10 +6026,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a8eaac01ec949473fec558985cff6f60d9021dd41596ec3c77f4cff9c07d8869"
+    "storageHash": "44d75a4aa57c1618fae357e63982cc2aabb12d219e413c21a42f94ec4e7bc9cc"
   },
   "execution": {
-    "executionHash": "5692c6da233d65bb9f783d697d981d4cd207b2a0f536c1f06462f23976671e46",
+    "executionHash": "e9e2aa3cf57082bba9f3235c83a206d4751d1ceb0e20f5eb2a61916d5df9cbe9",
     "mutations": {
       "defaults": [
         {
@@ -5158,6 +6096,61 @@
             "column": "id",
             "namespace": "public",
             "table": "lap"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "level"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "levelExercise"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "levelTick"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "mineBoard"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "mineReveal"
           }
         },
         {
