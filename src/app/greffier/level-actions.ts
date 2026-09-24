@@ -30,8 +30,9 @@ export type LevelLive = {
   raceEndedAtMs: number | null;
   // Signature de la structure (equipes, membres, echelle, temps impose) : si elle change, l'ecran recharge la page.
   structure: string;
+  at: number; // heure serveur de la lecture : l'ecran n'applique jamais un etat plus ancien qu'un deja applique
 };
-export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[] };
+export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; at: number };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
 
 async function raceClock(sessionId: string) {
@@ -47,6 +48,7 @@ const liveTick = (startedAtMs: number | null, pauses: { from: number; to: number
 
 // Etat d'une seule equipe, apres une coche : 3 requetes, l'ecran remplace juste cette equipe.
 async function teamLive(sessionId: string, teamId: string, startedAtMs: number | null, pauses: { from: number; to: number | null }[], rsId: string | null): Promise<TeamLive> {
+  const at = Date.now();
   const [ticks, losses, cards] = await Promise.all([
     db.orm.public.LevelTick.where({ sessionId, teamId }).all(),
     db.orm.public.LevelLoss.where({ sessionId, teamId }).all(),
@@ -54,6 +56,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
   ]);
   return {
     teamId,
+    at,
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
     yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
@@ -65,6 +68,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
 export async function levelLiveAction(sessionId: string): Promise<LevelLive | { error: string }> {
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return { error: "Accès refusé." };
+  const at = Date.now();
   const ctx = await loadZombieContext(sessionId);
   if (!ctx) return { error: "Séance introuvable." };
   const caught = await applyZombieCatches(sessionId, undefined, ctx);
@@ -89,6 +93,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     endedAtMs: rs?.endedAt ? toMs(rs.endedAt) : null,
     raceEndedAtMs: ctx.session.raceEndedAt ? toMs(ctx.session.raceEndedAt) : null,
     structure,
+    at,
   };
 }
 

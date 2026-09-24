@@ -48,21 +48,39 @@ export function LevelClient({
   // Etat vivant (coches, vies, cartes, chrono) tenu localement : une coche remplace la ligne de son equipe,
   // le pouls recharge cet etat leger, et la page entiere n'est rechargee que si la structure change.
   const [live, setLive] = useState<LevelLive>(() => liveFromBundle(bundle));
-  useEffect(() => { setLive(liveFromBundle(bundle)); setOptimistic(new Map()); }, [bundle]);
+  useEffect(() => { setLive(liveFromBundle(bundle)); setOptimistic(new Map()); lastApplied.current = new Map(); }, [bundle]);
   const { startedAtMs, endedAtMs, pauses } = live;
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   // Coches en attente de confirmation serveur : l'ecran reagit au doigt, la reponse de la coche confirme.
   const [optimistic, setOptimistic] = useState<Map<string, boolean>>(new Map());
-  function mergeTeam(t: TeamLive) {
+  // Heure serveur du dernier etat applique par equipe : une reponse plus ancienne (taps qui se croisent) est
+  // ignoree, et seule la coche terminee est liberee — les autres restent affichees telles que tapees.
+  const lastApplied = useRef<Map<string, number>>(new Map());
+  function mergeTeam(t: TeamLive, finishedKey?: string) {
+    if (finishedKey) setOptimistic((m) => { const n = new Map(m); n.delete(finishedKey); return n; });
+    if (t.at <= (lastApplied.current.get(t.teamId) ?? 0)) return;
+    lastApplied.current.set(t.teamId, t.at);
     setLive((l) => ({
       ...l,
       ticks: [...l.ticks.filter((x) => x.teamId !== t.teamId), ...t.ticks],
       losses: [...l.losses.filter((x) => x.teamId !== t.teamId), ...t.losses],
       yellowCards: [...l.yellowCards.filter((x) => x.teamId !== t.teamId), ...t.yellowCards],
     }));
-    setOptimistic((m) => { const n = new Map(m); for (const k of n.keys()) if (k.startsWith(t.teamId + "_")) n.delete(k); return n; });
+  }
+  // Etat complet du pouls : les equipes dont on a un etat plus recent gardent leurs donnees locales.
+  function applyLive(l: LevelLive) {
+    setLive((prev) => {
+      const newer = new Set([...lastApplied.current.entries()].filter(([, at]) => at > l.at).map(([id]) => id));
+      if (!newer.size) return l;
+      return {
+        ...l,
+        ticks: [...l.ticks.filter((x) => !newer.has(x.teamId)), ...prev.ticks.filter((x) => newer.has(x.teamId))],
+        losses: [...l.losses.filter((x) => !newer.has(x.teamId)), ...prev.losses.filter((x) => newer.has(x.teamId))],
+        yellowCards: [...l.yellowCards.filter((x) => !newer.has(x.teamId)), ...prev.yellowCards.filter((x) => newer.has(x.teamId))],
+      };
+    });
   }
 
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
@@ -106,7 +124,7 @@ export function LevelClient({
         if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); return; }
         lastStructure.current = l.structure;
         const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
-        if (key !== lastLive.current) { lastLive.current = key; setLive(l); }
+        if (key !== lastLive.current) { lastLive.current = key; applyLive(l); }
       } catch {
         /* reseau : prochain tick */
       } finally {
@@ -167,7 +185,7 @@ export function LevelClient({
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
-      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) setLive(l); });
+      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     }
   }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, sessionId]);
 
@@ -208,7 +226,7 @@ export function LevelClient({
         setOptimistic((m) => { const n = new Map(m); n.delete(key); return n; });
         return;
       }
-      mergeTeam(res.team);
+      mergeTeam(res.team, key);
       if (res.caught) setError(`Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.`);
     });
   }
@@ -379,7 +397,7 @@ export function LevelClient({
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "" };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0 };
 }
 
 // Colonnes d'exercices du recap : ordre de premiere apparition dans l'echelle.
@@ -395,7 +413,7 @@ const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 // Cadence de marche : lente pour les premiers paliers (zombies kawaii qui trainent la patte), plus vive ensuite.
 type ZombieKind = number | "boss";
 const spriteFile = (kind: ZombieKind) => `/zombies/${kind === "boss" ? "boss" : "z" + String(kind).padStart(2, "0")}.png`;
-const walkSeconds = (kind: ZombieKind) => (kind === "boss" ? 0.9 : kind <= 3 ? 1.5 : kind <= 7 ? 1.1 : 0.75);
+const walkSeconds = (_kind: ZombieKind) => 1.2; // meme cadence pour tous (Sartay : pas plus vite au fil des paliers)
 const spriteCache = new Map<string, boolean>();
 function useSprite(kind: ZombieKind): boolean | null {
   const key = String(kind);
