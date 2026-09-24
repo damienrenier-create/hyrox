@@ -89,6 +89,9 @@ export async function deleteTeam(teamId: string): Promise<{ error: string } | { 
   for (const t of await db.orm.public.LevelTick.where({ sessionId, teamId }).all()) {
     await db.orm.public.LevelTick.where({ id: t.id }).delete();
   }
+  for (const l of await db.orm.public.LevelLoss.where({ sessionId, teamId }).all()) {
+    await db.orm.public.LevelLoss.where({ id: l.id }).delete();
+  }
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (rs) {
     for (const l of await db.orm.public.Lap.where({ raceStateId: rs.id, teamId }).all()) {

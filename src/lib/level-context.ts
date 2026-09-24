@@ -3,7 +3,8 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { progressOf, rankTeams, type FrozenLevel, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { progressOf, rankTeams, type FrozenLevel, type Loss, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
 // classements. Module serveur sans "use server" : importe par les pages et les actions, jamais expose.
@@ -25,6 +26,8 @@ export type LevelBundle = {
   evaluations: LevelEval[]; // demineur : une par case jouee (eleve x exercice)
   capMin: number | null; // temps impose (minutes de chrono), null = libre
   refereeMode: boolean; // activite des dispenses (demineur)
+  zombies: boolean; // mode zombies (vies, retour au niveau precedent)
+  losses: (Loss & { id: string })[];
 };
 
 export function readLevelCap(settings: unknown): number | null {
@@ -33,6 +36,7 @@ export function readLevelCap(settings: unknown): number | null {
 }
 
 export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> {
+  await applyZombieCatches(sessionId);
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) throw new Error("Séance introuvable.");
 
@@ -67,10 +71,12 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const endedAtMs = rs?.endedAt ? toMs(rs.endedAt) : null;
   const pauses = rs ? (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })) : [];
-  const [rawTicks, rawCards] = await Promise.all([
+  const [rawTicks, rawCards, rawLosses] = await Promise.all([
     db.orm.public.LevelTick.where({ sessionId }).orderBy((t) => t.at.asc()).all(),
     rs ? db.orm.public.YellowCard.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
+    db.orm.public.LevelLoss.where({ sessionId }).all(),
   ]);
+  const losses = rawLosses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const ticks: LevelTickRow[] = rawTicks.map((t) => {
     const abs = toMs(t.at);
     return { id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, abs) ?? 0, absMs: abs, by: t.by };
@@ -107,12 +113,14 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     evaluations,
     capMin: readLevelCap(session.settings),
     refereeMode: session.refereeMode,
+    zombies: readZombies(session.settings),
+    losses,
   };
 }
 
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
-  return rankTeams(bundle.teams.map((t) => progressOf(bundle.levels, t.id, bundle.ticks)));
+  return rankTeams(bundle.teams.map((t) => progressOf(bundle.levels, t.id, bundle.ticks, bundle.losses)));
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.

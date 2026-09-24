@@ -36,6 +36,7 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
   deleted.stations = await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
   // WOD Level : fiches cochees, cases du demineur (et l'ancienne carte), echelle figee (re-figee au prochain depart).
   await deleteAll(await db.orm.public.LevelTick.where({ sessionId }).all(), (id) => db.orm.public.LevelTick.where({ id }).delete());
+  await deleteAll(await db.orm.public.LevelLoss.where({ sessionId }).all(), (id) => db.orm.public.LevelLoss.where({ id }).delete());
   await deleteAll(await db.orm.public.MineReveal.where({ sessionId }).all(), (id) => db.orm.public.MineReveal.where({ id }).delete());
   await deleteAll(await db.orm.public.MineBoard.where({ sessionId }).all(), (id) => db.orm.public.MineBoard.where({ id }).delete());
   if (session.wodType === "LEVEL") {

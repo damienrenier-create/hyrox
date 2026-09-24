@@ -36,6 +36,10 @@
       "model": "LevelExercise",
       "namespace": "public"
     },
+    "levelLoss": {
+      "model": "LevelLoss",
+      "namespace": "public"
+    },
     "levelTick": {
       "model": "LevelTick",
       "namespace": "public"
@@ -1057,6 +1061,84 @@
               },
               "namespaceId": "public",
               "table": "levelExercise"
+            }
+          },
+          "LevelLoss": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "level": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "teamId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "level": {
+                  "column": "level"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "teamId": {
+                  "column": "teamId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "levelLoss"
             }
           },
           "LevelTick": {
@@ -2303,6 +2385,21 @@
                 },
                 "to": {
                   "model": "Evaluation",
+                  "namespace": "public"
+                }
+              },
+              "levelLosses": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "LevelLoss",
                   "namespace": "public"
                 }
               },
@@ -4155,6 +4252,74 @@
                   ]
                 }
               ]
+            },
+            "levelLoss": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "level": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "teamId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "levelLoss"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "levelLoss_sessionId_idx_29f415d4",
+                  "prefix": "levelLoss_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
             },
             "levelTick": {
               "columns": {
@@ -6026,10 +6191,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "44d75a4aa57c1618fae357e63982cc2aabb12d219e413c21a42f94ec4e7bc9cc"
+    "storageHash": "aed1cfa0cde3582b755ad0c6a9365d58364e5a571922d998b49b2b9bf20326ce"
   },
   "execution": {
-    "executionHash": "e9e2aa3cf57082bba9f3235c83a206d4751d1ceb0e20f5eb2a61916d5df9cbe9",
+    "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",
     "mutations": {
       "defaults": [
         {
@@ -6118,6 +6283,17 @@
             "column": "id",
             "namespace": "public",
             "table": "levelExercise"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "levelLoss"
           }
         },
         {

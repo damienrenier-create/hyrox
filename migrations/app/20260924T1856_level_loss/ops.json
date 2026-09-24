@@ -1,0 +1,122 @@
+[
+  {
+    "id": "table.levelLoss",
+    "label": "Create table \"levelLoss\"",
+    "summary": "Creates table \"levelLoss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "levelLoss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"levelLoss\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelLoss\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"levelLoss\"",
+        "sql": "CREATE TABLE \"public\".\"levelLoss\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"level\" int4 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"levelLoss\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelLoss\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.levelLoss.levelLoss_sessionId_idx_29f415d4",
+    "label": "Create index \"levelLoss_sessionId_idx_29f415d4\" on \"levelLoss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "levelLoss_sessionId_idx_29f415d4",
+        "table": "levelLoss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"levelLoss_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelLoss_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"levelLoss_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"levelLoss_sessionId_idx_29f415d4\" ON \"public\".\"levelLoss\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"levelLoss_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"levelLoss_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.levelLoss.levelLoss_sessionId_fkey",
+    "label": "Add foreign key \"levelLoss_sessionId_fkey\" on \"levelLoss\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "levelLoss_sessionId_fkey",
+        "table": "levelLoss"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"levelLoss_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelLoss_sessionId_fkey",
+          "public",
+          "\"public\".\"levelLoss\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"levelLoss_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"levelLoss\"\nADD CONSTRAINT \"levelLoss_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"levelLoss_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "levelLoss_sessionId_fkey",
+          "public",
+          "\"public\".\"levelLoss\""
+        ]
+      }
+    ]
+  }
+]

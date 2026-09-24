@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams,
+  activeCards, estimateSeconds, fmtTheoretical, levelLabel, progressOf, rankTeams, zombieGeometry, zombieTier,
   type FrozenLevel, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
@@ -106,7 +106,7 @@ export function LevelClient({
     }
     return out;
   }, [bundle.ticks, optimistic, liveMs]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(levels, t.id, ticks)])), [teams, levels, ticks]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(levels, t.id, ticks, bundle.losses)])), [teams, levels, ticks, bundle.losses]);
   const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
   const rankOf = useMemo(() => new Map(ranked.map((p, i) => [p.teamId, i + 1])), [ranked]);
   const levelByNumber = useMemo(() => new Map(levels.map((l) => [l.number, l])), [levels]);
@@ -116,6 +116,22 @@ export function LevelClient({
     return m;
   }, [bundle.yellowCards]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
+  // Mode zombies : quand un zombie touche un coeur, c'est le serveur qui tranche ; l'ecran se contente de
+  // demander une relecture (une seule par rattrapage, pas a chaque seconde).
+  const [caughtRefreshAt, setCaughtRefreshAt] = useState(0);
+  useEffect(() => {
+    if (!bundle.zombies || phase !== "run" || isPaused) return;
+    const raceNow = liveMs;
+    const due = [...progress.values()].some((p) => {
+      if (p.currentLevel === null) return false;
+      const l = levelByNumber.get(p.currentLevel);
+      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs).remainingMs <= 0;
+    });
+    if (due && Date.now() - caughtRefreshAt > 4000) {
+      setCaughtRefreshAt(Date.now());
+      router.refresh();
+    }
+  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, router]);
 
   function refresh() {
     router.refresh();
@@ -236,9 +252,9 @@ export function LevelClient({
             {teams.length === 0 ? (
               <p className={`${ui.cardPad} ${ui.muted}`}>Aucune équipe : compose-les dans l&apos;onglet « Équipes &amp; arbitres ».</p>
             ) : (
-              <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+              <div className="flex flex-col gap-1.5">
                 {teams.map((t) => (
-                  <TeamCard
+                  <TeamRow
                     key={t.id}
                     team={t}
                     progress={progress.get(t.id)!}
@@ -247,6 +263,9 @@ export function LevelClient({
                     yellow={cardsOf.get(t.id) ?? 0}
                     canTick={canTick}
                     pendingKeys={optimistic}
+                    zombies={bundle.zombies}
+                    raceMs={liveMs}
+                    running={phase === "run" && !isPaused}
                     onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
                     onYellow={(delta) => run(() => levelYellowCardAction(sessionId, t.id, delta))}
                   />
@@ -265,7 +284,7 @@ export function LevelClient({
         ))}
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
-        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} />}
+        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
       </main>
 
@@ -319,6 +338,120 @@ function exerciseColumns(levels: FrozenLevel[]): string[] {
 }
 
 const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+
+// Sprites : public/zombies/z01.png .. z10.png (4 frames en ligne, transparent). Absent -> emoji.
+const spriteCache = new Map<number, boolean>();
+function useSprite(tier: number): boolean | null {
+  const [ok, setOk] = useState<boolean | null>(spriteCache.get(tier) ?? null);
+  useEffect(() => {
+    if (spriteCache.has(tier)) { setOk(spriteCache.get(tier)!); return; }
+    const img = new Image();
+    img.onload = () => { spriteCache.set(tier, true); setOk(true); };
+    img.onerror = () => { spriteCache.set(tier, false); setOk(false); };
+    img.src = `/zombies/z${String(tier).padStart(2, "0")}.png`;
+  }, [tier]);
+  return ok;
+}
+
+function Zombie({ tier, moving }: { tier: number; moving: boolean }) {
+  const ok = useSprite(tier);
+  if (ok) {
+    return <span className={cx("block w-12 h-12", moving && "zwalk")} style={{ backgroundImage: `url(/zombies/z${String(tier).padStart(2, "0")}.png)`, backgroundSize: "400% 100%", backgroundRepeat: "no-repeat" }} title={`Zombie niveau ${tier}`} />;
+  }
+  return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block" }} title={`Zombie niveau ${tier}`}>🧟</span>;
+}
+
+function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys, zombies, raceMs, running, onToggle, onYellow }: {
+  team: LevelTeam;
+  progress: TeamProgress;
+  level: FrozenLevel | null;
+  rank: number;
+  yellow: number;
+  canTick: boolean;
+  pendingKeys: Map<string, boolean>;
+  zombies: boolean;
+  raceMs: number;
+  running: boolean;
+  onToggle: (level: number, card: number, done: boolean) => void;
+  onYellow: (delta: 1 | -1) => void;
+}) {
+  const finished = p.currentLevel === null;
+  const boss = !!level?.boss;
+  const act = level ? activeCards(level) : [];
+  const n = Math.max(1, act.length);
+  const remaining = [...act].filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`)).sort((a, b) => a.card.reps - b.card.reps || a.index - b.index);
+  const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs)) : null;
+  const danger = !!geo && geo.remainingMs <= 60_000;
+  const tier = level ? zombieTier(level.number) : 1;
+  return (
+    <section
+      title={team.members.map((m) => m.name).join(", ")}
+      className={cx(ui.card, "px-2 py-1 flex items-center gap-2 min-w-0 h-16", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger")}
+    >
+      <div className="flex flex-col gap-0.5 w-[190px] flex-shrink-0 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
+          {rank > 0 && <span className={cx(ui.chip, "px-1.5", rank === 1 ? ui.chipAccent : rank <= 3 ? ui.chipBrand : ui.chipMuted)}>#{rank}</span>}
+          {zombies && <span className="text-[11px] font-bold tabular-nums" title="Vies perdues">💔{p.losses}</span>}
+          <span className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+            {yellow > 0 && <button type="button" onClick={() => onYellow(-1)} disabled={!canTick} className="w-5 h-5 rounded-full bg-paper text-ink-2 hover:bg-line text-xs font-bold leading-none disabled:opacity-30" aria-label="Retirer une carte jaune">−</button>}
+            <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="h-5 rounded-full bg-paper hover:bg-line px-1.5 text-xs font-bold tabular-nums leading-none disabled:opacity-30" title="Donner une carte jaune">🟨{yellow}</button>
+          </span>
+        </div>
+        <div className="flex items-baseline gap-1 min-w-0" title={level?.name ?? undefined}>
+          {finished ? (
+            <span className="font-display font-extrabold text-sm text-success-ink">🏁 Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</span>
+          ) : level ? (
+            <>
+              <span className={cx("font-display font-extrabold text-lg leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
+              <span className="text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
+              <span className={`${ui.hint} tabular-nums ml-auto`}>{p.reps} reps</span>
+            </>
+          ) : (
+            <span className={ui.hint}>Échelle vide.</span>
+          )}
+        </div>
+      </div>
+
+      {/* Piste : zombie a gauche, coeur devant les fiches restantes alignees a droite (moitie droite de la piste). */}
+      <div className="relative flex-1 h-full min-w-0">
+        {!finished && level && (
+          <>
+            {geo && (
+              <>
+                <div className="absolute top-1/2 -translate-y-1/2 transition-[left] duration-1000 ease-linear" style={{ left: `calc(${geo.zombie * 100}% - 24px)` }}>
+                  <Zombie tier={tier} moving={running} />
+                </div>
+                <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full text-2xl leading-none transition-[left] duration-300", danger && "heartbeat")} style={{ left: `${geo.heart * 100}%` }} title={geo.remainingMs > 0 ? `Le zombie arrive dans ${fmt(geo.remainingMs)}` : "Rattrapée !"}>❤️</div>
+              </>
+            )}
+            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${(remaining.length / n) * 50}%` }}>
+              {remaining.map(({ card, index }) => {
+                const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    disabled={!canTick || busy}
+                    onClick={() => onToggle(level.number, index, false)}
+                    title={`${card.reps} ${cap(card.label)} — cocher quand c'est fait`}
+                    className={cx("flex-1 min-w-0 rounded-lg border px-1 text-left flex flex-col justify-center leading-tight transition active:scale-[.98] bg-card border-line-2 hover:border-brand", (!canTick || busy) && "opacity-60")}
+                  >
+                    <span className="font-display font-extrabold text-base tabular-nums">{card.reps}</span>
+                    <span className="font-bold text-[10px] truncate">{cap(card.label)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {p.currentDone > 0 && (
+              <button type="button" disabled={!canTick} onClick={() => { const last = act.filter(({ index }) => p.doneCards.has(`${level.number}_${index}`)).pop(); if (last) onToggle(level.number, last.index, true); }} className="absolute left-0 bottom-0 text-[10px] text-ink-3 underline disabled:opacity-40" title="Annuler la dernière fiche cochée de ce niveau">annuler une coche</button>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function TeamCard({ team, progress: p, level, rank, yellow, canTick, pendingKeys, onToggle, onYellow }: {
   team: LevelTeam;
@@ -403,7 +536,7 @@ function ResultsTable({ ranked, teamById, levelByNumber, cardsOf }: { ranked: Te
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>🟨</th>
+            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>
           </tr>
         </thead>
         <tbody>
@@ -420,11 +553,12 @@ function ResultsTable({ ranked, teamById, levelByNumber, cardsOf }: { ranked: Te
                 <td className="p-2 text-right tabular-nums">{p.lastTickMs !== null ? fmt(p.lastTickMs) : "—"}</td>
                 <td className="p-2 text-right tabular-nums">{p.reps}</td>
                 <td className="p-2 text-right tabular-nums">{fmtTheoretical(p.weighted)}</td>
+                <td className="p-2 text-right tabular-nums">{p.losses}</td>
                 <td className="p-2 text-right tabular-nums">{cardsOf.get(p.teamId) ?? 0}</td>
               </tr>
             );
           })}
-          {ranked.length === 0 && <tr><td colSpan={9} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
+          {ranked.length === 0 && <tr><td colSpan={10} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
         </tbody>
       </table>
     </div>

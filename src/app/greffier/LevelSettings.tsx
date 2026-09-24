@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTeamCountAction } from "./settings-actions";
-import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction } from "./level-actions";
+import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setZombiesAction } from "./level-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Onglet Reglages du greffier Level : nombre d'equipes (avant le depart), temps impose (avant ou pendant),
 // activite des dispenses (demineur), et les raccourcis vers l'atelier et les fiches a imprimer.
-export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen }: {
+export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true }: {
   sessionId: string;
+  zombies?: boolean;
   phase: "pre" | "run" | "post";
   numTeams: number;
   capMin: number | null;
@@ -61,6 +62,15 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
           </button>
           {capMin !== null && <button type="button" disabled={pending || phase === "post"} onClick={() => { setCap(""); run("Temps libre.", () => setLevelCapAction(sessionId, null)); }} className={btn.ghost}>Temps libre</button>}
         </div>
+      </section>
+
+      <section className={ui.cardPad}>
+        <h3 className={ui.h3}>Mode zombies</h3>
+        <p className={`${ui.hint} mb-2`}>Sur chaque niveau, un zombie avance vers le cœur de l&apos;équipe au rythme « durée du niveau + 3 min ». Chaque fiche cochée éloigne le cœur. S&apos;il l&apos;atteint, l&apos;équipe perd une vie et retombe au niveau précédent. Le classement compte les niveaux, puis les vies perdues.</p>
+        <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
+          <input type="checkbox" checked={zombies} disabled={pending} onChange={(e) => run(e.target.checked ? "Mode zombies activé." : "Mode zombies désactivé.", () => setZombiesAction(sessionId, e.target.checked))} className={ui.check} />
+          🧟 Zombies (vies et retour au niveau précédent)
+        </label>
       </section>
 
       <section className={ui.cardPad}>

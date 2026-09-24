@@ -6,6 +6,7 @@ import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level
 import { activeCards, isBoss, readFrozenLevels, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
+import { applyZombieCatches } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 
 // Actions du WOD Level. Profs, coachs ET greffier cochent (les BOSS se valident a plusieurs sur la meme
@@ -34,20 +35,22 @@ async function count(fn: () => Promise<{ n: number }>): Promise<number> {
 export async function levelPulseAction(sessionId: string): Promise<string> {
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return "";
+  await applyZombieCatches(sessionId);
   const [rs, teams, session] = await Promise.all([
     db.orm.public.RaceState.where({ sessionId }).first(),
     db.orm.public.Team.where({ sessionId }).all(),
     db.orm.public.Session.where({ id: sessionId }).first(),
   ]);
   const teamIds = teams.map((t) => t.id);
-  const [ticks, cards, members, pauses] = await Promise.all([
+  const [ticks, cards, members, pauses, losses] = await Promise.all([
     count(() => db.orm.public.LevelTick.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
+    count(() => db.orm.public.LevelLoss.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
     rs ? count(() => db.orm.public.YellowCard.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     teamIds.length ? count(() => db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     rs ? count(() => db.orm.public.RacePause.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
   ]);
   const version = JSON.stringify((session?.settings as { levels?: unknown } | null)?.levels ?? "").length;
-  return `${ticks}|${cards}|${members}|${teams.length}|${pauses}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${version}|${readLevelCap(session?.settings) ?? 0}`;
+  return `${ticks}|${cards}|${members}|${teams.length}|${pauses}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${version}|${readLevelCap(session?.settings) ?? 0}|${losses}`;
 }
 
 // Coup d'envoi : l'echelle est FIGEE dans la seance (copie des fiches avec libelle et ponderation), puis le
@@ -116,6 +119,14 @@ export async function resetLevelAction(sessionId: string): Promise<Res> {
   return "error" in r ? r : { ok: true };
 }
 
+// Mode zombies (vies, retour au niveau precedent) pour cette seance.
+export async function setZombiesAction(sessionId: string, on: boolean): Promise<Res> {
+  const { session } = await requireLevelStaff(sessionId);
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, zombies: on })) });
+  return { ok: true };
+}
+
 // Activite des dispenses (demineur) pour cette seance, modifiable a tout moment.
 export async function setLevelRefereeModeAction(sessionId: string, on: boolean): Promise<Res> {
   await requireLevelStaff(sessionId);
@@ -141,6 +152,7 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   const { user, session } = await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
+  if ((await applyZombieCatches(sessionId)) > 0) return { error: "Le zombie a rattrapé une équipe : l'écran se met à jour." };
   const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const levels = readFrozenFromSettings(session.settings);

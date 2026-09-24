@@ -78,8 +78,30 @@ export function fmtTheoretical(sec: number): string {
   return r ? `${m} min ${String(r).padStart(2, "0")} s` : `${m} min`;
 }
 
+// ===== Mode zombies =====
+export const ZOMBIE_GRACE_S = 180; // le zombie met « duree estimee du niveau + 3 min » a atteindre le coeur
+// Delai (ms de chrono) entre le depart d'une tentative et le rattrapage : chaque fiche cochee eloigne le
+// coeur d'un cran (les fiches occupent la moitie droite de la piste, une fiche = 1/n de cette moitie).
+export function zombieDeadlineMs(level: FrozenLevel, done: number): number {
+  const act = activeCards(level);
+  const base = (estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss) + ZOMBIE_GRACE_S) * 1000;
+  return act.length ? base * (1 + done / act.length) : base;
+}
+// Position du zombie (0..1 de la piste) et du coeur pour l'ecran : la moitie gauche de la piste est
+// parcourue en « base » ms ; le coeur part au milieu et recule d'une demi-fiche par fiche cochee.
+export function zombieGeometry(level: FrozenLevel, done: number, sinceMs: number): { zombie: number; heart: number; remainingMs: number } {
+  const act = activeCards(level);
+  const n = Math.max(1, act.length);
+  const base = zombieDeadlineMs(level, 0);
+  const heart = 0.5 + (0.5 * done) / n;
+  const zombie = Math.min(heart, base > 0 ? (0.5 * sinceMs) / base : 0);
+  return { zombie, heart, remainingMs: zombieDeadlineMs(level, done) - sinceMs };
+}
+export const zombieTier = (levelNumber: number) => Math.max(1, Math.min(10, Math.ceil(levelNumber / 2)));
+
 // ===== Progression d'une equipe =====
 export type Tick = { teamId: string; level: number; card: number; atMs: number };
+export type Loss = { teamId: string; level: number; atMs: number };
 export type TeamProgress = {
   teamId: string;
   completedLevels: number; // niveaux entierement valides, dans l'ordre
@@ -92,14 +114,17 @@ export type TeamProgress = {
   weighted: number; // travail cumule (reps x ponderation) des fiches validees
   repsByExercise: Record<string, number>; // par libelle d'exercice
   doneCards: Set<string>; // `${level}_${card}`
+  losses: number; // vies perdues (mode zombies)
+  attemptStartMs: number; // chrono : depart de la tentative du niveau en cours (fin du precedent ou derniere vie perdue)
 };
 
 // Une equipe avance niveau par niveau : le niveau N+1 n'est « en cours » que quand toutes les fiches en jeu
 // de N sont cochees. Un niveau sans aucune fiche en jeu est franchi d'office. Des coches orphelines (fiche
 // d'un niveau plus loin, ou fiche retiree) comptent dans rien : elles n'arrivent que par une annulation en
 // arriere ou un retrait de fiche, et se resorbent d'elles-memes.
-export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[]): TeamProgress {
+export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[] = []): TeamProgress {
   const mine = ticks.filter((t) => t.teamId === teamId);
+  const myLosses = losses.filter((l) => l.teamId === teamId);
   const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
   let completed = 0;
   let current: FrozenLevel | null = null;
@@ -132,6 +157,9 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[])
       if (t) counted.push(t.atMs);
     }
   }
+  // Depart de la tentative en cours : derniere fiche d'un niveau boucle (ou derniere vie perdue) la plus tardive.
+  const prevTicks = current ? mine.filter((t) => t.level < current.number).map((t) => t.atMs) : [];
+  const attemptStartMs = Math.max(0, ...prevTicks, ...myLosses.map((l) => l.atMs));
   return {
     teamId,
     completedLevels: completed,
@@ -144,15 +172,18 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[])
     weighted,
     repsByExercise,
     doneCards: done,
+    losses: myLosses.length,
+    attemptStartMs,
   };
 }
 
-// Classement : niveaux boucles, puis fiches cochees dans le niveau en cours, puis la derniere coche la plus
-// tot (a egalite de travail, la plus rapide gagne). Une equipe sans aucune coche est derniere.
+// Classement : niveaux boucles, puis le moins de vies perdues, puis fiches cochees dans le niveau en cours,
+// puis la derniere coche la plus tot (a egalite de travail, la plus rapide gagne).
 export function rankTeams(progress: TeamProgress[]): TeamProgress[] {
   return [...progress].sort(
     (a, b) =>
       b.completedLevels - a.completedLevels ||
+      a.losses - b.losses ||
       b.currentDone - a.currentDone ||
       (a.lastTickMs ?? Number.POSITIVE_INFINITY) - (b.lastTickMs ?? Number.POSITIVE_INFINITY)
   );

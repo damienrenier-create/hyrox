@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, fmtIntensity, fmtTheoretical, progressOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, fmtIntensity, fmtTheoretical, progressOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
@@ -28,6 +28,7 @@ type Row = {
   intensity: number | null;
   work30: number;
   reps30: number;
+  losses: number; // vies perdues (mode zombies)
   bossMs: number | null; // BOSS le plus rapide (du dernier coche du niveau precedent a la coche du BOSS)
   bossNumber: number | null;
   cards: number;
@@ -53,9 +54,10 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
   const ids = kept.map((s) => s.id);
   const keptIds = new Set(ids);
   const rsIds = raceStates.filter((r) => keptIds.has(r.sessionId)).map((r) => r.id);
-  const [allTeams, allTicks, allPauses, allCards] = await Promise.all([
+  const [allTeams, allTicks, allLosses, allPauses, allCards] = await Promise.all([
     db.orm.public.Team.where((t) => t.sessionId.in(ids)).all(),
     db.orm.public.LevelTick.where((t) => t.sessionId.in(ids)).all(),
+    db.orm.public.LevelLoss.where((t) => t.sessionId.in(ids)).all(),
     rsIds.length ? db.orm.public.RacePause.where((p) => p.raceStateId.in(rsIds)).all() : Promise.resolve([]),
     rsIds.length ? db.orm.public.YellowCard.where((c) => c.raceStateId.in(rsIds)).all() : Promise.resolve([]),
   ]);
@@ -71,6 +73,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
   };
   const teamsBy = group(allTeams, (t) => t.sessionId);
   const ticksBy = group(allTicks, (t) => t.sessionId);
+  const lossesBy = group(allLosses, (l) => l.sessionId);
   const membersBy = group(allMembers, (m) => m.teamId);
   const pausesBy = group(allPauses, (p) => p.raceStateId);
   const cardsBy = group(allCards, (c) => c.raceStateId);
@@ -90,6 +93,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     const pauseMarks = pauses.map((p) => elapsed(startedAtMs, pauses, p.from) ?? 0);
     const endMs = rs.endedAt ? elapsed(startedAtMs, pauses, toMs(rs.endedAt)) ?? 0 : null;
     const ticks: Tick[] = (ticksBy.get(s.id) ?? []).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
+    const losses: Loss[] = (lossesBy.get(s.id) ?? []).map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
     const teams = (teamsBy.get(s.id) ?? []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const sessionLabel = s.label ?? wodLabel(s.wodType);
     const dateMs = dateOf(s);
@@ -98,8 +102,8 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     for (const l of levels) for (const { card, index } of activeCards(l)) cardWeight.set(`${l.number}_${index}`, { reps: card.reps, weight: card.weight });
 
     for (const t of teams) {
-      const p = progressOf(levels, t.id, ticks);
-      if (p.reps === 0) continue;
+      const p = progressOf(levels, t.id, ticks, losses);
+      if (p.reps === 0 && p.losses === 0) continue;
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
       if (!mem.length) continue;
       if (mem.some((u) => isTestClass(u!.className))) continue; // classe de test : jamais dans un palmares
@@ -139,7 +143,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
       rows.push({
         base,
         grade: (() => { const gs = new Set(mem.map((u) => gradeOf(u!.className)).filter((g): g is number => g !== null)); return gs.size === 1 ? [...gs][0] : null; })(),
-        levels: p.completedLevels, currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs,
+        levels: p.completedLevels, currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
         reps: p.reps, work: p.weighted, intensity: p.reps >= MIN_REPS_FOR_INTENSITY ? p.weighted / p.reps : null,
         work30, reps30, bossMs, bossNumber, cards: (cardsBy.get(rs.id) ?? []).filter((c) => c.teamId === t.id).length,
       });
@@ -155,10 +159,11 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     scored.sort((a, b) => (lowerIsBetter ? a.v - b.v : b.v - a.v) || (tie ? tie(a.r, b.r) : 0) || b.r.base.dateMs - a.r.base.dateMs);
     return { id, title, hint, rows: scored.slice(0, 5).map(({ r, v }) => ({ ...r.base, display: display(v, r) })) };
   };
-  const lvlTie = (a: Row, b: Row) => b.currentDone - a.currentDone || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity);
+  const lvlTie = (a: Row, b: Row) => a.losses - b.losses || b.currentDone - a.currentDone || (a.lastTickMs ?? Infinity) - (b.lastTickMs ?? Infinity);
 
   const boards: RecordBoard[] = [
-    top("levels", "🧗 Le niveau le plus haut", "niveaux bouclés, puis fiches du suivant, puis le plus rapide", (r) => r.levels, false, (v, r) => (r.finishMs !== null ? `🏁 ${v} en ${fmt(r.finishMs)}` : `${v} niv. + ${r.currentDone} fiche${r.currentDone > 1 ? "s" : ""}`), lvlTie),
+    top("levels", "🧗 Le niveau le plus haut", "niveaux bouclés, puis le moins de vies perdues, puis le plus rapide", (r) => r.levels, false, (v, r) => `${r.finishMs !== null ? `🏁 ${v} en ${fmt(r.finishMs)}` : `${v} niv. + ${r.currentDone} fiche${r.currentDone > 1 ? "s" : ""}`}${r.losses ? ` · 💔 ${r.losses}` : ""}`, lvlTie),
+    top("lives", "🧟 Le plus loin sans perdre de vie", "niveaux bouclés sans jamais être rattrapé", (r) => (r.losses === 0 && r.levels > 0 ? r.levels : null), false, (v) => `${v} niv. · 💔 0`, (a, b) => b.currentDone - a.currentDone),
     top("finish", "🏁 L'échelle bouclée le plus vite", "équipes arrivées au bout", (r) => r.finishMs, true, (v) => fmt(v)),
     top("reps", "💪 Le plus de reps", "fiches entières validées", (r) => r.reps, false, (v) => `${v} reps`),
     top("work", "⚖️ Le plus de travail", "reps × pondération cumulées", (r) => r.work, false, (v) => fmtTheoretical(v)),

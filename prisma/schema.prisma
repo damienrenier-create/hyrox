@@ -145,6 +145,7 @@ model Session {
   referees        SessionReferee[]
   stationEvents   StationEvent[]
   levelTicks      LevelTick[]
+  levelLosses     LevelLoss[]
   mineBoard       MineBoard?
   mineReveals     MineReveal[]
 }
@@ -459,5 +460,18 @@ model MineReveal {
   at           DateTime @default(now())
 
   @@unique([sessionId, refereeId, row, col])
+  @@index([sessionId])
+}
+
+// WOD Level, mode zombies : une vie perdue = le zombie a rattrape le coeur de l'equipe sur ce niveau.
+// L'equipe retombe au niveau precedent (ses fiches des niveaux >= level-1 sont effacees) et le zombie repart.
+model LevelLoss {
+  id        String   @id @default(uuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  teamId    String
+  level     Int
+  at        DateTime @default(now())
+
   @@index([sessionId])
 }
