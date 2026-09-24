@@ -599,14 +599,29 @@ function Zombie({ kind, moving }: { kind: ZombieKind; moving: boolean }) {
   return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block", animationDuration: `${walkSeconds(kind) / 2}s` }} title={title}>{kind === "boss" ? "👹" : "🧟"}</span>;
 }
 
-// Le coeur : entier, puis deux morceaux, puis un ; bat quand le zombie le mange.
-function Heart({ bites, beating }: { bites: number; beating: boolean }) {
+// Le coeur, mange DEPUIS LA GAUCHE (le zombie arrive de la gauche) : entier, une bouchee, deux bouchees, puis
+// zombifie (vert, un ver en sort) = niveau perdu. Il ternit a chaque bouchee et bat quand le zombie le mange.
+// Sprite optionnel public/zombies/heart.png = 4 etats cote a cote ; sinon emoji + filtres.
+const HEART_STATES = 4;
+function Heart({ state, beating }: { state: number; beating: boolean }) {
   const ok = useSprite("heart");
-  const state = Math.min(HEART_BITES - 1, Math.max(0, bites));
+  const s = Math.min(HEART_STATES - 1, Math.max(0, state));
+  const lost = s === HEART_STATES - 1;
+  const tarnish = s === 1 ? "saturate(0.7) brightness(0.95)" : s === 2 ? "saturate(0.4) brightness(0.85)" : undefined;
   if (ok) {
-    return <span className={cx("block w-10 h-10", beating && "heartbeat")} style={{ backgroundImage: "url(/zombies/heart.png)", backgroundSize: "300% 100%", backgroundRepeat: "no-repeat", backgroundPositionX: `${state * 50}%` }} title={beating ? "Le zombie dévore le cœur !" : "Cœur de l'équipe"} />;
+    return (
+      <span className="relative block w-10 h-10">
+        <span className={cx("block w-10 h-10", beating && "heartbeat")} style={{ backgroundImage: "url(/zombies/heart.png)", backgroundSize: `${HEART_STATES * 100}% 100%`, backgroundRepeat: "no-repeat", backgroundPositionX: `${(s * 100) / (HEART_STATES - 1)}%`, filter: tarnish }} title={lost ? "Cœur zombifié : niveau perdu" : beating ? "Le zombie dévore le cœur !" : "Cœur de l'équipe"} />
+        {lost && <span className="absolute -right-2 -top-1 text-sm animate-bounce" aria-hidden>🐛</span>}
+      </span>
+    );
   }
-  return <span className={cx("text-2xl leading-none inline-block", beating && "heartbeat")} style={{ transform: `scale(${1 - state * 0.25})` }}>{state >= 2 ? "💔" : state === 1 ? "🫀" : "❤️"}</span>;
+  return (
+    <span className="relative inline-block">
+      <span className={cx("text-2xl leading-none inline-block", beating && "heartbeat")} style={{ transform: `scale(${1 - Math.min(2, s) * 0.2})`, filter: lost ? "hue-rotate(95deg) saturate(1.4)" : tarnish }}>{s >= 2 ? "💔" : s === 1 ? "❤️‍🩹" : "❤️"}</span>
+      {lost && <span className="absolute -right-2 -top-1 text-sm animate-bounce" aria-hidden>🐛</span>}
+    </span>
+  );
 }
 
 // Compteur qui defile (reps, rang, vies) : attire l'oeil quand la valeur change.
@@ -672,13 +687,19 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
   // Jalons : premiere place, podium, plus derniere, centaine de reps, niveau gagne, coeur devore.
   const prev = useRef<{ rank: number; reps: number; losses: number; level: number | null } | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string; bad: boolean } | null>(null);
+  const [lostFlash, setLostFlash] = useState(false);
+  useEffect(() => {
+    if (!lostFlash) return;
+    const h = setTimeout(() => setLostFlash(false), 3000);
+    return () => clearTimeout(h);
+  }, [lostFlash]);
   useEffect(() => {
     const cur = { rank, reps: p.reps, losses: p.losses, level: p.currentLevel };
     const old = prev.current;
     prev.current = cur;
     if (!old) return;
     let t: { text: string; bad: boolean } | null = null;
-    if (cur.losses > old.losses) t = { text: `💔 Cœur dévoré ! Retour au ${cur.level !== null ? `niveau ${cur.level}` : "début"}`, bad: true };
+    if (cur.losses > old.losses) { t = { text: `💔 Cœur zombifié ! Retour au ${cur.level !== null ? `niveau ${cur.level}` : "début"}`, bad: true }; setLostFlash(true); }
     else if (cur.rank === 1 && old.rank !== 1 && teamsCount > 1) t = { text: "🥇 Première place !", bad: false };
     else if (cur.rank <= 3 && old.rank > 3) t = { text: "🏆 Podium !", bad: false };
     else if (teamsCount > 1 && old.rank === teamsCount && cur.rank < teamsCount) t = { text: "🚀 Plus dernière !", bad: false };
@@ -730,11 +751,11 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
           <>
             {geo && (
               <>
-                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}>
-                  {boss ? <Horde tiers={horde} moving={running && !geo.contact} /> : <Zombie kind={kind} moving={running && !geo.contact} />}
+                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${(lostFlash ? geo.heart : geo.zombie) * 100}% - 24px)`, transition: "left 1s linear" }}>
+                  {boss ? <Horde tiers={horde} moving={running && !geo.contact && !lostFlash} /> : <Zombie kind={kind} moving={running && !geo.contact && !lostFlash} />}
                 </div>
-                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${geo.heart * 100}%` }} title={geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
-                  <Heart bites={geo.bites} beating={geo.contact} />
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${geo.heart * 100}%` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
+                  <Heart state={lostFlash ? HEART_STATES - 1 : geo.bites} beating={geo.contact || lostFlash} />
                 </div>
               </>
             )}

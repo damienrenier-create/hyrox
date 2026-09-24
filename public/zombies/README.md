@@ -4,4 +4,4 @@ Deposer ici z01.png .. z10.png (les niveaux BOSS affichent une HORDE des zombies
 
 Generation depuis une image Gemini (4 frames, fond uni ou damier, JPEG) : `node scripts/sprite-sheet.mjs entree.jpg public/zombies/zNN.png 128 [ordre des colonnes, ex. 1,4,3,4 pour remplacer une frame abimee]`.
 
-heart.png (optionnel) : le coeur en 3 etats cote a cote (entier, 2/3, 1/3), 3 x 128 px, fond transparent, meme DA que les zombies. Absent -> emoji.
+heart.png (optionnel) : le coeur en 4 etats cote a cote, mange DEPUIS LA GAUCHE (entier, une bouchee, deux bouchees, zombifie vert avec un ver = niveau perdu), 4 x 128 px, fond transparent, meme DA que les zombies. Absent -> emoji.
