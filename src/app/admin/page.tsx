@@ -141,7 +141,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <div className="font-bold">
                         {s.label ?? wodLabel(s.wodType)}
                         <span className="text-ink-3 font-normal"> · {engineName(s.wodType)}</span>
-                        {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>🏴‍☠️ Touché-Coulé</span>}
+                        {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
                       </div>
                       <div className="text-xs text-ink-2">
                         {classes.length ? classes.join(", ") : "toutes classes"} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
@@ -153,7 +153,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Greffier</Link>
                       {/* Un deuxieme prof arbitre pendant que le premier tient le greffier : chacun son ecran. */}
-                      {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>🏴‍☠️ Arbitrer</Link>}
+                      {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>{s.wodType === "LEVEL" ? "💣 Arbitrer" : "🏴‍☠️ Arbitrer"}</Link>}
                       {s.refereeMode && s.wodType !== "LEVEL" && (
                         <form action={runGenerateGhostFleets.bind(null, s.id)}>
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>
@@ -229,7 +229,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <div className="font-bold">
                       {s.label ?? wodLabel(s.wodType)}
                       <span className="text-ink-3 font-normal"> · ouvre {fmtDay(s.opensAt)} à {fmtTime(s.opensAt)}</span>
-                      {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>🏴‍☠️ Touché-Coulé</span>}
+                      {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
                     </div>
                     <div className="text-xs text-ink-2">
                       {readSessionClasses(s.settings).join(", ") || "toutes classes"}
@@ -393,7 +393,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <label className="flex items-center gap-3 text-sm text-ink sm:col-span-2">
               <input type="hidden" name="refereeModeSet" value="1" />
               <input type="checkbox" name="refereeMode" defaultChecked className="w-5 h-5 accent-brand" />
-              Activer le Touché-Coulé (arbitrage par les élèves)
+              Activité dispensés : arbitrage par les élèves qui ne jouent pas (Touché-Coulé, ou démineur pour un WOD Level)
             </label>
 
             {/* Calendrier : une date precise au lieu de « tout de suite ». UNE seule seance, pas de repetition. */}
@@ -439,7 +439,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <li key={p.id} className={cx("flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 border", p.isCurrent ? "bg-brand-soft border-brand/40" : "bg-paper border-line")}>
                       <div className="text-sm">
                         <span className="font-bold">{p.order}. {p.label}</span>
-                        <span className="text-ink-3"> · {engineName(p.wodType)} · {p.numTeams} équipes{p.refereeMode ? " · Touché-Coulé" : ""}</span>
+                        <span className="text-ink-3"> · {engineName(p.wodType)} · {p.numTeams} équipes{p.refereeMode ? " · Dispensés" : ""}</span>
                         {p.isCurrent && <span className={`${ui.chip} bg-brand text-white ml-2`}>SEMAINE</span>}
                       </div>
                       <div className="flex gap-2">
@@ -477,7 +477,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                   <input type="number" name="numTeams" defaultValue={20} min={1} max={50} className={input} />
                 </label>
                 <label className="text-xs flex items-center gap-2 pb-2.5 font-semibold text-ink-2">
-                  <input type="checkbox" name="refereeMode" defaultChecked className={ui.check} /> Touché-Coulé
+                  <input type="checkbox" name="refereeMode" defaultChecked className={ui.check} /> Activité dispensés
                 </label>
                 <button type="submit" className={`${btn.primary} col-span-2 sm:col-span-5`}>+ Ajouter la séance au cycle</button>
               </form>
