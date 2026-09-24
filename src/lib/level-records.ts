@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, fmtIntensity, fmtTheoretical, progressOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, fmtIntensity, fmtTheoretical, progressOf, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
@@ -104,7 +104,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     for (const l of levels) for (const { card, index } of activeCards(l)) cardWeight.set(`${l.number}_${index}`, { reps: card.reps, weight: card.weight });
 
     for (const t of teams) {
-      const p = progressOf(levels, t.id, ticks, losses);
+      const p = progressOf(levels, t.id, ticks, losses, readPenalties(s.settings));
       if (p.reps === 0 && p.losses === 0) continue;
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
       if (!mem.length) continue;

@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { orderedLevels, progressOf, rankTeams, readFixedZombie, readLevelOrder, type FrozenLevel, type LevelOrder, type Loss, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
+import { orderedLevels, progressOf, rankTeams, readFixedZombie, readLevelOrder, readPenalties, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -31,6 +31,7 @@ export type LevelBundle = {
   levelOrder: LevelOrder | null; // echauffement en differe : ordre des niveaux par equipe
   zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale
   child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
+  penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
 };
 
 export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
@@ -130,12 +131,13 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     levelOrder: readLevelOrder(session.settings),
     zombieSpeed: readFixedZombie(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
+    penalties: readPenalties(session.settings),
   };
 }
 
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
-  return rankTeams(bundle.teams.map((t) => progressOf(orderedLevels(bundle.levels, bundle.levelOrder?.[t.id]), t.id, bundle.ticks, bundle.losses)));
+  return rankTeams(bundle.teams.map((t) => progressOf(orderedLevels(bundle.levels, bundle.levelOrder?.[t.id]), t.id, bundle.ticks, bundle.losses, bundle.penalties)));
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.

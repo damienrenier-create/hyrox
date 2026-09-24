@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, ZOMBIE_ZONE,
-  type FrozenLevel, type TeamProgress, type Tick,
+  activeCards, cardSeconds, cardsForTeam, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieGeometry, zombieSpeedLevel, zombieTier, HEART_BITES, PENALTY_STEPS, ZOMBIE_ZONE,
+  type FrozenLevel, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam } from "@/lib/level-context";
 import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
@@ -67,6 +68,7 @@ export function LevelClient({
       ticks: [...l.ticks.filter((x) => x.teamId !== t.teamId), ...t.ticks],
       losses: [...l.losses.filter((x) => x.teamId !== t.teamId), ...t.losses],
       yellowCards: [...l.yellowCards.filter((x) => x.teamId !== t.teamId), ...t.yellowCards],
+      penalties: [...l.penalties.filter((x) => x.teamId !== t.teamId), ...t.penalties],
     }));
   }
   // Etat complet du pouls : les equipes dont on a un etat plus recent gardent leurs donnees locales.
@@ -79,6 +81,7 @@ export function LevelClient({
         ticks: [...l.ticks.filter((x) => !newer.has(x.teamId)), ...prev.ticks.filter((x) => newer.has(x.teamId))],
         losses: [...l.losses.filter((x) => !newer.has(x.teamId)), ...prev.losses.filter((x) => newer.has(x.teamId))],
         yellowCards: [...l.yellowCards.filter((x) => !newer.has(x.teamId)), ...prev.yellowCards.filter((x) => newer.has(x.teamId))],
+        penalties: [...l.penalties.filter((x) => !newer.has(x.teamId)), ...prev.penalties.filter((x) => newer.has(x.teamId))],
       };
     });
   }
@@ -123,7 +126,7 @@ export function LevelClient({
         if (stop || "error" in l) return;
         if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); return; }
         lastStructure.current = l.structure;
-        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
+        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.penalties.length, l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
         if (key !== lastLive.current) { lastLive.current = key; applyLive(l); }
       } catch {
         /* reseau : prochain tick */
@@ -162,7 +165,7 @@ export function LevelClient({
     }
     return out;
   }, [live.ticks, optimistic, liveMs]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(orderedLevels(levels, bundle.levelOrder?.[t.id]), t.id, ticks, live.losses)])), [teams, levels, ticks, live.losses, bundle.levelOrder]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(orderedLevels(levels, bundle.levelOrder?.[t.id]), t.id, ticks, live.losses, live.penalties)])), [teams, levels, ticks, live.losses, live.penalties, bundle.levelOrder]);
   const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
   const rankOf = useMemo(() => new Map(ranked.map((p, i) => [p.teamId, i + 1])), [ranked]);
   const levelByNumber = useMemo(() => new Map(levels.map((l) => [l.number, l])), [levels]);
@@ -181,13 +184,13 @@ export function LevelClient({
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
       const l = levelByNumber.get(p.currentLevel);
-      return !!l && zombieGeometry(l, p.currentDone, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses)).remainingMs <= 0;
+      return !!l && zombieGeometry(l, p.currentFrac, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length).remainingMs <= 0;
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
       void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     }
-  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, sessionId]);
+  }, [bundle.zombies, phase, isPaused, liveMs, progress, levelByNumber, caughtRefreshAt, sessionId, live.penalties]);
 
   function refresh() {
     router.refresh();
@@ -332,11 +335,13 @@ export function LevelClient({
                     progress={progress.get(t.id)!}
                     level={progress.get(t.id)!.currentLevel ? levelByNumber.get(progress.get(t.id)!.currentLevel!) ?? null : null}
                     rank={rankOf.get(t.id) ?? 0}
+                    teamsCount={teams.length}
                     yellow={cardsOf.get(t.id) ?? 0}
                     canTick={canTick}
                     pendingKeys={optimistic}
                     zombies={bundle.zombies}
                     fixedSpeed={bundle.zombieSpeed}
+                    penalties={live.penalties.filter((x) => x.teamId === t.id)}
                     raceMs={liveMs}
                     running={phase === "run" && !isPaused}
                     onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
@@ -432,7 +437,7 @@ export function LevelClient({
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0 };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0 };
 }
 
 // Colonnes d'exercices du recap : ordre de premiere apparition dans l'echelle.
@@ -444,13 +449,14 @@ function exerciseColumns(levels: FrozenLevel[]): string[] {
 
 const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
-// Sprites : public/zombies/z01.png .. z10.png et boss.png (4 frames en ligne, transparent). Absent -> emoji.
-// Cadence de marche : lente pour les premiers paliers (zombies kawaii qui trainent la patte), plus vive ensuite.
+// Sprites : public/zombies/z01.png .. z10.png (4 frames en ligne) et heart.png (3 etats : entier, 2/3, 1/3).
+// Absent -> emoji. Meme cadence de marche pour tous les paliers.
 type ZombieKind = number | "boss";
-const spriteFile = (kind: ZombieKind) => `/zombies/${kind === "boss" ? "boss" : "z" + String(kind).padStart(2, "0")}.png`;
-const walkSeconds = (_kind: ZombieKind) => 1.2; // meme cadence pour tous (Sartay : pas plus vite au fil des paliers)
+type SpriteKey = ZombieKind | "heart";
+const spriteFile = (kind: SpriteKey) => `/zombies/${kind === "boss" ? "boss" : kind === "heart" ? "heart" : "z" + String(kind).padStart(2, "0")}.png`;
+const walkSeconds = (_kind: ZombieKind) => 1.2;
 const spriteCache = new Map<string, boolean>();
-function useSprite(kind: ZombieKind): boolean | null {
+function useSprite(kind: SpriteKey): boolean | null {
   const key = String(kind);
   const [ok, setOk] = useState<boolean | null>(spriteCache.get(key) ?? null);
   useEffect(() => {
@@ -486,16 +492,55 @@ function Zombie({ kind, moving }: { kind: ZombieKind; moving: boolean }) {
   return <span className={cx("text-3xl leading-none", moving && "zbob")} style={{ transform: "scaleX(-1)", display: "inline-block", animationDuration: `${walkSeconds(kind) / 2}s` }} title={title}>{kind === "boss" ? "👹" : "🧟"}</span>;
 }
 
-function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, raceMs, running, onToggle, onYellow }: {
+// Le coeur : entier, puis deux morceaux, puis un ; bat quand le zombie le mange.
+function Heart({ bites, beating }: { bites: number; beating: boolean }) {
+  const ok = useSprite("heart");
+  const state = Math.min(HEART_BITES - 1, Math.max(0, bites));
+  if (ok) {
+    return <span className={cx("block w-10 h-10", beating && "heartbeat")} style={{ backgroundImage: "url(/zombies/heart.png)", backgroundSize: "300% 100%", backgroundRepeat: "no-repeat", backgroundPositionX: `${state * 50}%` }} title={beating ? "Le zombie dévore le cœur !" : "Cœur de l'équipe"} />;
+  }
+  return <span className={cx("text-2xl leading-none inline-block", beating && "heartbeat")} style={{ transform: `scale(${1 - state * 0.25})` }}>{state >= 2 ? "💔" : state === 1 ? "🫀" : "❤️"}</span>;
+}
+
+// Compteur qui defile (reps, rang, vies) : attire l'oeil quand la valeur change.
+function Odometer({ value, className }: { value: number; className?: string }) {
+  const [shown, setShown] = useState(value);
+  const [bump, setBump] = useState(false);
+  const from = useRef(value);
+  useEffect(() => {
+    if (from.current === value) return;
+    const start = performance.now();
+    const a = from.current;
+    const dur = 650;
+    setBump(true);
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - start) / dur);
+      setShown(Math.round(a + (value - a) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(step);
+      else { from.current = value; setBump(false); }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span className={cx("tabular-nums inline-block transition-transform duration-300", bump && "scale-125", className)}>{shown}</span>;
+}
+
+const rankStyle = (rank: number) =>
+  rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
+
+function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, raceMs, running, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
   rank: number;
+  teamsCount: number;
   yellow: number;
   canTick: boolean;
   pendingKeys: Map<string, boolean>;
   zombies: boolean;
   fixedSpeed?: number | null;
+  penalties: TeamPenalty[];
   raceMs: number;
   running: boolean;
   onToggle: (level: number, card: number, done: boolean) => void;
@@ -503,61 +548,90 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
 }) {
   const finished = p.currentLevel === null;
   const boss = !!level?.boss;
-  const act = level ? activeCards(level) : [];
-  const n = Math.max(1, act.length);
-  const remaining = [...act].filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`)).sort((a, b) => a.card.reps - b.card.reps || a.index - b.index);
+  const all = level ? cardsForTeam(level, team.id, penalties) : [];
+  // Fiches restantes : par reps croissantes, les penalites en dernier (elles arrivent a droite).
+  const remaining = all
+    .filter(({ index }) => !p.doneCards.has(`${level!.number}_${index}`))
+    .sort((a, b) => Number(a.penalty) - Number(b.penalty) || a.card.reps - b.card.reps || a.index - b.index);
+  const remainingSec = remaining.reduce((s, x) => s + cardSeconds(x.card), 0);
+  const totalSec = Math.max(1, p.currentTotalSec);
   const speedLevel = level ? (fixedSpeed ?? zombieSpeedLevel(level.number, p.losses)) : 1;
-  const geo = level && zombies ? zombieGeometry(level, p.currentDone, Math.max(0, raceMs - p.attemptStartMs), speedLevel) : null;
-  const danger = !!geo && geo.remainingMs <= 30_000;
+  const geo = level && zombies ? zombieGeometry(level, p.currentFrac, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length) : null;
+  const danger = !!geo && (geo.contact || geo.remainingMs <= 20_000);
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
-  // Horde du BOSS : paliers des niveaux du bloc (L-4 .. L-1), avec la penalite de vitesse de l'equipe.
-  // Horde du BOSS : un zombie par niveau du bloc (L-4 .. L-1), doublons compris (echauffement = quatre z1).
   const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? zombieSpeedLevel(level.number - 4 + i, p.losses))).sort((a, b) => a - b) : [];
+
+  // Jalons : premiere place, podium, plus derniere, centaine de reps, niveau gagne, coeur devore.
+  const prev = useRef<{ rank: number; reps: number; losses: number; level: number | null } | null>(null);
+  const [toast, setToast] = useState<{ id: number; text: string; bad: boolean } | null>(null);
+  useEffect(() => {
+    const cur = { rank, reps: p.reps, losses: p.losses, level: p.currentLevel };
+    const old = prev.current;
+    prev.current = cur;
+    if (!old) return;
+    let t: { text: string; bad: boolean } | null = null;
+    if (cur.losses > old.losses) t = { text: `💔 Cœur dévoré ! Retour au ${cur.level !== null ? `niveau ${cur.level}` : "début"}`, bad: true };
+    else if (cur.rank === 1 && old.rank !== 1 && teamsCount > 1) t = { text: "🥇 Première place !", bad: false };
+    else if (cur.rank <= 3 && old.rank > 3) t = { text: "🏆 Podium !", bad: false };
+    else if (teamsCount > 1 && old.rank === teamsCount && cur.rank < teamsCount) t = { text: "🚀 Plus dernière !", bad: false };
+    else if (cur.level !== null && old.level !== null && cur.level !== old.level && cur.losses === old.losses) t = { text: `⬆️ ${level?.boss ? "BOSS" : "Niveau"} ${cur.level} !`, bad: false };
+    else if (Math.floor(cur.reps / 100) > Math.floor(old.reps / 100)) t = { text: `💯 ${Math.floor(cur.reps / 100) * 100} reps !`, bad: false };
+    if (t) setToast({ id: Date.now(), ...t });
+  }, [rank, p.reps, p.losses, p.currentLevel, teamsCount, level?.boss]);
+  useEffect(() => {
+    if (!toast) return;
+    const h = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(h);
+  }, [toast]);
+
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
-      className={cx(ui.card, "px-2 py-1 flex items-center gap-2 min-w-0 h-16", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger")}
+      className={cx(ui.card, "relative px-2 py-1 flex items-center gap-2 min-w-0 h-20 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse")}
     >
-      <div className="flex flex-col gap-0.5 w-[190px] flex-shrink-0 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
-          {rank > 0 && <span className={cx(ui.chip, "px-1.5", rank === 1 ? ui.chipAccent : rank <= 3 ? ui.chipBrand : ui.chipMuted)}>#{rank}</span>}
-          {zombies && <span className="text-[11px] font-bold tabular-nums" title="Vies perdues">💔{p.losses}</span>}
-          <span className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-            {yellow > 0 && <button type="button" onClick={() => onYellow(-1)} disabled={!canTick} className="w-5 h-5 rounded-full bg-paper text-ink-2 hover:bg-line text-xs font-bold leading-none disabled:opacity-30" aria-label="Retirer une carte jaune">−</button>}
-            <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="h-5 rounded-full bg-paper hover:bg-line px-1.5 text-xs font-bold tabular-nums leading-none disabled:opacity-30" title="Donner une carte jaune">🟨{yellow}</button>
-          </span>
-        </div>
-        <div className="flex items-baseline gap-1 min-w-0" title={level?.name ?? undefined}>
-          {finished ? (
-            <span className="font-display font-extrabold text-sm text-success-ink">🏁 Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</span>
-          ) : level ? (
-            <>
-              <span className={cx("font-display font-extrabold text-lg leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
-              <span className="text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
-              <span className={`${ui.hint} tabular-nums ml-auto`}>{p.reps} reps</span>
-            </>
-          ) : (
-            <span className={ui.hint}>Échelle vide.</span>
-          )}
+      {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
+      <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
+        <span className={cx("w-11 h-11 rounded-xl flex items-center justify-center font-display font-black text-lg flex-shrink-0", rankStyle(rank))} title="Classement">
+          {rank > 0 ? <>#<Odometer value={rank} /></> : "—"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
+            {zombies && <span className="text-xs font-bold tabular-nums" title="Vies perdues">💔<Odometer value={p.losses} /></span>}
+          </div>
+          <div className="flex items-baseline gap-1.5 min-w-0" title={level?.name ?? undefined}>
+            {finished ? (
+              <span className="font-display font-extrabold text-sm text-success-ink">🏁 Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</span>
+            ) : level ? (
+              <>
+                <span className={cx("font-display font-extrabold text-xl leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
+                <span className="text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
+              </>
+            ) : (
+              <span className={ui.hint}>Échelle vide.</span>
+            )}
+          </div>
+          <div className="text-[11px] text-ink-2 tabular-nums"><Odometer value={p.reps} className="font-bold text-ink text-sm" /> reps</div>
         </div>
       </div>
 
-      {/* Piste : zombie a gauche, coeur devant les fiches restantes alignees a droite (moitie droite de la piste). */}
+      {/* Piste : numero en filigrane, zombie a gauche, coeur devant les fiches restantes (largeur = duree). */}
       <div className="relative flex-1 h-full min-w-0">
+        <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 font-display font-black text-[3.2rem] leading-none text-ink/10 select-none pointer-events-none">{team.order}</span>
         {!finished && level && (
           <>
             {geo && (
               <>
-                {/* Un zombie par niveau : la cle change avec le niveau, il repart simplement du coin gauche. */}
-                <div key={level.number} className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}>
-                  {boss ? <Horde tiers={horde} moving={running} /> : <Zombie kind={kind} moving={running} />}
+                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${geo.zombie * 100}% - 24px)`, transition: "left 1s linear" }}>
+                  {boss ? <Horde tiers={horde} moving={running && !geo.contact} /> : <Zombie kind={kind} moving={running && !geo.contact} />}
                 </div>
-                <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full text-2xl leading-none transition-[left] duration-300", danger && "heartbeat")} style={{ left: `${geo.heart * 100}%` }} title={geo.remainingMs > 0 ? `Le zombie arrive dans ${fmt(geo.remainingMs)}` : "Rattrapée !"}>❤️</div>
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${geo.heart * 100}%` }} title={geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.remainingMs))}` : `Le zombie arrive dans ${fmt(Math.max(0, geo.remainingMs - geo.eatMs))}`}>
+                  <Heart bites={geo.bites} beating={geo.contact} />
+                </div>
               </>
             )}
-            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${(remaining.length / n) * ZOMBIE_ZONE * 100}%` }}>
-              {remaining.map(({ card, index }) => {
+            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${Math.min(1, remainingSec / totalSec) * ZOMBIE_ZONE * 100}%` }}>
+              {remaining.map(({ card, index, penalty }) => {
                 const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
                 return (
                   <button
@@ -565,98 +639,41 @@ function TeamRow({ team, progress: p, level, rank, yellow, canTick, pendingKeys,
                     type="button"
                     disabled={!canTick || busy}
                     onClick={() => onToggle(level.number, index, false)}
-                    title={`${card.reps} ${cap(card.label)} — cocher quand c'est fait`}
-                    className={cx("flex-1 min-w-0 rounded-lg border px-1.5 text-left flex items-center gap-1.5 leading-tight transition active:scale-[.98] bg-card border-line-2 hover:border-brand", (!canTick || busy) && "opacity-60")}
+                    title={`${card.reps} ${cap(card.label)}${penalty ? " (pénalité carte jaune)" : ""} — cocher quand c'est fait`}
+                    style={{ flex: `${Math.max(20, cardSeconds(card))} 1 0` }}
+                    className={cx(
+                      "min-w-[5.5rem] rounded-lg border px-1.5 py-0.5 text-left flex items-center gap-1.5 leading-tight transition active:scale-[.98] overflow-hidden",
+                      penalty ? "bg-accent-soft border-accent text-accent-ink" : "bg-card border-line-2 hover:border-brand",
+                      (!canTick || busy) && "opacity-60"
+                    )}
                   >
                     <span className="font-display font-extrabold text-xl tabular-nums flex-shrink-0">{card.reps}</span>
-                    <span className="font-bold text-sm truncate">{cap(card.label)}</span>
+                    <span className="font-bold text-xs leading-tight break-words">{penalty ? "🟨 " : ""}{cap(card.label)}</span>
                   </button>
                 );
               })}
             </div>
             {p.currentDone > 0 && (
-              <button type="button" disabled={!canTick} onClick={() => { const last = act.filter(({ index }) => p.doneCards.has(`${level.number}_${index}`)).pop(); if (last) onToggle(level.number, last.index, true); }} className="absolute left-0 bottom-0 text-[10px] text-ink-3 underline disabled:opacity-40" title="Annuler la dernière fiche cochée de ce niveau">annuler une coche</button>
+              <button type="button" disabled={!canTick} onClick={() => { const last = all.filter(({ index }) => p.doneCards.has(`${level.number}_${index}`)).pop(); if (last) onToggle(level.number, last.index, true); }} className="absolute left-0 bottom-0 text-[10px] text-ink-3 underline disabled:opacity-40" title="Annuler la dernière fiche cochée de ce niveau">annuler une coche</button>
             )}
           </>
         )}
-      </div>
-    </section>
-  );
-}
-
-function TeamCard({ team, progress: p, level, rank, yellow, canTick, pendingKeys, onToggle, onYellow }: {
-  team: LevelTeam;
-  progress: TeamProgress;
-  level: FrozenLevel | null;
-  rank: number;
-  yellow: number;
-  canTick: boolean;
-  pendingKeys: Map<string, boolean>;
-  onToggle: (level: number, card: number, done: boolean) => void;
-  onYellow: (delta: 1 | -1) => void;
-}) {
-  const finished = p.currentLevel === null;
-  const boss = !!level?.boss;
-  // Fiches par reps croissantes : plus intuitif pour le greffier (l'index reste celui de l'echelle).
-  const cards = level ? [...activeCards(level)].sort((a, b) => a.card.reps - b.card.reps || a.index - b.index) : [];
-  return (
-    <section
-      title={team.members.map((m) => m.name).join(", ")}
-      className={cx(ui.card, "p-2 flex flex-col gap-1.5 min-w-0", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40")}
-    >
-      <div className="flex items-center gap-1 min-w-0">
-        <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
-        {rank > 0 && <span className={cx(ui.chip, "px-1.5", rank === 1 ? ui.chipAccent : rank <= 3 ? ui.chipBrand : ui.chipMuted)}>#{rank}</span>}
-        <span className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-          {yellow > 0 && <button type="button" onClick={() => onYellow(-1)} disabled={!canTick} className="w-5 h-5 rounded-full bg-paper text-ink-2 hover:bg-line text-xs font-bold leading-none disabled:opacity-30" aria-label="Retirer une carte jaune">−</button>}
-          <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="h-5 rounded-full bg-paper hover:bg-line px-1.5 text-xs font-bold tabular-nums leading-none disabled:opacity-30" title="Donner une carte jaune">🟨{yellow}</button>
-        </span>
+        <AnimatePresence>
+          {toast && (
+            <motion.span key={toast.id} initial={{ opacity: 0, y: 10, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8 }} className={cx("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 rounded-full px-3 py-1 text-sm font-display font-extrabold shadow-pop pointer-events-none whitespace-nowrap", toast.bad ? "bg-danger text-white" : "bg-ink text-white")}>
+              {toast.text}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
-      {finished ? (
-        <div className="py-2 text-center">
-          <div className="text-2xl">🏁</div>
-          <p className="font-display font-extrabold text-success-ink text-sm leading-tight">Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</p>
-          <p className={ui.hint}>{p.completedLevels} niv. · {p.reps} reps</p>
-        </div>
-      ) : level ? (
-        <>
-          <div className="flex items-baseline gap-1 min-w-0" title={level.name ?? undefined}>
-            <span className={cx("font-display font-extrabold text-lg leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
-            <span className="ml-auto text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
-          </div>
-          <div className="h-1 rounded-full bg-line overflow-hidden">
-            <div className={cx("h-full transition-all", boss ? "bg-danger" : "bg-brand")} style={{ width: `${p.currentTotal ? (100 * p.currentDone) / p.currentTotal : 0}%` }} />
-          </div>
-          <div className="space-y-1">
-            {cards.map(({ card, index }) => {
-              const done = p.doneCards.has(`${level.number}_${index}`);
-              const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  disabled={!canTick || busy}
-                  onClick={() => onToggle(level.number, index, done)}
-                  title={`${card.reps} ${cap(card.label)}`}
-                  className={cx(
-                    "w-full flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left border transition active:scale-[.98] min-w-0",
-                    done ? "bg-success text-white border-success" : "bg-card border-line-2 hover:border-brand",
-                    (!canTick || busy) && "opacity-60"
-                  )}
-                >
-                  <span className={cx("w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px] font-black flex-shrink-0", done ? "border-white bg-white text-success" : "border-line-2")}>{done ? "✓" : ""}</span>
-                  <span className="font-display font-extrabold text-sm tabular-nums flex-shrink-0">{card.reps}</span>
-                  <span className="font-bold text-xs truncate">{cap(card.label)}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className={`${ui.hint} tabular-nums`}>{p.completedLevels} bouclé{p.completedLevels > 1 ? "s" : ""} · {p.reps} reps</p>
-        </>
-      ) : (
-        <p className={ui.hint}>Échelle vide.</p>
-      )}
+      {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
+      <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">
+        <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="w-10 h-10 rounded-lg bg-accent hover:bg-accent-hover text-ink font-display font-black text-base flex items-center justify-center disabled:opacity-30 shadow-sm" title={`Carte jaune : +${PENALTY_STEPS[Math.min(yellow, PENALTY_STEPS.length - 1)]} cordes de pénalité`}>
+          🟨{yellow > 0 && <span className="text-[11px] ml-0.5">{yellow}</span>}
+        </button>
+        {yellow > 0 && <button type="button" onClick={() => onYellow(-1)} disabled={!canTick} className="text-[10px] text-ink-3 underline disabled:opacity-30" title="Retirer la dernière carte jaune">retirer</button>}
+      </div>
     </section>
   );
 }

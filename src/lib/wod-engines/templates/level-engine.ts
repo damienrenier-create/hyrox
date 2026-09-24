@@ -72,6 +72,28 @@ export function readFixedZombie(settings: unknown): number | null {
 // Fiches encore en jeu d'un niveau, avec leur index d'origine (les coches referencent cet index).
 export const activeCards = (l: FrozenLevel) => l.cards.map((c, i) => ({ card: c, index: i })).filter((x) => !x.card.off);
 
+// Cartes jaunes (Sartay) : chaque carte ajoute une fiche de penalite a l'equipe sur son niveau en cours, de
+// plus en plus lourde : 10 cordes, 20, 30, 40, 50, 100, 200, 300, 400, 500 puis 1000. Elles vivent dans
+// Session.settings.penalties et portent un index >= 100 (jamais en collision avec les fiches de l'echelle).
+export const PENALTY_STEPS = [10, 20, 30, 40, 50, 100, 200, 300, 400, 500, 1000];
+export const PENALTY_INDEX0 = 100;
+export type TeamPenalty = { teamId: string; level: number; index: number; reps: number; label: string; weight: number };
+export function readPenalties(settings: unknown): TeamPenalty[] {
+  const raw = (settings as { penalties?: unknown } | null)?.penalties;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((p): p is TeamPenalty => !!p && typeof p === "object" && typeof (p as TeamPenalty).teamId === "string" && typeof (p as TeamPenalty).level === "number" && typeof (p as TeamPenalty).index === "number" && typeof (p as TeamPenalty).reps === "number");
+}
+export type TeamCard = { card: FrozenCard; index: number; penalty: boolean };
+// Fiches d'un niveau POUR UNE EQUIPE : celles de l'echelle, puis ses penalites sur ce niveau.
+export function cardsForTeam(level: FrozenLevel, teamId: string, penalties: TeamPenalty[] = []): TeamCard[] {
+  const base: TeamCard[] = activeCards(level).map((x) => ({ ...x, penalty: false }));
+  const extra: TeamCard[] = penalties
+    .filter((p) => p.teamId === teamId && p.level === level.number)
+    .map((p) => ({ card: { exerciseId: "PENALTY", label: p.label, reps: p.reps, weight: p.weight }, index: p.index, penalty: true }));
+  return [...base, ...extra];
+}
+export const cardSeconds = (c: { reps: number; weight: number }) => c.reps * c.weight;
+
 // Statistiques d'un lot de fiches : reps totales, travail (somme reps x ponderation, en secondes), intensite
 // (ponderation moyenne par rep : pure corde = 1, purs burpees = 7) et duree critique (la fiche la plus longue).
 export type CardStats = { reps: number; weighted: number; intensity: number; critical: number };
@@ -128,21 +150,43 @@ export function zombieTimeline(level: FrozenLevel, speedLevel: number): { approa
   const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000;
   return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 : 0, bandMs: band, n };
 }
-// Rattrapage : instant (depuis le depart de la tentative) ou le zombie atteint le coeur, `done` fiches cochees.
-export function zombieDeadlineMs(level: FrozenLevel, done: number, speedLevel = level.number): number {
-  const { approachMs, bandMs, n } = zombieTimeline(level, speedLevel);
-  if (n <= 1) return bandMs;
-  return approachMs + (Math.min(done, n) * (bandMs - approachMs)) / n;
+// Le coeur a trois morceaux : arrive dessus, le zombie se colle et le mange en ZOMBIE_EAT (30 s au palier 1,
+// 10 s au palier 20). L'equipe ne retombe qu'une fois les trois morceaux manges ; si elle eloigne le coeur
+// entre-temps (fiche cochee), le zombie repart et le coeur se ressoude.
+export const ZOMBIE_EAT_FIRST_S = 30;
+export const ZOMBIE_EAT_LAST_S = 10;
+export const HEART_BITES = 3;
+export function zombieEatMs(speedLevel: number): number {
+  const t = Math.min(1, Math.max(0, (speedLevel - 1) / 19));
+  return (ZOMBIE_EAT_FIRST_S + t * (ZOMBIE_EAT_LAST_S - ZOMBIE_EAT_FIRST_S)) * 1000;
 }
-// Positions (0..1 de la piste) du zombie et du coeur pour l'ecran, et temps restant avant le rattrapage.
-export function zombieGeometry(level: FrozenLevel, done: number, sinceMs: number, speedLevel = level.number): { zombie: number; heart: number; remainingMs: number } {
-  const { approachMs, bandMs, n } = zombieTimeline(level, speedLevel);
-  const heart = 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * Math.min(done, n)) / n;
+// Le coeur avance avec la DUREE des fiches cochees (`frac` = duree cochee / duree totale du niveau pour
+// l'equipe, penalites comprises) : une longue fiche eloigne plus le coeur, une penalite le rapproche.
+// Arrivee du zombie au coeur (ms depuis le depart de la tentative).
+export function zombieArrivalMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length): number {
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+  if (n <= 1) return bandMs;
+  return approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs);
+}
+// Rattrapage = arrivee + coeur entierement mange.
+export function zombieDeadlineMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length): number {
+  return zombieArrivalMs(level, frac, speedLevel, n) + zombieEatMs(speedLevel);
+}
+export type ZombieGeometry = { zombie: number; heart: number; remainingMs: number; contact: boolean; bites: number; eatMs: number };
+// Positions (0..1 de la piste) du zombie et du coeur pour l'ecran, contact, morceaux manges, temps restant.
+export function zombieGeometry(level: FrozenLevel, frac: number, sinceMs: number, speedLevel = level.number, n = activeCards(level).length): ZombieGeometry {
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+  const f = Math.min(1, Math.max(0, frac));
+  const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * f;
   let zombie: number;
   if (n <= 1) zombie = (sinceMs / bandMs) * (1 - ZOMBIE_ZONE);
   else if (sinceMs <= approachMs) zombie = (sinceMs / approachMs) * (1 - ZOMBIE_ZONE);
   else zombie = 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * (sinceMs - approachMs)) / (bandMs - approachMs);
-  return { zombie: Math.max(0, Math.min(heart, zombie)), heart, remainingMs: zombieDeadlineMs(level, done, speedLevel) - sinceMs };
+  const arrival = zombieArrivalMs(level, f, speedLevel, n);
+  const eatMs = zombieEatMs(speedLevel);
+  const contact = sinceMs >= arrival;
+  const bites = contact ? Math.min(HEART_BITES, Math.floor(((sinceMs - arrival) / eatMs) * HEART_BITES)) : 0;
+  return { zombie: Math.max(0, Math.min(heart, zombie)), heart, remainingMs: arrival + eatMs - sinceMs, contact, bites, eatMs };
 }
 export const zombieTier = (speedLevel: number) => Math.max(1, Math.min(10, Math.ceil(speedLevel / 2)));
 
@@ -163,13 +207,16 @@ export type TeamProgress = {
   doneCards: Set<string>; // `${level}_${card}`
   losses: number; // vies perdues (mode zombies)
   attemptStartMs: number; // chrono : depart de la tentative du niveau en cours (fin du precedent ou derniere vie perdue)
+  currentDoneSec: number; // duree (s theoriques) des fiches cochees du niveau en cours, penalites comprises
+  currentTotalSec: number; // duree totale des fiches du niveau en cours pour l'equipe
+  currentFrac: number; // currentDoneSec / currentTotalSec (0 si vide)
 };
 
 // Une equipe avance niveau par niveau : le niveau N+1 n'est « en cours » que quand toutes les fiches en jeu
 // de N sont cochees. Un niveau sans aucune fiche en jeu est franchi d'office. Des coches orphelines (fiche
 // d'un niveau plus loin, ou fiche retiree) comptent dans rien : elles n'arrivent que par une annulation en
 // arriere ou un retrait de fiche, et se resorbent d'elles-memes.
-export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[] = []): TeamProgress {
+export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[] = [], penalties: TeamPenalty[] = []): TeamProgress {
   const mine = ticks.filter((t) => t.teamId === teamId);
   const myLosses = losses.filter((l) => l.teamId === teamId);
   const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
@@ -177,16 +224,20 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
   let current: FrozenLevel | null = null;
   let currentDone = 0;
   let currentTotal = 0;
+  let currentDoneSec = 0;
+  let currentTotalSec = 0;
   for (const l of levels) {
-    const act = activeCards(l);
-    const n = act.filter(({ index }) => done.has(`${l.number}_${index}`)).length;
-    if (n === act.length) {
+    const act = cardsForTeam(l, teamId, penalties);
+    const doneCards = act.filter(({ index }) => done.has(`${l.number}_${index}`));
+    if (doneCards.length === act.length) {
       completed++;
       continue;
     }
     current = l;
-    currentDone = n;
+    currentDone = doneCards.length;
     currentTotal = act.length;
+    currentDoneSec = doneCards.reduce((s, x) => s + cardSeconds(x.card), 0);
+    currentTotalSec = act.reduce((s, x) => s + cardSeconds(x.card), 0);
     break;
   }
   const finished = !current && levels.length > 0;
@@ -195,7 +246,7 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
   const repsByExercise: Record<string, number> = {};
   const counted: number[] = [];
   for (const l of levels) {
-    for (const { card, index } of activeCards(l)) {
+    for (const { card, index } of cardsForTeam(l, teamId, penalties)) {
       if (!done.has(`${l.number}_${index}`)) continue;
       reps += card.reps;
       weighted += card.reps * card.weight;
@@ -221,6 +272,9 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
     doneCards: done,
     losses: myLosses.length,
     attemptStartMs,
+    currentDoneSec,
+    currentTotalSec,
+    currentFrac: currentTotalSec > 0 ? currentDoneSec / currentTotalSec : 0,
   };
 }
 

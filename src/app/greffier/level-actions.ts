@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, isBoss, orderedLevels, readFrozenLevels, readLevelOrder, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, cardsForTeam, isBoss, orderedLevels, progressOf, readFrozenLevels, readLevelOrder, readPenalties, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, type FrozenLevel, type Loss, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
@@ -33,8 +33,9 @@ export type LevelLive = {
   // Signature de la structure (equipes, membres, echelle, temps impose) : si elle change, l'ecran recharge la page.
   structure: string;
   at: number; // heure serveur de la lecture : l'ecran n'applique jamais un etat plus ancien qu'un deja applique
+  penalties: TeamPenalty[];
 };
-export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; at: number };
+export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; at: number };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
 
 async function raceClock(sessionId: string) {
@@ -49,7 +50,7 @@ const liveTick = (startedAtMs: number | null, pauses: { from: number; to: number
 };
 
 // Etat d'une seule equipe, apres une coche : 3 requetes, l'ecran remplace juste cette equipe.
-async function teamLive(sessionId: string, teamId: string, startedAtMs: number | null, pauses: { from: number; to: number | null }[], rsId: string | null): Promise<TeamLive> {
+async function teamLive(sessionId: string, teamId: string, startedAtMs: number | null, pauses: { from: number; to: number | null }[], rsId: string | null, settings: unknown): Promise<TeamLive> {
   const at = Date.now();
   const [ticks, losses, cards] = await Promise.all([
     db.orm.public.LevelTick.where({ sessionId, teamId }).all(),
@@ -59,6 +60,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
   return {
     teamId,
     at,
+    penalties: readPenalties(settings).filter((p) => p.teamId === teamId),
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
     yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
@@ -96,6 +98,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     raceEndedAtMs: ctx.session.raceEndedAt ? toMs(ctx.session.raceEndedAt) : null,
     structure,
     at,
+    penalties: readPenalties(ctx.session.settings),
   };
 }
 
@@ -250,14 +253,15 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   const caught = (await applyZombieCatches(sessionId, teamId, ctx)) > 0;
   const levels = readFrozenFromSettings(session.settings);
   const l = levels.find((x) => x.number === level);
-  if (!l || !l.cards[card] || l.cards[card].off) return { error: "Cette fiche n'est plus en jeu." };
+  const penalties = readPenalties(session.settings);
+  if (!l || !cardsForTeam(l, teamId, penalties).some((x) => x.index === card)) return { error: "Cette fiche n'est plus en jeu." };
   const ticks = caught ? await db.orm.public.LevelTick.where({ sessionId, teamId }).all() : (ctx?.ticks ?? []);
   const done = new Set(ticks.map((t) => `${t.level}_${t.card}`));
   let refused: string | null = null;
   // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
   for (const prev of orderedLevels(levels, readLevelOrder(session.settings)?.[teamId])) {
     if (prev.number === level) break;
-    if (activeCards(prev).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
+    if (cardsForTeam(prev, teamId, penalties).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
   }
   if (refused && !caught) return { error: refused };
   if (!refused && !done.has(`${level}_${card}`)) {
@@ -267,29 +271,49 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
       /* unicite : deja cochee par un autre appareil */
     }
   }
-  return { ok: true, caught, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
+  return { ok: true, caught, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, session.settings) };
 }
 
 export async function untickCardAction(sessionId: string, teamId: string, level: number, card: number): Promise<TeamRes> {
-  await requireLevelStaff(sessionId);
+  const { session } = await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
   const row = await db.orm.public.LevelTick.where({ sessionId, teamId, level, card }).first();
   if (row) await db.orm.public.LevelTick.where({ id: row.id }).delete();
-  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, session.settings) };
 }
 
+// Carte jaune : compte pour le classement ET ajoute une fiche de penalite (cordes) sur le niveau en cours de
+// l'equipe, de plus en plus lourde a chaque carte (PENALTY_STEPS). Retirer une carte retire la derniere penalite.
 export async function levelYellowCardAction(sessionId: string, teamId: string, delta: 1 | -1): Promise<TeamRes> {
-  await requireLevelStaff(sessionId);
+  const { session } = await requireLevelStaff(sessionId);
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  let penalties = readPenalties(session.settings);
+  const mine = penalties.filter((p) => p.teamId === teamId);
   if (delta > 0) {
     await db.orm.public.YellowCard.create({ raceStateId: gate.rsId, teamId });
+    const [ticks, losses] = await Promise.all([db.orm.public.LevelTick.where({ sessionId, teamId }).all(), db.orm.public.LevelLoss.where({ sessionId, teamId }).all()]);
+    const levels = orderedLevels(readFrozenFromSettings(session.settings), readLevelOrder(session.settings)?.[teamId]);
+    const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), penalties);
+    if (p.currentLevel !== null) {
+      const k = mine.length;
+      penalties = [...penalties, { teamId, level: p.currentLevel, index: PENALTY_INDEX0 + k, reps: PENALTY_STEPS[Math.min(k, PENALTY_STEPS.length - 1)], label: "CORDE", weight: 1 }];
+    }
   } else {
     const last = await db.orm.public.YellowCard.where({ raceStateId: gate.rsId, teamId }).orderBy((c) => c.at.desc()).first();
     if (last) await db.orm.public.YellowCard.where({ id: last.id }).delete();
+    const lastPen = [...mine].sort((a, b) => b.index - a.index)[0];
+    if (lastPen) {
+      penalties = penalties.filter((p) => p !== lastPen);
+      const tick = await db.orm.public.LevelTick.where({ sessionId, teamId, level: lastPen.level, card: lastPen.index }).first();
+      if (tick) await db.orm.public.LevelTick.where({ id: tick.id }).delete();
+    }
   }
-  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId) };
+  const settings = JSON.parse(JSON.stringify({ ...prev, penalties }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings });
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, settings) };
 }
 
 // Modifier l'echelle FIGEE de la seance pendant qu'elle tourne (greffier, profs) : reps ou exercice d'une
