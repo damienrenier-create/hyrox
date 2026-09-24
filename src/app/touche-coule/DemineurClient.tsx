@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MineView, MineStudent } from "@/lib/mine";
-import { MINE_COLS, MINE_COUNT, MINE_ROWS } from "@/lib/mine";
+import { MINE_COLS, MINE_COUNT, MINE_ROWS } from "@/lib/mine-core";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fireAction, minePulseAction, type FireResult } from "./mine-actions";
 import { usePulse } from "../_components/usePulse";

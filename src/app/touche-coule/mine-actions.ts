@@ -6,7 +6,7 @@ import { refereeAccess } from "@/lib/referee-access";
 import { readFrozenFromSettings } from "@/lib/level";
 import { activeCards } from "@/lib/wod-engines/templates/level-engine";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
-import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, numbersOf, roundsOf } from "@/lib/mine";
+import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, numbersOf, roundsOf } from "@/lib/mine-core";
 import { toMs } from "@/lib/scheduling";
 
 export type FireResult = { ok: true; mine: boolean; n: number; opened: [number, number, number][]; found: number; foundInRound: number; roundDone: boolean };
