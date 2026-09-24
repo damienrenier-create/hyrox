@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session-server";
 import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { activeCards, isBoss, readFrozenLevels, MAX_CARDS, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { readLevelCap } from "@/lib/level-context";
+import { resetRace } from "@/lib/cleanup";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 
 // Actions du WOD Level. Profs, coachs ET greffier cochent (les BOSS se valident a plusieurs sur la meme
@@ -105,6 +106,14 @@ async function raceOpen(sessionId: string): Promise<{ error: string } | { rsId: 
   const cap = readLevelCap(session?.settings);
   if (cap !== null && (elapsed(new Date(String(rs.startedAt)).getTime(), pauses, Date.now()) ?? 0) >= cap * 60_000) return { error: "Temps écoulé : déclare la fin du WOD." };
   return { rsId: rs.id };
+}
+
+// Remise a zero du WOD (apres confirmation cote client) : chrono, fiches cochees, cartes jaunes, demineur et
+// evaluations sont effaces ; equipes, arbitres et reglages restent ; l'echelle est re-figee au prochain depart.
+export async function resetLevelAction(sessionId: string): Promise<Res> {
+  await requireLevelStaff(sessionId);
+  const r = await resetRace(sessionId, { clearReferees: true });
+  return "error" in r ? r : { ok: true };
 }
 
 // Activite des dispenses (demineur) pour cette seance, modifiable a tout moment.

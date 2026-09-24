@@ -34,6 +34,18 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
     await db.orm.public.RaceState.where({ id: rs.id }).update({ startedAt: null, endedAt: null });
   }
   deleted.stations = await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
+  // WOD Level : fiches cochees, cases du demineur (et l'ancienne carte), echelle figee (re-figee au prochain depart).
+  await deleteAll(await db.orm.public.LevelTick.where({ sessionId }).all(), (id) => db.orm.public.LevelTick.where({ id }).delete());
+  await deleteAll(await db.orm.public.MineReveal.where({ sessionId }).all(), (id) => db.orm.public.MineReveal.where({ id }).delete());
+  await deleteAll(await db.orm.public.MineBoard.where({ sessionId }).all(), (id) => db.orm.public.MineBoard.where({ id }).delete());
+  if (session.wodType === "LEVEL") {
+    const prev = (session.settings as Record<string, unknown> | null) ?? {};
+    if ("levels" in prev) {
+      const rest = { ...prev };
+      delete rest.levels;
+      await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(rest)) });
+    }
+  }
 
   if (opts.clearReferees) {
     // Ordre impose par les cles etrangeres : Shot -> Evaluation, puis les flottes (cascade navires + cases).

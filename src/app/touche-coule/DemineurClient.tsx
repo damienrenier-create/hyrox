@@ -1,20 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import type { MineView } from "@/lib/mine";
+import type { MineView, MineStudent } from "@/lib/mine";
+import { MINE_COLS, MINE_COUNT, MINE_ROWS } from "@/lib/mine";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
-import { minePulseAction, revealCellAction } from "./mine-actions";
+import { fireAction, minePulseAction, type FireResult } from "./mine-actions";
 import { usePulse } from "../_components/usePulse";
 import { RecentEvals } from "./RecentEvals";
 import { btn, cx, ui } from "@/lib/ui";
 
 const DIGIT: Record<number, string> = { 1: "text-blue-600", 2: "text-green-700", 3: "text-red-600", 4: "text-indigo-800", 5: "text-amber-800", 6: "text-teal-700", 7: "text-black", 8: "text-gray-600" };
 const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+const RESULT_MS = 3000;
 
-// Demineur des arbitres (WOD Level) : lignes = eleves, colonnes = exercices. Une case cachee se joue en
-// encodant les reps observees et la qualite, puis « Feu ». Chiffre = mines dans les 8 cases voisines.
+type Step = "student" | "exercise" | "eval" | "board";
+
+// Demineur des arbitres (WOD Level) : eleve -> exercice -> reps + qualite -> tir sur la grille -> resultat
+// 3 s -> retour au menu. Jamais deux fois d'affilee la meme equipe quand il y en a plusieurs.
 export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended, ownTeamId }: {
   sessionId: string;
   sessionLabel: string;
@@ -25,43 +29,78 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [target, setTarget] = useState<{ row: number; col: number } | null>(null);
+  const [step, setStep] = useState<Step>("student");
+  const [student, setStudent] = useState<MineStudent | null>(null);
+  const [exerciseId, setExerciseId] = useState<string | null>(null);
+  const [allExos, setAllExos] = useState(false);
   const [reps, setReps] = useState("");
   const [note, setNote] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [flash, setFlash] = useState<{ id: number; mine: boolean; n: number } | null>(null);
+  const [result, setResult] = useState<(FireResult & { row: number; col: number; id: number }) | null>(null);
   const [showBoard, setShowBoard] = useState(false);
   const pulse = useCallback(() => minePulseAction(sessionId), [sessionId]);
-  usePulse(pulse, 10000, !target && !pending);
+  usePulse(pulse, 10000, step === "student" && !pending && !result);
 
-  const cells = view.cells;
-  const me = useMemo(() => view.leaderboard.findIndex((l) => l.refereeId === evaluator.id), [view.leaderboard, evaluator.id]);
-  const playable = (r: number, c: number) => !cells[r][c] && view.rows[r].userId !== evaluator.id && (!ownTeamId || view.rows[r].teamId !== ownTeamId);
+  // Apres le tir : resultat affiche 3 s, puis retour au menu (listes rafraichies par le serveur).
+  useEffect(() => {
+    if (!result) return;
+    const t = setTimeout(() => {
+      setResult(null);
+      setStudent(null);
+      setExerciseId(null);
+      setReps("");
+      setNote(null);
+      setStep("student");
+      router.refresh();
+    }, RESULT_MS);
+    return () => clearTimeout(t);
+  }, [result, router]);
 
-  function open(r: number, c: number) {
-    if (!playable(r, c)) return;
-    setTarget({ row: r, col: c });
+  const excludedTeam = view.teamsCount > 1 ? view.lastTeamId : null;
+  const students = useMemo(() => view.students.filter((s) => s.userId !== evaluator.id && (!ownTeamId || s.teamId !== ownTeamId)), [view.students, evaluator.id, ownTeamId]);
+  const byTeam = useMemo(() => {
+    const m = new Map<string, { teamName: string; list: MineStudent[] }>();
+    for (const s of students) (m.get(s.teamId) ?? m.set(s.teamId, { teamName: s.teamName, list: [] }).get(s.teamId)!).list.push(s);
+    return [...m.entries()];
+  }, [students]);
+  const exercises = useMemo(() => (allExos ? view.exercises : view.exercises.filter((e) => e.suggested)), [view.exercises, allExos]);
+  const exercise = view.exercises.find((e) => e.exerciseId === exerciseId) ?? null;
+  const me = view.leaderboard.findIndex((l) => l.refereeId === evaluator.id);
+
+  // Cellules affichees : la grille serveur + le tir et ses cases ouvertes en cascade tant que le resultat est a l'ecran.
+  const cells = useMemo(() => {
+    const c = view.cells.map((r) => [...r]);
+    if (result) {
+      c[result.row][result.col] = { mine: result.mine, n: result.n };
+      for (const [r, cc, n] of result.opened) c[r][cc] = { mine: false, n };
+    }
+    return c;
+  }, [view.cells, result]);
+
+  function goEval() {
+    if (!student || !exerciseId) return;
     setReps("");
     setNote(null);
     setError("");
+    setStep("eval");
   }
-  function fire() {
-    if (!target) return;
+  function goBoard() {
     const n = parseInt(reps, 10);
     if (!Number.isInteger(n) || n < 0) { setError("Encode les reps observées."); return; }
     if (note === null) { setError("Choisis une appréciation."); return; }
     setError("");
+    setStep("board");
+  }
+  function fire(row: number, col: number) {
+    if (!student || !exerciseId || note === null || pending || result) return;
+    const n = parseInt(reps, 10);
     startTransition(async () => {
-      const res = await revealCellAction(sessionId, target.row, target.col, n, note);
-      if ("error" in res) { setError(res.error); return; }
-      setFlash({ id: Date.now(), mine: res.mine, n: res.n });
-      setTarget(null);
-      router.refresh();
-      setTimeout(() => setFlash(null), 1800);
+      const res = await fireAction(sessionId, student.userId, exerciseId, n, note, row, col);
+      if ("error" in res) { setError(res.error); setStep("student"); setStudent(null); setExerciseId(null); router.refresh(); return; }
+      setResult({ ...res, row, col, id: Date.now() });
     });
   }
 
-  const t = target ? { row: view.rows[target.row], col: view.cols[target.col] } : null;
   const back = evaluator.role === "STUDENT" ? "/eleve" : "/admin";
 
   return (
@@ -70,10 +109,10 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
         <a href={back} aria-label="Retour" className="w-9 h-9 rounded-full bg-paper hover:bg-line text-ink-2 flex items-center justify-center font-bold text-lg flex-shrink-0">‹</a>
         <div className="min-w-0 flex-1">
           <p className={ui.eyebrow}>💣 Démineur · {sessionLabel}</p>
-          <p className="text-xs text-ink-2 truncate">{ended ? "WOD terminé · l'arbitrage reste ouvert" : "Encode les reps et la qualité, puis feu. Les chiffres comptent les bombes voisines."}</p>
+          <p className="text-xs text-ink-2 truncate">{ended ? "WOD terminé · l'arbitrage reste ouvert" : `Carte ${view.round + 1} · ${view.foundInRound}/${MINE_COUNT} bombes trouvées`}</p>
         </div>
         <button type="button" onClick={() => setShowBoard((v) => !v)} className={cx(ui.chip, ui.chipAccent, "text-sm px-3 py-1")} title="Classement des arbitres">
-          💣 {view.found} / {view.total}{me >= 0 && <span className="ml-1 opacity-70">#{me + 1}</span>}
+          💣 {view.found}{me >= 0 && <span className="ml-1 opacity-70">#{me + 1}</span>}
         </button>
       </header>
 
@@ -94,80 +133,62 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
         </div>
       )}
 
-      <div className="p-3">
-        <RecentEvals sessionId={sessionId} items={view.recent} />
-      </div>
+      {error && <p className={`${ui.alertErr} mx-3 mt-3`}>{error}</p>}
 
-      <div className="overflow-auto px-3 pb-3">
-        <table className="border-separate border-spacing-[2px]">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-paper text-left text-[10px] text-ink-3 font-bold pr-2">Élève</th>
-              {view.cols.map((c) => (
-                <th key={c.exerciseId} className="align-bottom pb-1">
-                  <span className="block w-9 text-[9px] font-bold text-ink-2 leading-tight break-words text-center" title={c.label}>{shortLabel(c.label)}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {view.rows.map((r, ri) => {
-              const mine = r.userId === evaluator.id || (!!ownTeamId && r.teamId === ownTeamId);
+      <main className="p-3 space-y-3">
+        {/* Fil d'Ariane */}
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <span className={cx(ui.chip, step === "student" ? ui.chipBrand : ui.chipMuted)}>1 · Élève{student ? ` : ${student.name}` : ""}</span>
+          <span className={cx(ui.chip, step === "exercise" ? ui.chipBrand : ui.chipMuted)}>2 · Exercice{exercise ? ` : ${cap(exercise.label)}` : ""}</span>
+          <span className={cx(ui.chip, step === "eval" ? ui.chipBrand : ui.chipMuted)}>3 · Évaluation</span>
+          <span className={cx(ui.chip, step === "board" ? ui.chipBrand : ui.chipMuted)}>4 · Feu</span>
+        </div>
+
+        {step === "student" && (
+          <div className="space-y-3">
+            <RecentEvals sessionId={sessionId} items={view.recent} />
+            {byTeam.length === 0 && <p className={`${ui.cardPad} ${ui.muted}`}>Aucun élève à arbitrer pour l&apos;instant.</p>}
+            {byTeam.map(([teamId, g]) => {
+              const blocked = teamId === excludedTeam;
               return (
-                <tr key={r.userId} className={cx(mine && "opacity-40")}>
-                  <th className="sticky left-0 z-10 bg-paper text-left pr-2 whitespace-nowrap">
-                    <span className="block text-xs font-bold text-ink leading-tight">{r.name}</span>
-                    <span className="block text-[9px] text-ink-3 leading-tight">{r.teamName}</span>
-                  </th>
-                  {view.cols.map((c, ci) => {
-                    const cell = cells[ri][ci];
-                    return (
-                      <td key={c.exerciseId} className="p-0">
-                        {cell === null ? (
-                          <button
-                            type="button"
-                            onClick={() => open(ri, ci)}
-                            disabled={mine || pending}
-                            aria-label={`${r.name} · ${c.label}`}
-                            className="w-9 h-9 rounded-md bg-line-2/70 hover:bg-brand-soft border border-line-2 shadow-[inset_0_-2px_0_rgba(0,0,0,.12)] active:scale-95 transition disabled:cursor-not-allowed"
-                          />
-                        ) : cell.mine ? (
-                          <span className="w-9 h-9 rounded-md bg-danger text-white flex items-center justify-center text-lg" title="Bombe trouvée">💣</span>
-                        ) : (
-                          <span className={cx("w-9 h-9 rounded-md bg-card border border-line flex items-center justify-center font-display font-extrabold text-base", DIGIT[cell.n] ?? "text-ink-3")}>{cell.n || ""}</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
+                <section key={teamId} className={cx(ui.card, "p-2", blocked && "opacity-50")}>
+                  <p className="text-xs font-bold text-ink-2 px-1 mb-1">{g.teamName}{blocked && <span className="ml-2 font-normal text-ink-3">· arbitrée à l&apos;instant, revient après ta prochaine évaluation</span>}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {g.list.map((s) => (
+                      <button key={s.userId} type="button" disabled={blocked || pending} onClick={() => { setStudent(s); setExerciseId(null); setStep("exercise"); }} className={cx(ui.btn, "justify-start text-left", "bg-paper border border-line-2 hover:border-brand disabled:cursor-not-allowed")}>
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                </section>
               );
             })}
-          </tbody>
-        </table>
-        <p className={`${ui.hint} mt-2`}>Case grise = à jouer · chiffre = bombes dans les 8 cases voisines · 💣 = bombe trouvée. Lignes grisées : toi-même et ta propre équipe. {view.total} bombes cachées, les mêmes pour tous les arbitres.</p>
-      </div>
-
-      <AnimatePresence>
-        {flash && (
-          <motion.div key={flash.id} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 top-24 z-40 flex justify-center pointer-events-none">
-            <span className={cx("rounded-2xl px-5 py-3 font-display font-extrabold text-xl shadow-pop", flash.mine ? "bg-danger text-white" : "bg-card border border-line text-ink")}>
-              {flash.mine ? "💥 BOMBE trouvée !" : flash.n ? `${flash.n} bombe${flash.n > 1 ? "s" : ""} autour` : "Rien autour…"}
-            </span>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
-      {t && (
-        <div className={ui.backdrop} onClick={() => !pending && setTarget(null)}>
-          <div className={ui.sheet} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div>
-                <p className={ui.eyebrow}>{t.row.teamName}</p>
-                <h2 className={ui.h2}>{t.row.name}</h2>
-                <p className="text-sm text-ink-2 font-bold">{cap(t.col.label)}</p>
-              </div>
-              <button type="button" onClick={() => setTarget(null)} className={ui.close} aria-label="Fermer">✕</button>
+        {step === "exercise" && student && (
+          <div className="space-y-2">
+            <p className={ui.hint}>Exercice observé chez <b className="text-ink">{student.name}</b> ({student.teamName}). <button type="button" onClick={() => setStep("student")} className="underline">changer d&apos;élève</button></p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {exercises.map((e) => (
+                <button key={e.exerciseId} type="button" onClick={() => { setExerciseId(e.exerciseId); }} className={cx(ui.btn, "justify-start text-left", exerciseId === e.exerciseId ? "bg-ink text-white" : "bg-paper border border-line-2 hover:border-brand")}>
+                  {cap(e.label)}
+                </button>
+              ))}
             </div>
+            {exercises.length === 0 && <p className={ui.hint}>Aucun exercice suggéré : affiche tous les exercices.</p>}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`${ui.hint} flex items-center gap-1`}><input type="checkbox" checked={allExos} onChange={(e) => setAllExos(e.target.checked)} className={ui.check} /> tous les exercices de l&apos;échelle</label>
+              <button type="button" disabled={!exerciseId} onClick={goEval} className={`${btn.primary} ml-auto`}>Évaluer →</button>
+            </div>
+          </div>
+        )}
+
+        {step === "eval" && student && exercise && (
+          <div className={ui.cardPad}>
+            <p className={ui.eyebrow}>{student.teamName}</p>
+            <h2 className={ui.h2}>{student.name}</h2>
+            <p className="text-sm text-ink-2 font-bold mb-3">{cap(exercise.label)}</p>
             <label className={ui.label}>Répétitions observées</label>
             <input type="number" inputMode="numeric" min={0} max={999} value={reps} onChange={(e) => setReps(e.target.value)} autoFocus className={`${ui.input} text-2xl font-display font-extrabold tabular-nums mb-3`} placeholder="0" />
             <p className={ui.label}>Qualité</p>
@@ -179,16 +200,44 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
                 </button>
               ))}
             </div>
-            {error && <p className={`${ui.alertErr} mb-3`}>{error}</p>}
-            <button type="button" onClick={fire} disabled={pending} className={`${btn.lgDanger} w-full`}>🔥 Feu !</button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setStep("exercise")} className={btn.ghost}>← Exercice</button>
+              <button type="button" onClick={goBoard} className={`${btn.lgDanger} flex-1`}>🔥 Choisir une case</button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {step === "board" && (
+          <div className="space-y-2">
+            <p className={ui.hint}>{result ? "Résultat…" : "Tape une case grise pour tirer. Chiffre = bombes dans les 8 cases voisines."}</p>
+            <div className="grid gap-1 mx-auto" style={{ gridTemplateColumns: `repeat(${MINE_COLS}, minmax(0, 1fr))`, maxWidth: 400 }}>
+              {Array.from({ length: MINE_ROWS }, (_, r) => Array.from({ length: MINE_COLS }, (_, c) => {
+                const cell = cells[r][c];
+                const isHit = result && result.row === r && result.col === c;
+                return cell === null ? (
+                  <button key={`${r}_${c}`} type="button" disabled={pending || !!result} onClick={() => fire(r, c)} aria-label={`case ${r + 1}-${c + 1}`} className="aspect-square rounded-md bg-line-2/70 hover:bg-brand-soft border border-line-2 shadow-[inset_0_-2px_0_rgba(0,0,0,.12)] active:scale-95 transition disabled:opacity-70" />
+                ) : cell.mine ? (
+                  <span key={`${r}_${c}`} className={cx("aspect-square rounded-md bg-danger text-white flex items-center justify-center text-lg", isHit && "ring-2 ring-accent")}>💣</span>
+                ) : (
+                  <span key={`${r}_${c}`} className={cx("aspect-square rounded-md bg-card border border-line flex items-center justify-center font-display font-extrabold text-base", DIGIT[cell.n] ?? "text-ink-3", isHit && "ring-2 ring-accent")}>{cell.n || ""}</span>
+                );
+              }))}
+            </div>
+            {!result && <button type="button" onClick={() => setStep("eval")} className={btn.ghost}>← Revoir l&apos;évaluation</button>}
+          </div>
+        )}
+      </main>
+
+      <AnimatePresence>
+        {result && (
+          <motion.div key={result.id} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 top-24 z-40 flex justify-center pointer-events-none">
+            <span className={cx("rounded-2xl px-5 py-3 font-display font-extrabold text-xl shadow-pop text-center", result.mine ? "bg-danger text-white" : "bg-card border border-line text-ink")}>
+              {result.mine ? `💥 BOMBE trouvée ! ${result.foundInRound}/${MINE_COUNT}` : result.n ? `${result.n} bombe${result.n > 1 ? "s" : ""} autour` : `Rien autour… ${result.opened.length} case${result.opened.length > 1 ? "s" : ""} ouverte${result.opened.length > 1 ? "s" : ""}`}
+              {result.roundDone && <span className="block text-sm font-bold mt-1">🏆 Carte terminée, une nouvelle t&apos;attend !</span>}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
-}
-
-function shortLabel(s: string): string {
-  const t = cap(s);
-  return t.length <= 10 ? t : t.replace(/[aeiouy]/gi, (m, i) => (i === 0 ? m : "")).slice(0, 10);
 }

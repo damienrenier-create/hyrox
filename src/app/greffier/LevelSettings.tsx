@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTeamCountAction } from "./settings-actions";
-import { setLevelCapAction, setLevelRefereeModeAction } from "./level-actions";
+import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction } from "./level-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Onglet Reglages du greffier Level : nombre d'equipes (avant le depart), temps impose (avant ou pendant),
@@ -70,6 +70,20 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
           <input type="checkbox" checked={refereeMode} disabled={pending} onChange={(e) => run(e.target.checked ? "Démineur activé." : "Démineur désactivé.", () => setLevelRefereeModeAction(sessionId, e.target.checked))} className={ui.check} />
           💣 Démineur pour les dispensés
         </label>
+      </section>
+
+      <section className={cx(ui.cardPad, "border-danger/50")}>
+        <h3 className={cx(ui.h3, "text-danger-ink")}>Remettre le WOD à zéro</h3>
+        <p className={`${ui.hint} mb-2`}>Efface le chrono, les fiches cochées, les cartes jaunes, le démineur et les évaluations. Les équipes, les arbitres et les réglages restent. L&apos;échelle est reprise de l&apos;atelier au prochain coup d&apos;envoi.</p>
+        <button
+          type="button"
+          disabled={pending || phase === "pre"}
+          onClick={() => confirm("Remettre ce WOD Level à zéro ? Chrono, coches, cartes jaunes, démineur et évaluations seront effacés. Il n'y a pas de retour en arrière.") && run("WOD remis à zéro.", () => resetLevelAction(sessionId))}
+          className={btn.danger}
+        >
+          ↺ Remettre à zéro
+        </button>
+        {phase === "pre" && <p className={`${ui.hint} mt-1`}>Rien à remettre à zéro : le WOD n&apos;a pas démarré.</p>}
       </section>
 
       <section className={ui.cardPad}>
