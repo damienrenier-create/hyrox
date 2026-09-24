@@ -648,6 +648,7 @@ function Odometer({ value, className }: { value: number; className?: string }) {
   return <span className={cx("tabular-nums inline-block transition-transform duration-300", bump && "scale-125", className)}>{shown}</span>;
 }
 
+const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500, 10000];
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
@@ -693,20 +694,31 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
     const h = setTimeout(() => setLostFlash(false), 3000);
     return () => clearTimeout(h);
   }, [lostFlash]);
+  // Jalons espaces : au plus UN par niveau et par equipe (la chute s'affiche toujours), paliers de reps de
+  // plus en plus eloignes (100, 250, 500, 1 000, 1 500, 2 000, 3 000, 4 000, 5 000…).
+  const lastToastLevel = useRef<number | null>(null);
   useEffect(() => {
     const cur = { rank, reps: p.reps, losses: p.losses, level: p.currentLevel };
     const old = prev.current;
     prev.current = cur;
     if (!old) return;
-    let t: { text: string; bad: boolean } | null = null;
-    if (cur.losses > old.losses) { t = { text: `💔 Cœur zombifié ! Retour au ${cur.level !== null ? `niveau ${cur.level}` : "début"}`, bad: true }; setLostFlash(true); }
-    else if (cur.rank === 1 && old.rank !== 1 && teamsCount > 1) t = { text: "🥇 Première place !", bad: false };
-    else if (cur.rank <= 3 && old.rank > 3) t = { text: "🏆 Podium !", bad: false };
-    else if (teamsCount > 1 && old.rank === teamsCount && cur.rank < teamsCount) t = { text: "🚀 Plus dernière !", bad: false };
-    else if (cur.level !== null && old.level !== null && cur.level !== old.level && cur.losses === old.losses) t = { text: `⬆️ ${level?.boss ? "BOSS" : "Niveau"} ${cur.level} !`, bad: false };
-    else if (Math.floor(cur.reps / 100) > Math.floor(old.reps / 100)) t = { text: `💯 ${Math.floor(cur.reps / 100) * 100} reps !`, bad: false };
-    if (t) setToast({ id: Date.now(), ...t });
-  }, [rank, p.reps, p.losses, p.currentLevel, teamsCount, level?.boss]);
+    if (cur.losses > old.losses) {
+      setToast({ id: Date.now(), text: `💔 Cœur zombifié ! Retour au ${cur.level !== null ? `niveau ${cur.level}` : "début"}`, bad: true });
+      setLostFlash(true);
+      lastToastLevel.current = cur.level;
+      return;
+    }
+    if (cur.level !== null && lastToastLevel.current === cur.level) return; // deja un jalon sur ce niveau
+    let t: string | null = null;
+    if (cur.rank === 1 && old.rank !== 1 && teamsCount > 1) t = "🥇 Première place !";
+    else if (cur.rank <= 3 && old.rank > 3 && teamsCount > 3) t = "🏆 Podium !";
+    else if (teamsCount > 1 && old.rank === teamsCount && cur.rank < teamsCount) t = "🚀 Plus dernière !";
+    else {
+      const crossed = REP_MILESTONES.filter((m) => old.reps < m && cur.reps >= m).pop();
+      if (crossed) t = `💯 ${crossed.toLocaleString("fr-BE")} reps !`;
+    }
+    if (t) { setToast({ id: Date.now(), text: t, bad: false }); lastToastLevel.current = cur.level; }
+  }, [rank, p.reps, p.losses, p.currentLevel, teamsCount]);
   useEffect(() => {
     if (!toast) return;
     const h = setTimeout(() => setToast(null), 2600);
