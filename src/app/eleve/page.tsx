@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { sessionsForStudent, wodLabel, fmtDate } from "@/lib/student-sessions";
 import { openSessionsForStudent, toMs } from "@/lib/scheduling";
 import { refereeAccess } from "@/lib/referee-access";
-import { LogoutButton } from "./LogoutButton";
+import { LogoutButton } from "../_components/LogoutButton";
 import { RefereeRequest } from "./RefereeRequest";
 import { TopBar } from "../_components/TopBar";
 import { ui } from "@/lib/ui";

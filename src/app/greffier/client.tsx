@@ -37,6 +37,7 @@ import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { SettingsPanel } from "./SettingsPanel";
 import { ArbitrageTab } from "./ArbitrageTab";
 import { RecordsTab } from "./RecordsTab";
+import { LogoutButton } from "../_components/LogoutButton";
 import type { BoardData } from "@/lib/referee-board";
 import { motion } from "framer-motion";
 import type { PendingRequest } from "./referee-decisions";
@@ -828,6 +829,7 @@ export function GreffierClient({
               </>
             )}
             {board && <a href={`/touche-coule?session=${sessionId}`} className={btn.lgGhost} title="Arbitrer cette séance (Touché-Coulé) sans quitter le greffier à quelqu'un d'autre">🏴‍☠️ Arbitrer</a>}
+              <LogoutButton />
             <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
           </div>
         </div>

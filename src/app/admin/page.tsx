@@ -15,6 +15,7 @@ import {
   openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
+import { LogoutButton } from "../_components/LogoutButton";
 import { btn, cx, ui } from "@/lib/ui";
 
 async function runGenerateGhostFleets(sessionId: string) {
@@ -115,6 +116,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             {canDelete && <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>}
             <Link href="/greffier" className={btn.smGhost}>Greffier</Link>
             <Link href="/touche-coule" className={btn.smSea}>Touché-Coulé</Link>
+            <LogoutButton />
           </nav>
         }
       />
