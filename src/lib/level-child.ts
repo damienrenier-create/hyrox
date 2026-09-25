@@ -35,6 +35,12 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
   // BOSS pour le moteur (multiple de 5), les autres series gardent 1..n.
   const bossIdx = levels.findIndex((l) => l.boss);
   if (bossIdx >= 0 && !isBoss(levels[bossIdx].number)) levels[bossIdx].number = Math.max(5, Math.ceil(levels.length / 5) * 5);
+  // Echauffement : les series ordinaires evitent les multiples de 5 (1, 2, 3, 4, 6) — un numero multiple de 5
+  // est relu comme BOSS par le moteur (la serie E jouait en BOSS : horde, une seule fiche admise).
+  if (kind === "warmup") {
+    let n = 0;
+    for (const l of levels) if (!l.boss) { n++; if (n % 5 === 0) n++; l.number = n; }
+  }
   levels.sort((a, b) => a.number - b.number);
 
   const prev = (parent.settings as Record<string, unknown> | null) ?? {};
