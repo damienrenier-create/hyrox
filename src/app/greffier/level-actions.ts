@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, orderedLevels, progressOf, readEmom, readEmomScores, readFrozenLevels, readLevelOrder, readPenalties, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, type FrozenLevel, type Loss, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
+import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderFor, orderedLevels, progressOf, readEmom, readEmomScores, readFrozenLevels, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_STARS, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
@@ -89,8 +89,8 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     caught > 0 ? db.orm.public.LevelTick.where({ sessionId }).all() : Promise.resolve(ctx.ticks as { id: string; teamId: string; level: number; card: number; at: unknown; by: string }[]),
     caught > 0 ? db.orm.public.LevelLoss.where({ sessionId }).all() : Promise.resolve(ctx.losses as { id: string; teamId: string; level: number; at: unknown }[]),
   ]);
-  const s = ctx.session.settings as { levels?: unknown; levelCapMin?: unknown } | null;
-  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify(s?.levels ?? ""))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
+  const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; levelCapMin?: unknown } | null;
+  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   return {
     ticks: ticks.map(liveTick(startedAtMs, pauses)),
     losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
@@ -165,10 +165,13 @@ export async function startLevelAction(sessionId: string): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
   let levels = readFrozenFromSettings(session.settings);
   if (!levels.length) {
-    levels = await freezeLevels();
-    if (!levels.some((l) => activeCards(l).length > 0)) return { error: "L'échelle est vide : compose les niveaux dans l'atelier Level avant de lancer." };
+    // Les trois parcours sont figes d'un coup ; un parcours vide dans l'atelier retombe sur le 2 etoiles.
+    const all = await freezeLadders();
+    levels = all[2];
+    if (!levels.some((l) => activeCards(l).length > 0)) return { error: "L'échelle 2 étoiles est vide : compose les niveaux dans l'atelier Level avant de lancer." };
     const prev = (session.settings as Record<string, unknown> | null) ?? {};
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, levels } });
+    const ladders = { ...(all[1].length ? { "1": all[1] } : {}), ...(all[3].length ? { "3": all[3] } : {}) };
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, levels, ladders })) });
   }
   let rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs) rs = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: [] });
@@ -269,7 +272,7 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
   // Contexte de l'equipe charge une fois : rattrapage en memoire, puis verification du niveau en cours.
   const ctx = await loadZombieContext(sessionId, teamId);
   const caught = (await applyZombieCatches(sessionId, teamId, ctx)) > 0;
-  const levels = readFrozenFromSettings(session.settings);
+  const levels = teamLadder(session.settings, teamId);
   const l = levels.find((x) => x.number === level);
   const penalties = readPenalties(session.settings);
   if (!l || !cardsForTeam(l, teamId, penalties).some((x) => x.index === card)) return { error: "Cette fiche n'est plus en jeu." };
@@ -288,7 +291,7 @@ export async function tickCardAction(sessionId: string, teamId: string, level: n
     }
   } else {
     // Le niveau doit etre le niveau en cours : toutes les fiches en jeu des niveaux precedents sont cochees.
-    for (const prev of orderedLevels(levels, readLevelOrder(session.settings)?.[teamId])) {
+    for (const prev of levels) {
       if (prev.number === level) break;
       if (cardsForTeam(prev, teamId, penalties).some(({ index }) => !done.has(`${prev.number}_${index}`))) { refused = `Le niveau ${prev.number} n'est pas terminé.`; break; }
     }
@@ -325,7 +328,7 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
   if (delta > 0) {
     await db.orm.public.YellowCard.create({ raceStateId: gate.rsId, teamId });
     const [ticks, losses] = await Promise.all([db.orm.public.LevelTick.where({ sessionId, teamId }).all(), db.orm.public.LevelLoss.where({ sessionId, teamId }).all()]);
-    const levels = orderedLevels(readFrozenFromSettings(session.settings), readLevelOrder(session.settings)?.[teamId]);
+    const levels = teamLadder(session.settings, teamId);
     const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), penalties);
     if (p.currentLevel !== null) {
       const k = mine.length;
@@ -349,10 +352,11 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
 // Modifier l'echelle FIGEE de la seance pendant qu'elle tourne (greffier, profs) : reps ou exercice d'une
 // fiche, fiche ajoutee, fiche retiree (`off`, jamais supprimee : les coches referencent l'index), niveau
 // ajoute en fin d'echelle. L'echelle commune de l'atelier n'est pas touchee.
-export async function updateSessionLevelsAction(sessionId: string, input: FrozenLevel[]): Promise<Res> {
+export async function updateSessionLevelsAction(sessionId: string, input: FrozenLevel[], stars: Stars = DEFAULT_STARS): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
-  const current = readFrozenFromSettings(session.settings);
-  if (!current.length) return { error: "L'échelle n'est pas encore figée : modifie-la dans l'atelier Level." };
+  if (!readFrozenFromSettings(session.settings).length) return { error: "L'échelle n'est pas encore figée : modifie-la dans l'atelier Level." };
+  // Parcours 1 ou 3 etoiles jamais fige (atelier vide au depart) : il se cree ici, a partir de la copie proposee.
+  const current = stars === DEFAULT_STARS ? readFrozenFromSettings(session.settings) : readLadders(session.settings)[stars] ?? [];
   const catalog = new Map((await listExercises()).map((e) => [e.id, e]));
   const parsed = readFrozenLevels(input);
   if (!parsed.length) return { error: "Échelle vide." };
@@ -377,6 +381,30 @@ export async function updateSessionLevelsAction(sessionId: string, input: Frozen
     if (l.boss && activeCards(l).length > 1) return { error: `Le niveau ${l.number} est un BOSS : une seule fiche en jeu.` };
   }
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, levels } });
+  if (stars === DEFAULT_STARS) await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, levels } });
+  else {
+    const prevLadders = (prev.ladders && typeof prev.ladders === "object" ? prev.ladders : {}) as Record<string, unknown>;
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, ladders: { ...prevLadders, [String(stars)]: levels } })) });
+  }
+  return { ok: true };
+}
+
+// Echelle d'une equipe dans une seance : son parcours (etoiles) dans son ordre.
+function teamLadder(settings: unknown, teamId: string): FrozenLevel[] {
+  return orderedLevels(ladderFor(readFrozenFromSettings(settings), readLadders(settings), teamStarsOf(readTeamStars(settings), teamId)), readLevelOrder(settings)?.[teamId]);
+}
+
+// Parcours (1, 2 ou 3 etoiles) d'une equipe. Modifiable tant que l'equipe n'a rien coche : les coches
+// referencent des numeros de niveau et des index de fiche propres a une echelle.
+export async function setTeamStarsAction(sessionId: string, teamId: string, stars: Stars): Promise<Res> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
+  const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
+  if (!team) return { error: "Équipe introuvable." };
+  const ticked = await db.orm.public.LevelTick.where({ sessionId, teamId }).first();
+  if (ticked) return { error: "Cette équipe a déjà coché des fiches : son parcours est verrouillé (annule ses coches d'abord)." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const teamStars = { ...readTeamStars(session.settings), [teamId]: stars };
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, teamStars })) });
   return { ok: true };
 }

@@ -3,7 +3,7 @@ import { readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, orderedLevels, progressOf, readLevelOrder, readPenalties, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Demineur des arbitres (WOD Level), version « deux listes » (Sartay, 24/09 soir) :
 //   1. l'arbitre choisit un eleve qui joue, puis un exercice (liste alphabetique limitee aux niveaux en cours
@@ -69,20 +69,20 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const pauses = rs ? (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })) : [];
   const ticks: Tick[] = (await db.orm.public.LevelTick.where({ sessionId }).all()).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-  const shown = new Set<number>();
   const order = readLevelOrder(session.settings);
   const penalties = readPenalties(session.settings);
-  for (const t of teams) {
-    const p = progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks, [], penalties);
-    if (p.currentLevel !== null) { shown.add(p.currentLevel); shown.add(p.currentLevel + 1); }
-  }
-  if (!shown.size) { shown.add(1); shown.add(2); }
+  const ladders = readLadders(session.settings);
+  const teamStars = readTeamStars(session.settings);
   const suggestedIds = new Set<string>();
   const all = new Map<string, string>();
-  for (const l of levels) for (const { card } of activeCards(l)) {
-    all.set(card.exerciseId, card.label);
-    if (shown.has(l.number)) suggestedIds.add(card.exerciseId);
+  for (const l of [levels, ...Object.values(ladders)].flat()) for (const { card } of activeCards(l)) all.set(card.exerciseId, card.label);
+  for (const t of teams) {
+    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id)), order?.[t.id]);
+    const p = progressOf(mine, t.id, ticks, [], penalties);
+    if (p.currentLevel === null) continue;
+    for (const l of mine) if (l.number === p.currentLevel || l.number === p.currentLevel + 1) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);
   }
+  if (!suggestedIds.size) for (const l of levels) if (l.number <= 2) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);
   const exercises: MineExercise[] = [...all.entries()].map(([exerciseId, label]) => ({ exerciseId, label, suggested: suggestedIds.has(exerciseId) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
 
   const reveals = await db.orm.public.MineReveal.where({ sessionId }).all();

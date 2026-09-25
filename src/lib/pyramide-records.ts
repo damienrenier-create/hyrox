@@ -21,6 +21,7 @@ export type RecordEntry = {
   teamId: string;
   teamName: string;
   members: string[];
+  stars?: number; // WOD Level : parcours de l'equipe (1, 2 ou 3 etoiles)
   sex: TeamSex;
   classes: string;
   sessionLabel: string;
@@ -39,7 +40,7 @@ export type RecordBoard = { id: string; title: string; hint: string; rows: Recor
 export type RecordPeriod = "session" | "day" | "week" | "all";
 // « phase » (Level seulement) : le WOD principal, ou ses seances enfant echauffement / finisher.
 export type RecordPhase = "wod" | "warmup" | "finisher";
-export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase };
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase; stars?: 1 | 2 | 3 | null };
 // `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
 // visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
 export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };

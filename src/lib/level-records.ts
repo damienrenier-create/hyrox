@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, fmtIntensity, fmtTheoretical, progressOf, readEmomScores, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, fmtIntensity, fmtTheoretical, ladderFor, progressOf, readEmomScores, readLadders, readPenalties, readTeamStars, teamStarsOf, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
@@ -20,6 +20,7 @@ const MIN_REPS_FOR_INTENSITY = 200;
 type Row = {
   base: Omit<RecordEntry, "display">;
   grade: number | null;
+  stars: Stars;
   levels: number;
   currentDone: number;
   lastTickMs: number | null;
@@ -104,11 +105,20 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     const dateMs = dateOf(s);
     const excludedIds = new Set(readExcludedFromRecords(s.settings));
     const scores = readEmomScores(s.settings);
-    const cardWeight = new Map<string, { reps: number; weight: number }>();
-    for (const l of levels) for (const { card, index } of activeCards(l)) cardWeight.set(`${l.number}_${index}`, { reps: card.reps, weight: card.weight });
+    const ladders = readLadders(s.settings);
+    const teamStars = readTeamStars(s.settings);
+    const weightCache = new Map<Stars, Map<string, { reps: number; weight: number }>>();
+    const cardWeightOf = (stars: Stars, lv: FrozenLevel[]) => {
+      let m = weightCache.get(stars);
+      if (!m) { m = new Map(); for (const l of lv) for (const { card, index } of activeCards(l)) m.set(`${l.number}_${index}`, { reps: card.reps, weight: card.weight }); weightCache.set(stars, m); }
+      return m;
+    };
 
     for (const t of teams) {
-      const p = progressOf(levels, t.id, ticks, losses, readPenalties(s.settings));
+      const stars = teamStarsOf(teamStars, t.id);
+      const lv = ladderFor(levels, ladders, stars);
+      const cardWeight = cardWeightOf(stars, lv);
+      const p = progressOf(lv, t.id, ticks, losses, readPenalties(s.settings));
       const score = scores[t.id] ?? null;
       if (p.reps === 0 && p.losses === 0 && score === null) continue;
       const mem = (membersBy.get(t.id) ?? []).map((m) => userById.get(m.userId)).filter((u) => !!u);
@@ -121,6 +131,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
       const base = {
         key: `${s.id}_${t.id}`, sessionId: s.id, teamId: t.id, bk, teamName: t.name,
         members: mem.map((u) => `${u!.firstName ?? ""}`.trim()).filter(Boolean),
+        stars,
         sex,
         classes: [...new Set(mem.map((u) => u!.className).filter((c): c is string => !!c))].sort().join(", "),
         sessionLabel, dateMs,
@@ -138,7 +149,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
       }
       // BOSS le plus rapide : coche du BOSS moins derniere coche du niveau precedent (ou 0 si niveau 1).
       let bossMs: number | null = null, bossNumber: number | null = null;
-      for (const l of levels) {
+      for (const l of lv) {
         if (!l.boss || l.number > p.completedLevels) continue;
         const bossTicks = ticks.filter((x) => x.teamId === t.id && x.level === l.number);
         const prevTicks = ticks.filter((x) => x.teamId === t.id && x.level === l.number - 1);
@@ -151,7 +162,8 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
         base,
         grade: (() => { const gs = new Set(mem.map((u) => gradeOf(u!.className)).filter((g): g is number => g !== null)); return gs.size === 1 ? [...gs][0] : null; })(),
         // Une vague « max » (sans fiche) compte comme bouclee d'office : on ne compte que les niveaux a fiches.
-        levels: Math.min(p.completedLevels, levels.filter((l) => activeCards(l).length > 0).length), currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
+        stars,
+        levels: Math.min(p.completedLevels, lv.filter((l) => activeCards(l).length > 0).length), currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
         reps: p.reps, work: p.weighted, intensity: p.reps >= MIN_REPS_FOR_INTENSITY ? p.weighted / p.reps : null,
         work30, reps30, bossMs, bossNumber, cards: (cardsBy.get(rs.id) ?? []).filter((c) => c.teamId === t.id).length, score,
       });
@@ -161,6 +173,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
   const grades = [...new Set(rows.map((r) => r.grade).filter((g): g is number => g !== null))].sort((a, b) => a - b);
   let pool = f.sex ? rows.filter((r) => r.base.sex === f.sex) : rows;
   if (f.grade) pool = pool.filter((r) => r.grade === f.grade);
+  if (f.stars) pool = pool.filter((r) => r.stars === f.stars);
 
   const top = (id: string, title: string, hint: string, value: (r: Row) => number | null, lowerIsBetter: boolean, display: (v: number, r: Row) => string, tie?: (a: Row, b: Row) => number): RecordBoard => {
     const scored = pool.map((r) => ({ r, v: value(r) })).filter((x): x is { r: Row; v: number } => x.v !== null && Number.isFinite(x.v));

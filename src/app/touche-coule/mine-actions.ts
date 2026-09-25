@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { refereeAccess } from "@/lib/referee-access";
 import { readFrozenFromSettings } from "@/lib/level";
-import { activeCards } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, readLadders } from "@/lib/wod-engines/templates/level-engine";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, numbersOf, roundsOf } from "@/lib/mine-core";
 import { toMs } from "@/lib/scheduling";
@@ -36,7 +36,7 @@ export async function fireAction(
 
   const levels = readFrozenFromSettings(session.settings);
   if (!levels.length) return { error: "Le WOD n'est pas lancé." };
-  if (!levels.some((l) => activeCards(l).some(({ card }) => card.exerciseId === exerciseId))) return { error: "Exercice hors échelle." };
+  if (![levels, ...Object.values(readLadders(session.settings))].flat().some((l) => activeCards(l).some(({ card }) => card.exerciseId === exerciseId))) return { error: "Exercice hors échelle." };
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const membership = (await db.orm.public.TeamMember.where({ userId: targetUserId }).all()).find((m) => teams.some((t) => t.id === m.teamId));

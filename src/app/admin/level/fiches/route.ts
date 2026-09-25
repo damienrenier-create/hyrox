@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { LEVEL_STAFF, freezeLevels, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, estimateSeconds, fmtTheoretical, DEFAULT_TEAM, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { LEVEL_STAFF, freezeLadders, readFrozenFromSettings } from "@/lib/level";
+import { activeCards, estimateSeconds, fmtTheoretical, readLadders, starsLabel, starsName, DEFAULT_TEAM, STARS, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 export const dynamic = "force-dynamic";
@@ -16,23 +16,27 @@ export async function GET(req: Request) {
   const user = await getSession();
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) return Response.redirect(new URL("/", req.url), 307);
   const sessionId = new URL(req.url).searchParams.get("session");
-  let levels: FrozenLevel[] = [];
+  // Les trois parcours (1, 2, 3 etoiles) : ceux figes dans la seance avec ?session=, sinon ceux de l'atelier.
+  let ladders: Partial<Record<Stars, FrozenLevel[]>> = {};
   let title = "Échelle commune";
   if (sessionId) {
     const s = await db.orm.public.Session.where({ id: sessionId }).first();
-    if (s) {
-      levels = readFrozenFromSettings(s.settings);
+    if (s && readFrozenFromSettings(s.settings).length) {
+      ladders = { 2: readFrozenFromSettings(s.settings), ...readLadders(s.settings) };
       title = `${s.label ?? wodLabel(s.wodType)} · échelle de la séance`;
     }
   }
-  if (!levels.length) {
-    levels = await freezeLevels();
+  if (!ladders[2]?.length) {
+    const all = await freezeLadders();
+    ladders = { ...(all[1].length ? { 1: all[1] } : {}), 2: all[2], ...(all[3].length ? { 3: all[3] } : {}) };
     title = "Échelle commune";
   }
+  const levels = STARS.flatMap((st) => (ladders[st] ?? []).map((l) => ({ ...l, stars: st })));
   const cards = levels.flatMap((l) => {
     const act = activeCards(l);
-    const head = `<div class="card head${l.boss ? " boss" : ""}"><div class="lvl">${l.boss ? "BOSS" : "Niveau"} ${l.number}</div><div class="name">${esc(l.name ? l.name.replace(/^BOSS · /, "") : l.boss ? "Boss" : `Niveau ${l.number}`)}</div><div class="list">${esc(act.map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · "))}</div><div class="meta">≈ ${fmtTheoretical(estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss))}${l.boss ? " · toute l'équipe en même temps, validé par un prof" : " · une fiche par membre, en relais"}</div></div>`;
-    return [head, ...act.map(({ card, index }) => `<div class="card${l.boss ? " boss" : ""}"><div class="lvl">${l.boss ? "BOSS" : "Niveau"} ${l.number} · fiche ${index + 1}/${act.length}</div><div class="reps">${card.reps}</div><div class="exo">${esc(cap(card.label))}</div><div class="meta">${l.boss ? `à ${DEFAULT_TEAM} en simultané` : `≈ ${fmtTheoretical(card.reps * card.weight)} pour un membre`}</div></div>`)];
+    const star = STARS.filter((st) => ladders[st]?.length).length > 1 ? `${starsLabel(l.stars)} · ` : "";
+    const head = `<div class="card head${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number}</div><div class="name">${esc(l.name ? l.name.replace(/^BOSS · /, "") : l.boss ? "Boss" : `Niveau ${l.number}`)}</div><div class="list">${esc(act.map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · "))}</div><div class="meta">${star ? starsName(l.stars) + " · " : ""}≈ ${fmtTheoretical(estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss))}${l.boss ? " · toute l'équipe en même temps, validé par un prof" : " · une fiche par membre, en relais"}</div></div>`;
+    return [head, ...act.map(({ card, index }) => `<div class="card${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number} · fiche ${index + 1}/${act.length}</div><div class="reps">${card.reps}</div><div class="exo">${esc(cap(card.label))}</div><div class="meta">${l.boss ? `à ${DEFAULT_TEAM} en simultané` : `≈ ${fmtTheoretical(card.reps * card.weight)} pour un membre`}</div></div>`)];
   });
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiches WOD Level</title><style>
 @page { size: A4; margin: 10mm; }

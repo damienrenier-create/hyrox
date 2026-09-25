@@ -22,7 +22,8 @@ type Spec =
   | { boss: true; identity: Identity; name: string; label: string; reps: number }
   | { fixed: true; identity: Identity; name: string; cards: [label: string, reps: number][] }; // fiches ecrites a la main (F)
 export type Proposal = {
-  key: "A" | "B" | "C" | "D" | "E" | "F";
+  key: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+  stars?: 1 | 2 | 3; // parcours auquel la proposition est destinee (G = 1 etoile, F = 2, H = 3)
   title: string;
   philosophy: string;
   strengths: string[];
@@ -387,5 +388,113 @@ PROPOSALS.push({
     BOSS("full", "Break dance", "BREAK DANCE", 150),
   ],
 });
+
+// ===== Parcours 1 et 3 etoiles (Sartay, 25/09) =====
+// Trois parcours joues EN MEME TEMPS dans la salle : 1 etoile (peu de force et de technique, exercices
+// simples), 2 etoiles (F, equilibre), 3 etoiles (force et cardio). Contraintes croisees verifiees :
+// - au meme numero de niveau, un BOSS different sur chaque parcours (files diluees) ;
+// - tapis (tire / flip), barres, poutre : un seul parcours a la fois au meme numero de niveau ;
+//   kettlebells et box : deux parcours au plus ;
+// - le materiel d'un BOSS (tractions, KB, cordes, tapis, box, balles, poutre) est absent des deux niveaux
+//   qui le precedent sur le meme parcours ;
+// - socle bras + jambes + cardio, 3 a 8 fiches, reps rondes, durees et fiche la plus longue croissantes.
+// BOSS de force a petites doses au 1 etoile (50 tractions, 150 pompes), a grosses doses au 3 etoiles
+// (200 tractions, 1000 cordes, 100 aller-retour).
+const F_PROPOSAL = PROPOSALS.find((p) => p.key === "F")!;
+F_PROPOSAL.stars = 2;
+PROPOSALS.push({
+  key: "G",
+  stars: 1,
+  title: "1 étoile · Découverte",
+  philosophy:
+    "Le parcours des equipes qui decouvrent ou qui veulent tenir la distance : corde, squats, fentes, commando, plank slide, KB tour, tour de poutre, aller-retour et pompes font l'essentiel ; les exercices de force ou techniques (box jump, tractions, burpees, flip et tire tapis, wall ball, snatch, one rep, break dance) n'arrivent qu'a petites doses (13 % des fiches). Les BOSS y donnent quand meme droit a la force, en quantite raisonnable : 200 cordes, 50 tractions, 150 pompes, 40 aller-retour, 400 squats jump. Niveaux 15 % plus courts que le 2 etoiles.",
+  strengths: [
+    "Accessible : aucune fiche ne demande un geste que l'equipe ne maitrise pas, les niveaux s'enchainent et le tableau bouge.",
+    "Les BOSS restent des BOSS (50 tractions, 150 pompes) : l'equipe touche a la force sans s'y casser les dents.",
+    "Materiel leger : jamais plus d'un exercice a materiel lourd par niveau, et jamais le meme que les deux autres parcours au meme numero.",
+    "Socle bras + jambes + cardio conserve : un corps complet, meme sans burpees ni tractions.",
+  ],
+  weaknesses: [
+    "Beaucoup de corde et de reps « faciles » : l'intensite tourne autour de 2, le compteur de reps s'envole mais le stimulus de force reste faible.",
+    "Une equipe forte s'y ennuie : le parcours est pense pour finir loin, pas pour souffrir.",
+    "Les exercices techniques y sont si rares (une fiche chacun) que les eleves ne les apprennent pas ici.",
+  ],
+  ramp: [],
+  specs: [
+    FX("cardio", "Premiers pas", ["CORDE", 40], ["SQUATS JUMP", 20], ["COMMANDO BRAS", 20]),
+    FX("jambes", "Tour de chauffe", ["ALLER-RETOUR", 3], ["FENTES DISK", 20], ["POMPES", 20], ["PLANK SLIDE", 20]),
+    FX("bras", "Cadence", ["MONKEY SLIDE", 20], ["COMMANDO BRAS", 30], ["ALLER-RETOUR", 4], ["TOUR DE POUTRE", 10]),
+    FX("tronc", "Plein régime", ["SQUATS JUMP", 40], ["POMPES", 20], ["ALLER-RETOUR", 5], ["KB TOUR", 70], ["SMASH DOWN", 20]),
+    BOSS("cardio", "Corde", "CORDE", 200),
+    FX("full", "Reprise", ["CORDE", 80], ["FENTES DISK", 40], ["COMMANDO BRAS", 40], ["PLANK SLIDE", 30], ["KB SWING", 40]),
+    FX("cardio", "Éventail", ["ALLER-RETOUR", 6], ["SQUATS JUMP", 50], ["POMPES", 30], ["SMASH DOWN", 30], ["MONKEY SLIDE", 30]),
+    FX("jambes", "Endurance", ["CORDE", 100], ["FENTES DISK", 50], ["COMMANDO BRAS", 50], ["KB TOUR", 110], ["TOUR DE POUTRE", 20]),
+    FX("bras", "Grand huit", ["ALLER-RETOUR", 6], ["SQUATS JUMP", 50], ["POMPES", 40], ["PLANK SLIDE", 30], ["MONKEY SLIDE", 30], ["WALL BALL SHOT", 30], ["BREAK DANCE", 5]),
+    BOSS("bras", "Tractions", "TRACTIONS", 50),
+    FX("bras", "Relance", ["CORDE", 120], ["FENTES DISK", 60], ["COMMANDO BRAS", 60], ["TOUR DE POUTRE", 25], ["SMASH DOWN", 40], ["FLIP TAPIS", 10]),
+    FX("jambes", "Sept ateliers", ["ALLER-RETOUR", 9], ["SQUATS JUMP", 50], ["POMPES", 30], ["PLANK SLIDE", 30], ["MONKEY SLIDE", 30], ["BOX JUMP", 30], ["WALL BALL SHOT", 30]),
+    FX("tronc", "Quatre costauds", ["CORDE", 140], ["FENTES DISK", 70], ["COMMANDO BRAS", 70], ["TIRE TAPIS AR", 5]),
+    FX("full", "Dernière ligne droite", ["ALLER-RETOUR", 11], ["SQUATS JUMP", 50], ["POMPES", 40], ["KB TOUR", 120], ["TOUR DE POUTRE", 25], ["PLANK SLIDE", 40]),
+    BOSS("bras", "Pompes", "POMPES", 150),
+    FX("bras", "Retour de flamme", ["CORDE", 170], ["FENTES DISK", 80], ["COMMANDO BRAS", 80], ["SMASH DOWN", 50], ["MONKEY SLIDE", 50], ["BURPEES", 10]),
+    FX("full", "Tour du gymnase", ["ALLER-RETOUR", 12], ["SQUATS JUMP", 60], ["POMPES", 40], ["PLANK SLIDE", 40], ["WALL BALL SHOT", 40], ["TRACTIONS", 15], ["FENTES DISK", 60]),
+    FX("cardio", "Quatre géants", ["CORDE", 190], ["TOUR DE POUTRE", 35], ["COMMANDO BRAS", 90], ["MONKEY SLIDE", 60]),
+    FX("tronc", "Apothéose", ["ALLER-RETOUR", 13], ["SQUATS JUMP", 70], ["POMPES", 50], ["PLANK SLIDE", 50], ["SMASH DOWN", 50], ["BOX JUMP", 50]),
+    BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 40),
+    FX("bras", "Cinquième étage", ["CORDE", 200], ["FENTES DISK", 100], ["COMMANDO BRAS", 100], ["TOUR DE POUTRE", 40], ["MONKEY SLIDE", 70]),
+    FX("full", "Le grand tour", ["ALLER-RETOUR", 14], ["SQUATS JUMP", 70], ["POMPES", 50], ["KB TOUR", 150], ["PLANK SLIDE", 50], ["ONE REP", 10], ["WALL BALL SHOT", 50]),
+    FX("jambes", "Quatre piliers", ["CORDE", 230], ["FENTES DISK", 110], ["COMMANDO BRAS", 110], ["TRACTIONS", 20]),
+    FX("cardio", "Dernier rempart", ["ALLER-RETOUR", 16], ["MONKEY SLIDE", 60], ["POMPES", 60], ["PLANK SLIDE", 60], ["SMASH DOWN", 60], ["TOUR DE POUTRE", 35], ["KB SNATCH", 30]),
+    BOSS("jambes", "Squats jump", "SQUATS JUMP", 400),
+  ],
+});
+PROPOSALS.push({
+  key: "H",
+  stars: 3,
+  title: "3 étoiles · Élite",
+  philosophy:
+    "Le parcours des equipes qui veulent de la force et du cardio : box jump, tractions, burpees, flip et tire tapis, wall ball, snatch, one rep et break dance font plus de la moitie des fiches, avec les pompes, l'aller-retour et la corde en fil rouge. Les exercices simples (KB tour, plank slide, monkey slide, squats) n'apparaissent qu'en respiration. Niveaux 10 % plus longs que le 2 etoiles, BOSS a grosses doses : 50 break dance, 100 burpees, 1000 cordes, 200 tractions, 100 aller-retour.",
+  strengths: [
+    "Vrai stimulus de force et de puissance : les equipes fortes ont enfin de quoi se depasser, et les BOSS tranchent le classement.",
+    "Beaucoup de gestes techniques a juger : le demineur des arbitres a de la matiere.",
+    "Au meme numero de niveau, jamais le meme materiel lourd que les deux autres parcours : les barres, tapis et box du 3 etoiles ne font pas la file avec le 1 et le 2.",
+    "Socle bras + jambes + cardio conserve, reps rondes, tout le catalogue en jeu.",
+  ],
+  weaknesses: [
+    "Trop dur pour une equipe moyenne : les niveaux 16 a 24 depassent les 3 min 30 et le zombie ne pardonne pas.",
+    "Materiel sollicite en permanence (KB, tapis, barres, balles, box) : il faut la salle et le stock pour trois ou quatre equipes en 3 etoiles.",
+    "Fatigue et qualite d'execution : burpees, one rep et break dance reviennent souvent, l'arbitrage doit etre strict.",
+  ],
+  ramp: [],
+  specs: [
+    FX("cardio", "Premiers pas", ["BURPEES", 10], ["POMPES", 20], ["BOX JUMP", 20], ["CORDE", 60]),
+    FX("bras", "Tour de chauffe", ["ALLER-RETOUR", 5], ["TRACTIONS", 15], ["TIRE TAPIS AR", 2], ["KB SNATCH", 20], ["SMASH DOWN", 20]),
+    FX("full", "Cadence", ["CORDE", 90], ["FLIP TAPIS", 20], ["POMPES", 30], ["MONKEY SLIDE", 30]),
+    FX("jambes", "Plein régime", ["BURPEES", 15], ["TRACTIONS", 15], ["BOX JUMP", 30], ["WALL BALL SHOT", 30], ["ONE REP", 5], ["FENTES DISK", 40]),
+    BOSS("full", "Break dance", "BREAK DANCE", 50),
+    FX("full", "Reprise", ["ALLER-RETOUR", 8], ["POMPES", 40], ["TIRE TAPIS AR", 4], ["KB SNATCH", 40], ["BREAK DANCE", 15]),
+    FX("cardio", "Éventail", ["CORDE", 100], ["COMMANDO BRAS", 50], ["BOX JUMP", 30], ["FLIP TAPIS", 25], ["WALL BALL SHOT", 30], ["ONE REP", 9], ["SQUATS JUMP", 50]),
+    FX("bras", "Du lourd", ["ALLER-RETOUR", 10], ["TRACTIONS", 25], ["KB SWING", 60], ["SMASH DOWN", 40], ["FENTES DISK", 60]),
+    FX("jambes", "Grand huit", ["CORDE", 120], ["POMPES", 50], ["BOX JUMP", 40], ["KB SNATCH", 40], ["TOUR DE POUTRE", 25], ["BREAK DANCE", 15]),
+    BOSS("cardio", "Burpees", "BURPEES", 100),
+    FX("bras", "Relance", ["ALLER-RETOUR", 11], ["TRACTIONS", 30], ["BOX JUMP", 50], ["ONE REP", 10]),
+    FX("full", "Sept ateliers", ["CORDE", 170], ["POMPES", 40], ["FENTES DISK", 60], ["KB TOUR", 120], ["WALL BALL SHOT", 40], ["BREAK DANCE", 20], ["TOUR DE POUTRE", 25]),
+    FX("jambes", "Cinq costauds", ["BURPEES", 25], ["TRACTIONS", 35], ["BOX JUMP", 60], ["KB SNATCH", 60], ["ONE REP", 13]),
+    FX("cardio", "Dernière ligne droite", ["ALLER-RETOUR", 13], ["POMPES", 50], ["FENTES DISK", 70], ["SMASH DOWN", 50], ["BREAK DANCE", 20], ["MONKEY SLIDE", 50]),
+    BOSS("cardio", "Corde", "CORDE", 1000),
+    FX("bras", "Retour de flamme", ["BURPEES", 30], ["POMPES", 50], ["TIRE TAPIS AR", 5], ["BOX JUMP", 50], ["TOUR DE POUTRE", 30], ["ONE REP", 10]),
+    FX("full", "Tour du gymnase", ["CORDE", 130], ["COMMANDO BRAS", 60], ["FENTES DISK", 60], ["KB SWING", 60], ["WALL BALL SHOT", 40], ["BURPEES", 30], ["PLANK SLIDE", 40], ["MONKEY SLIDE", 40]),
+    FX("jambes", "Cinq géants", ["ALLER-RETOUR", 15], ["POMPES", 70], ["BOX JUMP", 70], ["KB SNATCH", 70], ["ONE REP", 14]),
+    FX("cardio", "Apothéose", ["CORDE", 160], ["COMMANDO BRAS", 80], ["FENTES DISK", 80], ["TOUR DE POUTRE", 30], ["WALL BALL SHOT", 50], ["BREAK DANCE", 30], ["ONE REP", 10]),
+    BOSS("bras", "Tractions", "TRACTIONS", 200),
+    FX("full", "Cinquième étage", ["BURPEES", 35], ["POMPES", 60], ["BOX JUMP", 60], ["KB SWING", 90], ["SMASH DOWN", 60], ["ONE REP", 12]),
+    FX("bras", "Le grand tour", ["CORDE", 150], ["TRACTIONS", 50], ["TIRE TAPIS AR", 5], ["FENTES DISK", 70], ["WALL BALL SHOT", 50], ["FLIP TAPIS", 35], ["BREAK DANCE", 20], ["KB SNATCH", 50]),
+    FX("jambes", "Cinq titans", ["BURPEES", 40], ["POMPES", 90], ["BOX JUMP", 90], ["KB SNATCH", 90], ["ONE REP", 18]),
+    FX("cardio", "Dernier rempart", ["CORDE", 200], ["COMMANDO BRAS", 100], ["TIRE TAPIS AR", 10], ["FENTES DISK", 100], ["WALL BALL SHOT", 60], ["BREAK DANCE", 25], ["FLIP TAPIS", 40]),
+    BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 100),
+  ],
+});
+// Proposition conseillee pour chaque parcours.
+export const STAR_PROPOSAL: Record<1 | 2 | 3, "G" | "F" | "H"> = { 1: "G", 2: "F", 3: "H" };
 
 export const proposalByKey = (key: string) => PROPOSALS.find((p) => p.key === key) ?? null;

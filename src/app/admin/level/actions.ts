@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listLevels, seedDefaultExercises } from "@/lib/level";
 import type { Temporal as TemporalNS } from "temporal-spec";
-import { isBoss, readCards, MAX_CARDS, type LevelCard } from "@/lib/wod-engines/templates/level-engine";
+import { isBoss, readCards, MAX_CARDS, DEFAULT_STARS, type LevelCard, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { asStars } from "@/lib/level";
 
 // Catalogue d'exercices et echelle des niveaux du WOD Level. Profs, coachs ET greffier construisent ;
 // seul DAMZER supprime (regle de la console : les coachs ne suppriment rien).
@@ -83,11 +84,11 @@ export async function seedExercisesAction(): Promise<Res & { added?: number }> {
 }
 
 // ===== Niveaux =====
-export async function createLevelAction(): Promise<Res & { id?: string }> {
+export async function createLevelAction(stars: Stars = DEFAULT_STARS): Promise<Res & { id?: string }> {
   await requireLevelStaff();
-  const levels = await listLevels();
+  const levels = await listLevels(asStars(stars));
   const number = (levels.at(-1)?.number ?? 0) + 1;
-  const row = await db.orm.public.Level.create({ number, cards: [] });
+  const row = await db.orm.public.Level.create({ stars: asStars(stars), number, cards: [] });
   revalidatePath(PATH);
   return { ok: true, id: row.id };
 }
@@ -112,7 +113,9 @@ export async function saveLevelAction(id: string, input: { name: string | null; 
 // Deplacer un niveau d'un cran : echange des numeros avec le voisin, en trois temps a cause de l'unicite.
 export async function moveLevelAction(id: string, dir: "up" | "down"): Promise<Res> {
   await requireLevelStaff();
-  const levels = await listLevels();
+  const row = await db.orm.public.Level.where({ id }).first();
+  if (!row) return { error: "Niveau introuvable." };
+  const levels = await listLevels(asStars(row.stars));
   const i = levels.findIndex((l) => l.id === id);
   if (i < 0) return { error: "Niveau introuvable." };
   const j = dir === "up" ? i - 1 : i + 1;
@@ -131,7 +134,9 @@ export async function moveLevelAction(id: string, dir: "up" | "down"): Promise<R
 // Supprimer un niveau resserre la numerotation (les BOSS restent « tous les 5 », par position).
 export async function deleteLevelAction(id: string): Promise<Res> {
   await requireMaster();
-  const levels = await listLevels();
+  const row = await db.orm.public.Level.where({ id }).first();
+  if (!row) return { error: "Niveau introuvable." };
+  const levels = await listLevels(asStars(row.stars));
   if (!levels.some((l) => l.id === id)) return { error: "Niveau introuvable." };
   await db.transaction(async (tx) => {
     await tx.orm.public.Level.where({ id }).delete();

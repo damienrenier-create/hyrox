@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, levelLabel, orderedLevels, progressOf, rankTeams, zombieSim, zombieSpeedLevel, zombieTier, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ZOMBIE_ZONE,
-  type EmomTeam, type EmomWave, type FrozenLevel, type TeamPenalty, type TeamProgress, type Tick,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, starsLabel, starsName, teamStarsOf, zombieSim, zombieSpeedLevel, zombieTier, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, STARS, ZOMBIE_ZONE,
+  type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
 import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setEmomScoreAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
@@ -168,10 +168,24 @@ export function LevelClient({
     }
     return out;
   }, [live.ticks, optimistic, liveMs]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(orderedLevels(levels, bundle.levelOrder?.[t.id]), t.id, ticks, live.losses, live.penalties)])), [teams, levels, ticks, live.losses, live.penalties, bundle.levelOrder]);
+  // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
+  const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId)), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, bundle.teamStars, bundle.levelOrder]);
+  const starsOf = useCallback((teamId: string): Stars => teamStarsOf(bundle.teamStars, teamId), [bundle.teamStars]);
+  const levelOf = useCallback((teamId: string, number: number | null) => (number === null ? null : ladderOf(teamId).find((l) => l.number === number) ?? null), [ladderOf]);
+  const allLevels = useMemo(() => [levels, ...Object.values(bundle.ladders)].flat(), [levels, bundle.ladders]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, live.losses, live.penalties)])), [teams, ladderOf, ticks, live.losses, live.penalties]);
   const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
-  const rankOf = useMemo(() => new Map(ranked.map((p, i) => [p.teamId, i + 1])), [ranked]);
-  const levelByNumber = useMemo(() => new Map(levels.map((l) => [l.number, l])), [levels]);
+  // Rang DANS SON PARCOURS : un niveau 12 du 1 etoile ne se compare pas a un niveau 10 du 3 etoiles.
+  const rankOf = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const st of STARS) ranked.filter((p) => starsOf(p.teamId) === st).forEach((p, i) => m.set(p.teamId, i + 1));
+    return m;
+  }, [ranked, starsOf]);
+  const groupSize = useMemo(() => {
+    const m = new Map<Stars, number>();
+    for (const t of teams) m.set(starsOf(t.id), (m.get(starsOf(t.id)) ?? 0) + 1);
+    return m;
+  }, [teams, starsOf]);
   const cardsOf = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of live.yellowCards) m.set(c.teamId, (m.get(c.teamId) ?? 0) + 1);
@@ -196,7 +210,7 @@ export function LevelClient({
     const raceNow = zombieMs;
     const due = [...progress.values()].some((p) => {
       if (p.currentLevel === null) return false;
-      const l = levelByNumber.get(p.currentLevel);
+      const l = levelOf(p.teamId, p.currentLevel);
       if (!l) return false;
       const ev = attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties);
       return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length).catchAtMs !== null;
@@ -205,7 +219,7 @@ export function LevelClient({
       setCaughtRefreshAt(Date.now());
       void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     }
-  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelByNumber, caughtRefreshAt, sessionId, live.penalties, ticks]);
+  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelOf, caughtRefreshAt, sessionId, live.penalties, ticks]);
 
   function refresh() {
     router.refresh();
@@ -257,14 +271,14 @@ export function LevelClient({
   }
 
   function exportCsv() {
-    const exercises = exerciseColumnsWith(levels, extras);
+    const exercises = exerciseColumnsWith(allLevels, extras);
     const hasPhases = bundle.phases.length > 0;
-    const head = ["Rang", "Équipe", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
+    const head = ["Rang (dans son parcours)", "Équipe", "Parcours", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
     const lines = ranked.map((p) => {
       const t = teamById.get(p.teamId)!;
       const ex = extras.get(p.teamId) ?? extrasFor([], 0);
       return [
-        rankOf.get(p.teamId), t.name, t.members.map((m) => m.name).join(" / "), p.completedLevels, p.currentLevel ?? "terminé",
+        rankOf.get(p.teamId), t.name, starsLabel(starsOf(p.teamId)), t.members.map((m) => m.name).join(" / "), p.completedLevels, p.currentLevel ?? "terminé",
         p.currentLevel ? `${p.currentDone}/${p.currentTotal}` : "", p.lastTickMs !== null ? fmt(p.lastTickMs) : "", p.reps + ex.reps, Math.round(p.weighted + ex.work), (cardsOf.get(p.teamId) ?? 0) + ex.cards, p.losses + ex.losses,
         p.finishedMs !== null ? fmt(p.finishedMs) : "", ...(hasPhases ? [p.reps, ...bundle.phases.map((ph) => ph.byOrder[t.order]?.reps ?? 0), ex.score ?? ""] : []), ...exercises.map((e) => (p.repsByExercise[e] ?? 0) + (ex.repsByExercise[e] ?? 0)),
       ];
@@ -385,9 +399,10 @@ export function LevelClient({
                     key={t.id}
                     team={t}
                     progress={progress.get(t.id)!}
-                    level={progress.get(t.id)!.currentLevel ? levelByNumber.get(progress.get(t.id)!.currentLevel!) ?? null : null}
+                    level={levelOf(t.id, progress.get(t.id)!.currentLevel)}
+                    stars={starsOf(t.id)}
                     rank={rankOf.get(t.id) ?? 0}
-                    teamsCount={teams.length}
+                    teamsCount={groupSize.get(starsOf(t.id)) ?? teams.length}
                     yellow={cardsOf.get(t.id) ?? 0}
                     canTick={canTick}
                     pendingKeys={optimistic}
@@ -406,16 +421,16 @@ export function LevelClient({
           </>
         )}
 
-        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelByNumber={levelByNumber} cardsOf={cardsOf} extras={extras} phases={bundle.phases} />}
-        {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={levels} extras={extras} phases={bundle.phases} />}
+        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} />}
+        {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={allLevels} extras={extras} phases={bundle.phases} />}
         {view === "ladder" && (bundle.frozen ? (
-          <LevelLadderEditor sessionId={sessionId} levels={levels} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />
+          <LevelLadderEditor sessionId={sessionId} levels={levels} ladders={bundle.ladders} teamStars={bundle.teamStars} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />
         ) : (
-          <LadderPreview levels={levels} />
+          <LadderPreview levels={levels} ladders={bundle.ladders} />
         ))}
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
-        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} />}
+        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
       </main>
 
@@ -771,10 +786,11 @@ const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500,
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
-function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, onToggle, onYellow }: {
+function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
+  stars: Stars;
   rank: number;
   teamsCount: number;
   yellow: number;
@@ -864,6 +880,7 @@ function TeamRow({ team, progress: p, level, rank, teamsCount, yellow, canTick, 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 min-w-0">
             <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
+            <span className="text-[11px] font-bold text-accent-ink tracking-tight flex-shrink-0" title={`Parcours ${starsName(stars)}`}>{starsLabel(stars)}</span>
             {zombies && <span className="text-xs font-bold tabular-nums" title="Vies perdues">💔<Odometer value={p.losses} /></span>}
           </div>
           <div className="flex items-baseline gap-1.5 min-w-0" title={level?.name ?? undefined}>
@@ -967,9 +984,11 @@ function phaseBreakdown(phases: LevelBundle["phases"], order: number, main: numb
   return [`WOD ${main}`, ...phases.map((ph) => `${PHASE_NAMES[ph.kind]} ${ph.byOrder[order] ? pick(ph.byOrder[order]) : 0}`)].join(" + ");
 }
 
-function ResultsTable({ ranked, teamById, levelByNumber, cardsOf, extras, phases }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelByNumber: Map<number, FrozenLevel>; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"] }) {
+function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, cardsOf, extras, phases }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelOf: (teamId: string, number: number | null) => FrozenLevel | null; rankOf: Map<string, number>; starsOf: (teamId: string) => Stars; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"] }) {
   const hasFinisher = phases.some((ph) => ph.kind === "finisher");
   const hasPhases = phases.length > 0;
+  // Un classement par parcours : les etoiles ne se comparent pas entre elles.
+  const groups = STARS.map((st) => ({ st, rows: ranked.filter((p) => starsOf(p.teamId) === st) })).filter((g) => g.rows.length > 0);
   return (
     <div className={`${ui.card} overflow-x-auto`}>
       <table className="w-full text-sm">
@@ -979,14 +998,16 @@ function ResultsTable({ ranked, teamById, levelByNumber, cardsOf, extras, phases
           </tr>
         </thead>
         <tbody>
-          {ranked.map((p, i) => {
+          {groups.flatMap(({ st, rows }) => [
+            ...(groups.length > 1 ? [<tr key={`h${st}`}><td colSpan={12} className="p-2 bg-paper font-display font-extrabold text-sm">{starsLabel(st)} Parcours {starsName(st)} · {rows.length} équipe{rows.length > 1 ? "s" : ""}</td></tr>] : []),
+            ...rows.map((p) => {
             const t = teamById.get(p.teamId)!;
-            const l = p.currentLevel ? levelByNumber.get(p.currentLevel) : null;
+            const l = levelOf(p.teamId, p.currentLevel);
             const ex = extras.get(p.teamId) ?? extrasFor([], 0);
             return (
               <tr key={p.teamId} className={ui.tr}>
-                <td className="p-2 font-display font-extrabold">{i + 1}</td>
-                <td className="p-2 font-bold">{t.name}</td>
+                <td className="p-2 font-display font-extrabold">{rankOf.get(p.teamId) ?? "—"}</td>
+                <td className="p-2 font-bold">{t.name} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(st)}</span></td>
                 <td className={`p-2 ${ui.hint}`}>{t.members.map((m) => m.name).join(", ")}</td>
                 <td className="p-2 text-right tabular-nums font-bold">{p.completedLevels}</td>
                 <td className="p-2">{p.currentLevel ? <span className={cx(l?.boss && "text-danger-ink font-bold")}>{levelLabel(l)} · {p.currentDone}/{p.currentTotal}</span> : <span className="text-success-ink font-bold">🏁 {p.finishedMs !== null ? fmt(p.finishedMs) : ""}</span>}</td>
@@ -998,7 +1019,8 @@ function ResultsTable({ ranked, teamById, levelByNumber, cardsOf, extras, phases
                 {hasFinisher && <td className="p-2 text-right tabular-nums font-bold">{ex.score !== null ? `${ex.score} cordes` : "—"}</td>}
               </tr>
             );
-          })}
+          }),
+          ])}
           {ranked.length === 0 && <tr><td colSpan={11} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
         </tbody>
       </table>
@@ -1041,15 +1063,25 @@ function RecapTable({ ranked, teamById, levels, extras, phases }: { ranked: Team
   );
 }
 
-function LadderPreview({ levels }: { levels: FrozenLevel[] }) {
+function LadderPreview({ levels, ladders }: { levels: FrozenLevel[]; ladders: LevelBundle["ladders"] }) {
+  const [stars, setStars] = useState<Stars>(2);
+  const shown = ladderFor(levels, ladders, stars);
+  const available = STARS.filter((st) => st === 2 || (ladders[st]?.length ?? 0) > 0);
   return (
     <div className="space-y-2">
       <p className={`${ui.cardPad} ${ui.muted}`}>
-        Échelle commune de l&apos;atelier, figée dans la séance au coup d&apos;envoi. Pour la modifier avant le départ : <a href="/admin/level" className="underline font-bold">atelier Level</a>. Une fois lancée, elle se retouche ici, pour cette séance seulement. <a href="/admin/level/fiches" target="_blank" className="underline font-bold">🖨️ Imprimer les fiches</a>.
+        Échelles communes de l&apos;atelier (un parcours par étoile), figées dans la séance au coup d&apos;envoi. Pour les modifier avant le départ : <a href="/admin/level" className="underline font-bold">atelier Level</a>. Une fois lancée, elles se retouchent ici, pour cette séance seulement. <a href="/admin/level/fiches" target="_blank" className="underline font-bold">🖨️ Imprimer les fiches</a>.
       </p>
-      {levels.length === 0 && <p className={ui.alertWarn}>Aucun niveau : l&apos;atelier Level est vide.</p>}
+      <div className={`${ui.segmented} inline-flex`}>
+        {STARS.map((st) => (
+          <button key={st} type="button" onClick={() => setStars(st)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", stars === st ? ui.segOn : ui.segOff)} title={available.includes(st) ? starsName(st) : `${starsName(st)} : pas d'échelle, ses équipes jouent le 2 étoiles`}>
+            {starsLabel(st)} {starsName(st)}{!available.includes(st) && " (= 2★)"}
+          </button>
+        ))}
+      </div>
+      {shown.length === 0 && <p className={ui.alertWarn}>Aucun niveau : l&apos;atelier Level est vide.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-        {levels.map((l) => (
+        {shown.map((l) => (
           <div key={l.number} className={cx(ui.card, "p-2.5", l.boss && "border-danger/50 bg-danger-soft/40")}>
             <p className={cx("font-display font-extrabold", l.boss ? "text-danger-ink" : "text-ink")}>{l.boss ? "BOSS" : "Niveau"} {l.number}{l.name ? <span className="text-xs text-ink-2 font-sans font-normal"> · {l.name.replace(/^BOSS · /, "")}</span> : null}</p>
             <p className="text-xs text-ink-2">{activeCards(l).map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · ")}</p>

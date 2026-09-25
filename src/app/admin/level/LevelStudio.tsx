@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ExerciseRow, LevelRow } from "@/lib/level";
 import {
-  BOSS_EVERY, DEFAULT_TEAM, MAX_CARDS, estimateSeconds, fmtIntensity, fmtTheoretical, isBoss, statsOf, type LevelCard,
+  BOSS_EVERY, DEFAULT_TEAM, MAX_CARDS, STARS, estimateSeconds, fmtIntensity, fmtTheoretical, isBoss, starsLabel, starsName, statsOf, type LevelCard, type Stars,
 } from "@/lib/wod-engines/templates/level-engine";
-import { PROPOSALS } from "@/lib/level-proposals";
+import { PROPOSALS, STAR_PROPOSAL } from "@/lib/level-proposals";
 import {
   createExerciseAction, createLevelAction, deleteExerciseAction, deleteLevelAction, moveLevelAction,
   saveLevelAction, seedExercisesAction, updateExerciseAction,
@@ -19,9 +19,13 @@ const fmtW = (w: number) => String(w).replace(".", ",");
 // Atelier du WOD Level. Deux volets : le catalogue (un exercice = un libelle + une ponderation, le temps
 // theorique d'une rep en secondes) et l'echelle des niveaux (1 a 10 fiches exercice x reps ; BOSS tous
 // les 5 niveaux, un seul exercice). Chaque niveau se modifie en local puis s'enregistre d'un coup.
-export function LevelStudio({ exercises, levels, isMaster }: { exercises: ExerciseRow[]; levels: LevelRow[]; isMaster: boolean }) {
-  const [tab, setTab] = useState<"levels" | "catalog">(levels.length || exercises.length ? "levels" : "catalog");
-  const [proposal, setProposal] = useState("E");
+export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exercises: ExerciseRow[]; levels: LevelRow[]; isMaster: boolean }) {
+  const [tab, setTab] = useState<"levels" | "catalog">(allLevels.length || exercises.length ? "levels" : "catalog");
+  // Un parcours (1, 2 ou 3 etoiles) a la fois ; la proposition conseillee suit le parcours.
+  const [star, setStar] = useState<Stars>(2);
+  const levels = useMemo(() => allLevels.filter((l) => l.stars === star), [allLevels, star]);
+  const [proposal, setProposal] = useState<string>(STAR_PROPOSAL[2]);
+  useEffect(() => { setProposal(STAR_PROPOSAL[star]); }, [star]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const weightOf = useMemo(() => new Map(exercises.map((e) => [e.id, e.weight])), [exercises]);
@@ -51,7 +55,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
           </button>
         </div>
         <span className={ui.hint}>
-          Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {DEFAULT_TEAM} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
+          {tab === "levels" && <>Parcours {starsName(star)} · </>}Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {DEFAULT_TEAM} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
         </span>
         {pending && <span className={ui.hint}>Enregistrement…</span>}
         <a href="/admin/level/fiches" target="_blank" className={btn.smGhost} title="Fiches à imprimer et découper (3 × 4 par page A4)">🖨️ Fiches</a>
@@ -60,9 +64,19 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
       {msg && <p className={msg.kind === "ok" ? ui.alertOk : ui.alertErr}>{msg.text}</p>}
 
       {tab === "catalog" ? (
-        <Catalog exercises={exercises} levels={levels} isMaster={isMaster} run={run} />
+        <Catalog exercises={exercises} levels={allLevels} isMaster={isMaster} run={run} />
       ) : (
         <div className="space-y-3">
+          <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
+            <div className={ui.segmented}>
+              {STARS.map((st) => (
+                <button key={st} type="button" onClick={() => setStar(st)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", star === st ? ui.segOn : ui.segOff)}>
+                  {starsLabel(st)} {starsName(st)} ({allLevels.filter((l) => l.stars === st).length})
+                </button>
+              ))}
+            </div>
+            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio. Chaque équipe choisit le sien dans les réglages du greffier ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
+          </div>
           {exercises.filter((e) => e.active).length === 0 && (
             <p className={ui.alertInfo}>Le catalogue est vide : ajoute des exercices (ou importe le listing) avant de composer des niveaux.</p>
           )}
@@ -78,8 +92,8 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(`Proposition ${proposal} chargée : 25 niveaux.`, async () => {
-                  const r = await loadProposalAction(proposal);
+                onClick={() => run(`Proposition ${proposal} chargée dans le parcours ${starsName(star)} : 25 niveaux.`, async () => {
+                  const r = await loadProposalAction(proposal, false, star);
                   return "error" in r ? r : { ok: true };
                 })}
                 className={btn.accent}
@@ -105,7 +119,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(`Niveau ${levels.length + 1} ajouté.`, () => createLevelAction())}
+              onClick={() => run(`Niveau ${levels.length + 1} ajouté (${starsName(star)}).`, () => createLevelAction(star))}
               className={btn.primary}
             >
               + Ajouter le niveau {levels.length + 1}{isBoss(levels.length + 1) ? " (BOSS)" : ""}
@@ -119,9 +133,9 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
                   type="button"
                   disabled={pending}
                   onClick={() =>
-                    confirm(`Remplacer TOUTE l'échelle par la proposition ${proposal} ? Les niveaux actuels sont perdus (les séances déjà lancées gardent leur copie).`) &&
-                    run(`Échelle remplacée par la proposition ${proposal}.`, async () => {
-                      const r = await loadProposalAction(proposal, true);
+                    confirm(`Remplacer TOUTE l'échelle ${starsName(star)} par la proposition ${proposal} ? Les niveaux actuels de ce parcours sont perdus (les séances déjà lancées gardent leur copie).`) &&
+                    run(`Échelle ${starsName(star)} remplacée par la proposition ${proposal}.`, async () => {
+                      const r = await loadProposalAction(proposal, true, star);
                       return "error" in r ? r : { ok: true };
                     })
                   }
@@ -144,8 +158,8 @@ function Catalog({ exercises, levels, isMaster, run }: { exercises: ExerciseRow[
   const [label, setLabel] = useState("");
   const [weight, setWeight] = useState("");
   const usage = useMemo(() => {
-    const m = new Map<string, number[]>();
-    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), l.number]);
+    const m = new Map<string, string[]>();
+    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), `${"★".repeat(l.stars)}${l.number}`]);
     return m;
   }, [levels]);
 
@@ -207,7 +221,7 @@ function Catalog({ exercises, levels, isMaster, run }: { exercises: ExerciseRow[
   );
 }
 
-function ExerciseLine({ e, used, isMaster, run }: { e: ExerciseRow; used: number[]; isMaster: boolean; run: (label: string, fn: () => Promise<Res>) => void }) {
+function ExerciseLine({ e, used, isMaster, run }: { e: ExerciseRow; used: string[]; isMaster: boolean; run: (label: string, fn: () => Promise<Res>) => void }) {
   const [label, setLabel] = useState(e.label);
   const [weight, setWeight] = useState(fmtW(e.weight));
   useEffect(() => { setLabel(e.label); setWeight(fmtW(e.weight)); }, [e.label, e.weight]);

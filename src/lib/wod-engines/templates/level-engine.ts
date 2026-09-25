@@ -46,6 +46,39 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
   return out.sort((a, b) => a.number - b.number);
 }
 
+// ===== Parcours 1, 2 ou 3 etoiles (Sartay 25/09) =====
+// Trois echelles vivent cote a cote : 1 etoile (peu de force et de technique), 2 etoiles (equilibree), 3 etoiles
+// (force et cardio). Une seance fige les trois (settings.levels = 2 etoiles, settings.ladders = { "1": [...],
+// "3": [...] }) et chaque equipe joue sur le parcours de settings.teamStars[teamId] (2 par defaut).
+export type Stars = 1 | 2 | 3;
+export const STARS: Stars[] = [1, 2, 3];
+export const DEFAULT_STARS: Stars = 2;
+export const starsLabel = (s: Stars) => "★".repeat(s) + "☆".repeat(3 - s);
+export const starsName = (s: Stars) => (s === 1 ? "1 étoile" : `${s} étoiles`);
+export function readTeamStars(settings: unknown): Record<string, Stars> {
+  const raw = (settings as { teamStars?: unknown } | null)?.teamStars;
+  const out: Record<string, Stars> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === 1 || v === 2 || v === 3) out[k] = v;
+  return out;
+}
+export const teamStarsOf = (teamStars: Record<string, Stars>, teamId: string): Stars => teamStars[teamId] ?? DEFAULT_STARS;
+// Echelles figees des parcours 1 et 3 etoiles (le 2 etoiles est settings.levels).
+export function readLadders(settings: unknown): Partial<Record<Stars, FrozenLevel[]>> {
+  const raw = (settings as { ladders?: unknown } | null)?.ladders;
+  const out: Partial<Record<Stars, FrozenLevel[]>> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const s of STARS) {
+    const l = readFrozenLevels((raw as Record<string, unknown>)[String(s)]);
+    if (l.length) out[s] = l;
+  }
+  return out;
+}
+// Echelle d'un parcours : celle du parcours si elle est figee, sinon l'echelle 2 etoiles.
+export function ladderFor(levels: FrozenLevel[], ladders: Partial<Record<Stars, FrozenLevel[]>>, stars: Stars): FrozenLevel[] {
+  return (stars === DEFAULT_STARS ? levels : ladders[stars]) ?? levels;
+}
+
 // Ordre des niveaux propre a une equipe (echauffement en differe) : les numeros manquants sont ajoutes a la fin.
 export function orderedLevels(levels: FrozenLevel[], order?: number[] | null): FrozenLevel[] {
   if (!order || !order.length) return levels;

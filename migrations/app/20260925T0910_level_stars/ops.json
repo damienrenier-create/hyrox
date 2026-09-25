@@ -1,0 +1,128 @@
+[
+  {
+    "id": "dropConstraint.level.level_number_key",
+    "label": "Drop constraint \"level_number_key\" on \"level\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "level_number_key",
+        "table": "level"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"level_number_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop constraint \"level_number_key\"",
+        "sql": "ALTER TABLE \"public\".\"level\" DROP CONSTRAINT \"level_number_key\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"level_number_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.level.stars",
+    "label": "Add column \"stars\" to \"level\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "stars",
+        "table": "level"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"stars\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "level",
+          "stars"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"stars\"",
+        "sql": "ALTER TABLE \"public\".\"level\" ADD COLUMN \"stars\" int4 DEFAULT 2 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"stars\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "level",
+          "stars"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.level.level_stars_number_key",
+    "label": "Add unique constraint on \"level\" (stars, number)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "level_stars_number_key",
+        "table": "level"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"level_stars_number_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_stars_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"level_stars_number_key\"",
+        "sql": "ALTER TABLE \"public\".\"level\" ADD CONSTRAINT \"level_stars_number_key\" UNIQUE (\"stars\", \"number\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"level_stars_number_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "level_stars_number_key",
+          "public",
+          "\"public\".\"level\""
+        ]
+      }
+    ]
+  }
+]

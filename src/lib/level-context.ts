@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { freezeLevels, listExercises, readFrozenFromSettings } from "@/lib/level";
+import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { orderedLevels, progressOf, rankTeams, readEmom, readEmomScores, readFixedZombie, readLevelOrder, readPenalties, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { ladderFor, orderedLevels, progressOf, rankTeams, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -13,7 +13,9 @@ export type LevelTeam = { id: string; name: string; order: number; members: { id
 export type LevelTickRow = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
 export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; atMs: number };
 export type LevelBundle = {
-  levels: FrozenLevel[];
+  levels: FrozenLevel[]; // parcours 2 etoiles (echelle par defaut)
+  ladders: Partial<Record<Stars, FrozenLevel[]>>; // parcours 1 et 3 etoiles s'ils existent
+  teamStars: Record<string, Stars>; // parcours choisi par equipe (2 par defaut)
   frozen: boolean; // true = echelle figee dans la seance (course lancee) ; false = echelle vive de l'atelier
   teams: LevelTeam[];
   ticks: LevelTickRow[];
@@ -100,12 +102,14 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
   const parent = childRef ? await db.orm.public.Session.where({ id: childRef.parentId }).first() : null;
   const children = childRef ? {} : readChildren(session.settings);
   const phases = (await Promise.all([children.warmup ? phaseTotals("warmup", children.warmup) : null, children.finisher ? phaseTotals("finisher", children.finisher) : null])).filter((p): p is PhaseTotals => !!p);
-  const [levels, catalog, rawTeams, rs] = await Promise.all([
-    frozen ? Promise.resolve(frozenLevels) : freezeLevels(),
+  const live = frozen ? null : await freezeLadders();
+  const [catalog, rawTeams, rs] = await Promise.all([
     listExercises(),
     db.orm.public.Team.where({ sessionId }).all(),
     db.orm.public.RaceState.where({ sessionId }).first(),
   ]);
+  const levels = frozen ? frozenLevels : live![2];
+  const ladders: Partial<Record<Stars, FrozenLevel[]>> = frozen ? readLadders(session.settings) : { ...(live![1].length ? { 1: live![1] } : {}), ...(live![3].length ? { 3: live![3] } : {}) };
 
   const teamIds = rawTeams.map((t) => t.id);
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
@@ -159,6 +163,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
 
   return {
     levels,
+    ladders,
+    teamStars: readTeamStars(session.settings),
     frozen,
     teams,
     ticks,
@@ -196,9 +202,13 @@ export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals
   return agg;
 }
 
+// Echelle d'une equipe : son parcours (etoiles), dans son ordre (echauffement en differe).
+export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "teamStars" | "levelOrder">, teamId: string): FrozenLevel[] {
+  return orderedLevels(ladderFor(bundle.levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId)), bundle.levelOrder?.[teamId]);
+}
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
-  return rankTeams(bundle.teams.map((t) => progressOf(orderedLevels(bundle.levels, bundle.levelOrder?.[t.id]), t.id, bundle.ticks, bundle.losses, bundle.penalties)));
+  return rankTeams(bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties)));
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.

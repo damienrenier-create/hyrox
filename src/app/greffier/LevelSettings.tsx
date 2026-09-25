@@ -3,14 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTeamCountAction } from "./settings-actions";
-import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setZombiesAction } from "./level-actions";
+import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setTeamStarsAction, setZombiesAction } from "./level-actions";
+import { STARS, starsLabel, starsName, teamStarsOf, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Onglet Reglages du greffier Level : nombre d'equipes (avant le depart), temps impose (avant ou pendant),
 // activite des dispenses (demineur), et les raccourcis vers l'atelier et les fiches a imprimer.
-export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true }: {
+export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true, teamList = [], teamStars = {}, ladders = {}, isChild = false, onChanged }: {
   sessionId: string;
   zombies?: boolean;
+  teamList?: { id: string; name: string; order: number }[];
+  teamStars?: Record<string, Stars>;
+  ladders?: Partial<Record<Stars, FrozenLevel[]>>;
+  isChild?: boolean;
+  onChanged?: () => void;
   phase: "pre" | "run" | "post";
   numTeams: number;
   capMin: number | null;
@@ -48,6 +54,32 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
           {phase !== "pre" && <span className={ui.hint}>verrouillé : la course est lancée</span>}
         </div>
       </section>
+
+      {!isChild && (
+        <section className={ui.cardPad}>
+          <h3 className={ui.h3}>Parcours des équipes</h3>
+          <p className={`${ui.hint} mb-2`}>Trois parcours joués en même temps : ★☆☆ découverte (peu de force et de technique), ★★☆ équilibré, ★★★ force et cardio. Chaque équipe a son classement dans son parcours. Modifiable tant que l&apos;équipe n&apos;a rien coché.{STARS.filter((st) => st !== 2 && !ladders[st]).length > 0 && <> ⚠️ {STARS.filter((st) => st !== 2 && !ladders[st]).map((st) => starsName(st)).join(" et ")} : pas d&apos;échelle {frozen ? "figée dans cette séance" : "dans l'atelier"}, ces équipes joueraient le 2 étoiles.</>}</p>
+          {teamList.length === 0 ? <p className={ui.hint}>Pas encore d&apos;équipe.</p> : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {teamList.map((t) => {
+                const cur = teamStarsOf(teamStars, t.id);
+                return (
+                  <div key={t.id} className={`${ui.inset} px-2 py-1.5 flex items-center gap-2`}>
+                    <span className="font-bold text-sm flex-1 truncate">{t.name}</span>
+                    <div className={`${ui.segmented} inline-flex`}>
+                      {STARS.map((st) => (
+                        <button key={st} type="button" disabled={pending || cur === st} onClick={() => run(`${t.name} : parcours ${starsName(st)}.`, async () => { const r = await setTeamStarsAction(sessionId, t.id, st); if (!("error" in r)) onChanged?.(); return r; })} className={cx("px-2 py-1 rounded-lg text-xs font-bold", cur === st ? ui.segOn : ui.segOff)} title={starsName(st)}>
+                          {starsLabel(st)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className={ui.cardPad}>
         <h3 className={ui.h3}>Temps imposé</h3>

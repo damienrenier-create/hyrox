@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { updateSessionLevelsAction } from "./level-actions";
-import { MAX_CARDS, activeCards, estimateSeconds, fmtTheoretical, isBoss, statsOf, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
-import type { LevelTickRow } from "@/lib/level-context";
+import { MAX_CARDS, STARS, DEFAULT_STARS, activeCards, estimateSeconds, fmtTheoretical, isBoss, ladderFor, starsLabel, starsName, statsOf, teamStarsOf, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import type { LevelBundle, LevelTickRow } from "@/lib/level-context";
 import { btn, cx, ui } from "@/lib/ui";
 
 type Catalog = { id: string; label: string; weight: number; active: boolean }[];
@@ -11,20 +11,25 @@ type Catalog = { id: string; label: string; weight: number; active: boolean }[];
 // Editeur de l'echelle FIGEE d'une seance, pendant qu'elle tourne : reps ou exercice d'une fiche, fiche
 // ajoutee, fiche retiree (jamais supprimee : les coches y font reference par index), niveau ajoute en fin.
 // L'echelle commune de l'atelier /admin/level n'est pas touchee.
-export function LevelLadderEditor({ sessionId, levels, catalog, ticks, onSaved }: { sessionId: string; levels: FrozenLevel[]; catalog: Catalog; ticks: LevelTickRow[]; onSaved: () => void }) {
-  const [draft, setDraft] = useState<FrozenLevel[]>(() => structuredClone(levels));
+export function LevelLadderEditor({ sessionId, levels, ladders, teamStars, catalog, ticks, onSaved }: { sessionId: string; levels: FrozenLevel[]; ladders: LevelBundle["ladders"]; teamStars: LevelBundle["teamStars"]; catalog: Catalog; ticks: LevelTickRow[]; onSaved: () => void }) {
+  // Un parcours a la fois ; un parcours 1 ou 3 etoiles jamais fige part d'une copie du 2 etoiles.
+  const [stars, setStars] = useState<Stars>(DEFAULT_STARS);
+  const source = ladderFor(levels, ladders, stars);
+  const copied = stars !== DEFAULT_STARS && !ladders[stars];
+  const [draft, setDraft] = useState<FrozenLevel[]>(() => structuredClone(source));
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   useEffect(() => {
-    if (!dirty) setDraft(structuredClone(levels));
-  }, [levels, dirty]);
+    if (!dirty) setDraft(structuredClone(ladderFor(levels, ladders, stars)));
+  }, [levels, ladders, stars, dirty]);
 
+  // Coches des equipes DE CE PARCOURS (les index de fiche sont propres a chaque echelle).
   const tickedBy = useMemo(() => {
     const m = new Map<string, number>();
-    for (const t of ticks) m.set(`${t.level}_${t.card}`, (m.get(`${t.level}_${t.card}`) ?? 0) + 1);
+    for (const t of ticks) if (teamStarsOf(teamStars, t.teamId) === stars) m.set(`${t.level}_${t.card}`, (m.get(`${t.level}_${t.card}`) ?? 0) + 1);
     return m;
-  }, [ticks]);
+  }, [ticks, teamStars, stars]);
   const byId = useMemo(() => new Map(catalog.map((e) => [e.id, e])), [catalog]);
 
   const edit = (fn: (d: FrozenLevel[]) => void) => {
@@ -37,7 +42,7 @@ export function LevelLadderEditor({ sessionId, levels, catalog, ticks, onSaved }
   };
   const save = () =>
     startTransition(async () => {
-      const r = await updateSessionLevelsAction(sessionId, draft);
+      const r = await updateSessionLevelsAction(sessionId, draft, stars);
       if ("error" in r) setMsg({ kind: "err", text: r.error });
       else {
         setMsg({ kind: "ok", text: "Échelle de la séance enregistrée." });
@@ -53,12 +58,20 @@ export function LevelLadderEditor({ sessionId, levels, catalog, ticks, onSaved }
           <b className="text-ink">Échelle de cette séance</b>
           <p className={ui.hint}>Figée au coup d&apos;envoi. Tu peux corriger les reps, changer un exercice, ajouter une fiche, retirer une fiche (elle reste dans l&apos;historique) ou ajouter un niveau. L&apos;échelle commune de l&apos;atelier ne bouge pas.</p>
         </div>
+        <div className={`${ui.segmented} inline-flex`}>
+          {STARS.map((st) => (
+            <button key={st} type="button" disabled={dirty && st !== stars} onClick={() => setStars(st)} className={cx("px-2.5 py-1 rounded-lg text-sm font-bold disabled:opacity-40", stars === st ? ui.segOn : ui.segOff)} title={dirty && st !== stars ? "Enregistre d'abord" : starsName(st)}>
+              {starsLabel(st)}
+            </button>
+          ))}
+        </div>
         <a href={`/admin/level/fiches?session=${sessionId}`} target="_blank" className={btn.ghost}>🖨️ Fiches</a>
         <button type="button" onClick={save} disabled={!dirty || pending} className={dirty ? btn.primary : btn.soft}>
           {pending ? "Enregistrement…" : dirty ? "Enregistrer" : "Enregistré"}
         </button>
       </div>
       {msg && <p className={msg.kind === "ok" ? ui.alertOk : ui.alertErr}>{msg.text}</p>}
+      {copied && <p className={ui.alertInfo}>Le parcours {starsName(stars)} n&apos;a pas été figé au départ (atelier vide) : ses équipes jouent le 2 étoiles. Ce qui suit en est une copie ; enregistre-la pour créer le parcours {starsName(stars)} dans cette séance.</p>}
 
       {draft.map((l, li) => {
         const boss = isBoss(l.number);

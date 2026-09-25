@@ -7,7 +7,7 @@ import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/template
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
 import { toMs } from "@/lib/scheduling";
 import { readFrozenFromSettings } from "@/lib/level";
-import { levelLabel, orderedLevels, progressOf, rankTeams, readLevelOrder, readPenalties, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Classements de PLUSIEURS seances en une poignee de requetes groupees (.in) au lieu d'une cascade par
 // seance / par equipe / par eleve. La page Resultats passait 14 s a faire ~520 allers-retours.
@@ -169,18 +169,22 @@ function levelStandingsBatch(
   for (const t of rawTicks) lastAbs.set(t.teamId, Math.max(lastAbs.get(t.teamId) ?? 0, toMs(t.at)));
   const order = readLevelOrder(session.settings);
   const penalties = readPenalties(session.settings);
-  const ranked = rankTeams(rawTeams.map((t) => progressOf(orderedLevels(levels, order?.[t.id]), t.id, ticks, losses, penalties)));
+  const ladders = readLadders(session.settings);
+  const teamStars = readTeamStars(session.settings);
+  const ladderOf = new Map(rawTeams.map((t) => [t.id, orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id)), order?.[t.id])]));
+  const ranked = rankTeams(rawTeams.map((t) => progressOf(ladderOf.get(t.id)!, t.id, ticks, losses, penalties)));
   const teamName = new Map(rawTeams.map((t) => [t.id, t.name]));
   const finishedAtMs: Record<string, number> = {};
   const rows: StandingRow[] = ranked.map((p, i) => {
     if (p.finishedMs !== null && lastAbs.has(p.teamId)) finishedAtMs[p.teamId] = lastAbs.get(p.teamId)!;
-    const cur = p.currentLevel ? levels.find((l) => l.number === p.currentLevel) ?? null : null;
+    const myLevels = ladderOf.get(p.teamId) ?? levels;
+    const cur = p.currentLevel ? myLevels.find((l) => l.number === p.currentLevel) ?? null : null;
     return {
       rank: i + 1,
       teamId: p.teamId,
       teamName: teamName.get(p.teamId) ?? p.teamId,
       laps: p.completedLevels,
-      lapsTotal: levels.length,
+      lapsTotal: myLevels.length,
       time: p.finishedMs !== null ? fmt(p.finishedMs) : p.lastTickMs !== null ? fmt(p.lastTickMs) : null,
       late: null,
       start: cur ? `${levelLabel(cur)} · ${p.currentDone}/${p.currentTotal}` : "🏁",

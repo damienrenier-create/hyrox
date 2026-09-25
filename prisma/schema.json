@@ -938,6 +938,13 @@
                   "kind": "scalar"
                 }
               },
+              "stars": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "updatedAt": {
                 "nullable": false,
                 "type": {
@@ -963,6 +970,9 @@
                 },
                 "number": {
                   "column": "number"
+                },
+                "stars": {
+                  "column": "stars"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -4154,6 +4164,15 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
+                "stars": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 2
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -4174,6 +4193,7 @@
               "uniques": [
                 {
                   "columns": [
+                    "stars",
                     "number"
                   ]
                 }
@@ -6191,7 +6211,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "aed1cfa0cde3582b755ad0c6a9365d58364e5a571922d998b49b2b9bf20326ce"
+    "storageHash": "c9f50f1208dc970324e7760fd837bec74c744f3d164630a7979752483735b3fa"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",

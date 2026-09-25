@@ -410,13 +410,18 @@ model LevelExercise {
 
 // Echelle commune des niveaux, ordonnee par number (boss si number % 5 == 0).
 // cards = [{ exerciseId, reps }] ; l'echelle est figee dans Session.settings.levels au coup d'envoi.
+// Trois parcours (Sartay 25/09) : 1 etoile (peu de force / technique), 2 etoiles (equilibre), 3 etoiles
+// (force et cardio). Chaque parcours est une echelle a part ; une equipe choisit son parcours.
 model Level {
   id        String   @id @default(uuid())
-  number    Int      @unique
+  stars     Int      @default(2)
+  number    Int
   name      String?
   cards     Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
+
+  @@unique([stars, number])
 }
 
 // Fiche cochee (greffier ou prof) pour une equipe : niveau + index de la fiche dans l'echelle figee.
