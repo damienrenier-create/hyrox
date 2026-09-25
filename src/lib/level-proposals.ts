@@ -1,5 +1,6 @@
-// Cinq propositions d'echelle pour le WOD Level (24/09/2026), 20 niveaux chacune, BOSS aux niveaux 5, 10,
-// 15 et 20 (un seul exercice, toute l'equipe dessus en simultane).
+// Six propositions d'echelle pour le WOD Level (24-25/09/2026), 25 niveaux chacune, BOSS aux niveaux 5, 10,
+// 15, 20 et 25 (un seul exercice, toute l'equipe dessus en simultane). Le cinquieme bloc (21-24 + BOSS 25) a
+// ete ajoute le 25/09 (Sartay : « un dernier palier de 4, avec un dernier boss, toujours plus difficile »).
 //
 // MODELE DE TEMPS (Sartay) : les 5 membres travaillent en parallele sur le niveau, en relais sur les exos.
 // Un niveau dure donc le temps de sa fiche la plus longue, pas la somme des fiches. Chaque proposition est
@@ -26,7 +27,7 @@ export type Proposal = {
   philosophy: string;
   strengths: string[];
   weaknesses: string[];
-  ramp: number[]; // duree cible D (s) des 16 niveaux ordinaires, dans l'ordre
+  ramp: number[]; // duree cible D (s) des 20 niveaux ordinaires, dans l'ordre (vide pour une echelle ecrite a la main)
   specs: Spec[];
 };
 
@@ -64,8 +65,9 @@ const L = (identity: Identity, name: string, ...exos: string[]): Spec => ({ iden
 const FX = (identity: Identity, name: string, ...cards: [string, number][]): Spec => ({ fixed: true, identity, name, cards });
 const BOSS = (identity: Identity, name: string, label: string, reps: number): Spec => ({ boss: true, identity, name, label, reps });
 
-// Rampe standard : 55 s au premier niveau, 205 s au dix-neuvieme (les BOSS ont leur propre duree).
-const STD = [55, 65, 80, 95, 100, 110, 120, 130, 140, 150, 160, 170, 175, 185, 195, 205];
+// Rampe standard : 55 s au premier niveau, 205 s au dix-neuvieme, 245 s au vingt-quatrieme (les BOSS ont
+// leur propre duree).
+const STD = [55, 65, 80, 95, 100, 110, 120, 130, 140, 150, 160, 170, 175, 185, 195, 205, 215, 225, 235, 245];
 const scale = (k: number) => STD.map((d) => Math.round((d * k) / 5) * 5);
 
 // Fiche « ouverture » (Sartay, mode zombies) : un exercice tres facile, connu, au nom court et sans materiel,
@@ -126,6 +128,11 @@ export const PROPOSALS: Proposal[] = [
       L("full", "Full body", "KB SWING", "KB SNATCH", "SMASH DOWN", "BREAK DANCE", "FLIP TAPIS", "TOUR DE POUTRE"),
       L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "ALLER-RETOUR"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
+      L("full", "Full body", "KB SWING", "FLIP TAPIS", "SMASH DOWN", "ONE REP", "TOUR DE POUTRE"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
+      L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE", "KB TOUR"),
+      L("tronc", "Tronc & full body", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "TIRE TAPIS AR", "WALL BALL SHOT", "BURPEES"),
+      BOSS("full", "Break dance", "BREAK DANCE", 150),
     ],
   },
   {
@@ -167,6 +174,11 @@ export const PROPOSALS: Proposal[] = [
       L("tronc", "Finale III", "MONKEY SLIDE", "POMPES", "KB SNATCH", "PLANK SLIDE", "ALLER-RETOUR"),
       L("full", "Finale IV", "BURPEES", "TIRE TAPIS AR", "FENTES DISK", "COMMANDO BRAS", "ONE REP"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
+      L("cardio", "Ultime I", "CORDE", "TRACTIONS", "FENTES DISK", "KB SNATCH", "BURPEES"),
+      L("bras", "Ultime II", "BOX JUMP", "POMPES", "MONKEY SLIDE", "SMASH DOWN", "ONE REP"),
+      L("tronc", "Ultime III", "ALLER-RETOUR", "COMMANDO BRAS", "TIRE TAPIS AR", "PLANK SLIDE", "WALL BALL SHOT"),
+      L("full", "Ultime IV", "BURPEES", "TRACTIONS", "SQUATS JUMP", "KB SWING", "FLIP TAPIS", "TOUR DE POUTRE"),
+      BOSS("full", "Break dance", "BREAK DANCE", 150),
     ],
   },
   {
@@ -209,6 +221,11 @@ export const PROPOSALS: Proposal[] = [
       L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE"),
       L("bras", "Bras & tronc", "POMPES", "COMMANDO BRAS", "PLANK SLIDE", "KB TOUR", "CORDE"),
       BOSS("cardio", "ALLER-RETOUR", "ALLER-RETOUR", 80),
+      L("jambes", "Jambes", "SQUATS JUMP", "FENTES DISK", "MONKEY SLIDE", "CORDE", "BOX JUMP"),
+      L("bras", "Bras", "POMPES", "COMMANDO BRAS", "TRACTIONS", "CORDE", "PLANK SLIDE"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "MONKEY SLIDE"),
+      L("full", "Full body", "FLIP TAPIS", "WALL BALL SHOT", "SMASH DOWN", "BREAK DANCE", "CORDE"),
+      BOSS("tronc", "KB tour marathon", "KB TOUR", 1500),
     ],
   },
   {
@@ -250,6 +267,11 @@ export const PROPOSALS: Proposal[] = [
       L("cardio", "Cardio", "BURPEES", "ALLER-RETOUR", "BOX JUMP", "KB SNATCH", "BREAK DANCE"),
       L("full", "Full body", "KB SNATCH", "KB SWING", "BREAK DANCE", "FLIP TAPIS", "TOUR DE POUTRE", "SMASH DOWN"),
       BOSS("full", "One rep", "ONE REP", 50),
+      L("jambes", "Jambes", "TIRE TAPIS AR", "SQUATS JUMP", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE"),
+      L("bras", "Bras", "TRACTIONS", "POMPES", "COMMANDO BRAS", "SMASH DOWN", "WALL BALL SHOT"),
+      L("full", "Full body", "KB SNATCH", "KB SWING", "BREAK DANCE", "FLIP TAPIS", "ONE REP", "TOUR DE POUTRE"),
+      L("cardio", "Cardio & tronc", "ALLER-RETOUR", "BOX JUMP", "PLANK SLIDE", "KB TOUR", "BREAK DANCE"),
+      BOSS("cardio", "Burpees", "BURPEES", 150),
     ],
   },
   {
@@ -290,6 +312,11 @@ export const PROPOSALS: Proposal[] = [
       L("full", "Full body", "KB SNATCH", "BREAK DANCE", "FLIP TAPIS", "SMASH DOWN", "TOUR DE POUTRE", "ONE REP"),
       L("jambes", "Jambes & cardio", "FENTES DISK", "BOX JUMP", "MONKEY SLIDE", "TIRE TAPIS AR", "CORDE", "ALLER-RETOUR"),
       BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
+      L("full", "Full body", "KB SWING", "FLIP TAPIS", "SMASH DOWN", "TOUR DE POUTRE", "ONE REP"),
+      L("cardio", "Cardio", "CORDE", "ALLER-RETOUR", "BOX JUMP", "BURPEES", "FENTES DISK"),
+      L("bras", "Bras", "POMPES", "TRACTIONS", "COMMANDO BRAS", "CORDE", "KB SNATCH"),
+      L("tronc", "Tronc", "PLANK SLIDE", "KB TOUR", "COMMANDO BRAS", "TIRE TAPIS AR", "WALL BALL SHOT"),
+      BOSS("full", "Break dance", "BREAK DANCE", 150),
     ],
   },
 ];
@@ -327,7 +354,7 @@ PROPOSALS.push({
   weaknesses: [
     "L'intensite (ponderation moyenne d'une rep) monte par bloc mais zigzague d'un niveau a l'autre : une fiche de corde de 60 a 90 reps fait mecaniquement baisser le chiffre du niveau, sans que le niveau soit plus facile.",
     "Les niveaux a 3-4 fiches laissent un ou deux membres en relais : l'equilibre affiche (52 a 80 %) est plus bas que dans E, c'est le prix des petits niveaux voulus.",
-    "Sept fiches SKILL (smash down, wall ball) sur 16 niveaux : une par niveau au plus, mais plus que dans E ; a surveiller si les balles manquent.",
+    "Neuf fiches SKILL (smash down, wall ball) sur 20 niveaux : une par niveau au plus, mais plus que dans E ; a surveiller si les balles manquent.",
     "Les trois exercices lourds (aller-retour, one rep, tire tapis) pesent lourd dans l'intensite des niveaux 9, 14, 18 et 19 : si ONE REP se revele plus long que 15 s, ces niveaux s'allongent.",
   ],
   ramp: [],
@@ -352,6 +379,12 @@ PROPOSALS.push({
     FX("cardio", "Cinq costauds", ["ALLER-RETOUR", 12], ["TIRE TAPIS AR", 6], ["TRACTIONS", 40], ["BREAK DANCE", 25], ["KB SWING", 100]),
     FX("tronc", "Apothéose", ["WALL BALL SHOT", 40], ["FENTES DISK", 60], ["COMMANDO BRAS", 60], ["BURPEES", 30], ["KB SNATCH", 40], ["PLANK SLIDE", 40], ["TIRE TAPIS AR", 4], ["ONE REP", 8]),
     BOSS("jambes", "Squats jump", "SQUATS JUMP", 500),
+    // Bloc 5 (25/09) : toujours plus difficile — 225 s -> 270 s, fiches de 3 a 4,5 min, exercices lourds.
+    FX("bras", "Cinquième étage", ["BURPEES", 25], ["TIRE TAPIS AR", 6], ["TRACTIONS", 45], ["KB SNATCH", 60], ["WALL BALL SHOT", 60], ["COMMANDO BRAS", 90]),
+    FX("full", "Le grand tour", ["ALLER-RETOUR", 8], ["FENTES DISK", 60], ["POMPES", 40], ["PLANK SLIDE", 40], ["SMASH DOWN", 40], ["BOX JUMP", 40], ["ONE REP", 16], ["TOUR DE POUTRE", 25]),
+    FX("jambes", "Cinq géants", ["SQUATS JUMP", 90], ["COMMANDO BRAS", 90], ["KB SNATCH", 60], ["BURPEES", 35], ["TIRE TAPIS AR", 6]),
+    FX("cardio", "Dernier rempart", ["BOX JUMP", 40], ["FENTES DISK", 80], ["TRACTIONS", 40], ["POMPES", 50], ["WALL BALL SHOT", 50], ["ONE REP", 12], ["ALLER-RETOUR", 18]),
+    BOSS("full", "Break dance", "BREAK DANCE", 150),
   ],
 });
 

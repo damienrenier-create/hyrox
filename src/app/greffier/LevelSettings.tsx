@@ -66,7 +66,7 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
 
       <section className={ui.cardPad}>
         <h3 className={ui.h3}>Mode zombies</h3>
-        <p className={`${ui.hint} mb-2`}>Sur chaque niveau, un zombie atteint la première fiche en 1 min puis traverse les fiches au rythme « durée du niveau + marge » (+3 min au niveau 1, −2 min au niveau 20). Chaque fiche cochée éloigne le cœur, une carte jaune le rapproche. Au contact, le zombie mange le cœur en trois bouchées (30 s au palier 1, 10 s au palier 20) : cœur dévoré = une vie perdue et retour au niveau précédent, et le zombie descend de trois paliers. Le classement compte les niveaux, puis les vies perdues. Le zombie se fige au temps imposé.</p>
+        <p className={`${ui.hint} mb-2`}>Sur chaque niveau, un zombie atteint la première fiche en 1 min puis traverse les fiches au rythme « durée du niveau + marge » (+3 min au niveau 1, −2 min au niveau 20, et elle continue de fondre jusqu'au 25). Chaque fiche cochée éloigne le cœur, une carte jaune le rapproche. Au contact, le zombie mange le cœur en trois bouchées (30 s au palier 1, 10 s à partir du palier 20) : cœur dévoré = une vie perdue et retour au niveau précédent, et le zombie descend de trois paliers. Le classement compte les niveaux, puis les vies perdues. Le zombie se fige au temps imposé.</p>
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
           <input type="checkbox" checked={zombies} disabled={pending} onChange={(e) => run(e.target.checked ? "Mode zombies activé." : "Mode zombies désactivé.", () => setZombiesAction(sessionId, e.target.checked))} className={ui.check} />
           🧟 Zombies (vies et retour au niveau précédent)

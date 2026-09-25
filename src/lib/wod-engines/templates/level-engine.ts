@@ -134,11 +134,15 @@ export const ZOMBIE_ZONE = 0.62;
 export const ZOMBIE_MARGIN_FIRST_S = 180;
 export const ZOMBIE_MARGIN_LAST_S = -120;
 export const ZOMBIE_LOSS_PENALTY = 3;
+export const ZOMBIE_TOP_LEVEL = 25; // dernier palier de l'echelle (bloc 21-24 + BOSS 25, Sartay 25/09)
+export const ZOMBIE_TIERS = 13; // sprites z01..z13 (palier = ceil(niveau / 2))
 const MIN_ZONE_S = 15;
 
 export const zombieSpeedLevel = (levelNumber: number, losses: number) => Math.max(1, levelNumber - ZOMBIE_LOSS_PENALTY * losses);
+// La marge fond de +3 min (niveau 1) a -2 min (niveau 20) et CONTINUE de fondre jusqu'au niveau 25
+// (« toujours plus difficile ») ; la bande garde son plancher (approche + 15 s).
 export function zombieMarginS(speedLevel: number): number {
-  const t = Math.min(1, Math.max(0, (speedLevel - 1) / 19));
+  const t = Math.max(0, (Math.min(speedLevel, ZOMBIE_TOP_LEVEL) - 1) / 19);
   return ZOMBIE_MARGIN_FIRST_S + t * (ZOMBIE_MARGIN_LAST_S - ZOMBIE_MARGIN_FIRST_S);
 }
 // Bande complete (ms de chrono) et approche : avec une seule fiche (BOSS), le zombie traverse tout d'un
@@ -264,7 +268,7 @@ export function zombieGeometry(level: FrozenLevel, frac: number, sinceMs: number
   const bites = contact ? Math.min(HEART_BITES, Math.floor(((sinceMs - arrival) / eatMs) * HEART_BITES)) : 0;
   return { zombie: Math.max(0, Math.min(heart, zombie)), heart, remainingMs: arrival + eatMs - sinceMs, contact, bites, eatMs };
 }
-export const zombieTier = (speedLevel: number) => Math.max(1, Math.min(10, Math.ceil(speedLevel / 2)));
+export const zombieTier = (speedLevel: number) => Math.max(1, Math.min(ZOMBIE_TIERS, Math.ceil(speedLevel / 2)));
 
 // ===== Progression d'une equipe =====
 export type Tick = { teamId: string; level: number; card: number; atMs: number };

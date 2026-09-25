@@ -69,8 +69,8 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
           {levels.length === 0 && (
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
               <div className="flex-1 min-w-[240px]">
-                <b className="text-ink">Partir d'une proposition de 20 niveaux</b>
-                <p className={ui.hint}>Équipes de 5, difficulté croissante, BOSS aux niveaux 5, 10, 15 et 20. Tout reste modifiable ensuite.</p>
+                <b className="text-ink">Partir d'une proposition de 25 niveaux</b>
+                <p className={ui.hint}>Équipes de 5, difficulté croissante, BOSS aux niveaux 5, 10, 15, 20 et 25. Tout reste modifiable ensuite.</p>
               </div>
               <select value={proposal} onChange={(e) => setProposal(e.target.value)} className={`${ui.input} max-w-[260px]`}>
                 {PROPOSALS.map((p) => <option key={p.key} value={p.key}>{p.key} · {p.title}</option>)}
@@ -78,7 +78,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(`Proposition ${proposal} chargée : 20 niveaux.`, async () => {
+                onClick={() => run(`Proposition ${proposal} chargée : 25 niveaux.`, async () => {
                   const r = await loadProposalAction(proposal);
                   return "error" in r ? r : { ok: true };
                 })}
@@ -126,7 +126,7 @@ export function LevelStudio({ exercises, levels, isMaster }: { exercises: Exerci
                     })
                   }
                   className={btn.smDanger}
-                  title="Repart d'une proposition de 20 niveaux"
+                  title="Repart d'une proposition de 25 niveaux"
                 >
                   Remplacer par la proposition
                 </button>

@@ -676,7 +676,7 @@ function exerciseColumnsWith(levels: FrozenLevel[], extras: Map<string, PhaseTea
 
 const cap = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
-// Sprites : public/zombies/z01.png .. z10.png (4 frames en ligne) et heart.png (3 etats : entier, 2/3, 1/3).
+// Sprites : public/zombies/z01.png .. z13.png (4 frames en ligne) et heart.png (4 etats, mange depuis la gauche).
 // Absent -> emoji. Meme cadence de marche pour tous les paliers.
 type ZombieKind = number | "boss";
 type SpriteKey = ZombieKind | "heart";

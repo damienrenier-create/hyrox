@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listExercises, listLevels, seedDefaultExercises } from "@/lib/level";
 import { materialize, proposalByKey } from "@/lib/level-proposals";
 
-// Charge une proposition de 20 niveaux (A a E) dans une echelle VIDE. Avec `replace`, DAMZER (seul)
+// Charge une proposition de 25 niveaux (A a F) dans une echelle VIDE. Avec `replace`, DAMZER (seul)
 // remplace l'echelle existante : les seances deja lancees gardent leur copie figee dans
 // Session.settings.levels. Les exercices manquants du listing sont importes au passage, par libelle.
 export async function loadProposalAction(key: string, replace = false): Promise<{ ok: true; levels: number } | { error: string }> {
