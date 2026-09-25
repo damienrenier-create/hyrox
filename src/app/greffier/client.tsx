@@ -57,6 +57,7 @@ import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
 import { finishRaceAction } from "./actions";
+import { resetSessionAction } from "./race-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { cake } from "@/lib/birthday";
 
@@ -565,6 +566,17 @@ export function GreffierClient({
       }
     });
   }
+  // Course lancee ou terminee par erreur : tout remettre a zero sans passer par la console (double confirmation).
+  function handleReset() {
+    if (!confirm("Remettre cette course à zéro ? Chrono, tours, cartes jaunes, tirs et évaluations du Touché-Coulé seront effacés. Les équipes, les arbitres, leurs flottes et les réglages restent, et la séance est rouverte.")) return;
+    if (!confirm("Vraiment ? Les résultats de cette course seront perdus, sans retour en arrière.")) return;
+    setError("");
+    startTransition(async () => {
+      const res = await resetSessionAction(sessionId);
+      if ("error" in res) setError(res.error);
+      else { void setRaceStatus(sessionId, "PREPARATION"); refresh(); }
+    });
+  }
 
   function exportCsv() {
     const L: string[] = [];
@@ -819,6 +831,7 @@ export function GreffierClient({
                 <button onClick={handleUndo} disabled={pending} className={btn.lgGhost}>Annuler le dernier</button>
                 {canCorrect && <button onClick={() => setFixOpen(true)} disabled={pending} className={btn.lgGhost}>Annuler un tour…</button>}
                 <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>Fin de course</button>
+                <button onClick={handleReset} disabled={pending} className={btn.lgGhost} title="Course lancée par erreur : tout remettre à zéro (double confirmation)">↺ Remettre à zéro</button>
               </>
             )}
             {phase === "post" && (
@@ -826,6 +839,7 @@ export function GreffierClient({
                 <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>
                 {/* Un tour frauduleux se corrige aussi apres coup : classement, medailles et records se recalculent. */}
                 {canCorrect && <button onClick={() => setFixOpen(true)} disabled={pending} className={btn.lgGhost}>Annuler un tour…</button>}
+                <button onClick={handleReset} disabled={pending} className={btn.lgGhost} title="Terminée par erreur : tout remettre à zéro et repartir (double confirmation)">↺ Remettre à zéro</button>
               </>
             )}
             {board && <a href={`/touche-coule?session=${sessionId}`} className={btn.lgGhost} title="Arbitrer cette séance (Touché-Coulé) sans quitter le greffier à quelqu'un d'autre">🏴‍☠️ Arbitrer</a>}

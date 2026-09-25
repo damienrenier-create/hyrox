@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { getWodEngine } from "@/lib/wod-engines";
+import { resetRace } from "@/lib/cleanup";
 
 async function requireGreffierAccess(sessionId: string) {
   const user = await getSession();
@@ -37,6 +38,15 @@ export async function ensureRaceStateAction(sessionId: string): Promise<string> 
   }
   const created = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: noStart, ...(defaults ?? {}) });
   return created.id;
+}
+
+// Remise a zero de la course depuis le greffier, y compris une fois le WOD termine ou la seance fermee par
+// erreur (Sartay 25/09 : « la giga galere pour redemarrer ») : chrono, tours, cartes, pointages, tirs et
+// evaluations effaces ; equipes, arbitres, flottes placees et reglages conserves ; la seance est rouverte.
+export async function resetSessionAction(sessionId: string): Promise<{ error: string } | { ok: true }> {
+  await requireGreffierAccess(sessionId);
+  const r = await resetRace(sessionId, { clearReferees: true, keepFleets: true });
+  return "error" in r ? r : { ok: true };
 }
 
 export async function startRaceAction(sessionId: string): Promise<{ error: string } | { ok: true }> {

@@ -10,7 +10,7 @@ import {
 } from "@/lib/wod-engines/templates/fete-foraine-engine";
 import type { FFBundle } from "@/lib/fete-foraine-context";
 import type { BoardData } from "@/lib/referee-board";
-import { startRaceAction, togglePauseAction } from "./race-actions";
+import { resetSessionAction, startRaceAction, togglePauseAction } from "./race-actions";
 import { finishRaceAction } from "./actions";
 import { ffColorAction, ffFinisherAction, ffPenaltyAction, ffResetColorsAction, ffSettingsAction, ffTapAction, ffUndoAction } from "./ff-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
@@ -93,6 +93,12 @@ export function FeteForaineClient({
       return res;
     });
   }
+  // Course lancee ou terminee par erreur : tout remettre a zero sans passer par la console (double confirmation).
+  function handleReset() {
+    if (!confirm("Remettre cette course à zéro ? Chrono, pointages, pénalités, points Finisher, tirs et évaluations du Touché-Coulé seront effacés. Les équipes, les arbitres, leurs flottes et les réglages restent, et la séance est rouverte.")) return;
+    if (!confirm("Vraiment ? Les résultats de cette course seront perdus, sans retour en arrière.")) return;
+    run(() => resetSessionAction(sessionId));
+  }
   function handleFinish() {
     if (!confirm("Arrêter définitivement la course ? Les équipes non terminées resteront sans temps.")) return;
     setError("");
@@ -172,9 +178,15 @@ export function FeteForaineClient({
                 <button onClick={() => run(() => togglePauseAction(sessionId))} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>{isPaused ? "Reprendre" : "Pause"}</button>
                 <button onClick={handleUndo} disabled={pending || ctx.events.length === 0} className={btn.lgGhost}>Annuler</button>
                 <button onClick={handleFinish} disabled={pending} className={btn.lgDanger}>Fin de course</button>
+                <button onClick={handleReset} disabled={pending} className={btn.lgGhost} title="Course lancée par erreur : tout remettre à zéro (double confirmation)">↺ Remettre à zéro</button>
               </>
             )}
-            {phase === "post" && <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 Course terminée</span>}
+            {phase === "post" && (
+              <>
+                <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 Course terminée</span>
+                <button onClick={handleReset} disabled={pending} className={btn.lgGhost} title="Terminée par erreur : tout remettre à zéro et repartir (double confirmation)">↺ Remettre à zéro</button>
+              </>
+            )}
             <button onClick={exportCsv} className={btn.lgDark}>Exporter vers Excel</button>
           </div>
         </div>

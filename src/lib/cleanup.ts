@@ -15,6 +15,7 @@ async function deleteAll<T extends { id: string }>(rows: T[], del: (id: string) 
 // ===== Remise a zero de la course d'une seance (elle redevient « pas commencee ») =====
 export type ResetOptions = {
   clearReferees?: boolean; // vider aussi l'arbitrage : flottes, tirs, evaluations
+  keepFleets?: boolean; // avec clearReferees : tirs et evaluations effaces, mais les flottes placees restent
   clearMembers?: boolean; // vider aussi la composition des equipes
 };
 export type ResetResult = { laps: number; cards: number; pauses: number; stations: number; evaluations: number; shots: number; fleets: number; placements: number; members: number };
@@ -34,6 +35,12 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
     await db.orm.public.RaceState.where({ id: rs.id }).update({ startedAt: null, endedAt: null });
   }
   deleted.stations = await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
+  // Donnees de course portees par les equipes : dernier exercice saisi apres la fin (Pyramide), penalites et
+  // points Finisher (Fete Foraine). Les equipes et leurs membres restent.
+  const raceTeams = await db.orm.public.Team.where({ sessionId }).all();
+  for (const t of raceTeams) if (t.endExerciseId || t.penalties) await db.orm.public.Team.where({ id: t.id }).update({ endExerciseId: null, penalties: 0 });
+  const raceTeamIds = raceTeams.map((t) => t.id);
+  if (raceTeamIds.length) for (const m of await db.orm.public.TeamMember.where((x) => x.teamId.in(raceTeamIds)).all()) if (m.finisherPoints) await db.orm.public.TeamMember.where({ id: m.id }).update({ finisherPoints: 0 });
   // WOD Level : fiches cochees, cases du demineur (et l'ancienne carte), echelle figee (re-figee au prochain depart).
   await deleteAll(await db.orm.public.LevelTick.where({ sessionId }).all(), (id) => db.orm.public.LevelTick.where({ id }).delete());
   await deleteAll(await db.orm.public.LevelLoss.where({ sessionId }).all(), (id) => db.orm.public.LevelLoss.where({ id }).delete());
@@ -53,8 +60,10 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
     // Ordre impose par les cles etrangeres : Shot -> Evaluation, puis les flottes (cascade navires + cases).
     deleted.shots = await deleteAll(await db.orm.public.Shot.where({ sessionId }).all(), (id) => db.orm.public.Shot.where({ id }).delete());
     deleted.evaluations = await deleteAll(await db.orm.public.Evaluation.where({ sessionId }).all(), (id) => db.orm.public.Evaluation.where({ id }).delete());
-    deleted.fleets = await deleteAll(await db.orm.public.RefereeFleet.where({ sessionId }).all(), (id) => db.orm.public.RefereeFleet.where({ id }).delete());
-    deleted.placements = await deleteAll(await db.orm.public.BoatPlacement.where({ sessionId }).all(), (id) => db.orm.public.BoatPlacement.where({ id }).delete());
+    if (!opts.keepFleets) {
+      deleted.fleets = await deleteAll(await db.orm.public.RefereeFleet.where({ sessionId }).all(), (id) => db.orm.public.RefereeFleet.where({ id }).delete());
+      deleted.placements = await deleteAll(await db.orm.public.BoatPlacement.where({ sessionId }).all(), (id) => db.orm.public.BoatPlacement.where({ id }).delete());
+    }
   }
 
   if (opts.clearMembers) {
