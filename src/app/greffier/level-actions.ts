@@ -3,10 +3,11 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderFor, orderedLevels, progressOf, readEmom, readEmomScores, readFrozenLevels, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_STARS, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, cardsForTeam, coinsState, emomNextCard, emomWaveAt, isBoss, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFrozenLevels, readLadders, readLevelOrder, readPenalties, readTeamStars, rightmostCard, rocketTargets, sendOptions, starsLabel, teamStarsOf, DISCOUNT_STEPS, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_STARS, ROCKET_PRICE, type CoinEvent, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { randomUUID } from "node:crypto";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
-import { readLevelCap } from "@/lib/level-context";
+import { phaseTotals, readChildren, readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
@@ -34,10 +35,11 @@ export type LevelLive = {
   // Signature de la structure (equipes, membres, echelle, temps impose) : si elle change, l'ecran recharge la page.
   structure: string;
   at: number; // heure serveur de la lecture : l'ecran n'applique jamais un etat plus ancien qu'un deja applique
-  penalties: TeamPenalty[];
+  penalties: TeamPenalty[]; // penalites, fiches recues et allegements de toutes les equipes
   emomScores: Record<string, number>;
+  coinEvents: CoinEvent[];
 };
-export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; score: number | null; at: number };
+export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; score: number | null; at: number; coinEvents: CoinEvent[] };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
 
 async function raceClock(sessionId: string) {
@@ -59,15 +61,40 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
     db.orm.public.LevelLoss.where({ sessionId, teamId }).all(),
     rsId ? db.orm.public.YellowCard.where({ raceStateId: rsId, teamId }).all() : Promise.resolve([]),
   ]);
+  const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
+  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const settled = await settleRockets(sessionId, settings, liveTicks, liveLosses, [teamId]);
   return {
     teamId,
     at,
-    penalties: readPenalties(settings).filter((p) => p.teamId === teamId).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
-    score: readEmomScores(settings)[teamId] ?? null,
-    ticks: ticks.map(liveTick(startedAtMs, pauses)),
-    losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
+    penalties: readPenalties(settled).filter((p) => p.teamId === teamId).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
+    score: readEmomScores(settled)[teamId] ?? null,
+    coinEvents: readCoinEvents(settled).filter((e) => e.teamId === teamId),
+    ticks: liveTicks,
+    losses: liveLosses,
     yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
   };
+}
+
+// Banque d'une equipe (pieces gagnees + report de l'echauffement - depenses), sur l'echelle de son parcours.
+function bankOf(settings: unknown, teamId: string, ticks: Tick[], losses: Loss[]) {
+  return coinsState(teamLadder(settings, teamId), teamId, ticks, losses, readPenalties(settings), readCoinEvents(settings), readCoinsCarry(settings));
+}
+// La fusee se construit et se paie toute seule des que la banque atteint son prix, une en stock au plus.
+// Ecrit les reglages seulement s'il y a une construction ; renvoie les reglages a jour.
+async function settleRockets(sessionId: string, settings: unknown, ticks: Tick[], losses: Loss[], teamIds: string[]): Promise<unknown> {
+  if (readEmom(settings)) return settings; // finisher : pas de pieces
+  const events = [...readCoinEvents(settings)];
+  let built = 0;
+  for (const teamId of teamIds) {
+    const state = coinsState(teamLadder(settings, teamId), teamId, ticks, losses, readPenalties(settings), events, readCoinsCarry(settings));
+    if (state.stock === 0 && state.bank >= ROCKET_PRICE) { events.push({ id: randomUUID(), teamId, kind: "rocket", coins: ROCKET_PRICE, at: Date.now() }); built++; }
+  }
+  if (!built) return settings;
+  const prev = (settings as Record<string, unknown> | null) ?? {};
+  const next = JSON.parse(JSON.stringify({ ...prev, coinEvents: events }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: next });
+  return next;
 }
 
 // L'unique appel du pouls (8 requetes, en parallele) : rattrapages calcules sur ces memes donnees (ecriture
@@ -91,9 +118,14 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
   ]);
   const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; levelCapMin?: unknown } | null;
   const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
+  const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
+  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  // Rattrapages appliques : les reglages (fiches recues annulees) ont pu changer, on relit avant les fusees.
+  const settingsNow = caught > 0 ? (await db.orm.public.Session.where({ id: sessionId }).first())?.settings ?? ctx.session.settings : ctx.session.settings;
+  const settled = rs?.startedAt && !rs.endedAt ? await settleRockets(sessionId, settingsNow, liveTicks, liveLosses, teamIds) : settingsNow;
   return {
-    ticks: ticks.map(liveTick(startedAtMs, pauses)),
-    losses: losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
+    ticks: liveTicks,
+    losses: liveLosses,
     yellowCards: cards.map((c) => ({ id: c.id, teamId: c.teamId, atMs: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 })),
     pauses,
     startedAtMs,
@@ -101,8 +133,9 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     raceEndedAtMs: ctx.session.raceEndedAt ? toMs(ctx.session.raceEndedAt) : null,
     structure,
     at,
-    penalties: readPenalties(ctx.session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
-    emomScores: readEmomScores(ctx.session.settings),
+    penalties: readPenalties(settled).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
+    emomScores: readEmomScores(settled),
+    coinEvents: readCoinEvents(settled),
   };
 }
 
@@ -176,8 +209,134 @@ export async function startLevelAction(sessionId: string): Promise<Res> {
   let rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs) rs = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: [] });
   if (rs.startedAt) return { ok: true };
+  // Numeros d'equipe (3 etoiles d'abord) s'ils n'ont pas ete attribues, puis report des pieces de l'echauffement.
+  await numberTeams(sessionId);
+  const fresh = (await db.orm.public.Session.where({ id: sessionId }).first())!;
+  const children = readChildren(fresh.settings);
+  if (children.warmup) {
+    const ph = await phaseTotals("warmup", children.warmup);
+    if (ph) {
+      const teams = await db.orm.public.Team.where({ sessionId }).all();
+      const coinsCarry: Record<string, number> = {};
+      for (const t of teams) { const c = ph.byOrder[t.order ?? 0]?.coins ?? 0; if (c > 0) coinsCarry[t.id] = c; }
+      const prev = (fresh.settings as Record<string, unknown> | null) ?? {};
+      await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, coinsCarry })) });
+    }
+  }
   await db.orm.public.RaceState.where({ id: rs.id }).update({ startedAt: Temporal.Now.instant() });
   return { ok: true };
+}
+
+// ===== Equipes par parcours (Sartay 26/09) : la categorie d'abord, les numeros a la fin =====
+// Une equipe se cree dans un parcours avec un nom provisoire ; « Attribuer les numeros » (ou le coup d'envoi)
+// numerote toutes les equipes : 3 etoiles d'abord, puis 2, puis 1, dans l'ordre de creation.
+export async function createStarTeamAction(sessionId: string, stars: Stars): Promise<Res & { id?: string }> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (rs?.startedAt) return { error: "La course est lancée : plus de nouvelle équipe." };
+  const teams = await db.orm.public.Team.where({ sessionId }).all();
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const teamStars = readTeamStars(session.settings);
+  const sameStars = teams.filter((t) => teamStarsOf(teamStars, t.id) === stars).length;
+  const letter = String.fromCharCode(65 + (sameStars % 26));
+  const provisional = 1000 + teams.length + 1; // apres toutes les equipes numerotees, dans l'ordre de creation
+  const team = await db.orm.public.Team.create({ sessionId, name: `${starsLabel(stars)} ${letter}`, order: provisional });
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, teamStars: { ...teamStars, [team.id]: stars }, numTeams: teams.length + 1 })) });
+  return { ok: true, id: team.id };
+}
+async function numberTeams(sessionId: string): Promise<number> {
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) return 0;
+  const teamStars = readTeamStars(session.settings);
+  const teams = (await db.orm.public.Team.where({ sessionId }).all()).sort((a, b) => teamStarsOf(teamStars, b.id) - teamStarsOf(teamStars, a.id) || (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "fr"));
+  let n = 0;
+  let changed = 0;
+  // Deux passes (numeros hors plage puis 1..N) : l'ordre n'est pas unique en base mais on garde les etapes propres.
+  for (const t of teams) { n++; if (t.order !== n || t.name !== `Équipe ${n}`) { await db.orm.public.Team.where({ id: t.id }).update({ order: n, name: `Équipe ${n}` }); changed++; } }
+  return changed;
+}
+export async function numberTeamsAction(sessionId: string): Promise<Res & { changed?: number }> {
+  await requireLevelStaff(sessionId);
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (rs?.startedAt) return { error: "La course est lancée : les numéros sont figés." };
+  return { ok: true, changed: await numberTeams(sessionId) };
+}
+
+// ===== Pieces : allegement d'une fiche, fusee =====
+// Retirer des reps a la fiche la plus a droite du niveau en cours (la plus longue de l'echelle) : 1 piece par
+// seconde de travail (reps x ponderation). Jamais sous 1 rep.
+export async function discountAction(sessionId: string, teamId: string, reps: number): Promise<TeamRes> {
+  const { session } = await requireLevelStaff(sessionId);
+  const gate = await raceOpen(sessionId);
+  if ("error" in gate) return gate;
+  if (!DISCOUNT_STEPS.includes(reps)) return { error: "Montant inconnu." };
+  const ctx = await loadZombieContext(sessionId, teamId);
+  const ticks: Tick[] = (ctx?.ticks ?? []).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 }));
+  const losses: Loss[] = (ctx?.losses ?? []).map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 }));
+  const levels = teamLadder(session.settings, teamId);
+  const extras = readPenalties(session.settings);
+  const p = progressOf(levels, teamId, ticks, losses, extras);
+  const level = p.currentLevel !== null ? levels.find((l) => l.number === p.currentLevel) : null;
+  if (!level) return { error: "Échelle bouclée : rien à alléger." };
+  const card = rightmostCard(level, teamId, extras, p.doneCards);
+  if (!card) return { error: "Aucune fiche à alléger sur ce niveau." };
+  const n = Math.min(reps, card.card.reps - 1);
+  const cost = n * card.card.weight;
+  const state = bankOf(session.settings, teamId, ticks, losses);
+  if (cost > state.bank) return { error: `Il faut ${cost} pièces pour retirer ${n} ${card.card.label} ; l'équipe en a ${state.bank}.` };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const at = Date.now();
+  const id = randomUUID();
+  const discounts = [...(Array.isArray(prev.discounts) ? (prev.discounts as unknown[]) : []), { id, teamId, level: level.number, index: card.index, reps: -n, label: card.card.label, weight: card.card.weight, exerciseId: card.card.exerciseId, at }];
+  const coinEvents = [...readCoinEvents(session.settings), { id, teamId, kind: "discount", coins: cost, at, label: card.card.label, reps: n, level: level.number, index: card.index }];
+  const settings = JSON.parse(JSON.stringify({ ...prev, discounts, coinEvents }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings });
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, settings) };
+}
+// Envoyer des reps d'un exercice maitrise a une equipe : la fusee en stock part, le prix (reps x ponderation) est
+// debite, la cible recoit une fiche a son prochain niveau (le niveau qui suit son niveau en cours).
+export async function sendRocketAction(sessionId: string, teamId: string, exerciseId: string, reps: number, toTeamId: string): Promise<TeamRes> {
+  const { session } = await requireLevelStaff(sessionId);
+  const gate = await raceOpen(sessionId);
+  if ("error" in gate) return gate;
+  if (toTeamId === teamId) return { error: "Pas à soi-même." };
+  const ctx = await loadZombieContext(sessionId);
+  if (!ctx) return { error: "Séance introuvable." };
+  const ticks: Tick[] = ctx.ticks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 }));
+  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 }));
+  const extras = readPenalties(session.settings);
+  const state = bankOf(session.settings, teamId, ticks, losses);
+  if (state.stock < 1) return { error: "Pas de fusée en stock : il faut d'abord la construire (100 pièces)." };
+  const mastered = masteredExercises(teamLadder(session.settings, teamId), teamId, ticks, extras).find((m) => m.exerciseId === exerciseId);
+  if (!mastered) return { error: "Cet exercice n'est pas encore maîtrisé (3 fiches cochées)." };
+  if (!sendOptions(mastered.weight).some((o) => o.reps === reps)) return { error: "Quantité inconnue." };
+  const price = reps * mastered.weight;
+  if (price > state.bank) return { error: `Il faut ${price} pièces ; l'équipe en a ${state.bank}.` };
+  // Cibles : rang dans le parcours, taille du groupe, equipes arrivees au bout.
+  const teamStars = readTeamStars(session.settings);
+  const progress = ctx.teams.map((t) => progressOf(teamLadder(session.settings, t.id), t.id, ticks, losses, extras));
+  const ranked = rankTeams(progress);
+  const rows = ctx.teams.map((t) => {
+    const stars = teamStarsOf(teamStars, t.id);
+    const group = ranked.filter((p) => teamStarsOf(teamStars, p.teamId) === stars);
+    return { teamId: t.id, stars, rankInStars: group.findIndex((p) => p.teamId === t.id) + 1, groupSize: group.length, finished: progress.find((p) => p.teamId === t.id)!.currentLevel === null };
+  });
+  if (!rocketTargets(teamId, rows).some((t) => t.teamId === toTeamId)) return { error: "Cette équipe n'est pas une cible autorisée (même parcours, jamais la dernière, jamais une équipe arrivée au bout)." };
+  const targetLevels = teamLadder(session.settings, toTeamId);
+  const tp = progress.find((p) => p.teamId === toTeamId)!;
+  const idx = targetLevels.findIndex((l) => l.number === tp.currentLevel);
+  const next = idx >= 0 ? targetLevels[idx + 1] : undefined;
+  if (!next) return { error: "Cette équipe joue son dernier niveau : rien ne peut lui être envoyé." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const at = Date.now();
+  const id = randomUUID();
+  const existing = Array.isArray(prev.gifts) ? (prev.gifts as unknown[]) : [];
+  const gifts = [...existing, { id, teamId: toTeamId, fromTeamId: teamId, level: next.number, index: 200 + existing.length, reps, label: mastered.label, weight: mastered.weight, exerciseId, at }];
+  const coinEvents = [...readCoinEvents(session.settings), { id, teamId, kind: "send", coins: price, at, toTeamId, label: mastered.label, reps, giftId: id, level: next.number }];
+  const settings = JSON.parse(JSON.stringify({ ...prev, gifts, coinEvents }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings });
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, settings) };
 }
 
 export async function levelPauseAction(sessionId: string): Promise<Res> {
@@ -323,13 +482,14 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
   const gate = await raceOpen(sessionId);
   if ("error" in gate) return gate;
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  let penalties = readPenalties(session.settings);
+  // settings.penalties seulement : readPenalties y ajoute les fiches recues et les allegements, qui vivent ailleurs.
+  let penalties = readPenalties(session.settings).filter((p) => p.kind === "penalty");
   const mine = penalties.filter((p) => p.teamId === teamId);
   if (delta > 0) {
     await db.orm.public.YellowCard.create({ raceStateId: gate.rsId, teamId });
     const [ticks, losses] = await Promise.all([db.orm.public.LevelTick.where({ sessionId, teamId }).all(), db.orm.public.LevelLoss.where({ sessionId, teamId }).all()]);
     const levels = teamLadder(session.settings, teamId);
-    const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), penalties);
+    const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), readPenalties(session.settings));
     if (p.currentLevel !== null) {
       const k = mine.length;
       penalties = [...penalties, { teamId, level: p.currentLevel, index: PENALTY_INDEX0 + k, reps: PENALTY_STEPS[Math.min(k, PENALTY_STEPS.length - 1)], label: "CORDE", weight: 1, at: Date.now() }];

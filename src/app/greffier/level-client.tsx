@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, starsLabel, starsName, teamStarsOf, zombieSim, zombieSpeedLevel, zombieTier, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, STARS, ZOMBIE_ZONE,
-  type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
+  type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
-import { endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, setEmomScoreAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, sendRocketAction, setEmomScoreAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -69,6 +69,7 @@ export function LevelClient({
       losses: [...l.losses.filter((x) => x.teamId !== t.teamId), ...t.losses],
       yellowCards: [...l.yellowCards.filter((x) => x.teamId !== t.teamId), ...t.yellowCards],
       penalties: [...l.penalties.filter((x) => x.teamId !== t.teamId), ...t.penalties],
+      coinEvents: [...l.coinEvents.filter((x) => x.teamId !== t.teamId), ...t.coinEvents],
       emomScores: t.score === null ? l.emomScores : { ...l.emomScores, [t.teamId]: t.score },
     }));
   }
@@ -83,6 +84,7 @@ export function LevelClient({
         losses: [...l.losses.filter((x) => !newer.has(x.teamId)), ...prev.losses.filter((x) => newer.has(x.teamId))],
         yellowCards: [...l.yellowCards.filter((x) => !newer.has(x.teamId)), ...prev.yellowCards.filter((x) => newer.has(x.teamId))],
         penalties: [...l.penalties.filter((x) => !newer.has(x.teamId)), ...prev.penalties.filter((x) => newer.has(x.teamId))],
+        coinEvents: [...l.coinEvents.filter((x) => !newer.has(x.teamId)), ...prev.coinEvents.filter((x) => newer.has(x.teamId))],
       };
     });
   }
@@ -127,7 +129,7 @@ export function LevelClient({
         if (stop || "error" in l) return;
         if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); return; }
         lastStructure.current = l.structure;
-        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.penalties.length, l.emomScores, l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
+        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.penalties.length, l.penalties.map((x) => x.id ?? "").join(","), l.coinEvents.length, l.emomScores, l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
         if (key !== lastLive.current) { lastLive.current = key; applyLive(l); }
       } catch {
         /* reseau : prochain tick */
@@ -186,6 +188,34 @@ export function LevelClient({
     for (const t of teams) m.set(starsOf(t.id), (m.get(starsOf(t.id)) ?? 0) + 1);
     return m;
   }, [teams, starsOf]);
+  // Pieces (echauffement et WOD, pas le finisher) : gagnees d'apres les coches, banque = gagnees + report - depenses.
+  const coinsOn = !bundle.emom;
+  const inPlay = bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay;
+  const coinsOf = useMemo(() => new Map(teams.map((t) => [t.id, coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay)])), [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay]);
+  function discount(teamId: string, reps: number) {
+    setError("");
+    void discountAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+  }
+  const [rocketFor, setRocketFor] = useState<string | null>(null);
+  const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  function launchRocket(fromId: string, exerciseId: string, reps: number, toId: string) {
+    setError("");
+    void sendRocketAction(sessionId, fromId, exerciseId, reps, toId).then((res) => {
+      if ("error" in res) { setError(res.error); return; }
+      setRocketFor(null);
+      mergeTeam(res.team);
+      // La fusee decolle de la ligne de l'expediteur et vient toucher la ligne de la cible.
+      const a = document.getElementById(`team-row-${fromId}`)?.getBoundingClientRect();
+      const b = document.getElementById(`team-row-${toId}`)?.getBoundingClientRect();
+      if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 } });
+      // La cible a une nouvelle fiche : relecture complete de l'etat vivant.
+      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
+    });
+  }
+  // Classement par parcours pour les cibles de fusee.
+  const rocketRows = useMemo(() => teams.map((t) => { const st = starsOf(t.id); return { teamId: t.id, stars: st, rankInStars: rankOf.get(t.id) ?? 0, groupSize: groupSize.get(st) ?? 1, finished: progress.get(t.id)?.currentLevel === null }; }), [teams, starsOf, rankOf, groupSize, progress]);
+  function createStar(st: Stars) { run(async () => { const r = await createStarTeamAction(sessionId, st); return "error" in r ? r : { ok: true }; }); }
+  function numberTeams() { run(async () => { const r = await numberTeamsAction(sessionId); return "error" in r ? r : { ok: true }; }); }
   const cardsOf = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of live.yellowCards) m.set(c.teamId, (m.get(c.teamId) ?? 0) + 1);
@@ -273,13 +303,14 @@ export function LevelClient({
   function exportCsv() {
     const exercises = exerciseColumnsWith(allLevels, extras);
     const hasPhases = bundle.phases.length > 0;
-    const head = ["Rang (dans son parcours)", "Équipe", "Parcours", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
+    const head = ["Rang (dans son parcours)", "Équipe", "Parcours", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Pièces gagnées", "Pièces en banque", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
     const lines = ranked.map((p) => {
       const t = teamById.get(p.teamId)!;
       const ex = extras.get(p.teamId) ?? extrasFor([], 0);
       return [
         rankOf.get(p.teamId), t.name, starsLabel(starsOf(p.teamId)), t.members.map((m) => m.name).join(" / "), p.completedLevels, p.currentLevel ?? "terminé",
         p.currentLevel ? `${p.currentDone}/${p.currentTotal}` : "", p.lastTickMs !== null ? fmt(p.lastTickMs) : "", p.reps + ex.reps, Math.round(p.weighted + ex.work), (cardsOf.get(p.teamId) ?? 0) + ex.cards, p.losses + ex.losses,
+        (coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0), coinsOf.get(p.teamId)?.bank ?? 0,
         p.finishedMs !== null ? fmt(p.finishedMs) : "", ...(hasPhases ? [p.reps, ...bundle.phases.map((ph) => ph.byOrder[t.order]?.reps ?? 0), ex.score ?? ""] : []), ...exercises.map((e) => (p.repsByExercise[e] ?? 0) + (ex.repsByExercise[e] ?? 0)),
       ];
     });
@@ -393,35 +424,69 @@ export function LevelClient({
                 onScore={(teamId, reps) => { setError(""); void setEmomScoreAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
               />
             ) : (
-              <div className="flex flex-col gap-1.5">
-                {teams.map((t) => (
-                  <TeamRow
-                    key={t.id}
-                    team={t}
-                    progress={progress.get(t.id)!}
-                    level={levelOf(t.id, progress.get(t.id)!.currentLevel)}
-                    stars={starsOf(t.id)}
-                    rank={rankOf.get(t.id) ?? 0}
-                    teamsCount={groupSize.get(starsOf(t.id)) ?? teams.length}
-                    yellow={cardsOf.get(t.id) ?? 0}
-                    canTick={canTick}
-                    pendingKeys={optimistic}
-                    zombies={bundle.zombies}
-                    fixedSpeed={bundle.zombieSpeed}
-                    penalties={live.penalties.filter((x) => x.teamId === t.id)}
-                    ticks={ticks}
-                    raceMs={zombieMs}
-                    running={phase === "run" && !isPaused && !timeUp}
-                    onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
-                    onYellow={(delta) => yellow(t.id, delta)}
-                  />
-                ))}
+              <>
+              <div className="flex flex-col gap-2">
+                {[3, 2, 1].filter((st): st is Stars => teams.some((t) => starsOf(t.id) === st)).map((st) => {
+                  const group = ranked.filter((p) => starsOf(p.teamId) === st);
+                  return (
+                    <section key={st} className="rounded-2xl p-1.5 flex flex-col gap-1.5" style={{ background: STAR_BG[st] }}>
+                      <p className="px-2 pt-0.5 text-[11px] font-display font-extrabold tracking-widest text-ink/60 uppercase">{starsLabel(st)} Parcours {starsName(st)} · {group.length} équipe{group.length > 1 ? "s" : ""}</p>
+                      {group.map((p) => {
+                        const t = teamById.get(p.teamId)!;
+                        return (
+                          <motion.div key={t.id} layout transition={{ type: "spring", stiffness: 260, damping: 28 }} id={`team-row-${t.id}`}>
+                            <TeamRow
+                              team={t}
+                              progress={p}
+                              level={levelOf(t.id, p.currentLevel)}
+                              stars={st}
+                              rank={rankOf.get(t.id) ?? 0}
+                              teamsCount={group.length}
+                              yellow={cardsOf.get(t.id) ?? 0}
+                              canTick={canTick}
+                              pendingKeys={optimistic}
+                              zombies={bundle.zombies}
+                              fixedSpeed={bundle.zombieSpeed}
+                              penalties={live.penalties.filter((x) => x.teamId === t.id)}
+                              ticks={ticks}
+                              raceMs={zombieMs}
+                              running={phase === "run" && !isPaused && !timeUp}
+                              coins={coinsOn ? coinsOf.get(t.id) ?? null : null}
+                              onDiscount={(reps) => discount(t.id, reps)}
+                              onRocket={() => setRocketFor(t.id)}
+                              onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
+                              onYellow={(delta) => yellow(t.id, delta)}
+                            />
+                          </motion.div>
+                        );
+                      })}
+                    </section>
+                  );
+                })}
               </div>
+              <AnimatePresence>
+                {flight && (
+                  <motion.span key={flight.id} initial={{ x: flight.from.x, y: flight.from.y, rotate: 0, scale: 1 }} animate={{ x: flight.to.x, y: flight.to.y, rotate: [0, -20, 0], scale: [1, 1.4, 1] }} exit={{ opacity: 0, scale: 2 }} transition={{ duration: 1.2, ease: "easeInOut" }} onAnimationComplete={() => setTimeout(() => setFlight(null), 250)} className="fixed left-0 top-0 z-50 text-4xl pointer-events-none drop-shadow-lg">🚀</motion.span>
+                )}
+              </AnimatePresence>
+              {rocketFor && (
+                <RocketMenu
+                  team={teamById.get(rocketFor)!}
+                  stars={starsOf(rocketFor)}
+                  coins={coinsOf.get(rocketFor) ?? null}
+                  mastered={masteredExercises(ladderOf(rocketFor), rocketFor, ticks, live.penalties)}
+                  targets={rocketTargets(rocketFor, rocketRows).map((r) => ({ id: r.teamId, name: teamById.get(r.teamId)?.name ?? "?", stars: r.stars, rank: r.rankInStars }))}
+                  sameGroupOnly={rocketRows.filter((r) => r.stars === starsOf(rocketFor) && r.teamId !== rocketFor).length >= 2}
+                  onSend={(exerciseId, reps, toId) => launchRocket(rocketFor, exerciseId, reps, toId)}
+                  onClose={() => setRocketFor(null)}
+                />
+              )}
+              </>
             )}
           </>
         )}
 
-        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} />}
+        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} coinsOf={coinsOn ? coinsOf : null} />}
         {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={allLevels} extras={extras} phases={bundle.phases} />}
         {view === "ladder" && (bundle.frozen ? (
           <LevelLadderEditor sessionId={sessionId} levels={levels} ladders={bundle.ladders} teamStars={bundle.teamStars} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />
@@ -431,7 +496,7 @@ export function LevelClient({
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
         {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} />}
-        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} />}
+        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} />}
       </main>
 
       <footer className="fixed bottom-0 inset-x-0 z-20 bg-card/95 backdrop-blur border-t border-line px-2 py-1.5">
@@ -505,7 +570,7 @@ export function LevelClient({
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0 };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0 };
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
@@ -633,7 +698,7 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
       </div>
       {sim && (
         <div className="relative w-[220px] h-full flex-shrink-0" title={sim.done ? "Vague bouclée : le zombie s'arrête" : sim.contact ? `Le zombie dévore le cœur : boucle la vague avant ${fmt(Math.max(0, sim.remainingMs))}` : cards.length ? `Le zombie mord dans ${fmt(Math.max(0, sim.remainingMs - sim.eatMs))}` : "Vague MAX : le zombie arrive à la fin, sans mordre"}>
-          <div className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${(lostFlash ? sim.heart : sim.zombie) * 100}% - 24px)`, transition: "left 1s linear" }}>
+          <div className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${(lostFlash ? sim.heart : sim.zombie) * 100}% - ${Math.round(24 + 56 * Math.min(1, (lostFlash ? sim.heart : sim.zombie) / Math.max(0.01, sim.heart)))}px)`, transition: "left 1s linear" }}>
             <Zombie kind={zombieTier(zombieSpeed)} moving={running && !sim.contact && !sim.done && !lostFlash} />
           </div>
           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${sim.heart * 100}%` }}>
@@ -661,6 +726,60 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
         {!current && !over && <span className={ui.hint}>En attente du départ.</span>}
       </div>
     </section>
+  );
+}
+
+// Menu de la fusee : exercice maitrise, quantite (prix = reps x ponderation), cible (meme parcours sauf s'il
+// manque d'adversaires, jamais la derniere, jamais une equipe arrivee au bout).
+function RocketMenu({ team, stars, coins, mastered, targets, sameGroupOnly, onSend, onClose }: {
+  team: LevelTeam; stars: Stars; coins: CoinsState | null; mastered: ReturnType<typeof masteredExercises>; targets: { id: string; name: string; stars: Stars; rank: number }[]; sameGroupOnly: boolean;
+  onSend: (exerciseId: string, reps: number, toId: string) => void; onClose: () => void;
+}) {
+  const [pick, setPick] = useState<{ exerciseId: string; reps: number; price: number; label: string } | null>(null);
+  const bank = coins?.bank ?? 0;
+  return (
+    <div className="fixed inset-0 z-40 bg-ink/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className={cx(ui.card, "w-full max-w-2xl p-4 space-y-3")} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <span className="text-3xl">🚀</span>
+          <div className="flex-1">
+            <p className="font-display font-extrabold text-lg">Fusée de {team.name} <span className="text-accent-ink text-sm">{starsLabel(stars)}</span></p>
+            <p className={ui.hint}>Banque : <b className="text-ink">{bank} 🪙</b> · 1 pièce = 1 seconde de travail (reps × pondération). L'équipe visée reçoit la fiche à son prochain niveau.</p>
+          </div>
+          <button type="button" onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
+        </div>
+        {mastered.length === 0 ? (
+          <p className={ui.alertInfo}>Aucun exercice maîtrisé pour l&apos;instant : il faut avoir coché 3 fiches d&apos;un même exercice pour pouvoir l&apos;envoyer.</p>
+        ) : (
+          <div className="space-y-1.5">
+            <p className={ui.eyebrow}>1 · Exercice maîtrisé et quantité</p>
+            {mastered.map((m) => (
+              <div key={m.exerciseId} className={`${ui.inset} px-2 py-1.5 flex flex-wrap items-center gap-1.5`}>
+                <span className="font-bold text-sm w-36 truncate" title={`${m.count} fiches cochées · ${m.weight} 🪙/rep`}>{cap(m.label)} <span className="text-[10px] text-ink-3">×{m.count}</span></span>
+                {sendOptions(m.weight).map((o) => (
+                  <button key={o.reps} type="button" disabled={o.price > bank} onClick={() => setPick({ exerciseId: m.exerciseId, reps: o.reps, price: o.price, label: m.label })} className={cx("rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-40", pick?.exerciseId === m.exerciseId && pick.reps === o.reps ? "bg-ink text-white border-ink" : "bg-card border-line-2 hover:border-brand")}>
+                    {o.reps} reps · {o.price}🪙
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <p className={ui.eyebrow}>2 · Cible {sameGroupOnly ? `(même parcours ${starsLabel(stars)}, jamais la dernière)` : "(moins de deux adversaires dans le parcours : tout le monde, jamais la dernière d'un parcours)"}</p>
+          {targets.length === 0 ? <p className={ui.hint}>Aucune cible possible.</p> : (
+            <div className="flex flex-wrap gap-1.5">
+              {targets.map((t) => (
+                <button key={t.id} type="button" disabled={!pick} onClick={() => pick && onSend(pick.exerciseId, pick.reps, t.id)} className={cx(btn.primary, "disabled:opacity-40")} title={pick ? `Envoyer ${pick.reps} ${cap(pick.label)} à ${t.name} pour ${pick.price} pièces` : "Choisis d'abord un exercice et une quantité"}>
+                  {t.name} <span className="text-[10px] opacity-80">{starsLabel(t.stars)} #{t.rank}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {pick && <p className={ui.hint}>Sélection : <b className="text-ink">{pick.reps} {cap(pick.label)}</b> pour <b className="text-ink">{pick.price} 🪙</b>. Touche l&apos;équipe visée pour lancer.</p>}
+      </div>
+    </div>
   );
 }
 
@@ -786,12 +905,17 @@ const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500,
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
-function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, onToggle, onYellow }: {
+const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
+
+function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, onDiscount, onRocket, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
   stars: Stars;
   rank: number;
+  coins?: CoinsState | null;
+  onDiscount?: (reps: number) => void;
+  onRocket?: () => void;
   teamsCount: number;
   yellow: number;
   canTick: boolean;
@@ -820,12 +944,19 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
   const geo = level && zombies && ev ? zombieSim(level, ev.initialTotalSec, ev.events, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length) : null;
   const danger = !!geo && (geo.contact || geo.remainingMs <= 20_000);
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
+  // Pieces : fiche allegeable (la plus longue restante de l'echelle) et menu d'allegement.
+  const [coinOpen, setCoinOpen] = useState(false);
+  const target = level && !finished ? rightmostCard(level, team.id, penalties, p.doneCards) : null;
   const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? zombieSpeedLevel(level.number - 4 + i, p.losses))).sort((a, b) => a - b) : [];
 
   // Jalons : premiere place, podium, plus derniere, centaine de reps, niveau gagne, coeur devore.
   const prev = useRef<{ rank: number; reps: number; losses: number; level: number | null } | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string; bad: boolean } | null>(null);
   const [lostFlash, setLostFlash] = useState(false);
+  // Le zombie s'arrete au BORD GAUCHE du coeur (40 px de coeur + 48 px de zombie - 8 px de morsure) : decalage
+  // qui va de 24 px au depart a 80 px au contact, en fonction de sa progression vers le coeur.
+  const zx = geo ? (lostFlash ? geo.heart : geo.zombie) : 0;
+  const zombieShift = geo ? Math.round(24 + 56 * Math.min(1, zx / Math.max(0.01, geo.heart))) : 24;
   useEffect(() => {
     if (!lostFlash) return;
     const h = setTimeout(() => setLostFlash(false), 3000);
@@ -895,7 +1026,31 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
               <span className={ui.hint}>Échelle vide.</span>
             )}
           </div>
-          <div className="text-[11px] text-ink-2 tabular-nums"><Odometer value={p.reps} className="font-bold text-ink text-sm" /> reps</div>
+          <div className="text-[11px] text-ink-2 tabular-nums flex items-center gap-2">
+            <span><Odometer value={p.reps} className="font-bold text-ink text-sm" /> reps</span>
+            {coins && (
+              <span className="relative">
+                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold text-[11px] border", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
+                  🪙<Odometer value={coins.bank} />
+                </button>
+                {coinOpen && (
+                  <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
+                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées · fusée : {coins.stock ? "prête 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
+                    {target ? (
+                      <>
+                        <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
+                        <span className="flex flex-wrap gap-1">
+                          {DISCOUNT_STEPS.map((n) => { const k = Math.min(n, target.card.reps - 1); const cost = k * target.card.weight; return (
+                            <button key={n} type="button" disabled={!canTick || k <= 0 || cost > coins.bank} onClick={() => { setCoinOpen(false); onDiscount?.(n); }} className={cx(btn.smSoft, "disabled:opacity-40")} title={`${cost} pièces`}>−{k} · {cost}🪙</button>
+                          ); })}
+                        </span>
+                      </>
+                    ) : <span className="block text-[11px] text-ink-3">Rien à alléger sur ce niveau.</span>}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -909,7 +1064,7 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
           <>
             {geo && (
               <>
-                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${(lostFlash ? geo.heart : geo.zombie) * 100}% - 24px)`, transition: "left 1s linear" }}>
+                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${zx * 100}% - ${zombieShift}px)`, transition: "left 1s linear" }}>
                   {boss ? <Horde tiers={horde} moving={running && !geo.contact && !lostFlash} /> : <Zombie kind={kind} moving={running && !geo.contact && !lostFlash} />}
                 </div>
                 <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${geo.heart * 100}%` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
@@ -918,24 +1073,25 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
               </>
             )}
             <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${Math.min(1, remainingSec / totalSec) * ZOMBIE_ZONE * 100}%` }}>
-              {remaining.map(({ card, index, penalty }) => {
+              {remaining.map(({ card, index, penalty, kind: cardKind }) => {
                 const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
+                const gift = cardKind === "gift";
                 return (
                   <button
                     key={index}
                     type="button"
                     disabled={!canTick || busy}
                     onClick={() => onToggle(level.number, index, false)}
-                    title={`${card.reps} ${cap(card.label)}${penalty ? " (pénalité carte jaune)" : ""} — cocher quand c'est fait`}
-                    style={{ flex: `${Math.max(20, cardSeconds(card))} 1 0` }}
+                    title={`${card.reps} ${cap(card.label)}${gift ? " (fiche reçue d'une fusée adverse)" : penalty ? " (pénalité carte jaune)" : ""} — cocher quand c'est fait`}
+                    style={{ flex: `${Math.max(20, cardSeconds(card))} 1 0`, ...(gift ? { background: "#efe4ff", borderColor: "#a06cd5", color: "#4a1d7a" } : {}) }}
                     className={cx(
                       "min-w-[5.5rem] rounded-lg border px-1.5 py-0.5 text-left flex items-center gap-1.5 leading-tight transition active:scale-[.98] overflow-hidden",
-                      penalty ? "bg-accent-soft border-accent text-accent-ink" : "bg-card border-line-2 hover:border-brand",
+                      gift ? "" : penalty ? "bg-accent-soft border-accent text-accent-ink" : "bg-card border-line-2 hover:border-brand",
                       (!canTick || busy) && "opacity-60"
                     )}
                   >
                     <span className="font-display font-extrabold text-xl tabular-nums flex-shrink-0">{card.reps}</span>
-                    <span className="font-bold text-xs leading-tight break-words">{penalty ? "🟨 " : ""}{cap(card.label)}</span>
+                    <span className="font-bold text-xs leading-tight break-words">{gift ? "🚀 " : penalty ? "🟨 " : ""}{cap(card.label)}</span>
                   </button>
                 );
               })}
@@ -954,6 +1110,10 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
         </AnimatePresence>
       </div>
 
+      {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
+      {coins && coins.stock > 0 && !finished && (
+        <button type="button" onClick={onRocket} disabled={!canTick} className="w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 animate-bounce disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : envoyer des reps à une équipe">🚀</button>
+      )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">
         <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="w-10 h-10 rounded-lg bg-accent hover:bg-accent-hover text-ink font-display font-black text-base flex items-center justify-center disabled:opacity-30 shadow-sm" title={`Carte jaune : +${PENALTY_STEPS[Math.min(yellow, PENALTY_STEPS.length - 1)]} cordes de pénalité`}>
@@ -968,11 +1128,11 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
 // Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe. Copie client de
 // phaseExtras (level-context est un module serveur).
 function extrasFor(phases: LevelBundle["phases"], order: number): PhaseTeamTotals {
-  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0 };
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0 };
   for (const ph of phases) {
     const x = ph.byOrder[order];
     if (!x) continue;
-    agg.reps += x.reps; agg.work += x.work; agg.losses += x.losses; agg.cards += x.cards; agg.levels += x.levels;
+    agg.reps += x.reps; agg.work += x.work; agg.losses += x.losses; agg.cards += x.cards; agg.levels += x.levels; agg.coins += x.coins;
     for (const [k, v] of Object.entries(x.repsByExercise)) agg.repsByExercise[k] = (agg.repsByExercise[k] ?? 0) + v;
     if (ph.kind === "finisher") agg.score = x.score;
   }
@@ -984,7 +1144,7 @@ function phaseBreakdown(phases: LevelBundle["phases"], order: number, main: numb
   return [`WOD ${main}`, ...phases.map((ph) => `${PHASE_NAMES[ph.kind]} ${ph.byOrder[order] ? pick(ph.byOrder[order]) : 0}`)].join(" + ");
 }
 
-function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, cardsOf, extras, phases }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelOf: (teamId: string, number: number | null) => FrozenLevel | null; rankOf: Map<string, number>; starsOf: (teamId: string) => Stars; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"] }) {
+function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, cardsOf, extras, phases, coinsOf }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelOf: (teamId: string, number: number | null) => FrozenLevel | null; rankOf: Map<string, number>; starsOf: (teamId: string) => Stars; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"]; coinsOf: Map<string, CoinsState> | null }) {
   const hasFinisher = phases.some((ph) => ph.kind === "finisher");
   const hasPhases = phases.length > 0;
   // Un classement par parcours : les etoiles ne se comparent pas entre elles.
@@ -994,7 +1154,7 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, cardsOf, ext
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
+            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{coinsOf && <th className={`${ui.th} text-right`} title="Pièces gagnées (échauffement compris) · en banque">🪙</th>}{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
           </tr>
         </thead>
         <tbody>
@@ -1016,6 +1176,7 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, cardsOf, ext
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, Math.round(p.weighted), (x) => Math.round(x.work)) : undefined}>{fmtTheoretical(p.weighted + ex.work)}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.losses, (x) => x.losses) : undefined}>{p.losses + ex.losses}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, cardsOf.get(p.teamId) ?? 0, (x) => x.cards) : undefined}>{(cardsOf.get(p.teamId) ?? 0) + ex.cards}</td>
+                {coinsOf && <td className="p-2 text-right tabular-nums" title={`${coinsOf.get(p.teamId)?.earned ?? 0} gagnées au WOD + ${coinsOf.get(p.teamId)?.carry ?? 0} de l'échauffement · ${coinsOf.get(p.teamId)?.spent ?? 0} dépensées`}><b>{(coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0)}</b> <span className="text-ink-3">· {coinsOf.get(p.teamId)?.bank ?? 0}</span></td>}
                 {hasFinisher && <td className="p-2 text-right tabular-nums font-bold">{ex.score !== null ? `${ex.score} cordes` : "—"}</td>}
               </tr>
             );

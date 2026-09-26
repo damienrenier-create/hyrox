@@ -18,6 +18,7 @@ import { btn, cx, ui } from "@/lib/ui";
 import { cake } from "@/lib/birthday";
 import { fold } from "@/lib/staff-names";
 import type { PairHit } from "@/lib/teammates";
+import { STARS, starsLabel, starsName, type Stars } from "@/lib/wod-engines/templates/level-engine";
 
 // Tout ce dont le selecteur a besoin, precharge par la page : plus aucune requete pendant la frappe.
 export type PickerData = { roster: StudentHit[]; pairs: Record<string, PairHit[]> };
@@ -35,6 +36,10 @@ type Props = {
   phase: "pre" | "run" | "post";
   startByTeam?: Record<string, { number: number; label: string }>; // Pyramide : atelier de depart, annonce aux eleves
   picker: PickerData;
+  // WOD Level : parcours (etoiles) de chaque equipe, creation d'une equipe dans un parcours, attribution des numeros.
+  starsOf?: (teamId: string) => Stars;
+  onCreateStar?: (stars: Stars) => void;
+  onNumber?: () => void;
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -42,7 +47,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -192,8 +197,19 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
           <h3 className={ui.h3}>2 · Équipes <span className={counter}>({totalMembers} élève{totalMembers > 1 ? "s" : ""} · {filledTeams}/{teams.length} équipes)</span></h3>
-          <p className={ui.hint}>Touche une équipe pour y ajouter des élèves.</p>
+          <p className={ui.hint}>{onCreateStar ? "D'abord le parcours de l'équipe, puis ses élèves ; les numéros viennent à la fin." : "Touche une équipe pour y ajouter des élèves."}</p>
         </div>
+        {onCreateStar && (
+          <div className={`${ui.cardPad} mb-2 flex flex-wrap items-center gap-2`}>
+            <span className={ui.eyebrow}>Nouvelle équipe</span>
+            {[3, 2, 1].map((st) => (
+              <button key={st} type="button" disabled={pending} onClick={() => onCreateStar(st as Stars)} className={btn.primary} title={`Créer une équipe dans le parcours ${starsName(st as Stars)}`}>+ {starsLabel(st as Stars)} {starsName(st as Stars)}</button>
+            ))}
+            {onNumber && teams.some((t) => t.order >= 1000) && (
+              <button type="button" disabled={pending} onClick={onNumber} className={`${btn.accent} ml-auto`} title="Numérote toutes les équipes : 3 étoiles d'abord, puis 2, puis 1 (fait aussi automatiquement au coup d'envoi)">🔢 Attribuer les numéros</button>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
           {teams.map((team) => (
             <div
@@ -205,7 +221,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
               className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card cursor-pointer", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
               <div className="flex justify-between items-center gap-2 mb-1">
-                <span className="font-display font-bold text-lg">{team.name}</span>
+                <span className="font-display font-bold text-lg">{team.name}{starsOf && <span className="ml-1.5 text-xs text-accent-ink font-sans font-bold" title={`Parcours ${starsName(starsOf(team.id))}`}>{starsLabel(starsOf(team.id))}</span>}</span>
                 <span className="flex items-center gap-1.5 flex-shrink-0">
                   <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
                     {team.members.length} élève{team.members.length > 1 ? "s" : ""}

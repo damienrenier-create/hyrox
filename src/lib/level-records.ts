@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, fmtIntensity, fmtTheoretical, ladderFor, progressOf, readEmomScores, readLadders, readPenalties, readTeamStars, teamStarsOf, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, fmtIntensity, fmtTheoretical, ladderFor, progressOf, readEmomScores, readLadders, readPenalties, readTeamStars, teamStarsOf, warmupCoinsInPlay, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass } from "@/lib/session-roles";
@@ -35,6 +35,7 @@ type Row = {
   bossNumber: number | null;
   cards: number;
   score: number | null; // finisher : maximum de cordes
+  coins: number; // pieces gagnees (WOD ou echauffement)
 };
 
 export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsResult> {
@@ -166,6 +167,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
         levels: Math.min(p.completedLevels, lv.filter((l) => activeCards(l).length > 0).length), currentDone: p.currentDone, lastTickMs: p.lastTickMs, finishMs: p.finishedMs, losses: p.losses,
         reps: p.reps, work: p.weighted, intensity: p.reps >= MIN_REPS_FOR_INTENSITY ? p.weighted / p.reps : null,
         work30, reps30, bossMs, bossNumber, cards: (cardsBy.get(rs.id) ?? []).filter((c) => c.teamId === t.id).length, score,
+        coins: phase === "finisher" ? 0 : coinsEarned(lv, t.id, ticks, losses, readPenalties(s.settings), phase === "warmup" ? warmupCoinsInPlay : coinsInPlay).total,
       });
     }
   }
@@ -200,6 +202,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     top("work30", `⏱️ Le plus de travail en ${WINDOW_MIN} min`, "fiches cochées dans la première demi-heure", (r) => (r.work30 > 0 ? r.work30 : null), false, (v, r) => `${fmtTheoretical(v)} · ${r.reps30} reps`),
     top("boss", "👹 Le BOSS le plus rapide", "du dernier niveau bouclé à la coche du BOSS", (r) => r.bossMs, true, (v, r) => `BOSS ${r.bossNumber} en ${fmt(v)}`),
     top("cards", "🟨 Le plus de cartes jaunes", "le palmarès dont on se passerait", (r) => (r.cards > 0 ? r.cards : null), false, (v) => `${v} carte${v > 1 ? "s" : ""}`),
+    top("coins", "🪙 Le plus de pièces gagnées", "niveaux bouclés vite : pièces gagnées, dépensées ou non", (r) => (r.coins > 0 ? r.coins : null), false, (v) => `${v} pièces`),
   ];
   excluded.sort((a, b) => b.dateMs - a.dateMs);
   return { boards, excluded, grades, teamsScanned: pool.length, sessionsScanned };

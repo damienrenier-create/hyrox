@@ -48,7 +48,7 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
   await deleteAll(await db.orm.public.MineBoard.where({ sessionId }).all(), (id) => db.orm.public.MineBoard.where({ id }).delete());
   if (session.wodType === "LEVEL") {
     const prev = (session.settings as Record<string, unknown> | null) ?? {};
-    const raceKeys = ["levels", "penalties", "emomScores", "children"];
+    const raceKeys = ["levels", "penalties", "emomScores", "children", "coinEvents", "gifts", "discounts", "coinsCarry"];
     if (raceKeys.some((k) => k in prev)) {
       const rest = { ...prev };
       for (const k of raceKeys) delete rest[k];

@@ -70,6 +70,7 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const fixed = readFixedZombie(session.settings);
   const ladders = readLadders(session.settings);
   const teamStars = readTeamStars(session.settings);
+  const voided = new Set<string>(); // fiches recues (fusees) annulees par une chute
   const penalties = readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined }));
 
   // Finisher (EMOM) : une vie perdue par vague non bouclee a sa fin ; les coches restent (les vagues
@@ -121,7 +122,15 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
       ticks = ticks.filter((x) => !doomed.includes(x));
       losses.push({ teamId: t.id, level: p.currentLevel, atMs: deadline });
       applied++;
+      // Les fiches recues d'une fusee qui ne sont pas dans un niveau encore boucle apres la chute sont effacees.
+      const kept = new Set(seq.slice(0, Math.max(0, at - 1)));
+      for (const g of penalties) if (g.kind === "gift" && g.teamId === t.id && g.id && !kept.has(g.level)) voided.add(g.id);
     }
+  }
+  if (voided.size) {
+    const prev = (session.settings as Record<string, unknown> | null) ?? {};
+    const gifts = (Array.isArray(prev.gifts) ? (prev.gifts as Record<string, unknown>[]) : []).map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g));
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, gifts })) });
   }
   return applied;
 }

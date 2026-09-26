@@ -110,19 +110,39 @@ export const activeCards = (l: FrozenLevel) => l.cards.map((c, i) => ({ card: c,
 // Session.settings.penalties et portent un index >= 100 (jamais en collision avec les fiches de l'echelle).
 export const PENALTY_STEPS = [10, 20, 30, 40, 50, 100, 200, 300, 400, 500, 1000];
 export const PENALTY_INDEX0 = 100;
-export type TeamPenalty = { teamId: string; level: number; index: number; reps: number; label: string; weight: number; at?: number; atMs?: number }; // at = epoch ms de la carte, atMs = chrono de course (derive)
+// Un « extra » de niveau propre a une equipe (Sartay 25-26/09) :
+// - penalty : fiche de penalite d'une carte jaune (index >= 100) ;
+// - gift : fiche recue d'une fusee adverse (index >= 200), rattachee au niveau que l'equipe atteint apres l'envoi ;
+// - discount : allegement paye en pieces sur une fiche de l'echelle (reps NEGATIVES, appliquees a la fiche index).
+// at = epoch ms, atMs = chrono de course (derive). Les trois vivent dans settings.penalties / gifts / discounts et
+// sont lus ensemble par readPenalties, pour que tout le moteur (progression, zombie, records) les voie.
+export type ExtraKind = "penalty" | "gift" | "discount";
+export type TeamPenalty = { teamId: string; level: number; index: number; reps: number; label: string; weight: number; at?: number; atMs?: number; kind?: ExtraKind; id?: string; fromTeamId?: string; exerciseId?: string; void?: boolean };
+const isExtra = (p: unknown): p is TeamPenalty => !!p && typeof p === "object" && typeof (p as TeamPenalty).teamId === "string" && typeof (p as TeamPenalty).level === "number" && typeof (p as TeamPenalty).index === "number" && typeof (p as TeamPenalty).reps === "number";
 export function readPenalties(settings: unknown): TeamPenalty[] {
-  const raw = (settings as { penalties?: unknown } | null)?.penalties;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((p): p is TeamPenalty => !!p && typeof p === "object" && typeof (p as TeamPenalty).teamId === "string" && typeof (p as TeamPenalty).level === "number" && typeof (p as TeamPenalty).index === "number" && typeof (p as TeamPenalty).reps === "number");
+  const s = settings as { penalties?: unknown; gifts?: unknown; discounts?: unknown } | null;
+  const pen = (Array.isArray(s?.penalties) ? s!.penalties : []).filter(isExtra).map((p) => ({ ...p, kind: "penalty" as const }));
+  const gifts = (Array.isArray(s?.gifts) ? s!.gifts : []).filter(isExtra).filter((g) => !g.void).map((g) => ({ ...g, kind: "gift" as const }));
+  const disc = (Array.isArray(s?.discounts) ? s!.discounts : []).filter(isExtra).map((d) => ({ ...d, kind: "discount" as const }));
+  return [...pen, ...gifts, ...disc];
 }
-export type TeamCard = { card: FrozenCard; index: number; penalty: boolean };
-// Fiches d'un niveau POUR UNE EQUIPE : celles de l'echelle, puis ses penalites sur ce niveau.
+// Toutes les fiches recues (y compris annulees) : pour l'historique et l'ecran.
+export function readGifts(settings: unknown): TeamPenalty[] {
+  const raw = (settings as { gifts?: unknown } | null)?.gifts;
+  return (Array.isArray(raw) ? raw : []).filter(isExtra).map((g) => ({ ...g, kind: "gift" as const }));
+}
+export type TeamCard = { card: FrozenCard; index: number; penalty: boolean; kind: "base" | "penalty" | "gift" };
+// Fiches d'un niveau POUR UNE EQUIPE : celles de l'echelle (allegees de ses achats, jamais sous 1 rep), puis ses
+// penalites et ses fiches recues sur ce niveau.
 export function cardsForTeam(level: FrozenLevel, teamId: string, penalties: TeamPenalty[] = []): TeamCard[] {
-  const base: TeamCard[] = activeCards(level).map((x) => ({ ...x, penalty: false }));
-  const extra: TeamCard[] = penalties
-    .filter((p) => p.teamId === teamId && p.level === level.number)
-    .map((p) => ({ card: { exerciseId: "PENALTY", label: p.label, reps: p.reps, weight: p.weight }, index: p.index, penalty: true }));
+  const mine = penalties.filter((p) => p.teamId === teamId && p.level === level.number);
+  const base: TeamCard[] = activeCards(level).map((x) => {
+    const off = mine.filter((p) => p.kind === "discount" && p.index === x.index).reduce((s, p) => s + p.reps, 0);
+    return { card: off ? { ...x.card, reps: Math.max(1, x.card.reps + off) } : x.card, index: x.index, penalty: false, kind: "base" as const };
+  });
+  const extra: TeamCard[] = mine
+    .filter((p) => p.kind !== "discount")
+    .map((p) => ({ card: { exerciseId: p.exerciseId ?? "PENALTY", label: p.label, reps: p.reps, weight: p.weight }, index: p.index, penalty: true, kind: p.kind === "gift" ? ("gift" as const) : ("penalty" as const) }));
   return [...base, ...extra];
 }
 export const cardSeconds = (c: { reps: number; weight: number }) => c.reps * c.weight;
@@ -491,6 +511,107 @@ export function emomZombieSim(waveMs: number, n: number, totalSec: number, event
   const bites = Math.min(HEART_BITES, Math.floor((eaten / eatMs) * HEART_BITES));
   const catchAt = !done && n > 0 && sinceMs >= waveMs ? waveMs : null;
   return { zombie, heart, contact, bites, eatMs, eatenMs: eaten, catchAtMs: catchAt, done, remainingMs: done ? Infinity : Math.max(0, waveMs - since) };
+}
+
+// ===== Pieces et fusees (Sartay 26/09) =====
+// Boucler un niveau rapporte des pieces selon le TEMPS RESTANT par rapport au temps theorique du niveau
+// (somme reps x ponderation, en secondes, fiches de l'equipe comprises) : 90-100 % restants = 100 % des
+// pieces, 80-89 % = 90 %, ... 0-9 % = 10 %, temps depasse = 0. Pieces en jeu = 10 x numero du niveau
+// (echauffement : 10 par serie, 20 au BOSS). Gains arrondis vers le bas. Les pieces gagnees ne baissent jamais
+// (elles comptent au classement) ; la banque = gagnees + report de l'echauffement - depenses.
+export const ROCKET_PRICE = 100;
+export const MASTERY_COUNT = 3; // un exercice fait 3 fois (3 fiches cochees) devient envoyable
+export const DISCOUNT_STEPS = [5, 10, 25, 50, 100]; // reps retirees d'un coup a la fiche la plus a droite
+export const SEND_WORK_STEPS = [50, 100, 150, 200, 300]; // secondes de travail envoyees par la fusee
+export const coinsInPlay = (levelNumber: number) => 10 * levelNumber;
+export const warmupCoinsInPlay = (levelNumber: number) => (isBoss(levelNumber) ? 20 : 10);
+export const coinsPct = (remaining: number) => (remaining <= 0 ? 0 : Math.min(100, Math.ceil(remaining * 10 - 1e-9) * 10));
+export type CoinLevel = { level: number; coins: number; pct: number; elapsedMs: number; workMs: number };
+export type CoinsEarned = { total: number; perLevel: CoinLevel[] };
+// Pieces gagnees par une equipe, deduites des coches (rien a stocker) : pour chaque niveau boucle, dans l'ordre
+// de l'equipe, le temps entre le depart de sa tentative (fin du niveau precedent ou derniere vie perdue) et sa
+// derniere coche, rapporte au temps theorique du niveau tel qu'elle l'a joue.
+export function coinsEarned(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[] = [], extras: TeamPenalty[] = [], inPlay: (levelNumber: number) => number = coinsInPlay): CoinsEarned {
+  const mine = ticks.filter((t) => t.teamId === teamId);
+  const myLosses = losses.filter((l) => l.teamId === teamId).map((l) => l.atMs);
+  const perLevel: CoinLevel[] = [];
+  let prevEnd = 0;
+  let total = 0;
+  for (const l of levels) {
+    const cards = cardsForTeam(l, teamId, extras);
+    if (!cards.length) continue;
+    const ticked = cards.map(({ index }) => mine.find((t) => t.level === l.number && t.card === index)).filter((t): t is Tick => !!t);
+    if (ticked.length < cards.length) break;
+    const lastTick = Math.max(...ticked.map((t) => t.atMs));
+    const start = Math.max(prevEnd, ...myLosses.filter((a) => a < lastTick));
+    const elapsedMs = Math.max(0, lastTick - start);
+    const workMs = cards.reduce((s, x) => s + cardSeconds(x.card), 0) * 1000;
+    const pct = coinsPct(workMs > 0 ? (workMs - elapsedMs) / workMs : 0);
+    const coins = Math.floor((inPlay(l.number) * pct) / 100);
+    perLevel.push({ level: l.number, coins, pct, elapsedMs, workMs });
+    total += coins;
+    prevEnd = lastTick;
+  }
+  return { total, perLevel };
+}
+export type CoinEvent = { id: string; teamId: string; kind: "discount" | "rocket" | "send"; coins: number; at: number; toTeamId?: string; label?: string; reps?: number; giftId?: string; level?: number; index?: number };
+export function readCoinEvents(settings: unknown): CoinEvent[] {
+  const raw = (settings as { coinEvents?: unknown } | null)?.coinEvents;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((e): e is CoinEvent => !!e && typeof e === "object" && typeof (e as CoinEvent).teamId === "string" && typeof (e as CoinEvent).coins === "number" && ["discount", "rocket", "send"].includes((e as CoinEvent).kind));
+}
+export function readCoinsCarry(settings: unknown): Record<string, number> {
+  const raw = (settings as { coinsCarry?: unknown } | null)?.coinsCarry;
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === "number" && v >= 0) out[k] = Math.floor(v);
+  return out;
+}
+export type CoinsState = { earned: number; carry: number; spent: number; bank: number; rockets: number; sends: number; stock: number; perLevel: CoinLevel[] };
+export function coinsState(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[], extras: TeamPenalty[], events: CoinEvent[], carry: Record<string, number>, inPlay: (levelNumber: number) => number = coinsInPlay): CoinsState {
+  const e = coinsEarned(levels, teamId, ticks, losses, extras, inPlay);
+  const mine = events.filter((x) => x.teamId === teamId);
+  const spent = mine.reduce((s, x) => s + x.coins, 0);
+  const rockets = mine.filter((x) => x.kind === "rocket").length;
+  const sends = mine.filter((x) => x.kind === "send").length;
+  const c = carry[teamId] ?? 0;
+  return { earned: e.total, carry: c, spent, bank: Math.max(0, e.total + c - spent), rockets, sends, stock: Math.max(0, rockets - sends), perLevel: e.perLevel };
+}
+// Reps « rondes » pour une duree de travail : dizaines (ponderation <= 3), multiples de 5 (4 a 8), unites au-dela.
+export function roundRepsFor(weight: number, seconds: number): number {
+  const step = weight <= 3 ? 10 : weight <= 8 ? 5 : 1;
+  return Math.max(step, Math.round(seconds / weight / step) * step);
+}
+// Exercices maitrises par une equipe : au moins MASTERY_COUNT fiches cochees de cet exercice (echelle et fiches recues).
+export type Mastered = { exerciseId: string; label: string; weight: number; count: number };
+export function masteredExercises(levels: FrozenLevel[], teamId: string, ticks: Tick[], extras: TeamPenalty[] = []): Mastered[] {
+  const mine = new Set(ticks.filter((t) => t.teamId === teamId).map((t) => `${t.level}_${t.card}`));
+  const m = new Map<string, Mastered>();
+  for (const l of levels) for (const { card, index, kind } of cardsForTeam(l, teamId, extras)) {
+    if (kind === "penalty" || !mine.has(`${l.number}_${index}`)) continue;
+    const cur = m.get(card.label) ?? { exerciseId: card.exerciseId, label: card.label, weight: card.weight, count: 0 };
+    cur.count++;
+    m.set(card.label, cur);
+  }
+  return [...m.values()].filter((x) => x.count >= MASTERY_COUNT).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+// Choix d'envoi pour un exercice : reps rondes par palier de travail, avec leur prix (reps x ponderation).
+export const sendOptions = (weight: number) => [...new Set(SEND_WORK_STEPS.map((w) => roundRepsFor(weight, w)))].map((reps) => ({ reps, price: reps * weight }));
+// La fiche la plus a droite de la ligne = la fiche de l'echelle restante la plus longue (les penalites et les
+// fiches recues sont a gauche, juste derriere le coeur) : c'est elle que les pieces allegent.
+export function rightmostCard(level: FrozenLevel, teamId: string, extras: TeamPenalty[], doneCards: Set<string>): TeamCard | null {
+  return cardsForTeam(level, teamId, extras)
+    .filter((x) => x.kind === "base" && !doneCards.has(`${level.number}_${x.index}`) && x.card.reps > 1)
+    .sort((a, b) => cardSeconds(b.card) - cardSeconds(a.card) || b.card.reps - a.card.reps || a.index - b.index)[0] ?? null;
+}
+// Cibles d'une fusee : meme parcours que l'expediteur (sauf s'il y a moins de deux adversaires dans ce parcours :
+// tout le monde), jamais la derniere equipe de son parcours, jamais soi-meme, jamais une equipe arrivee au bout.
+export function rocketTargets<T extends { teamId: string; stars: Stars; rankInStars: number; groupSize: number; finished: boolean }>(fromTeamId: string, teams: T[]): T[] {
+  const me = teams.find((t) => t.teamId === fromTeamId);
+  if (!me) return [];
+  const sameGroup = teams.filter((t) => t.stars === me.stars && t.teamId !== fromTeamId);
+  const pool = sameGroup.length >= 2 ? sameGroup : teams.filter((t) => t.teamId !== fromTeamId);
+  return pool.filter((t) => !t.finished && !(t.groupSize > 1 && t.rankInStars === t.groupSize));
 }
 
 // Libelle court d'un niveau pour les tuiles et les classements.
