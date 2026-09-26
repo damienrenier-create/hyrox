@@ -11,7 +11,7 @@ export type ChildKind = "warmup" | "finisher";
 export type SeriesDef = { name: string; boss?: boolean; cards: [label: string, reps: number][] };
 
 export const WARMUP_SERIES: SeriesDef[] = [
-  { name: "Série A", cards: [["SMASH DOWN", 20], ["CORDE", 100], ["ONE REP", 20]] },
+  { name: "Série A", cards: [["SMASH DOWN", 20], ["CORDE", 100], ["ONE REP", 30]] },
   { name: "Série B", cards: [["WALL BALL SHOT", 20], ["FLIP TAPIS", 20], ["KB SWING", 50], ["CORDE", 10]] },
   { name: "Série C", cards: [["POMPES", 30], ["WALL BALL SHOT", 30], ["TRACTIONS", 30]] },
   { name: "Série D", cards: [["SMASH DOWN", 30], ["BREAK DANCE", 20], ["KB SNATCH", 60]] },
