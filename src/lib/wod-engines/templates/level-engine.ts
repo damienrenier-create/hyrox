@@ -614,7 +614,8 @@ export function rocketTargets<T extends { teamId: string; stars: Stars; rankInSt
   if (!me) return [];
   const sameGroup = teams.filter((t) => t.stars === me.stars && t.teamId !== fromTeamId);
   const pool = sameGroup.length >= 2 ? sameGroup : teams.filter((t) => t.teamId !== fromTeamId);
-  return pool.filter((t) => !t.finished && !(t.groupSize > 1 && t.rankInStars === t.groupSize));
+  // La derniere equipe d'un parcours est intouchable, meme si elle y est seule (elle est alors aussi la derniere).
+  return pool.filter((t) => !t.finished && t.rankInStars !== t.groupSize);
 }
 
 // Libelle court d'un niveau pour les tuiles et les classements.
