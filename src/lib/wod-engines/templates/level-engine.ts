@@ -411,13 +411,16 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
   };
 }
 
-// Classement : niveaux boucles, puis le moins de vies perdues, puis fiches cochees dans le niveau en cours,
-// puis la derniere coche la plus tot (a egalite de travail, la plus rapide gagne).
-export function rankTeams(progress: TeamProgress[]): TeamProgress[] {
+// Classement : niveaux boucles, puis le moins de vies perdues, puis le plus de pieces gagnees (Sartay 26/09,
+// echauffement compris, depenses ou non), puis fiches cochees dans le niveau en cours, puis la derniere coche
+// la plus tot (a egalite de travail, la plus rapide gagne).
+export function rankTeams(progress: TeamProgress[], coinsOf?: (teamId: string) => number): TeamProgress[] {
+  const c = (p: TeamProgress) => coinsOf?.(p.teamId) ?? 0;
   return [...progress].sort(
     (a, b) =>
       b.completedLevels - a.completedLevels ||
       a.losses - b.losses ||
+      c(b) - c(a) ||
       b.currentDone - a.currentDone ||
       (a.lastTickMs ?? Number.POSITIVE_INFINITY) - (b.lastTickMs ?? Number.POSITIVE_INFINITY)
   );

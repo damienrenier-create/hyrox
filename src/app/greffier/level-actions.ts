@@ -316,7 +316,7 @@ export async function sendRocketAction(sessionId: string, teamId: string, exerci
   // Cibles : rang dans le parcours, taille du groupe, equipes arrivees au bout.
   const teamStars = readTeamStars(session.settings);
   const progress = ctx.teams.map((t) => progressOf(teamLadder(session.settings, t.id), t.id, ticks, losses, extras));
-  const ranked = rankTeams(progress);
+  const ranked = rankTeams(progress, (id) => bankOf(session.settings, id, ticks, losses).earned + (readCoinsCarry(session.settings)[id] ?? 0));
   const rows = ctx.teams.map((t) => {
     const stars = teamStarsOf(teamStars, t.id);
     const group = ranked.filter((p) => teamStarsOf(teamStars, p.teamId) === stars);

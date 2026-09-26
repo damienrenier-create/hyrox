@@ -215,7 +215,9 @@ export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "
 }
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
-  return rankTeams(bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties)));
+  const inPlay = bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay;
+  const coins = (teamId: string) => bundle.emom ? 0 : coinsEarned(levelsForTeam(bundle, teamId), teamId, bundle.ticks, bundle.losses, bundle.penalties, inPlay).total + (bundle.coinsCarry[teamId] ?? 0);
+  return rankTeams(bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties)), coins);
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.

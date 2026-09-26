@@ -176,7 +176,9 @@ export function LevelClient({
   const levelOf = useCallback((teamId: string, number: number | null) => (number === null ? null : ladderOf(teamId).find((l) => l.number === number) ?? null), [ladderOf]);
   const allLevels = useMemo(() => [levels, ...Object.values(bundle.ladders)].flat(), [levels, bundle.ladders]);
   const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, live.losses, live.penalties)])), [teams, ladderOf, ticks, live.losses, live.penalties]);
-  const ranked = useMemo(() => rankTeams([...progress.values()]), [progress]);
+  // Classement : niveaux, vies, pieces gagnees (echauffement compris), fiches, rapidite.
+  const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.earned + st.carry); } return m; }, [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
+  const ranked = useMemo(() => rankTeams([...progress.values()], (id) => coinsForRank.get(id) ?? 0), [progress, coinsForRank]);
   // Rang DANS SON PARCOURS : un niveau 12 du 1 etoile ne se compare pas a un niveau 10 du 3 etoiles.
   const rankOf = useMemo(() => {
     const m = new Map<string, number>();
