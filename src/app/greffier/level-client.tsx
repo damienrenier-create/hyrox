@@ -199,17 +199,21 @@ export function LevelClient({
     void discountAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
   const [rocketFor, setRocketFor] = useState<string | null>(null);
-  const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
-  function launchRocket(fromId: string, exerciseId: string, reps: number, toId: string) {
+  const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
+  // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
+  const [impact, setImpact] = useState<{ id: number; teamId: string; text: string } | null>(null);
+  function launchRocket(fromId: string, exerciseId: string, reps: number, toId: string, label: string) {
     setError("");
     void sendRocketAction(sessionId, fromId, exerciseId, reps, toId).then((res) => {
       if ("error" in res) { setError(res.error); return; }
       setRocketFor(null);
       mergeTeam(res.team);
-      // La fusee decolle de la ligne de l'expediteur et vient toucher la ligne de la cible.
+      // La fusee decolle de la ligne de l'expediteur, monte en arc et vient percuter la ligne de la cible.
       const a = document.getElementById(`team-row-${fromId}`)?.getBoundingClientRect();
       const b = document.getElementById(`team-row-${toId}`)?.getBoundingClientRect();
-      if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 } });
+      const text = `💥 +${reps} ${cap(label)} reçus de ${teamById.get(fromId)?.name ?? "l'adversaire"}`;
+      if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 }, toId, text });
+      else setImpact({ id: Date.now(), teamId: toId, text });
       // La cible a une nouvelle fiche : relecture complete de l'etat vivant.
       void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     });
@@ -454,6 +458,7 @@ export function LevelClient({
                               raceMs={zombieMs}
                               running={phase === "run" && !isPaused && !timeUp}
                               coins={coinsOn ? coinsOf.get(t.id) ?? null : null}
+                              impact={impact?.teamId === t.id ? impact : null}
                               onDiscount={(reps) => discount(t.id, reps)}
                               onRocket={() => setRocketFor(t.id)}
                               onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
@@ -468,7 +473,15 @@ export function LevelClient({
               </div>
               <AnimatePresence>
                 {flight && (
-                  <motion.span key={flight.id} initial={{ x: flight.from.x, y: flight.from.y, rotate: 0, scale: 1 }} animate={{ x: flight.to.x, y: flight.to.y, rotate: [0, -20, 0], scale: [1, 1.4, 1] }} exit={{ opacity: 0, scale: 2 }} transition={{ duration: 1.2, ease: "easeInOut" }} onAnimationComplete={() => setTimeout(() => setFlight(null), 250)} className="fixed left-0 top-0 z-50 text-4xl pointer-events-none drop-shadow-lg">🚀</motion.span>
+                  <motion.span
+                    key={flight.id}
+                    initial={{ x: flight.from.x, y: flight.from.y, rotate: -10, scale: 0.8, opacity: 1 }}
+                    animate={{ x: [flight.from.x, (flight.from.x + flight.to.x) / 2, flight.to.x], y: [flight.from.y, Math.min(flight.from.y, flight.to.y) - 160, flight.to.y], rotate: [-10, -40, 30], scale: [0.8, 1.7, 1] }}
+                    exit={{ opacity: 0, scale: 2.5 }}
+                    transition={{ duration: 1.4, ease: "easeInOut", times: [0, 0.5, 1] }}
+                    onAnimationComplete={() => { setImpact({ id: Date.now(), teamId: flight.toId, text: flight.text }); setTimeout(() => setFlight(null), 120); }}
+                    className="fixed left-0 top-0 z-50 text-4xl pointer-events-none drop-shadow-lg"
+                  >🚀</motion.span>
                 )}
               </AnimatePresence>
               {rocketFor && (
@@ -479,7 +492,7 @@ export function LevelClient({
                   mastered={masteredExercises(ladderOf(rocketFor), rocketFor, ticks, live.penalties)}
                   targets={rocketTargets(rocketFor, rocketRows).map((r) => ({ id: r.teamId, name: teamById.get(r.teamId)?.name ?? "?", stars: r.stars, rank: r.rankInStars }))}
                   sameGroupOnly={rocketRows.filter((r) => r.stars === starsOf(rocketFor) && r.teamId !== rocketFor).length >= 2}
-                  onSend={(exerciseId, reps, toId) => launchRocket(rocketFor, exerciseId, reps, toId)}
+                  onSend={(exerciseId, reps, toId, label) => launchRocket(rocketFor, exerciseId, reps, toId, label)}
                   onClose={() => setRocketFor(null)}
                 />
               )}
@@ -735,7 +748,7 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
 // manque d'adversaires, jamais la derniere, jamais une equipe arrivee au bout).
 function RocketMenu({ team, stars, coins, mastered, targets, sameGroupOnly, onSend, onClose }: {
   team: LevelTeam; stars: Stars; coins: CoinsState | null; mastered: ReturnType<typeof masteredExercises>; targets: { id: string; name: string; stars: Stars; rank: number }[]; sameGroupOnly: boolean;
-  onSend: (exerciseId: string, reps: number, toId: string) => void; onClose: () => void;
+  onSend: (exerciseId: string, reps: number, toId: string, label: string) => void; onClose: () => void;
 }) {
   const [pick, setPick] = useState<{ exerciseId: string; reps: number; price: number; label: string } | null>(null);
   const bank = coins?.bank ?? 0;
@@ -772,7 +785,7 @@ function RocketMenu({ team, stars, coins, mastered, targets, sameGroupOnly, onSe
           {targets.length === 0 ? <p className={ui.hint}>Aucune cible possible.</p> : (
             <div className="flex flex-wrap gap-1.5">
               {targets.map((t) => (
-                <button key={t.id} type="button" disabled={!pick} onClick={() => pick && onSend(pick.exerciseId, pick.reps, t.id)} className={cx(btn.primary, "disabled:opacity-40")} title={pick ? `Envoyer ${pick.reps} ${cap(pick.label)} à ${t.name} pour ${pick.price} pièces` : "Choisis d'abord un exercice et une quantité"}>
+                <button key={t.id} type="button" disabled={!pick} onClick={() => pick && onSend(pick.exerciseId, pick.reps, t.id, pick.label)} className={cx(btn.primary, "disabled:opacity-40")} title={pick ? `Envoyer ${pick.reps} ${cap(pick.label)} à ${t.name} pour ${pick.price} pièces` : "Choisis d'abord un exercice et une quantité"}>
                   {t.name} <span className="text-[10px] opacity-80">{starsLabel(t.stars)} #{t.rank}</span>
                 </button>
               ))}
@@ -909,13 +922,14 @@ const rankStyle = (rank: number) =>
 
 const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
 
-function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, onDiscount, onRocket, onToggle, onYellow }: {
+function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
   stars: Stars;
   rank: number;
   coins?: CoinsState | null;
+  impact?: { id: number; text: string } | null;
   onDiscount?: (reps: number) => void;
   onRocket?: () => void;
   teamsCount: number;
@@ -995,20 +1009,89 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
     return () => clearTimeout(h);
   }, [toast]);
 
+  // ----- Pack d'animations : pieces gagnees, niveau gagne, morsure, rang, fusee construite, impact, arrivee -----
+  const [coinBurst, setCoinBurst] = useState<{ id: number; delta: number; pct: number; dots: { x: number; y: number; d: number }[] } | null>(null);
+  const prevEarned = useRef<number | null>(null);
+  useEffect(() => {
+    const earned = coins ? coins.earned + coins.carry : null;
+    if (earned === null) return;
+    if (prevEarned.current !== null && earned > prevEarned.current) {
+      const delta = earned - prevEarned.current;
+      const pct = coins?.perLevel.at(-1)?.pct ?? 0;
+      const n = Math.min(14, 4 + Math.ceil(delta / 8));
+      setCoinBurst({ id: Date.now(), delta, pct, dots: Array.from({ length: n }, (_, i) => ({ x: 45 + ((i * 37) % 50), y: -18 + ((i * 23) % 36), d: (i % 5) * 0.06 })) });
+    }
+    prevEarned.current = earned;
+  }, [coins]);
+  useEffect(() => {
+    if (!coinBurst) return;
+    const h = setTimeout(() => setCoinBurst(null), 1900);
+    return () => clearTimeout(h);
+  }, [coinBurst]);
+  const [levelFlash, setLevelFlash] = useState(false);
+  const prevLevelUp = useRef<{ level: number | null; losses: number } | null>(null);
+  useEffect(() => {
+    const old = prevLevelUp.current;
+    prevLevelUp.current = { level: p.currentLevel, losses: p.losses };
+    if (!old || old.losses !== p.losses) return;
+    const up = (p.currentLevel === null && old.level !== null) || (p.currentLevel !== null && old.level !== null && p.currentLevel > old.level);
+    if (up) { setLevelFlash(true); setTimeout(() => setLevelFlash(false), 1200); }
+  }, [p.currentLevel, p.losses]);
+  const [biteShake, setBiteShake] = useState(false);
+  const prevBites = useRef(0);
+  useEffect(() => {
+    const b = geo?.bites ?? 0;
+    if (b > prevBites.current) { setBiteShake(true); setTimeout(() => setBiteShake(false), 500); }
+    prevBites.current = b;
+  }, [geo?.bites]);
+  const [rankDelta, setRankDelta] = useState<"up" | "down" | null>(null);
+  const prevRank = useRef(rank);
+  useEffect(() => {
+    if (prevRank.current > 0 && rank > 0 && rank !== prevRank.current) { setRankDelta(rank < prevRank.current ? "up" : "down"); setTimeout(() => setRankDelta(null), 1600); }
+    prevRank.current = rank;
+  }, [rank]);
+  const prevStock = useRef(coins?.stock ?? 0);
+  useEffect(() => {
+    const s = coins?.stock ?? 0;
+    if (s > prevStock.current) setToast({ id: Date.now(), text: "🚀 Fusée construite : prête à décoller !", bad: false });
+    prevStock.current = s;
+  }, [coins?.stock]);
+  const [shaking, setShaking] = useState(false);
+  const lastImpact = useRef<number | null>(null);
+  useEffect(() => {
+    if (!impact || impact.id === lastImpact.current) return;
+    lastImpact.current = impact.id;
+    setShaking(true);
+    setToast({ id: impact.id, text: impact.text, bad: true });
+    const h = setTimeout(() => setShaking(false), 700);
+    return () => clearTimeout(h);
+  }, [impact]);
+  const [confetti, setConfetti] = useState(false);
+  const prevFinished = useRef(finished);
+  useEffect(() => {
+    if (finished && !prevFinished.current) { setConfetti(true); setToast({ id: Date.now(), text: "🏁 Échelle bouclée !", bad: false }); setTimeout(() => setConfetti(false), 3200); }
+    prevFinished.current = finished;
+  }, [finished]);
+
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
-      className={cx(ui.card, "relative px-2 py-1 flex items-center gap-2 min-w-0 h-20 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse")}
+      className={cx(ui.card, "relative px-2 py-1 flex items-center gap-2 min-w-0 h-20 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse", levelFlash && "levelup", shaking && "shake")}
     >
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
       <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
-        <span className={cx("w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
+        <span className={cx("relative w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
           {rank > 0 ? (
             <>
               <span className="text-[9px] font-bold tracking-widest opacity-70">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "RANG"}</span>
               <span className="text-2xl">#<Odometer value={rank} /></span>
             </>
           ) : "—"}
+          <AnimatePresence>
+            {rankDelta && (
+              <motion.span key={rankDelta} initial={{ opacity: 0, y: rankDelta === "up" ? 10 : -10, scale: 0.6 }} animate={{ opacity: 1, y: rankDelta === "up" ? -22 : 22, scale: 1.2 }} exit={{ opacity: 0 }} transition={{ duration: 0.9 }} className={cx("absolute -right-2 top-1/2 text-xl font-black pointer-events-none", rankDelta === "up" ? "text-success-ink" : "text-danger-ink")}>{rankDelta === "up" ? "▲" : "▼"}</motion.span>
+            )}
+          </AnimatePresence>
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 min-w-0">
@@ -1032,7 +1115,7 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
             <span><Odometer value={p.reps} className="font-bold text-ink text-sm" /> reps</span>
             {coins && (
               <span className="relative">
-                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold text-[11px] border", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
+                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold text-[11px] border", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3", coinBurst && "coinpulse")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
                   🪙<Odometer value={coins.bank} />
                 </button>
                 {coinOpen && (
@@ -1058,6 +1141,18 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
 
       {/* Piste : numero en filigrane, zombie a gauche, coeur devant les fiches restantes (largeur = duree). */}
       <div className="relative flex-1 h-full min-w-0">
+        {/* Pluie de pieces vers la banque (niveau boucle) et confettis (echelle bouclee). */}
+        <AnimatePresence>
+          {coinBurst && coinBurst.dots.map((d, i) => (
+            <motion.span key={`${coinBurst.id}_${i}`} initial={{ left: `${d.x}%`, top: `calc(50% + ${d.y}px)`, opacity: 0, scale: 0.4 }} animate={{ left: "-12px", top: "50%", opacity: [0, 1, 1, 0], scale: [0.4, 1.2, 1, 0.5] }} exit={{ opacity: 0 }} transition={{ duration: 1.1, delay: d.d, ease: "easeIn" }} className="absolute z-20 text-lg pointer-events-none">🪙</motion.span>
+          ))}
+          {coinBurst && (
+            <motion.span key={`lbl${coinBurst.id}`} initial={{ opacity: 0, y: 6, scale: 0.7 }} animate={{ opacity: [0, 1, 1, 0], y: -34, scale: 1.1 }} transition={{ duration: 1.8 }} className="absolute left-2 top-1/2 z-30 rounded-full bg-accent text-ink font-display font-black text-sm px-2 py-0.5 shadow-pop pointer-events-none whitespace-nowrap">+{coinBurst.delta} 🪙 · {coinBurst.pct} % du temps restant</motion.span>
+          )}
+          {confetti && Array.from({ length: 14 }, (_, i) => (
+            <motion.span key={`cf${i}`} initial={{ left: `${4 + ((i * 29) % 92)}%`, top: -16, opacity: 1, rotate: 0 }} animate={{ top: 90, opacity: [1, 1, 0], rotate: (i % 2 ? 1 : -1) * 260 }} exit={{ opacity: 0 }} transition={{ duration: 2.4 + (i % 4) * 0.3, delay: (i % 6) * 0.1, ease: "easeIn" }} className="absolute z-20 text-xl pointer-events-none">{["🎉", "✨", "🏁", "⭐"][i % 4]}</motion.span>
+          ))}
+        </AnimatePresence>
         <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-0 flex items-baseline gap-1 select-none pointer-events-none">
           <span className="font-display font-black text-[0.9rem] tracking-[0.2em] text-ink/35 uppercase">Équipe</span>
           <span className="font-display font-black text-[3rem] leading-none text-ink/35">{team.order}</span>
@@ -1069,7 +1164,7 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
                 <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${zx * 100}% - ${zombieShift}px)`, transition: "left 1s linear" }}>
                   {boss ? <Horde tiers={horde} moving={running && !geo.contact && !lostFlash} /> : <Zombie kind={kind} moving={running && !geo.contact && !lostFlash} />}
                 </div>
-                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300" style={{ left: `${geo.heart * 100}%` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
+                <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300", biteShake && "bite")} style={{ left: `${geo.heart * 100}%` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
                   <Heart state={lostFlash ? HEART_STATES - 1 : geo.bites} beating={geo.contact || lostFlash} />
                 </div>
               </>
@@ -1114,7 +1209,7 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
 
       {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
       {coins && coins.stock > 0 && !finished && (
-        <button type="button" onClick={onRocket} disabled={!canTick} className="w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 animate-bounce disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : envoyer des reps à une équipe">🚀</button>
+        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : envoyer des reps à une équipe"><span className="inline-block animate-bounce">🚀</span></button>
       )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">

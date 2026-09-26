@@ -100,3 +100,14 @@ button,
 .zbob { animation: zbob 0.5s ease-in-out infinite; display: inline-block; }
 @keyframes heartbeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
 .heartbeat { animation: heartbeat 0.6s ease-in-out infinite; }
+/* Pack d'animations du greffier Level (26/09) : impact de fusee, niveau gagne, morsure, pieces, fusee construite. */
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px); } 40% { transform: translateX(9px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
+.shake { animation: shake 0.6s ease-in-out; }
+@keyframes levelup { 0% { box-shadow: 0 0 0 0 rgba(212, 160, 23, 0); background-color: #fff1bd; } 50% { box-shadow: 0 0 0 12px rgba(212, 160, 23, 0.25); } 100% { box-shadow: 0 0 0 0 rgba(212, 160, 23, 0); } }
+.levelup { animation: levelup 1.2s ease-out; }
+@keyframes bite { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-16deg) scale(1.15); } 75% { transform: rotate(12deg) scale(0.92); } }
+.bite { animation: bite 0.45s ease-in-out; }
+@keyframes coinpulse { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.4); background-color: #ffe28a; } }
+.coinpulse { animation: coinpulse 0.9s ease-out; }
+@keyframes rocketpop { 0% { transform: scale(0) rotate(-40deg); } 60% { transform: scale(1.35) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+.rocketpop { animation: rocketpop 0.7s cubic-bezier(0.2, 1.4, 0.5, 1); }
