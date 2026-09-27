@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ExerciseRow, LevelRow } from "@/lib/level";
 import {
-  BOSS_EVERY, DEFAULT_TEAM, MAX_CARDS, STARS, estimateSeconds, fmtIntensity, fmtTheoretical, isBoss, starsLabel, starsName, statsOf, type LevelCard, type Stars,
+  BOSS_EVERY, FORMATS, MAX_CARDS, STARS, estimateSeconds, fmtIntensity, fmtTheoretical, formatLabel, formatName, isBoss, starsLabel, starsName, statsOf, teamSizeOf, type Format, type LevelCard, type Stars,
 } from "@/lib/wod-engines/templates/level-engine";
 import { PROPOSALS, STAR_PROPOSAL } from "@/lib/level-proposals";
 import {
-  createExerciseAction, createLevelAction, deleteExerciseAction, deleteLevelAction, moveLevelAction,
+  createExerciseAction, createLevelAction, deleteExerciseAction, deleteLevelAction, deriveSmallLadderAction, moveLevelAction,
   saveLevelAction, seedExercisesAction, updateExerciseAction,
 } from "./actions";
 import { loadProposalAction } from "./proposal-actions";
@@ -23,7 +23,9 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
   const [tab, setTab] = useState<"levels" | "catalog">(allLevels.length || exercises.length ? "levels" : "catalog");
   // Un parcours (1, 2 ou 3 etoiles) a la fois ; la proposition conseillee suit le parcours.
   const [star, setStar] = useState<Stars>(2);
-  const levels = useMemo(() => allLevels.filter((l) => l.stars === star), [allLevels, star]);
+  // Format (Sartay 27/09) : « big » = equipes de 4-5+ (reference), « small » = equipes de 1 a 3 (÷ 1,7, 5 fiches max).
+  const [format, setFormat] = useState<Format>("big");
+  const levels = useMemo(() => allLevels.filter((l) => l.stars === star && l.format === format), [allLevels, star, format]);
   const [proposal, setProposal] = useState<string>(STAR_PROPOSAL[2]);
   useEffect(() => { setProposal(STAR_PROPOSAL[star]); }, [star]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -39,9 +41,9 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
 
   const totals = useMemo(() => {
     const all = levels.flatMap((l) => l.cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })));
-    const seconds = levels.reduce((s, l) => s + estimateSeconds(l.cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), isBoss(l.number)), 0);
+    const seconds = levels.reduce((s, l) => s + estimateSeconds(l.cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), isBoss(l.number), teamSizeOf(format)), 0);
     return { ...statsOf(all), seconds };
-  }, [levels, weightOf]);
+  }, [levels, weightOf, format]);
 
   return (
     <div className="space-y-4">
@@ -55,7 +57,7 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
           </button>
         </div>
         <span className={ui.hint}>
-          {tab === "levels" && <>Parcours {starsName(star)} · </>}Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {DEFAULT_TEAM} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
+          {tab === "levels" && <>Parcours {starsName(star)} · {formatName(format)} · </>}Échelle complète : {totals.reps} reps · travail {fmtTheoretical(totals.weighted)} · intensité moyenne {fmtIntensity(totals.intensity)} · <b className="text-ink">≈ {fmtTheoretical(totals.seconds)}</b> pour une équipe de {teamSizeOf(format)} qui boucle tout · BOSS tous les {BOSS_EVERY} niveaux
         </span>
         {pending && <span className={ui.hint}>Enregistrement…</span>}
         <a href="/admin/level/fiches" target="_blank" className={btn.smGhost} title="Fiches à imprimer et découper (3 × 4 par page A4)">🖨️ Fiches</a>
@@ -71,20 +73,46 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
             <div className={ui.segmented}>
               {STARS.map((st) => (
                 <button key={st} type="button" onClick={() => setStar(st)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", star === st ? ui.segOn : ui.segOff)}>
-                  {starsLabel(st)} {starsName(st)} ({allLevels.filter((l) => l.stars === st).length})
+                  {starsLabel(st)} {starsName(st)} ({allLevels.filter((l) => l.stars === st && l.format === format).length})
                 </button>
               ))}
             </div>
-            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio. Chaque équipe choisit le sien dans les réglages du greffier ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
+            <div className={ui.segmented} title="Format d'équipe : 4-5+ = échelle de référence ; 1-3 = reps ÷ 1,7, 5 fiches max, même travail par personne">
+              {FORMATS.map((fm) => (
+                <button key={fm} type="button" onClick={() => setFormat(fm)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", format === fm ? ui.segOn : ui.segOff)} title={formatName(fm)}>
+                  {formatLabel(fm)} ({allLevels.filter((l) => l.format === fm).length})
+                </button>
+              ))}
+            </div>
+            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio ; chacun en deux formats, équipes de 4-5+ et équipes de 1 à 3 (reps ÷ 1,7, 2 à 5 fiches, même travail par personne). Chaque équipe choisit son parcours dans les réglages du greffier, son format suit son effectif ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
           </div>
+          {levels.length === 0 && format === "small" && (
+            <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
+              <div className="flex-1 min-w-[240px]">
+                <b className="text-ink">Échelle 1-3 {starsName(star)} : dérivée automatiquement</b>
+                <p className={ui.hint}>Tant qu&apos;elle est vide, les équipes de 1 à 3 jouent l&apos;échelle 4-5+ du même parcours divisée par 1,7 (reps arrondies, 5 fiches max, travail des fiches retirées redistribué), dérivée au coup d&apos;envoi de chaque séance. Pour la retoucher niveau par niveau, copie-la ici.</p>
+              </div>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(`Échelle 1-3 ${starsName(star)} copiée depuis l'échelle 4-5+ (÷ 1,7).`, async () => {
+                  const r = await deriveSmallLadderAction(star);
+                  return "error" in r ? r : { ok: true };
+                })}
+                className={btn.accent}
+              >
+                Copier l&apos;échelle dérivée ici
+              </button>
+            </div>
+          )}
           {exercises.filter((e) => e.active).length === 0 && (
             <p className={ui.alertInfo}>Le catalogue est vide : ajoute des exercices (ou importe le listing) avant de composer des niveaux.</p>
           )}
           {levels.length === 0 && (
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
               <div className="flex-1 min-w-[240px]">
-                <b className="text-ink">Partir d'une proposition de 25 niveaux</b>
-                <p className={ui.hint}>Équipes de 5, difficulté croissante, BOSS aux niveaux 5, 10, 15, 20 et 25. Tout reste modifiable ensuite.</p>
+                <b className="text-ink">Partir d&apos;une proposition de 25 niveaux</b>
+                <p className={ui.hint}>{format === "small" ? "Réduite au format 1-3 (reps ÷ 1,7, 5 fiches max)" : "Équipes de 5"}, difficulté croissante, BOSS aux niveaux 5, 10, 15, 20 et 25. Tout reste modifiable ensuite.</p>
               </div>
               <select value={proposal} onChange={(e) => setProposal(e.target.value)} className={`${ui.input} max-w-[260px]`}>
                 {PROPOSALS.map((p) => <option key={p.key} value={p.key}>{p.key} · {p.title}</option>)}
@@ -92,8 +120,8 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(`Proposition ${proposal} chargée dans le parcours ${starsName(star)} : 25 niveaux.`, async () => {
-                  const r = await loadProposalAction(proposal, false, star);
+                onClick={() => run(`Proposition ${proposal} chargée dans le parcours ${starsName(star)} (${formatLabel(format)}) : 25 niveaux.`, async () => {
+                  const r = await loadProposalAction(proposal, false, star, format);
                   return "error" in r ? r : { ok: true };
                 })}
                 className={btn.accent}
@@ -119,7 +147,7 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(`Niveau ${levels.length + 1} ajouté (${starsName(star)}).`, () => createLevelAction(star))}
+              onClick={() => run(`Niveau ${levels.length + 1} ajouté (${starsName(star)}, ${formatLabel(format)}).`, () => createLevelAction(star, format))}
               className={btn.primary}
             >
               + Ajouter le niveau {levels.length + 1}{isBoss(levels.length + 1) ? " (BOSS)" : ""}
@@ -133,9 +161,9 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
                   type="button"
                   disabled={pending}
                   onClick={() =>
-                    confirm(`Remplacer TOUTE l'échelle ${starsName(star)} par la proposition ${proposal} ? Les niveaux actuels de ce parcours sont perdus (les séances déjà lancées gardent leur copie).`) &&
-                    run(`Échelle ${starsName(star)} remplacée par la proposition ${proposal}.`, async () => {
-                      const r = await loadProposalAction(proposal, true, star);
+                    confirm(`Remplacer TOUTE l'échelle ${starsName(star)} (${formatLabel(format)}) par la proposition ${proposal} ? Les niveaux actuels de ce parcours sont perdus (les séances déjà lancées gardent leur copie).`) &&
+                    run(`Échelle ${starsName(star)} (${formatLabel(format)}) remplacée par la proposition ${proposal}.`, async () => {
+                      const r = await loadProposalAction(proposal, true, star, format);
                       return "error" in r ? r : { ok: true };
                     })
                   }
@@ -144,6 +172,23 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
                 >
                   Remplacer par la proposition
                 </button>
+                {format === "small" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() =>
+                      confirm(`Remplacer TOUTE l'échelle 1-3 ${starsName(star)} par l'échelle 4-5+ divisée par 1,7 ? Les niveaux actuels sont perdus.`) &&
+                      run(`Échelle 1-3 ${starsName(star)} re-dérivée de l'échelle 4-5+.`, async () => {
+                        const r = await deriveSmallLadderAction(star);
+                        return "error" in r ? r : { ok: true };
+                      })
+                    }
+                    className={btn.smDanger}
+                    title="Repart de l'échelle 4-5+ du même parcours, divisée par 1,7"
+                  >
+                    Re-dériver du 4-5+ (÷ 1,7)
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -159,7 +204,7 @@ function Catalog({ exercises, levels, isMaster, run }: { exercises: ExerciseRow[
   const [weight, setWeight] = useState("");
   const usage = useMemo(() => {
     const m = new Map<string, string[]>();
-    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), `${"★".repeat(l.stars)}${l.number}`]);
+    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), `${l.format === "small" ? "1-3 " : ""}${"★".repeat(l.stars)}${l.number}`]);
     return m;
   }, [levels]);
 
@@ -277,7 +322,7 @@ function LevelEditor({ level, exercises, labelOf, weightOf, isFirst, isLast, isM
   }, [level, dirty]);
 
   const stats = statsOf(cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })));
-  const estimate = estimateSeconds(cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), boss);
+  const estimate = estimateSeconds(cards.map((c) => ({ reps: c.reps, weight: weightOf.get(c.exerciseId) ?? 0 })), boss, teamSizeOf(level.format));
   const options = exercises.filter((e) => e.active || cards.some((c) => c.exerciseId === e.id));
   const maxCards = boss ? 1 : MAX_CARDS;
   const edit = (i: number, patch: Partial<LevelCard>) => { setDirty(true); setCards((cs) => cs.map((c, k) => (k === i ? { ...c, ...patch } : c))); };

@@ -3,19 +3,21 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTeamCountAction } from "./settings-actions";
-import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setTeamStarsAction, setZombiesAction } from "./level-actions";
-import { STARS, starsLabel, starsName, teamStarsOf, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setTeamFormatAction, setTeamStarsAction, setZombiesAction } from "./level-actions";
+import { FORMATS, STARS, formatLabel, formatName, starsLabel, starsName, teamStarsOf, type Format, type Ladders, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Onglet Reglages du greffier Level : nombre d'equipes (avant le depart), temps impose (avant ou pendant),
 // activite des dispenses (demineur), et les raccourcis vers l'atelier et les fiches a imprimer.
-export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true, teamList = [], teamStars = {}, ladders = {}, isChild = false, onChanged, suggestions }: {
+export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true, teamList = [], teamStars = {}, teamFormats = {}, formatOf, ladders = {}, isChild = false, onChanged, suggestions }: {
   sessionId: string;
   zombies?: boolean;
   teamList?: { id: string; name: string; order: number }[];
   teamStars?: Record<string, Stars>;
-  ladders?: Partial<Record<Stars, FrozenLevel[]>>;
+  teamFormats?: Record<string, Format>; // formats fixes explicitement
+  formatOf?: (teamId: string) => Format; // format effectif (fixe, sinon d'apres l'effectif)
+  ladders?: Ladders;
   isChild?: boolean;
   onChanged?: () => void;
   suggestions?: Map<string, { stars: Stars; finishMs: number | null; ratio: number | null; levels: number; total: number }>; // d'apres l'echauffement
@@ -60,7 +62,7 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
       {!isChild && (
         <section className={ui.cardPad}>
           <h3 className={ui.h3}>Parcours des équipes</h3>
-          <p className={`${ui.hint} mb-2`}>Trois parcours joués en même temps : ★☆☆ découverte (peu de force et de technique), ★★☆ équilibré, ★★★ force et cardio. Chaque équipe a son classement dans son parcours. Modifiable tant que l&apos;équipe n&apos;a rien coché.{STARS.filter((st) => st !== 2 && !ladders[st]).length > 0 && <> ⚠️ {STARS.filter((st) => st !== 2 && !ladders[st]).map((st) => starsName(st)).join(" et ")} : pas d&apos;échelle {frozen ? "figée dans cette séance" : "dans l'atelier"}, ces équipes joueraient le 2 étoiles.</>}</p>
+          <p className={`${ui.hint} mb-2`}>Trois parcours joués en même temps : ★☆☆ découverte (peu de force et de technique), ★★☆ équilibré, ★★★ force et cardio. Deux formats : <b>4-5+</b> (échelle de référence) et <b>1-3</b> (reps ÷ 1,7, 2 à 5 fiches, même travail par personne), choisi automatiquement d&apos;après l&apos;effectif (auto) et modifiable ici. Chaque équipe a son classement dans son parcours et son format. Modifiable tant que l&apos;équipe n&apos;a rien coché.{STARS.filter((st) => st !== 2 && !ladders[st]).length > 0 && <> ⚠️ {STARS.filter((st) => st !== 2 && !ladders[st]).map((st) => starsName(st)).join(" et ")} : pas d&apos;échelle {frozen ? "figée dans cette séance" : "dans l'atelier"}, ces équipes joueraient le 2 étoiles.</>}</p>
           {teamList.length === 0 ? <p className={ui.hint}>Pas encore d&apos;équipe.</p> : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {teamList.map((t) => {
@@ -85,6 +87,16 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
                           {starsLabel(st)}
                         </button>
                       ))}
+                    </div>
+                    <div className={`${ui.segmented} inline-flex`} title="Format : 4-5+ (échelle de référence) ou 1-3 (reps ÷ 1,7, 5 fiches max)">
+                      {FORMATS.map((fm) => {
+                        const eff = formatOf?.(t.id) ?? "big";
+                        return (
+                          <button key={fm} type="button" disabled={pending || eff === fm} onClick={() => run(`${t.name} : ${formatName(fm)}.`, async () => { const r = await setTeamFormatAction(sessionId, t.id, fm); if (!("error" in r)) onChanged?.(); return r; })} className={cx("px-2 py-1 rounded-lg text-xs font-bold", eff === fm ? ui.segOn : ui.segOff)} title={formatName(fm)}>
+                            {formatLabel(fm)}{eff === fm && !teamFormats[t.id] ? " (auto)" : ""}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );

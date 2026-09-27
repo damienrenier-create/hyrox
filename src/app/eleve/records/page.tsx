@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { buildPyramideRecords, type RecordPeriod, type RecordPhase, type TeamSex } from "@/lib/pyramide-records";
 import { buildLevelRecords } from "@/lib/level-records";
-import { STARS, starsLabel, starsName, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { FORMATS, STARS, formatLabel, formatName, starsLabel, starsName, type Format, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { TopBar } from "../../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
 
@@ -30,7 +30,7 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-d
 
 // Records du WOD Pyramide vus par les eleves : le meme palmares que le greffier, en lecture seule,
 // avec les memes filtres (composition de l'equipe, degre). Tout passe par l'URL, donc partageable.
-export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string }> }) {
+export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/");
   const sp = await searchParams;
@@ -42,13 +42,15 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
   const phaseQ = PHASES.find((p) => p.q && p.q === sp.phase)?.q ?? "";
   const phase = PHASES.find((p) => p.q === phaseQ)?.v ?? "wod";
   const stars = (["1", "2", "3"].includes(sp.etoiles ?? "") ? Number(sp.etoiles) : null) as Stars | null;
-  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase, stars }) : await buildPyramideRecords({ sex, grade, period });
-  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string }) => {
+  const format = (sp.format === "small" || sp.format === "big" ? sp.format : null) as Format | null;
+  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase, stars, format }) : await buildPyramideRecords({ sex, grade, period });
+  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }) => {
     const p = new URLSearchParams();
-    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", phase: wod === "level" ? phaseQ : "", etoiles: wod === "level" && stars ? String(stars) : "", ...patch };
+    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", phase: wod === "level" ? phaseQ : "", etoiles: wod === "level" && stars ? String(stars) : "", format: wod === "level" && format ? format : "", ...patch };
     if (v.wod) p.set("wod", v.wod);
     if (v.wod === "level" && v.phase) p.set("phase", v.phase);
     if (v.wod === "level" && v.etoiles) p.set("etoiles", v.etoiles);
+    if (v.wod === "level" && v.format) p.set("format", v.format);
     if (v.sexe) p.set("sexe", v.sexe);
     if (v.degre) p.set("degre", v.degre);
     if (v.periode) p.set("periode", v.periode);
@@ -84,6 +86,17 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
               {STARS.map((st) => (
                 <Link key={st} href={href({ etoiles: String(st) })} className={cx(ui.pill, stars === st ? ui.pillOn : ui.pillOff)} title={starsName(st)}>
                   {starsLabel(st)}
+                </Link>
+              ))}
+            </div>
+          )}
+          {wod === "level" && phase === "wod" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={ui.eyebrow}>Format</span>
+              <Link href={href({ format: "" })} className={cx(ui.pill, format === null ? ui.pillOn : ui.pillOff)}>Tous</Link>
+              {FORMATS.map((fm) => (
+                <Link key={fm} href={href({ format: fm })} className={cx(ui.pill, format === fm ? ui.pillOn : ui.pillOff)} title={formatName(fm)}>
+                  {formatLabel(fm)}
                 </Link>
               ))}
             </div>
@@ -147,7 +160,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
                             <span className="block text-ink-3 text-[10px] truncate">{r.classes || "sans classe"} · {day(r.dateMs)}</span>
                           </span>
                           {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
-                          <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{r.display}</span>
+                          <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format === "small" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName("small")}>1-3</span> : null}{r.display}</span>
                         </li>
                       );
                     })}

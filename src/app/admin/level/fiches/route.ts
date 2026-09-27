@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, freezeLadders, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, estimateSeconds, fmtTheoretical, readLadders, starsLabel, starsName, DEFAULT_TEAM, STARS, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, estimateSeconds, fmtTheoretical, formatName, readLadders, starsLabel, starsName, teamSizeOf, LADDER_KEYS, type Format, type Ladders, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +16,9 @@ export async function GET(req: Request) {
   const user = await getSession();
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) return Response.redirect(new URL("/", req.url), 307);
   const sessionId = new URL(req.url).searchParams.get("session");
-  // Les trois parcours (1, 2, 3 etoiles) : ceux figes dans la seance avec ?session=, sinon ceux de l'atelier.
-  let ladders: Partial<Record<Stars, FrozenLevel[]>> = {};
+  // Les six echelles (1, 2, 3 etoiles x formats 4-5+ et 1-3) : celles figees dans la seance avec ?session=,
+  // sinon celles de l'atelier (le petit format derive du 4-5+ quand il n'est pas compose).
+  let ladders: Ladders = {};
   let title = "Échelle commune";
   if (sessionId) {
     const s = await db.orm.public.Session.where({ id: sessionId }).first();
@@ -28,15 +29,16 @@ export async function GET(req: Request) {
   }
   if (!ladders[2]?.length) {
     const all = await freezeLadders();
-    ladders = { ...(all[1].length ? { 1: all[1] } : {}), 2: all[2], ...(all[3].length ? { 3: all[3] } : {}) };
+    ladders = Object.fromEntries(LADDER_KEYS.filter((k) => all[k].length).map((k) => [k, all[k]])) as Ladders;
     title = "Échelle commune";
   }
-  const levels = STARS.flatMap((st) => (ladders[st] ?? []).map((l) => ({ ...l, stars: st })));
+  const levels = LADDER_KEYS.flatMap((k) => (ladders[k] ?? []).map((l) => ({ ...l, stars: (typeof k === "number" ? k : Number(k.slice(1))) as Stars, format: (typeof k === "number" ? "big" : "small") as Format })));
+  const multi = LADDER_KEYS.filter((k) => ladders[k]?.length).length > 1;
   const cards = levels.flatMap((l) => {
     const act = activeCards(l);
-    const star = STARS.filter((st) => ladders[st]?.length).length > 1 ? `${starsLabel(l.stars)} · ` : "";
-    const head = `<div class="card head${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number}</div><div class="name">${esc(l.name ? l.name.replace(/^BOSS · /, "") : l.boss ? "Boss" : `Niveau ${l.number}`)}</div><div class="list">${esc(act.map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · "))}</div><div class="meta">${star ? starsName(l.stars) + " · " : ""}≈ ${fmtTheoretical(estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss))}${l.boss ? " · toute l'équipe en même temps, validé par un prof" : " · une fiche par membre, en relais"}</div></div>`;
-    return [head, ...act.map(({ card, index }) => `<div class="card${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number} · fiche ${index + 1}/${act.length}</div><div class="reps">${card.reps}</div><div class="exo">${esc(cap(card.label))}</div><div class="meta">${l.boss ? `à ${DEFAULT_TEAM} en simultané` : `≈ ${fmtTheoretical(card.reps * card.weight)} pour un membre`}</div></div>`)];
+    const star = multi ? `${starsLabel(l.stars)}${l.format === "small" ? " 1-3" : ""} · ` : "";
+    const head = `<div class="card head${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number}</div><div class="name">${esc(l.name ? l.name.replace(/^BOSS · /, "") : l.boss ? "Boss" : `Niveau ${l.number}`)}</div><div class="list">${esc(act.map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · "))}</div><div class="meta">${star ? starsName(l.stars) + " · " + formatName(l.format) + " · " : ""}≈ ${fmtTheoretical(estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss, teamSizeOf(l.format)))}${l.boss ? " · toute l'équipe en même temps, validé par un prof" : " · une fiche par membre, en relais"}</div></div>`;
+    return [head, ...act.map(({ card, index }) => `<div class="card${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number} · fiche ${index + 1}/${act.length}</div><div class="reps">${card.reps}</div><div class="exo">${esc(cap(card.label))}</div><div class="meta">${l.boss ? `à ${teamSizeOf(l.format)} en simultané` : `≈ ${fmtTheoretical(card.reps * card.weight)} pour un membre`}</div></div>`)];
   });
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiches WOD Level</title><style>
 @page { size: A4; margin: 10mm; }

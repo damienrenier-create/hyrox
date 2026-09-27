@@ -64,18 +64,55 @@ export function readTeamStars(settings: unknown): Record<string, Stars> {
 }
 export const teamStarsOf = (teamStars: Record<string, Stars>, teamId: string): Stars => teamStars[teamId] ?? DEFAULT_STARS;
 // Echelles figees des parcours 1 et 3 etoiles (le 2 etoiles est settings.levels).
-export function readLadders(settings: unknown): Partial<Record<Stars, FrozenLevel[]>> {
-  const raw = (settings as { ladders?: unknown } | null)?.ladders;
-  const out: Partial<Record<Stars, FrozenLevel[]>> = {};
+// ===== Format d'equipe (Sartay 27/09) =====
+// Deux types de parcours : « big » (equipes de 4, 5 et plus : l'echelle de reference) et « small » (equipes de
+// 1 a 3 : reps divisees par 1,7, 2 a 5 fiches par niveau, meme travail par personne). Chaque type a ses trois
+// parcours 1, 2, 3 etoiles ; les echelles small d'une seance vivent dans settings.ladders sous "s1", "s2", "s3".
+export type Format = "big" | "small";
+export const FORMATS: Format[] = ["big", "small"];
+export const DEFAULT_FORMAT: Format = "big";
+export const SMALL_MAX_MEMBERS = 3; // 1 a 3 membres -> petit format par defaut
+export const SMALL_TEAM = 3; // taille de reference du petit format (estimations, zombie)
+export const SMALL_RATIO = 1.7;
+export const SMALL_MAX_CARDS = 5;
+export const formatLabel = (f: Format) => (f === "small" ? "1-3" : "4-5+");
+export const formatName = (f: Format) => (f === "small" ? "équipes de 1 à 3" : "équipes de 4, 5 et plus");
+export const teamSizeOf = (f: Format) => (f === "small" ? SMALL_TEAM : DEFAULT_TEAM);
+export type LadderKey = Stars | `s${Stars}`;
+export const LADDER_KEYS: LadderKey[] = [1, 2, 3, "s1", "s2", "s3"];
+export const ladderKey = (stars: Stars, format: Format = DEFAULT_FORMAT): LadderKey => (format === "small" ? `s${stars}` : stars);
+// Groupe de classement (une equipe se compare a celles du meme parcours ET du meme format).
+export const parcoursKey = (stars: Stars, format: Format = DEFAULT_FORMAT) => `${format}-${stars}`;
+export type Ladders = Partial<Record<LadderKey, FrozenLevel[]>>;
+export function readTeamFormats(settings: unknown): Record<string, Format> {
+  const raw = (settings as { teamFormat?: unknown } | null)?.teamFormat;
+  const out: Record<string, Format> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const s of STARS) {
-    const l = readFrozenLevels((raw as Record<string, unknown>)[String(s)]);
-    if (l.length) out[s] = l;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === "big" || v === "small") out[k] = v;
+  return out;
+}
+// Format d'une equipe : celui fixe dans les reglages, sinon d'apres son effectif (1 a 3 -> small), sinon big.
+export function teamFormatOf(formats: Record<string, Format>, teamId: string, memberCount?: number): Format {
+  return formats[teamId] ?? (memberCount !== undefined && memberCount > 0 && memberCount <= SMALL_MAX_MEMBERS ? "small" : DEFAULT_FORMAT);
+}
+export function readLadders(settings: unknown): Ladders {
+  const raw = (settings as { ladders?: unknown } | null)?.ladders;
+  const out: Ladders = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const k of LADDER_KEYS) {
+    if (k === DEFAULT_STARS) continue; // le 2 etoiles big vit dans settings.levels
+    const l = readFrozenLevels((raw as Record<string, unknown>)[String(k)]);
+    if (l.length) out[k] = l;
   }
   return out;
 }
-// Echelle d'un parcours : celle du parcours si elle est figee, sinon l'echelle 2 etoiles.
-export function ladderFor(levels: FrozenLevel[], ladders: Partial<Record<Stars, FrozenLevel[]>>, stars: Stars): FrozenLevel[] {
+// Echelle d'un parcours. Petit format : son echelle, sinon le petit 2 etoiles, sinon (seance figee avant le
+// petit format) l'echelle big ; un parcours 1 ou 3 etoiles absent retombe sur le 2 etoiles.
+export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars, format: Format = DEFAULT_FORMAT): FrozenLevel[] {
+  if (format === "small") {
+    const s = ladders[`s${stars}`] ?? ladders.s2;
+    if (s?.length) return s;
+  }
   return (stars === DEFAULT_STARS ? levels : ladders[stars]) ?? levels;
 }
 
@@ -211,10 +248,11 @@ export function zombieMarginS(speedLevel: number): number {
 }
 // Bande complete (ms de chrono) et approche : avec une seule fiche (BOSS), le zombie traverse tout d'un
 // mouvement uniforme ; sinon il touche la premiere fiche a 1 min, puis la zone en (bande - 1 min).
-export function zombieTimeline(level: FrozenLevel, speedLevel: number): { approachMs: number; bandMs: number; n: number } {
+// `team` = effectif de reference (5, ou 3 pour le petit format) : l'estimation du niveau en depend.
+export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DEFAULT_TEAM): { approachMs: number; bandMs: number; n: number } {
   const act = activeCards(level);
   const n = Math.max(1, act.length);
-  const est = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss);
+  const est = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
   const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000;
   return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 : 0, bandMs: band, n };
 }
@@ -231,14 +269,14 @@ export function zombieEatMs(speedLevel: number): number {
 // Le coeur avance avec la DUREE des fiches cochees (`frac` = duree cochee / duree totale du niveau pour
 // l'equipe, penalites comprises) : une longue fiche eloigne plus le coeur, une penalite le rapproche.
 // Arrivee du zombie au coeur (ms depuis le depart de la tentative).
-export function zombieArrivalMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length): number {
-  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+export function zombieArrivalMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length, team = DEFAULT_TEAM): number {
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team);
   if (n <= 1) return bandMs;
   return approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs);
 }
 // Rattrapage = arrivee + coeur entierement mange.
-export function zombieDeadlineMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length): number {
-  return zombieArrivalMs(level, frac, speedLevel, n) + zombieEatMs(speedLevel);
+export function zombieDeadlineMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length, team = DEFAULT_TEAM): number {
+  return zombieArrivalMs(level, frac, speedLevel, n, team) + zombieEatMs(speedLevel);
 }
 // Simulation d'une tentative (regle de Sartay : le coeur RESTE croque). Le zombie marche vers le coeur ; au
 // contact il mange ; si une fiche cochee eloigne le coeur, il repart marcher et reprend le repas ou il en
@@ -260,9 +298,10 @@ export function zombieSim(
   tickEvents: AttemptEvent[], // fiches cochees (doneSec augmente) et penalites ajoutees (total augmente)
   sinceMs: number,
   speedLevel = level.number,
-  n = activeCards(level).length
+  n = activeCards(level).length,
+  team = DEFAULT_TEAM
 ): ZombieSim {
-  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team);
   const eatMs = zombieEatMs(speedLevel);
   const total = Math.max(1, cardsTotalSec);
   const arrivalFor = (frac: number) => (n <= 1 ? bandMs : approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs));
@@ -620,13 +659,14 @@ export function rightmostCard(level: FrozenLevel, teamId: string, extras: TeamPe
 }
 // Cibles d'une fusee : meme parcours que l'expediteur (sauf s'il y a moins de deux adversaires dans ce parcours :
 // tout le monde), jamais la derniere equipe de son parcours, jamais soi-meme, jamais une equipe arrivee au bout.
-export function rocketTargets<T extends { teamId: string; stars: Stars; rankInStars: number; groupSize: number; finished: boolean }>(fromTeamId: string, teams: T[]): T[] {
+// `group` = parcours + format (parcoursKey) : une fusee vise d'abord son propre groupe.
+export function rocketTargets<T extends { teamId: string; group: string; rankInGroup: number; groupSize: number; finished: boolean }>(fromTeamId: string, teams: T[]): T[] {
   const me = teams.find((t) => t.teamId === fromTeamId);
   if (!me) return [];
-  const sameGroup = teams.filter((t) => t.stars === me.stars && t.teamId !== fromTeamId);
+  const sameGroup = teams.filter((t) => t.group === me.group && t.teamId !== fromTeamId);
   const pool = sameGroup.length >= 2 ? sameGroup : teams.filter((t) => t.teamId !== fromTeamId);
   // La derniere equipe d'un parcours est intouchable, meme si elle y est seule (elle est alors aussi la derniere).
-  return pool.filter((t) => !t.finished && t.rankInStars !== t.groupSize);
+  return pool.filter((t) => !t.finished && t.rankInGroup !== t.groupSize);
 }
 
 // Libelle court d'un niveau pour les tuiles et les classements.

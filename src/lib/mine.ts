@@ -3,7 +3,7 @@ import { readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Demineur des arbitres (WOD Level), version « deux listes » (Sartay, 24/09 soir) :
 //   1. l'arbitre choisit un eleve qui joue, puis un exercice (liste alphabetique limitee aux niveaux en cours
@@ -73,11 +73,12 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   const penalties = readPenalties(session.settings);
   const ladders = readLadders(session.settings);
   const teamStars = readTeamStars(session.settings);
+  const teamFormats = readTeamFormats(session.settings);
   const suggestedIds = new Set<string>();
   const all = new Map<string, string>();
   for (const l of [levels, ...Object.values(ladders)].flat()) for (const { card } of activeCards(l)) all.set(card.exerciseId, card.label);
   for (const t of teams) {
-    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id)), order?.[t.id]);
+    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id)), order?.[t.id]);
     const p = progressOf(mine, t.id, ticks, [], penalties);
     if (p.currentLevel === null) continue;
     for (const l of mine) if (l.number === p.currentLevel || l.number === p.currentLevel + 1) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);

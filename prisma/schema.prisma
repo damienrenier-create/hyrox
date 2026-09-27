@@ -414,6 +414,9 @@ model LevelExercise {
 // (force et cardio). Chaque parcours est une echelle a part ; une equipe choisit son parcours.
 model Level {
   id        String   @id @default(uuid())
+  // Format (Sartay 27/09) : « big » = equipes de 4, 5 et plus (echelle de reference), « small » = equipes de 1 a 3
+  // (reps divisees par 1,7, 2 a 5 fiches par niveau : meme travail par personne).
+  format    String   @default("big")
   stars     Int      @default(2)
   number    Int
   name      String?
@@ -421,7 +424,7 @@ model Level {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
-  @@unique([stars, number])
+  @@unique([format, stars, number])
 }
 
 // Fiche cochee (greffier ou prof) pour une equipe : niveau + index de la fiche dans l'echelle figee.

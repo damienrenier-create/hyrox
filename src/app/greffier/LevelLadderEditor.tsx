@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { updateSessionLevelsAction } from "./level-actions";
-import { MAX_CARDS, STARS, DEFAULT_STARS, activeCards, estimateSeconds, fmtTheoretical, isBoss, ladderFor, starsLabel, starsName, statsOf, teamStarsOf, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { MAX_CARDS, STARS, DEFAULT_STARS, FORMATS, activeCards, estimateSeconds, fmtTheoretical, formatLabel, formatName, isBoss, ladderFor, ladderKey, starsLabel, starsName, statsOf, teamFormatOf, teamSizeOf, teamStarsOf, type Format, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTickRow } from "@/lib/level-context";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -11,25 +11,26 @@ type Catalog = { id: string; label: string; weight: number; active: boolean }[];
 // Editeur de l'echelle FIGEE d'une seance, pendant qu'elle tourne : reps ou exercice d'une fiche, fiche
 // ajoutee, fiche retiree (jamais supprimee : les coches y font reference par index), niveau ajoute en fin.
 // L'echelle commune de l'atelier /admin/level n'est pas touchee.
-export function LevelLadderEditor({ sessionId, levels, ladders, teamStars, catalog, ticks, onSaved }: { sessionId: string; levels: FrozenLevel[]; ladders: LevelBundle["ladders"]; teamStars: LevelBundle["teamStars"]; catalog: Catalog; ticks: LevelTickRow[]; onSaved: () => void }) {
-  // Un parcours a la fois ; un parcours 1 ou 3 etoiles jamais fige part d'une copie du 2 etoiles.
+export function LevelLadderEditor({ sessionId, levels, ladders, teamStars, teamFormats, catalog, ticks, onSaved }: { sessionId: string; levels: FrozenLevel[]; ladders: LevelBundle["ladders"]; teamStars: LevelBundle["teamStars"]; teamFormats: LevelBundle["teamFormats"]; catalog: Catalog; ticks: LevelTickRow[]; onSaved: () => void }) {
+  // Un parcours (etoiles x format) a la fois ; un parcours jamais fige part d'une copie de celui qu'il remplace.
   const [stars, setStars] = useState<Stars>(DEFAULT_STARS);
-  const source = ladderFor(levels, ladders, stars);
-  const copied = stars !== DEFAULT_STARS && !ladders[stars];
+  const [format, setFormat] = useState<Format>("big");
+  const source = ladderFor(levels, ladders, stars, format);
+  const copied = !(stars === DEFAULT_STARS && format === "big") && !ladders[ladderKey(stars, format)];
   const [draft, setDraft] = useState<FrozenLevel[]>(() => structuredClone(source));
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   useEffect(() => {
-    if (!dirty) setDraft(structuredClone(ladderFor(levels, ladders, stars)));
-  }, [levels, ladders, stars, dirty]);
+    if (!dirty) setDraft(structuredClone(ladderFor(levels, ladders, stars, format)));
+  }, [levels, ladders, stars, format, dirty]);
 
   // Coches des equipes DE CE PARCOURS (les index de fiche sont propres a chaque echelle).
   const tickedBy = useMemo(() => {
     const m = new Map<string, number>();
-    for (const t of ticks) if (teamStarsOf(teamStars, t.teamId) === stars) m.set(`${t.level}_${t.card}`, (m.get(`${t.level}_${t.card}`) ?? 0) + 1);
+    for (const t of ticks) if (teamStarsOf(teamStars, t.teamId) === stars && teamFormatOf(teamFormats, t.teamId) === format) m.set(`${t.level}_${t.card}`, (m.get(`${t.level}_${t.card}`) ?? 0) + 1);
     return m;
-  }, [ticks, teamStars, stars]);
+  }, [ticks, teamStars, teamFormats, stars, format]);
   const byId = useMemo(() => new Map(catalog.map((e) => [e.id, e])), [catalog]);
 
   const edit = (fn: (d: FrozenLevel[]) => void) => {
@@ -42,7 +43,7 @@ export function LevelLadderEditor({ sessionId, levels, ladders, teamStars, catal
   };
   const save = () =>
     startTransition(async () => {
-      const r = await updateSessionLevelsAction(sessionId, draft, stars);
+      const r = await updateSessionLevelsAction(sessionId, draft, stars, format);
       if ("error" in r) setMsg({ kind: "err", text: r.error });
       else {
         setMsg({ kind: "ok", text: "Échelle de la séance enregistrée." });
@@ -65,19 +66,26 @@ export function LevelLadderEditor({ sessionId, levels, ladders, teamStars, catal
             </button>
           ))}
         </div>
+        <div className={`${ui.segmented} inline-flex`} title="Format d'équipe : 4-5+ ou 1-3">
+          {FORMATS.map((fm) => (
+            <button key={fm} type="button" disabled={dirty && fm !== format} onClick={() => setFormat(fm)} className={cx("px-2.5 py-1 rounded-lg text-sm font-bold disabled:opacity-40", format === fm ? ui.segOn : ui.segOff)} title={dirty && fm !== format ? "Enregistre d'abord" : formatName(fm)}>
+              {formatLabel(fm)}
+            </button>
+          ))}
+        </div>
         <a href={`/admin/level/fiches?session=${sessionId}`} target="_blank" className={btn.ghost}>🖨️ Fiches</a>
         <button type="button" onClick={save} disabled={!dirty || pending} className={dirty ? btn.primary : btn.soft}>
           {pending ? "Enregistrement…" : dirty ? "Enregistrer" : "Enregistré"}
         </button>
       </div>
       {msg && <p className={msg.kind === "ok" ? ui.alertOk : ui.alertErr}>{msg.text}</p>}
-      {copied && <p className={ui.alertInfo}>Le parcours {starsName(stars)} n&apos;a pas été figé au départ (atelier vide) : ses équipes jouent le 2 étoiles. Ce qui suit en est une copie ; enregistre-la pour créer le parcours {starsName(stars)} dans cette séance.</p>}
+      {copied && <p className={ui.alertInfo}>Le parcours {starsName(stars)} ({formatLabel(format)}) n&apos;a pas été figé au départ : ses équipes jouent l&apos;échelle de repli affichée ici. Enregistre cette copie pour créer le parcours {starsName(stars)} ({formatLabel(format)}) dans cette séance.</p>}
 
       {draft.map((l, li) => {
         const boss = isBoss(l.number);
         const act = activeCards(l);
         const stats = statsOf(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })));
-        const estimate = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), boss);
+        const estimate = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), boss, teamSizeOf(format));
         return (
           <section key={l.number} className={cx(ui.card, "p-3", boss && "border-danger/50 bg-danger-soft/40")}>
             <div className="flex flex-wrap items-center gap-2 mb-2">

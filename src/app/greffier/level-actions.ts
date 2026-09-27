@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_STARS, type CoinEvent, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderKey, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamFormats, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_FORMAT, DEFAULT_STARS, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyDiscount, createStarTeam, numberTeams, sendRocket, settleRockets, startLevelRace, teamLadder } from "@/lib/level-coins";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
@@ -95,8 +95,8 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     caught > 0 ? db.orm.public.LevelTick.where({ sessionId }).all() : Promise.resolve(ctx.ticks as { id: string; teamId: string; level: number; card: number; at: unknown; by: string }[]),
     caught > 0 ? db.orm.public.LevelLoss.where({ sessionId }).all() : Promise.resolve(ctx.losses as { id: string; teamId: string; level: number; at: unknown }[]),
   ]);
-  const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; levelCapMin?: unknown } | null;
-  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
+  const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; teamFormat?: unknown; levelCapMin?: unknown } | null;
+  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? "", s?.teamFormat ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
   const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   // Rattrapages appliques : les reglages (fiches recues annulees) ont pu changer, on relit avant les fusees.
@@ -383,11 +383,12 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
 // Modifier l'echelle FIGEE de la seance pendant qu'elle tourne (greffier, profs) : reps ou exercice d'une
 // fiche, fiche ajoutee, fiche retiree (`off`, jamais supprimee : les coches referencent l'index), niveau
 // ajoute en fin d'echelle. L'echelle commune de l'atelier n'est pas touchee.
-export async function updateSessionLevelsAction(sessionId: string, input: FrozenLevel[], stars: Stars = DEFAULT_STARS): Promise<Res> {
+export async function updateSessionLevelsAction(sessionId: string, input: FrozenLevel[], stars: Stars = DEFAULT_STARS, format: Format = DEFAULT_FORMAT): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
   if (!readFrozenFromSettings(session.settings).length) return { error: "L'échelle n'est pas encore figée : modifie-la dans l'atelier Level." };
-  // Parcours 1 ou 3 etoiles jamais fige (atelier vide au depart) : il se cree ici, a partir de la copie proposee.
-  const current = stars === DEFAULT_STARS ? readFrozenFromSettings(session.settings) : readLadders(session.settings)[stars] ?? [];
+  const main = stars === DEFAULT_STARS && format === DEFAULT_FORMAT; // settings.levels ; les autres dans settings.ladders
+  // Parcours jamais fige (atelier vide au depart) : il se cree ici, a partir de la copie proposee.
+  const current = main ? readFrozenFromSettings(session.settings) : readLadders(session.settings)[ladderKey(stars, format)] ?? [];
   const catalog = new Map((await listExercises()).map((e) => [e.id, e]));
   const parsed = readFrozenLevels(input);
   if (!parsed.length) return { error: "Échelle vide." };
@@ -412,11 +413,25 @@ export async function updateSessionLevelsAction(sessionId: string, input: Frozen
     if (l.boss && activeCards(l).length > 1) return { error: `Le niveau ${l.number} est un BOSS : une seule fiche en jeu.` };
   }
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  if (stars === DEFAULT_STARS) await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, levels } });
+  if (main) await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, levels } });
   else {
     const prevLadders = (prev.ladders && typeof prev.ladders === "object" ? prev.ladders : {}) as Record<string, unknown>;
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, ladders: { ...prevLadders, [String(stars)]: levels } })) });
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, ladders: { ...prevLadders, [String(ladderKey(stars, format))]: levels } })) });
   }
+  return { ok: true };
+}
+
+// Format d'une equipe (4-5+ ou 1-3), meme verrou que le parcours : modifiable tant qu'elle n'a rien coche.
+export async function setTeamFormatAction(sessionId: string, teamId: string, format: Format): Promise<Res> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (format !== "big" && format !== "small") return { error: "Format inconnu." };
+  const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
+  if (!team) return { error: "Équipe introuvable." };
+  const ticked = await db.orm.public.LevelTick.where({ sessionId, teamId }).first();
+  if (ticked) return { error: "Cette équipe a déjà coché des fiches : son format est verrouillé (annule ses coches d'abord)." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const teamFormat = { ...readTeamFormats(session.settings), [teamId]: format };
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, teamFormat })) });
   return { ok: true };
 }
 

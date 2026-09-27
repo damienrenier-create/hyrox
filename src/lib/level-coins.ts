@@ -7,8 +7,8 @@ import { phaseTotals, readChild, readChildren } from "@/lib/level-context";
 import { loadZombieContext } from "@/lib/zombies";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
-  readLevelOrder, readPenalties, readTeamStars, rightmostCard, rocketTargets, sendOptions, starsLabel, teamStarsOf,
-  DISCOUNT_STEPS, ROCKET_PRICE, type CoinEvent, type FrozenLevel, type Loss, type Stars, type Tick,
+  parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
+  DISCOUNT_STEPS, LADDER_KEYS, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
 // Pieces, fusees et equipes par parcours du WOD Level, cote serveur et SANS authentification (les actions du
@@ -31,7 +31,7 @@ async function writeSettings(sessionId: string, patch: (fresh: Settings) => Sett
 
 // Echelle d'une equipe dans une seance : son parcours (etoiles) dans son ordre.
 export function teamLadder(settings: unknown, teamId: string): FrozenLevel[] {
-  return orderedLevels(ladderFor(readFrozenFromSettings(settings), readLadders(settings), teamStarsOf(readTeamStars(settings), teamId)), readLevelOrder(settings)?.[teamId]);
+  return orderedLevels(ladderFor(readFrozenFromSettings(settings), readLadders(settings), teamStarsOf(readTeamStars(settings), teamId), teamFormatOf(readTeamFormats(settings), teamId)), readLevelOrder(settings)?.[teamId]);
 }
 // Banque d'une equipe (pieces gagnees + report de l'echauffement - depenses), sur l'echelle de son parcours.
 export function bankOf(settings: unknown, teamId: string, ticks: Tick[], losses: Loss[]) {
@@ -115,13 +115,15 @@ export async function sendRocket(sessionId: string, teamId: string, exerciseId: 
   if (price > state.bank) return { error: `Il faut ${price} pièces ; l'équipe en a ${state.bank}.` };
   // Cibles : rang dans le parcours (pieces comprises), taille du groupe, equipes arrivees au bout.
   const teamStars = readTeamStars(settings);
+  const teamFormats = readTeamFormats(settings);
+  const groupOf = (id: string) => parcoursKey(teamStarsOf(teamStars, id), teamFormatOf(teamFormats, id));
   const carry = readCoinsCarry(settings);
   const progress = ctx.teams.map((t) => progressOf(teamLadder(settings, t.id), t.id, ticks, losses, extras));
   const ranked = rankTeams(progress, (id) => bankOf(settings, id, ticks, losses).earned + (carry[id] ?? 0));
   const rows = ctx.teams.map((t) => {
-    const stars = teamStarsOf(teamStars, t.id);
-    const group = ranked.filter((p) => teamStarsOf(teamStars, p.teamId) === stars);
-    return { teamId: t.id, stars, rankInStars: group.findIndex((p) => p.teamId === t.id) + 1, groupSize: group.length, finished: progress.find((p) => p.teamId === t.id)!.currentLevel === null };
+    const group = groupOf(t.id);
+    const grp = ranked.filter((p) => groupOf(p.teamId) === group);
+    return { teamId: t.id, group, rankInGroup: grp.findIndex((p) => p.teamId === t.id) + 1, groupSize: grp.length, finished: progress.find((p) => p.teamId === t.id)!.currentLevel === null };
   });
   if (!rocketTargets(teamId, rows).some((t) => t.teamId === toTeamId)) return { error: "Cette équipe n'est pas une cible autorisée (même parcours, jamais la dernière, jamais une équipe arrivée au bout)." };
   const targetLevels = teamLadder(settings, toTeamId);
@@ -166,6 +168,16 @@ export async function numberTeams(sessionId: string): Promise<number> {
   let n = 0;
   let changed = 0;
   for (const t of teams) { n++; if (t.order !== n || t.name !== `Équipe ${n}`) { await db.orm.public.Team.where({ id: t.id }).update({ order: n, name: `Équipe ${n}` }); changed++; } }
+  // Format des equipes (Sartay 27/09) : fige ici d'apres l'effectif (1 a 3 membres -> petit format), sauf
+  // choix explicite dans les reglages. Les enfants (echauffement, finisher) en heritent, le zombie s'y regle.
+  const formats = readTeamFormats(settings);
+  const missing = teams.filter((t) => !formats[t.id]);
+  if (missing.length) {
+    const members = await db.orm.public.TeamMember.where((m) => m.teamId.in(missing.map((t) => t.id))).all();
+    const auto: Record<string, Format> = {};
+    for (const t of missing) auto[t.id] = teamFormatOf(formats, t.id, members.filter((m) => m.teamId === t.id).length);
+    await writeSettings(sessionId, (fresh) => ({ ...fresh, teamFormat: { ...auto, ...readTeamFormats(fresh) } }));
+  }
   return changed;
 }
 
@@ -177,7 +189,7 @@ export async function startLevelRace(sessionId: string): Promise<Res> {
   if (!readFrozenFromSettings(session.settings).length) {
     const all = await freezeLadders();
     if (!all[2].some((l) => activeCards(l).length > 0)) return { error: "L'échelle 2 étoiles est vide : compose les niveaux dans l'atelier Level avant de lancer." };
-    const ladders = { ...(all[1].length ? { "1": all[1] } : {}), ...(all[3].length ? { "3": all[3] } : {}) };
+    const ladders = Object.fromEntries(LADDER_KEYS.filter((k) => k !== 2 && all[k].length).map((k) => [String(k), all[k]]));
     await writeSettings(sessionId, (fresh) => ({ ...fresh, levels: all[2], ladders }));
   }
   let rs = await db.orm.public.RaceState.where({ sessionId }).first();

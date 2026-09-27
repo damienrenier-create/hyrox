@@ -14,6 +14,42 @@
 // Module pur (pas de base) : sert a l'atelier /admin/level et au rapport PDF.
 
 import { DEFAULT_EXERCISES } from "./level-catalog";
+import { SMALL_MAX_CARDS, SMALL_RATIO, type FrozenLevel } from "./wod-engines/templates/level-engine";
+
+// ===== Petit format (Sartay 27/09) : equipes de 1 a 3 =====
+// Un niveau big (equipe de 5) devient un niveau small : chaque fiche divisee par 1,7 (5/3), reps arrondies
+// « rondes » selon leur ordre de grandeur (dizaines au-dela de 100, multiples de 5 au-dela de 20, pairs
+// au-dela de 8, unites en dessous : la regle de repsFor), 5 fiches au plus.
+// Au-dela de 5 : on garde la plus longue fiche de chaque famille du socle (bras, jambes, cardio) puis les
+// plus longues, et le travail des fiches retirees se redistribue au prorata sur celles qui restent : le
+// travail par personne reste celui des equipes de 5. Un BOSS garde sa fiche unique (reps ÷ 1,7).
+export function roundSmallReps(raw: number): number {
+  const step = raw >= 100 ? 10 : raw >= 20 ? 5 : raw >= 8 ? 2 : 1;
+  return Math.max(1, Math.round(raw / step) * step);
+}
+export function shrinkFrozenLevel(level: FrozenLevel, ratio = SMALL_RATIO, maxCards = SMALL_MAX_CARDS): FrozenLevel {
+  const act = level.cards.filter((c) => !c.off);
+  let work = act.map((card) => ({ card, work: (card.reps * card.weight) / ratio }));
+  if (!level.boss && work.length > maxCards) {
+    const keep = new Set<number>();
+    for (const fam of ["bras", "jambes", "cardio"] as Identity[]) {
+      let best = -1;
+      work.forEach((w, i) => {
+        if (keep.has(i) || !(IDENTITY_OF[w.card.label.trim().toUpperCase()] ?? []).includes(fam)) return;
+        if (best < 0 || w.work > work[best].work) best = i;
+      });
+      if (best >= 0) keep.add(best);
+    }
+    const rest = work.map((_, i) => i).filter((i) => !keep.has(i)).sort((a, b) => work[b].work - work[a].work);
+    for (const i of rest) { if (keep.size >= maxCards) break; keep.add(i); }
+    const kept = work.filter((_, i) => keep.has(i));
+    const extra = work.filter((_, i) => !keep.has(i)).reduce((s, w) => s + w.work, 0);
+    const keptTotal = kept.reduce((s, w) => s + w.work, 0) || 1;
+    work = kept.map((w) => ({ ...w, work: w.work + (extra * w.work) / keptTotal }));
+  }
+  const cards = work.map(({ card, work: w }) => ({ ...card, reps: roundSmallReps(w / card.weight) }));
+  return { ...level, cards };
+}
 
 export type Identity = "cardio" | "jambes" | "bras" | "tronc" | "full";
 export type ProposedLevel = { name: string; identity: Identity; cards: [label: string, reps: number][] };

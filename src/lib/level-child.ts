@@ -3,7 +3,7 @@ import { listExercises, seedDefaultExercises } from "@/lib/level";
 import { readSessionClasses } from "@/lib/session-roles";
 import { readChild } from "@/lib/level-context";
 import { FINISHER_EMOM, FINISHER_SERIES, WARMUP_SERIES, childLabel, staggeredOrder, type ChildKind } from "@/lib/level-warmup";
-import { isBoss, EMOM_ZOMBIE_SPEED, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
+import { isBoss, readTeamFormats, teamFormatOf, EMOM_ZOMBIE_SPEED, type Format, type FrozenLevel } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 // Seance ENFANT d'un WOD Level (echauffement ou finisher) : memes equipes et membres copies, echelle figee
@@ -76,11 +76,15 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
     const teamId = idMap.get(m.teamId);
     if (teamId) await db.orm.public.TeamMember.create({ teamId, userId: m.userId });
   }
-  if (order) {
+  // Format de chaque equipe (petit format 1-3 : zombie regle sur 3) : celui du parent, sinon d'apres l'effectif.
+  const formats = readTeamFormats(prev);
+  const teamFormat: Record<string, Format> = {};
+  for (const t of teams) { const n = idMap.get(t.id); if (n) teamFormat[n] = teamFormatOf(formats, t.id, members.filter((m) => m.teamId === t.id).length); }
+  {
     const remapped: Record<string, number[]> = {};
-    for (const [oldId, seq] of Object.entries(order)) { const n = idMap.get(oldId); if (n) remapped[n] = seq; }
+    if (order) for (const [oldId, seq] of Object.entries(order)) { const n = idMap.get(oldId); if (n) remapped[n] = seq; }
     const s = (child.settings as Record<string, unknown> | null) ?? {};
-    await db.orm.public.Session.where({ id: child.id }).update({ settings: JSON.parse(JSON.stringify({ ...s, levelOrder: remapped })) });
+    await db.orm.public.Session.where({ id: child.id }).update({ settings: JSON.parse(JSON.stringify({ ...s, ...(order ? { levelOrder: remapped } : {}), teamFormat })) });
   }
   await db.orm.public.RaceState.create({ sessionId: child.id, noStartExerciseIds: [], startedAt: Temporal.Now.instant() });
   // Le parent connait ses enfants : classement, reps et records additionnent echauffement + WOD + finisher.

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { excludeFromRecordsAction, levelRecordsAction, pyramideRecordsAction, restoreToRecordsAction } from "./records-actions";
 // Types uniquement : importer une valeur de `pyramide-records` embarquerait la base dans le paquet client.
 import type { RecordEntry, RecordPeriod, RecordPhase, RecordsResult, TeamSex } from "@/lib/pyramide-records";
-import { STARS, starsLabel, starsName, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { FORMATS, STARS, formatLabel, formatName, starsLabel, starsName, type Format, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { btn, cx, ui } from "@/lib/ui";
 
 const SEXES: (TeamSex | "")[] = ["", "F", "M", "OPEN"];
@@ -33,7 +33,8 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
   const [period, setPeriod] = useState<RecordPeriod>("all");
   const [phase, setPhase] = useState<RecordPhase>("wod");
   const [stars, setStars] = useState<Stars | null>(null);
-  const filters = useMemo(() => ({ sex, grade, period, sessionId, ...(wod === "level" ? { phase, stars } : {}) }), [sex, grade, period, sessionId, phase, stars, wod]);
+  const [format, setFormat] = useState<Format | null>(null);
+  const filters = useMemo(() => ({ sex, grade, period, sessionId, ...(wod === "level" ? { phase, stars, format } : {}) }), [sex, grade, period, sessionId, phase, stars, format, wod]);
   const [data, setData] = useState<RecordsResult | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -83,6 +84,17 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
             {STARS.map((st) => (
               <button key={st} type="button" onClick={() => setStars(st)} className={cx(ui.pill, stars === st ? ui.pillOn : ui.pillOff)} title={starsName(st)}>
                 {starsLabel(st)}
+              </button>
+            ))}
+          </div>
+        )}
+        {wod === "level" && phase === "wod" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={ui.eyebrow}>Format</span>
+            <button type="button" onClick={() => setFormat(null)} className={cx(ui.pill, format === null ? ui.pillOn : ui.pillOff)}>Tous</button>
+            {FORMATS.map((fm) => (
+              <button key={fm} type="button" onClick={() => setFormat(fm)} className={cx(ui.pill, format === fm ? ui.pillOn : ui.pillOff)} title={formatName(fm)}>
+                {formatLabel(fm)}
               </button>
             ))}
           </div>
@@ -150,7 +162,7 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
                       </span>
                     </span>
                     {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
-                    <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{r.display}</span>
+                    <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format === "small" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName("small")}>1-3</span> : null}{r.display}</span>
                     {isMaster && (
                       <button
                         type="button"

@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { LEVEL_STAFF, listLevels, seedDefaultExercises } from "@/lib/level";
+import { LEVEL_STAFF, freezeLevels, listLevels, seedDefaultExercises } from "@/lib/level";
 import type { Temporal as TemporalNS } from "temporal-spec";
-import { isBoss, readCards, MAX_CARDS, DEFAULT_STARS, type LevelCard, type Stars } from "@/lib/wod-engines/templates/level-engine";
-import { asStars } from "@/lib/level";
+import { isBoss, readCards, MAX_CARDS, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type LevelCard, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { shrinkFrozenLevel } from "@/lib/level-proposals";
+import { asFormat, asStars } from "@/lib/level";
 
 // Catalogue d'exercices et echelle des niveaux du WOD Level. Profs, coachs ET greffier construisent ;
 // seul DAMZER supprime (regle de la console : les coachs ne suppriment rien).
@@ -84,13 +85,32 @@ export async function seedExercisesAction(): Promise<Res & { added?: number }> {
 }
 
 // ===== Niveaux =====
-export async function createLevelAction(stars: Stars = DEFAULT_STARS): Promise<Res & { id?: string }> {
+export async function createLevelAction(stars: Stars = DEFAULT_STARS, format: Format = DEFAULT_FORMAT): Promise<Res & { id?: string }> {
   await requireLevelStaff();
-  const levels = await listLevels(asStars(stars));
+  const levels = await listLevels(asStars(stars), asFormat(format));
   const number = (levels.at(-1)?.number ?? 0) + 1;
-  const row = await db.orm.public.Level.create({ stars: asStars(stars), number, cards: [] });
+  const row = await db.orm.public.Level.create({ format: asFormat(format), stars: asStars(stars), number, cards: [] });
   revalidatePath(PATH);
   return { ok: true, id: row.id };
+}
+
+// Petit format (equipes de 1 a 3) : copie derivee de l'echelle 4-5+ du meme parcours (reps ÷ 1,7, reps
+// rondes, 5 fiches max, meme travail par personne), a retoucher ensuite niveau par niveau. Tant que l'echelle
+// 1-3 d'un parcours est vide, c'est cette derivation qui est figee au coup d'envoi ; la copier ici sert a la
+// personnaliser. Remplacer une echelle 1-3 existante est reserve a DAMZER.
+export async function deriveSmallLadderAction(stars: Stars): Promise<Res & { levels?: number }> {
+  const user = await requireLevelStaff();
+  const existing = await listLevels(asStars(stars), "small");
+  if (existing.length && user.role !== "MASTER_ADMIN") return { error: "Remplacer l'échelle 1-3 est réservé à DAMZER." };
+  const big = await freezeLevels(asStars(stars), "big");
+  if (!big.some((l) => l.cards.length > 0)) return { error: "L'échelle 4-5+ de ce parcours est vide : compose-la d'abord." };
+  const derived = big.map((l) => shrinkFrozenLevel(l));
+  await db.transaction(async (tx) => {
+    for (const l of existing) await tx.orm.public.Level.where({ id: l.id }).delete();
+    for (const l of derived) await tx.orm.public.Level.create({ format: "small", stars: asStars(stars), number: l.number, name: l.name, cards: l.cards.map((c) => ({ exerciseId: c.exerciseId, reps: c.reps })) });
+  });
+  revalidatePath(PATH);
+  return { ok: true, levels: derived.length };
 }
 
 export async function saveLevelAction(id: string, input: { name: string | null; cards: LevelCard[] }): Promise<Res> {
@@ -115,7 +135,7 @@ export async function moveLevelAction(id: string, dir: "up" | "down"): Promise<R
   await requireLevelStaff();
   const row = await db.orm.public.Level.where({ id }).first();
   if (!row) return { error: "Niveau introuvable." };
-  const levels = await listLevels(asStars(row.stars));
+  const levels = await listLevels(asStars(row.stars), asFormat(row.format));
   const i = levels.findIndex((l) => l.id === id);
   if (i < 0) return { error: "Niveau introuvable." };
   const j = dir === "up" ? i - 1 : i + 1;
@@ -136,7 +156,7 @@ export async function deleteLevelAction(id: string): Promise<Res> {
   await requireMaster();
   const row = await db.orm.public.Level.where({ id }).first();
   if (!row) return { error: "Niveau introuvable." };
-  const levels = await listLevels(asStars(row.stars));
+  const levels = await listLevels(asStars(row.stars), asFormat(row.format));
   if (!levels.some((l) => l.id === id)) return { error: "Niveau introuvable." };
   await db.transaction(async (tx) => {
     await tx.orm.public.Level.where({ id }).delete();

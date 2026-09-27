@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { activeCards, coinsEarned, coinsInPlay, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, warmupCoinsInPlay, type CoinEvent, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -14,8 +14,9 @@ export type LevelTickRow = { id: string; teamId: string; level: number; card: nu
 export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; atMs: number };
 export type LevelBundle = {
   levels: FrozenLevel[]; // parcours 2 etoiles (echelle par defaut)
-  ladders: Partial<Record<Stars, FrozenLevel[]>>; // parcours 1 et 3 etoiles s'ils existent
+  ladders: Ladders; // parcours 1 et 3 etoiles s'ils existent, et les trois du petit format (s1, s2, s3)
   teamStars: Record<string, Stars>; // parcours choisi par equipe (2 par defaut)
+  teamFormats: Record<string, Format>; // format fixe par equipe (sinon : d'apres l'effectif, 1 a 3 -> small)
   frozen: boolean; // true = echelle figee dans la seance (course lancee) ; false = echelle vive de l'atelier
   teams: LevelTeam[];
   ticks: LevelTickRow[];
@@ -43,8 +44,9 @@ export type LevelBundle = {
 
 // Totaux d'une seance enfant (echauffement ou finisher), par NUMERO d'equipe (les enfants copient les
 // equipes du parent avec de nouveaux identifiants mais le meme numero).
-export type PhaseTeamTotals = { reps: number; work: number; repsByExercise: Record<string, number>; losses: number; cards: number; score: number | null; levels: number; coins: number; finishMs: number | null };
-export type PhaseTotals = { kind: "warmup" | "finisher"; sessionId: string; label: string; startedAtMs: number | null; byOrder: Record<number, PhaseTeamTotals>; levelsTotal: number; estimateMs: number };
+// `estimateMs` : duree theorique de la phase pour CETTE equipe (selon son format), transitions comprises.
+export type PhaseTeamTotals = { reps: number; work: number; repsByExercise: Record<string, number>; losses: number; cards: number; score: number | null; levels: number; coins: number; finishMs: number | null; estimateMs: number };
+export type PhaseTotals = { kind: "warmup" | "finisher"; sessionId: string; label: string; startedAtMs: number | null; byOrder: Record<number, PhaseTeamTotals>; levelsTotal: number };
 export const PHASE_LABEL: Record<PhaseTotals["kind"], string> = { warmup: "Échauffement", finisher: "Finisher" };
 
 export function readChildren(settings: unknown): { warmup?: string; finisher?: string } {
@@ -73,16 +75,19 @@ export async function phaseTotals(kind: PhaseTotals["kind"], sessionId: string):
   const order = readLevelOrder(s.settings);
   const penalties = readPenalties(s.settings);
   const scores = readEmomScores(s.settings);
+  const formats = readTeamFormats(s.settings);
+  const memberRows = teams.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teams.map((t) => t.id))).all() : [];
+  // Estimation de la phase (transitions comprises) selon l'effectif de reference : sert a suggerer un parcours.
+  const estimateFor = (team: number) => levels.reduce((a, l) => a + estimateSeconds(activeCards(l).map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss, team), 0) * 1.1 * 1000;
   const byOrder: Record<number, PhaseTeamTotals> = {};
   for (const t of teams) {
     const mine = orderedLevels(levels, order?.[t.id]);
     const p = progressOf(mine, t.id, ticks, losses, penalties);
     const coins = kind === "warmup" ? coinsEarned(mine, t.id, ticks, losses, penalties, warmupCoinsInPlay).total : 0;
-    byOrder[t.order ?? 0] = { reps: p.reps, work: p.weighted, repsByExercise: p.repsByExercise, losses: p.losses, cards: cards.filter((c) => c.teamId === t.id).length, score: scores[t.id] ?? null, levels: p.completedLevels, coins, finishMs: p.finishedMs };
+    const format = teamFormatOf(formats, t.id, memberRows.filter((m) => m.teamId === t.id).length);
+    byOrder[t.order ?? 0] = { reps: p.reps, work: p.weighted, repsByExercise: p.repsByExercise, losses: p.losses, cards: cards.filter((c) => c.teamId === t.id).length, score: scores[t.id] ?? null, levels: p.completedLevels, coins, finishMs: p.finishedMs, estimateMs: estimateFor(teamSizeOf(format)) };
   }
-  // Estimation de la phase pour une equipe de 5 (transitions comprises) : sert a suggerer un parcours.
-  const estimateMs = levels.reduce((a, l) => a + estimateSeconds(activeCards(l).map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss), 0) * 1.1 * 1000;
-  return { kind, sessionId, label: s.label ?? PHASE_LABEL[kind], startedAtMs, byOrder, levelsTotal: levels.filter((l) => activeCards(l).length > 0).length, estimateMs };
+  return { kind, sessionId, label: s.label ?? PHASE_LABEL[kind], startedAtMs, byOrder, levelsTotal: levels.filter((l) => activeCards(l).length > 0).length };
 }
 
 export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
@@ -115,7 +120,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     db.orm.public.RaceState.where({ sessionId }).first(),
   ]);
   const levels = frozen ? frozenLevels : live![2];
-  const ladders: Partial<Record<Stars, FrozenLevel[]>> = frozen ? readLadders(session.settings) : { ...(live![1].length ? { 1: live![1] } : {}), ...(live![3].length ? { 3: live![3] } : {}) };
+  const ladders: Ladders = frozen ? readLadders(session.settings) : (Object.fromEntries(LADDER_KEYS.filter((k) => k !== 2 && live![k].length).map((k) => [k, live![k]])) as Ladders);
 
   const teamIds = rawTeams.map((t) => t.id);
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
@@ -171,6 +176,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     levels,
     ladders,
     teamStars: readTeamStars(session.settings),
+    teamFormats: readTeamFormats(session.settings),
     frozen,
     teams,
     ticks,
@@ -200,7 +206,7 @@ export { coinsInPlay };
 
 // Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe.
 export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals {
-  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0, finishMs: null };
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0, finishMs: null, estimateMs: 0 };
   for (const ph of bundle.phases) {
     const x = ph.byOrder[order];
     if (!x) continue;
@@ -212,8 +218,9 @@ export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals
 }
 
 // Echelle d'une equipe : son parcours (etoiles), dans son ordre (echauffement en differe).
-export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "teamStars" | "levelOrder">, teamId: string): FrozenLevel[] {
-  return orderedLevels(ladderFor(bundle.levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId)), bundle.levelOrder?.[teamId]);
+export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "teamStars" | "teamFormats" | "teams" | "levelOrder">, teamId: string): FrozenLevel[] {
+  const format = teamFormatOf(bundle.teamFormats, teamId, bundle.teams.find((t) => t.id === teamId)?.members.length);
+  return orderedLevels(ladderFor(bundle.levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), format), bundle.levelOrder?.[teamId]);
 }
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
