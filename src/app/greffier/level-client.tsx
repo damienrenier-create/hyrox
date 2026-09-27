@@ -1350,12 +1350,12 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>Travail</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{coinsOf && <th className={`${ui.th} text-right`} title="Pièces gagnées (échauffement compris) · en banque">🪙</th>}{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
+            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{coinsOf && <th className={`${ui.th} text-right`} title="Pièces gagnées (échauffement compris) · en banque">🪙</th>}{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
           </tr>
         </thead>
         <tbody>
           {groups.flatMap(({ fm, st, rows }) => [
-            ...(groups.length > 1 ? [<tr key={`h${fm}${st}`}><td colSpan={12} className="p-2 bg-paper font-display font-extrabold text-sm">{starsLabel(st)} Parcours {starsName(st)}{mixed ? ` · ${formatName(fm)}` : ""} · {rows.length} équipe{rows.length > 1 ? "s" : ""}</td></tr>] : []),
+            ...(groups.length > 1 ? [<tr key={`h${fm}${st}`}><td colSpan={11} className="p-2 bg-paper font-display font-extrabold text-sm">{starsLabel(st)} Parcours {starsName(st)}{mixed ? ` · ${formatName(fm)}` : ""} · {rows.length} équipe{rows.length > 1 ? "s" : ""}</td></tr>] : []),
             ...rows.map((p) => {
             const t = teamById.get(p.teamId)!;
             const l = levelOf(p.teamId, p.currentLevel);
@@ -1369,7 +1369,6 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
                 <td className="p-2">{p.currentLevel ? <span className={cx(l?.boss && "text-danger-ink font-bold")}>{levelLabel(l)} · {p.currentDone}/{p.currentTotal}</span> : <span className="text-success-ink font-bold">🏁 {p.finishedMs !== null ? fmt(p.finishedMs) : ""}</span>}</td>
                 <td className="p-2 text-right tabular-nums">{p.lastTickMs !== null ? fmt(p.lastTickMs) : "—"}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.reps, (x) => x.reps) : undefined}>{p.reps + ex.reps}</td>
-                <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, Math.round(p.weighted), (x) => Math.round(x.work)) : undefined}>{fmtTheoretical(p.weighted + ex.work)}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.losses, (x) => x.losses) : undefined}>{p.losses + ex.losses}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, cardsOf.get(p.teamId) ?? 0, (x) => x.cards) : undefined}>{(cardsOf.get(p.teamId) ?? 0) + ex.cards}</td>
                 {coinsOf && <td className="p-2 text-right tabular-nums" title={`${coinsOf.get(p.teamId)?.earned ?? 0} gagnées au WOD + ${coinsOf.get(p.teamId)?.carry ?? 0} de l'échauffement · ${coinsOf.get(p.teamId)?.spent ?? 0} dépensées`}><b>{(coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0)}</b> <span className="text-ink-3">· {coinsOf.get(p.teamId)?.bank ?? 0}</span></td>}
