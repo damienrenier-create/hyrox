@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { openSession, parseHHMM, upcomingSessions, instantAtBrussels } from "@/lib/scheduling";
+import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { getWodEngine } from "@/lib/wod-engines";
 
@@ -280,6 +280,35 @@ export async function closeSessionAction(formData: FormData) {
   await requireMaster();
   await db.orm.public.Session.where({ id: str(formData, "id") }).update({ isActive: false });
   done("Séance fermée.");
+}
+
+// ===== Suppression douce (Sartay 27/09 : « une tete de mort sur la fiche, une confirmation, un soft delete ») =====
+// La seance disparait de partout mais reste en base : « Annuler » juste apres, ou Nettoyage > Corbeille pour la
+// restaurer ou l'effacer pour de bon. L'echauffement et le finisher d'un WOD Level suivent leur WOD.
+function childIdsOf(settings: unknown): string[] {
+  const c = (settings as { children?: Record<string, unknown> } | null)?.children;
+  return c && typeof c === "object" ? Object.values(c).filter((v): v is string => typeof v === "string") : [];
+}
+export async function softDeleteSessionAction(formData: FormData) {
+  const user = await requireMaster();
+  const s = await db.orm.public.Session.where({ id: str(formData, "id") }).first();
+  if (!s) fail("Séance introuvable.");
+  if (s.deletedAt) done("Cette séance est déjà supprimée.");
+  if (isSessionOpen(s)) fail("Cette séance est ouverte aux élèves : ferme-la d'abord.");
+  const at = Temporal.Now.instant();
+  for (const id of [s.id, ...childIdsOf(s.settings)]) await db.orm.public.Session.where({ id }).update({ deletedAt: at, deletedBy: user.name, isActive: false });
+  revalidatePath("/admin");
+  redirect(`/admin?ok=${encodeURIComponent(`💀 Séance « ${s.label ?? s.wodType} » supprimée.`)}&undo=${s.id}`);
+}
+export async function restoreSessionAction(formData: FormData) {
+  await requireMaster();
+  const back = str(formData, "back") === "/admin/nettoyage" ? "/admin/nettoyage" : "/admin";
+  const s = await db.orm.public.Session.where({ id: str(formData, "id") }).first();
+  if (!s) redirect(`${back}?msg=${encodeURIComponent("Séance introuvable.")}`);
+  for (const id of [s.id, ...childIdsOf(s.settings)]) await db.orm.public.Session.where({ id }).update({ deletedAt: null, deletedBy: null });
+  revalidatePath("/admin");
+  revalidatePath("/admin/nettoyage");
+  redirect(`${back}?ok=${encodeURIComponent(`Séance « ${s.label ?? s.wodType} » restaurée.`)}`);
 }
 
 // Rouvrir une seance fermee trop tot : possible tant que sa fenetre n'est pas passee (ou sans fenetre).

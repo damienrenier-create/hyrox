@@ -2,6 +2,11 @@
 // 6 depuis le 23/09 : les groupes AC Sport de DAMZER (2Ce, 2Cf, 2Cg, 2Sb, 2Sd, 2Se) comptent six classes.
 export const MAX_CLASSES = 6;
 
+// Suppression douce (Sartay 27/09) : une seance supprimee reste en base (Session.deletedAt) mais disparait de
+// partout (console, resultats, records, carnet, auto-evals, espace eleve). Nettoyage > Corbeille la restaure.
+export const isDeletedSession = (s: { deletedAt?: unknown } | null | undefined): boolean => !!s && s.deletedAt != null;
+export const notDeleted = (s: { deletedAt?: unknown }): boolean => s.deletedAt == null;
+
 // Classes de TEST (7A : 20 eleves fictifs, PIN 1234) : elles servent a tout essayer et n'entrent JAMAIS dans
 // une statistique ou un palmares. Une classe est « test » si elle commence par 7 (il n'y a pas de 7e annee).
 export const TEST_CLASS_PREFIX = "7";

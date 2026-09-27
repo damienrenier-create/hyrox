@@ -38,7 +38,7 @@ export async function sessionsForStudent(userId: string): Promise<StudentSession
     const team = await db.orm.public.Team.where({ id: m.teamId }).first();
     if (!team) continue;
     const session = await db.orm.public.Session.where({ id: team.sessionId }).first();
-    if (!session || readChild(session.settings)) continue; // echauffement / finisher : pas une seance a part entiere pour l'eleve
+    if (!session || session.deletedAt || readChild(session.settings)) continue; // echauffement / finisher : pas une seance a part entiere pour l'eleve ; corbeille : invisible
     rows.push({
       sessionId: session.id,
       wodType: session.wodType,

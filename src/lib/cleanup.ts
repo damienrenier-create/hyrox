@@ -127,7 +127,7 @@ export async function deleteSession(sessionId: string): Promise<number> {
 export type CleanupInventory = {
   sessions: {
     id: string; label: string; dateMs: number; opensAtMs: number | null; wodType: string; refereeMode: boolean;
-    state: "ouverte" | "programmée" | "terminée"; started: boolean; ended: boolean;
+    state: "ouverte" | "programmée" | "terminée"; started: boolean; ended: boolean; deleted: boolean; deletedBy: string | null;
     teams: number; members: number; laps: number; cards: number; evals: number; shots: number; selfEvals: number; fleets: number;
   }[];
   pinCount: number;
@@ -177,6 +177,8 @@ export async function cleanupInventory(): Promise<CleanupInventory> {
         state: (isScheduled(s, now) ? "programmée" : s.isActive ? "ouverte" : "terminée") as "ouverte" | "programmée" | "terminée",
         started: !!rs?.startedAt,
         ended: !!s.raceEndedAt,
+        deleted: s.deletedAt != null,
+        deletedBy: s.deletedBy ?? null,
         teams: teams.length,
         members: allMembers.filter((m) => teamIds.has(m.teamId)).length,
         laps: rs ? allLaps.filter((l) => l.raceStateId === rs.id).length : 0,

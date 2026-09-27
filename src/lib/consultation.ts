@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { buildStandingsForSessions } from "@/lib/standings-batch";
 import { isQualityCode, qualityCodeFromValue, type QualityCode } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
-import { readSessionClasses } from "@/lib/session-roles";
+import { notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { toMs } from "@/lib/scheduling";
 
@@ -68,7 +68,7 @@ export type ConsultationRow = {
 };
 
 export async function buildConsultation(f: ConsultationFilters): Promise<ConsultationResult> {
-  let sessions = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all();
+  let sessions = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).filter(notDeleted);
   if (f.sessionId) sessions = sessions.filter((s) => s.id === f.sessionId);
   if (f.cycleId) sessions = sessions.filter((s) => s.cycleId === f.cycleId);
   if (f.from) {

@@ -6,6 +6,7 @@ import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { Board, type BoardMarker } from "../../touche-coule/Board";
 import { TopBar } from "../../_components/TopBar";
 import { btn, ui } from "@/lib/ui";
+import { notDeleted } from "@/lib/session-roles";
 
 // Carte admin (lecture seule) : toutes les flottes (fantomes grisees), tous les tirs, classement des arbitres.
 export default async function CartePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
@@ -13,7 +14,7 @@ export default async function CartePage({ searchParams }: { searchParams: Promis
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) redirect("/");
 
   const { session: requested } = await searchParams;
-  const sessions = (await db.orm.public.Session.where({ refereeMode: true }).orderBy((s) => s.createdAt.desc()).all());
+  const sessions = (await db.orm.public.Session.where({ refereeMode: true }).orderBy((s) => s.createdAt.desc()).all()).filter(notDeleted);
   const session = (requested ? sessions.find((s) => s.id === requested) : null) ?? sessions[0] ?? null;
   const board = session ? await buildBoardData(session.id) : null;
 

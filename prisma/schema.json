@@ -2277,6 +2277,20 @@
                   "kind": "scalar"
                 }
               },
+              "deletedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "deletedBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -2605,6 +2619,12 @@
                 },
                 "cycleId": {
                   "column": "cycleId"
+                },
+                "deletedAt": {
+                  "column": "deletedAt"
+                },
+                "deletedBy": {
+                  "column": "deletedBy"
                 },
                 "id": {
                   "column": "id"
@@ -5316,6 +5336,16 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "deletedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "deletedBy": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6231,7 +6261,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f35c40d44fa29ead8e4bb486935fcd70482970a2186e0e459dc4f4ca5155e8c6"
+    "storageHash": "97cd79e33a98e3554d7f93b78be23a1378924f99bc1b85e919317496f05ab141"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",

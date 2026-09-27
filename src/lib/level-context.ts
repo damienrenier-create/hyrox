@@ -56,7 +56,7 @@ export function readChildren(settings: unknown): { warmup?: string; finisher?: s
 
 export async function phaseTotals(kind: PhaseTotals["kind"], sessionId: string): Promise<PhaseTotals | null> {
   const s = await db.orm.public.Session.where({ id: sessionId }).first();
-  if (!s) return null;
+  if (!s || s.deletedAt) return null; // echauffement / finisher supprime : il ne compte plus
   const levels = readFrozenFromSettings(s.settings);
   const [teams, rs, rawTicks, rawLosses] = await Promise.all([
     db.orm.public.Team.where({ sessionId }).all(),

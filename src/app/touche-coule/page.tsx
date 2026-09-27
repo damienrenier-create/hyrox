@@ -14,6 +14,7 @@ import { mineViewFor } from "@/lib/mine";
 import { wodLabel } from "@/lib/student-sessions";
 import type { BoardShip } from "./Board";
 import { btn, ui } from "@/lib/ui";
+import { notDeleted } from "@/lib/session-roles";
 
 export default async function ToucheCoulePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
   const evaluator = await getSession();
@@ -26,6 +27,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
   // l'acces au Touché-Coulé (§28) — elle ne fait que basculer les tirs suivants en POST_WOD.
   const { session: requested } = await searchParams;
   let session = requested ? await db.orm.public.Session.where({ id: requested, refereeMode: true }).first() : null;
+  if (session?.deletedAt) session = null; // seance supprimee (corbeille)
   if (!session) {
     const open = evaluator.role === "STUDENT"
       ? await openSessionsForStudent(evaluator.id, evaluator.className ?? null)
@@ -33,7 +35,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     session = open.find((s) => s.refereeMode) ?? null;
   }
   if (!session) {
-    session = await db.orm.public.Session.where({ refereeMode: true }).orderBy((s) => s.createdAt.desc()).first();
+    session = (await db.orm.public.Session.where({ refereeMode: true }).orderBy((s) => s.createdAt.desc()).all()).find(notDeleted) ?? null;
   }
 
   if (!session) {

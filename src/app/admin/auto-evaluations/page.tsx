@@ -9,6 +9,7 @@ import { querySelfEvaluations, readLevelParams, PAGE_SIZE, type SelfEvalSort } f
 import { TopBar } from "../../_components/TopBar";
 import { ReviewButton } from "../ReviewPanel";
 import { btn, cx, ui } from "@/lib/ui";
+import { notDeleted } from "@/lib/session-roles";
 
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -28,7 +29,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
   const levels = readLevelParams(sp);
 
   const [sessions, allClasses] = await Promise.all([
-    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all(),
+    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all().then((all) => all.filter(notDeleted)),
     db.orm.public.User.where({ role: "STUDENT" }).all().then((us) => [...new Set(us.map((u) => u.className).filter((c): c is string => !!c))].sort()),
   ]);
 

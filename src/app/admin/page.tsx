@@ -7,12 +7,15 @@ import { listWodEngines } from "@/lib/wod-engines";
 import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
 import { readSessionClasses, readCycleClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { SlotDeleteButton } from "./SlotDeleteButton";
+import { SessionDeleteButton } from "./SessionDeleteButton";
+import { notDeleted } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 import {
   addPlanAction, closeSessionAction, reopenSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
   openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
+  restoreSessionAction,
 } from "./cycles-actions";
 import { TopBar } from "../_components/TopBar";
 import { LogoutButton } from "../_components/LogoutButton";
@@ -30,14 +33,14 @@ const card = ui.cardPad;
 const input = ui.input;
 const fieldLabel = ui.label;
 
-export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ ok?: string; msg?: string; w?: string }> }) {
+export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ ok?: string; msg?: string; w?: string; undo?: string }> }) {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) {
     redirect("/");
   }
   // Un coach voit et pilote tout, mais aucune suppression ne lui est proposee.
   const canDelete = user.role === "MASTER_ADMIN";
-  const { ok, msg, w } = await searchParams;
+  const { ok, msg, w, undo } = await searchParams;
 
   await ensureAutoSessions();
   const open = await listOpenSessions();
@@ -51,13 +54,22 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const upcoming = (await upcomingSessions(80, daysAhead)).filter((u) => weekDays.includes(u.dateKey));
   const byDay = weekDays.map((dk) => upcoming.filter((u) => u.dateKey === dk));
   const fmtWeekDay = (dk: string) => `${dk.slice(8)}/${dk.slice(5, 7)}`;
-  const allSessions = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all();
+  const allSessions = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).filter(notDeleted);
   // Seances DEJA creees en attente de leur heure (a distinguer des simples creneaux recurrents).
   const scheduled = allSessions.filter((s) => s.isActive && isScheduled(s)).sort((a, b) => toMs(a.opensAt) - toMs(b.opensAt));
   // Raccourci vers les 3 dernieres seances ecoulees (ni ouvertes, ni programmees) : relecture rapide.
   const openIds = new Set(open.map((s) => s.id));
   const scheduledIds = new Set(scheduled.map((s) => s.id));
   const past = allSessions.filter((s) => !openIds.has(s.id) && !scheduledIds.has(s.id)).slice(0, 3);
+  // Pour la confirmation de la tete de mort : nombre d'equipes et WOD lance ou non.
+  const pastInfo = new Map(
+    await Promise.all(
+      past.map(async (s) => {
+        const [teams, rs] = await Promise.all([db.orm.public.Team.where({ sessionId: s.id }).all(), db.orm.public.RaceState.where({ sessionId: s.id }).first()]);
+        return [s.id, `${teams.length} équipe${teams.length > 1 ? "s" : ""} · ${rs?.startedAt ? (s.raceEndedAt ? "WOD joué jusqu'au bout" : "WOD lancé, pas terminé") : "WOD jamais lancé"}`] as const;
+      })
+    )
+  );
   const cycles = await db.orm.public.Cycle.where({}).orderBy((c) => c.order.asc()).all();
   const current = cycles.find((c) => c.isCurrent) ?? null;
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
@@ -123,7 +135,17 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
       />
 
       <main className={`${ui.container} py-6 space-y-5`}>
-        {ok && <p className={ui.alertOk}>✅ {ok}</p>}
+        {ok && (
+          <div className={`${ui.alertOk} flex flex-wrap items-center gap-2`}>
+            <span>✅ {ok}</span>
+            {undo && canDelete && (
+              <form action={restoreSessionAction} className="ml-auto">
+                <input type="hidden" name="id" value={undo} />
+                <button type="submit" className={btn.smGhost}>↩︎ Annuler la suppression</button>
+              </form>
+            )}
+          </div>
+        )}
         {msg && <p className={ui.alertErr}>⚠️ {msg}</p>}
 
         {/* ===== Seances ouvertes ===== */}
@@ -183,7 +205,9 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                 const classes = readSessionClasses(s.settings);
                 return (
                   <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-start gap-2">
+                      {canDelete && <SessionDeleteButton id={s.id} label={`${s.label ?? wodLabel(s.wodType)} · ${fmtDay(s.createdAt)} ${fmtTime(s.createdAt)}`} detail={`${classes.length ? classes.join(", ") : "toutes classes"} · ${pastInfo.get(s.id) ?? ""}`} />}
+                      <div className="min-w-0">
                       <div className="font-bold">
                         {s.label ?? wodLabel(s.wodType)}
                         <span className="text-ink-3 font-normal"> · {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}</span>
@@ -194,6 +218,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                         )}
                       </div>
                       <div className="text-xs text-ink-2">{classes.length ? classes.join(", ") : "toutes classes"} · {engineName(s.wodType)}</div>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Résultats</Link>

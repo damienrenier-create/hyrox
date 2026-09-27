@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { gradeOfCode, isQualityCode } from "@/lib/wod-engines/core/quality";
-import { readSessionClasses } from "@/lib/session-roles";
+import { notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 
 // Carnet de cotes : pour un groupe de classes, la note que chaque eleve s'est donnee a chaque WOD via son
@@ -86,7 +86,7 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     db.orm.public.SelfEvaluation.where((e) => e.studentId.in(ids)).all(),
     db.orm.public.TeamMember.where((m) => m.userId.in(ids)).all(),
     db.orm.public.SelfEvalReview.where((r) => r.studentId.in(ids)).all(),
-    db.orm.public.Session.where({}).all(),
+    db.orm.public.Session.where({}).all().then((all) => all.filter(notDeleted)),
   ]);
   const teamIds = [...new Set(memberships.map((m) => m.teamId))];
   const teams = teamIds.length ? await db.orm.public.Team.where((t) => t.id.in(teamIds)).all() : [];

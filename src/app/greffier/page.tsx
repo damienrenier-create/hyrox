@@ -13,7 +13,7 @@ import { isBirthdayToday } from "@/lib/birthday";
 import { teammatePairs } from "@/lib/teammates";
 import { STAFF_CLASS_LABEL, STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import type { PickerData } from "./TeamsManager";
-import { readSessionClasses } from "@/lib/session-roles";
+import { notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
 import { getSessionClasses } from "./team-actions";
@@ -34,10 +34,11 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const open = await listOpenSessions();
   const { session: requested } = await searchParams;
   let session = requested ? await db.orm.public.Session.where({ id: requested }).first() : null;
+  if (session?.deletedAt) session = null; // seance supprimee (corbeille) : on retombe sur la seance par defaut
   // Sans ?session= : la seance ouverte la plus recente qui n'est pas un echauffement ou un finisher (ceux-ci
   // se rejoignent depuis le greffier de leur WOD), sinon la plus recente tout court.
   if (!session) session = open.find((s) => !readChild(s.settings)) ?? open[0] ?? null;
-  if (!session) session = await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).first();
+  if (!session) session = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).find(notDeleted) ?? null;
 
   if (!session) {
     return (
@@ -55,7 +56,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   // (revoir les scores, finir d'encoder) ou passer a la suivante, sans repasser par la console.
   // On liste les 12 dernieres seances par ordre chronologique, la plus recente en tete.
   const openIds = new Set(open.map((s) => s.id));
-  const recent = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).slice(0, 12);
+  const recent = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).filter(notDeleted).slice(0, 12);
   const chain = recent.some((s) => s.id === session!.id) ? recent : [session, ...recent];
   const options: SessionOption[] = chain.map((s) => ({
     id: s.id,

@@ -6,7 +6,7 @@ import {
 } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs, TZ } from "@/lib/scheduling";
 import { wodLabel } from "@/lib/student-sessions";
-import { isTestClass } from "@/lib/session-roles";
+import { isTestClass, notDeleted } from "@/lib/session-roles";
 
 // Records du WOD Pyramide, toutes classes et toutes seances confondues. Calcule a la demande (onglet
 // Records du greffier), jamais au rendu de la page : ce balayage lit TOUTES les seances Pyramide et n'a
@@ -87,7 +87,7 @@ type Row = {
 };
 
 export async function buildPyramideRecords(f: RecordFilters = {}): Promise<RecordsResult> {
-  const sessions = await db.orm.public.Session.where({ wodType: "PYRAMIDE_CLASSIQUE" }).all();
+  const sessions = (await db.orm.public.Session.where({ wodType: "PYRAMIDE_CLASSIQUE" }).all()).filter(notDeleted);
   const allIds = sessions.map((s) => s.id);
   const raceStates = allIds.length ? await db.orm.public.RaceState.where((r) => r.sessionId.in(allIds)).all() : [];
   const rsBySession = new Map(raceStates.map((r) => [r.sessionId, r]));

@@ -18,7 +18,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
   if (user.role !== "STUDENT") redirect("/eleve");
 
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
-  if (!session) redirect("/eleve");
+  if (!session || session.deletedAt) redirect("/eleve");
 
   // Acces uniquement si l'eleve a ete encode (par identifiant) dans une equipe de cette seance.
   const teams = await db.orm.public.Team.where({ sessionId }).all();

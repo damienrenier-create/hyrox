@@ -3,6 +3,7 @@ import { buildStandingsForSessions } from "@/lib/standings-batch";
 import { gradeOfAnswers, fmtGrade } from "@/lib/carnet";
 import { STAFF_CLASS_LABEL, STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import { toMs } from "@/lib/scheduling";
+import { notDeleted } from "@/lib/session-roles";
 
 // Coequipiers habituels : pour chaque eleve, les 3 personnes avec qui il a le plus souvent joue. Quand le
 // greffier encode un nom dans une equipe, ses anciens coequipiers sont proposes en premier.
@@ -37,7 +38,7 @@ export async function teammatePairs(studentIds: string[]): Promise<Record<string
     db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all(),
   ]);
   const sessionIds = [...new Set(teams.map((t) => t.sessionId))];
-  const sessions = await db.orm.public.Session.where((s) => s.id.in(sessionIds)).all();
+  const sessions = (await db.orm.public.Session.where((s) => s.id.in(sessionIds)).all()).filter(notDeleted); // corbeille : pas de coequipiers fantomes
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const teamById = new Map(teams.map((t) => [t.id, t]));
 

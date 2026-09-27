@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { isQualityCode, type QualityCode } from "@/lib/wod-engines/core/quality";
 import { wodLabel } from "@/lib/student-sessions";
+import { isDeletedSession } from "@/lib/session-roles";
 
 // Consultation des auto-evaluations : chronologique par defaut (la plus recente en haut), avec filtres
 // (seance, classe, mot-cle, niveau atteint par critere), tris et pagination.
@@ -73,7 +74,8 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
     if (f.sessionId === sid) participants = members.reduce((n, list) => n + list.length, 0);
   }
 
-  const all: SelfEvalRow[] = evals.map((e) => {
+  // Seance supprimee (corbeille) : ses auto-evaluations disparaissent avec elle.
+  const all: SelfEvalRow[] = evals.filter((e) => !isDeletedSession(sessionById.get(e.sessionId))).map((e) => {
     const u = studentById.get(e.studentId);
     const s = sessionById.get(e.sessionId);
     const at = String(e.submittedAt);

@@ -4,7 +4,7 @@ import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import { activeCards, coinsEarned, coinsInPlay, fmtIntensity, fmtTheoretical, ladderFor, parcoursKey, progressOf, readEmomScores, readLadders, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, warmupCoinsInPlay, type Format, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
-import { isTestClass } from "@/lib/session-roles";
+import { isTestClass, notDeleted } from "@/lib/session-roles";
 import { readChild } from "@/lib/level-context";
 import {
   BK_WINDOW, gradeOf, periodRange, readExcludedFromRecords,
@@ -40,7 +40,7 @@ type Row = {
 
 export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsResult> {
   const phase = f.phase ?? "wod";
-  const sessions = await db.orm.public.Session.where({ wodType: "LEVEL" }).all();
+  const sessions = (await db.orm.public.Session.where({ wodType: "LEVEL" }).all()).filter(notDeleted);
   const allIds = sessions.map((s) => s.id);
   const raceStates = allIds.length ? await db.orm.public.RaceState.where((r) => r.sessionId.in(allIds)).all() : [];
   const rsBySession = new Map(raceStates.map((r) => [r.sessionId, r]));

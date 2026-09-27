@@ -11,15 +11,18 @@ export type PurgeRow = {
   when: string;
   state: "ouverte" | "programmée" | "terminée";
   detail: string;
-  protectedReason: string | null; // non pre-cochee, et affichee en garde-fou
+  protectedReason: string | null; // affichee en garde-fou
+  deleted?: boolean; // dans la corbeille (supprimee depuis la console)
 };
 
 // Grand menage : rien ne part tant que la phrase n'est pas tapee exactement. Les seances programmees
 // ou ouvertes ne sont jamais cochees d'avance — il faut aller les decocher... pardon, les cocher soi-meme.
 export function PurgeForm({ rows, pinCount, reliabilityCount, programme }: { rows: PurgeRow[]; pinCount: number; reliabilityCount: number; programme: string }) {
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(rows.filter((r) => !r.protectedReason).map((r) => r.id)));
-  const [pins, setPins] = useState(true);
-  const [rel, setRel] = useState(true);
+  // Depuis le lancement (27/09) : seules les seances de la corbeille sont cochees d'avance, et ni les PIN ni la
+  // fiabilite ne sont remis a zero sans un geste explicite. Les vraies seances ne partent plus par megarde.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(rows.filter((r) => r.deleted && !r.protectedReason).map((r) => r.id)));
+  const [pins, setPins] = useState(false);
+  const [rel, setRel] = useState(false);
   // Jamais coche d'avance : effacer la programmation est une remise a blanc avant un lancement,
   // pas un menage de fin de test.
   const [prog, setProg] = useState(false);
@@ -70,6 +73,7 @@ export function PurgeForm({ rows, pinCount, reliabilityCount, programme }: { row
                       >
                         {r.state}
                       </span>
+                      {r.deleted && <span className={cx(ui.chip, ui.chipErr, "ml-1")}>💀 corbeille</span>}
                     </span>
                     <span className="block text-xs text-ink-2">{r.detail}</span>
                     {r.protectedReason && <span className="block text-xs font-bold text-warn-ink mt-0.5">⚠️ {r.protectedReason}</span>}

@@ -7,6 +7,7 @@ import { wodLabel } from "@/lib/student-sessions";
 import { TZ } from "@/lib/scheduling";
 import { TopBar } from "../../_components/TopBar";
 import { resetRaceAction } from "./actions";
+import { restoreSessionAction } from "../cycles-actions";
 import { PurgeForm, type PurgeRow } from "./PurgeForm";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -24,7 +25,8 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
 
   const inv = await cleanupInventory();
   const now = Date.now();
-  const withContent = inv.sessions.filter((s) => s.started || s.ended || s.laps || s.shots || s.evals || s.selfEvals);
+  const withContent = inv.sessions.filter((s) => !s.deleted && (s.started || s.ended || s.laps || s.shots || s.evals || s.selfEvals));
+  const trash = inv.sessions.filter((s) => s.deleted);
   // Une seance dont l'heure d'ouverture est encore a venir est une seance PREPAREE, meme si elle a ete
   // lancee par erreur et donc refermee : elle ne doit jamais partir sans un geste explicite.
   const future = (s: { opensAtMs: number | null }) => !!s.opensAtMs && s.opensAtMs > now;
@@ -46,6 +48,7 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
       ]
         .filter(Boolean)
         .join(" · "),
+    deleted: s.deleted,
     protectedReason: future(s)
       ? `Séance préparée pour le ${fmt(s.opensAtMs!)} : la supprimer annulerait ta préparation.${s.ended ? " Elle a été lancée par erreur — utilise plutôt « Remettre à zéro » ci-dessus." : ""}`
       : s.state === "ouverte"
@@ -93,6 +96,39 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
               </span>
             </li>
           </ul>
+        </section>
+
+        {/* ===== Corbeille : seances supprimees depuis la console (💀), restaurables ===== */}
+        <section className={ui.cardPad}>
+          <h2 className={`${ui.h2} mb-1`}>💀 Corbeille <span className="text-ink-3 text-sm font-sans font-normal">({trash.length})</span></h2>
+          <p className={`${ui.hint} mb-3`}>
+            Séances supprimées avec la tête de mort de la console : invisibles partout (console, résultats, records, carnet, auto-évals,
+            espace élève), mais rien n&apos;est effacé. « Restaurer » les remet exactement comme avant. Pour les effacer pour de bon,
+            elles sont cochées d&apos;avance dans le grand ménage plus bas.
+          </p>
+          {trash.length === 0 ? (
+            <p className={ui.muted}>La corbeille est vide.</p>
+          ) : (
+            <ul className="space-y-2">
+              {trash.map((s) => (
+                <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
+                  <div className="min-w-0">
+                    <b className="text-sm">{s.label === s.wodType ? wodLabel(s.wodType) : s.label}</b>
+                    <span className="text-ink-3 text-sm"> · {s.opensAtMs ? `prévue ${fmt(s.opensAtMs)}` : fmt(s.dateMs)}</span>
+                    <span className="block text-xs text-ink-2">
+                      {s.teams} équipes · {s.members} participants{s.laps ? ` · ${s.laps} tours` : ""}{s.selfEvals ? ` · ${s.selfEvals} auto-évals` : ""}
+                      {s.deletedBy ? ` · supprimée par ${s.deletedBy}` : ""}
+                    </span>
+                  </div>
+                  <form action={restoreSessionAction}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="back" value="/admin/nettoyage" />
+                    <button type="submit" className={btn.smSuccess}>↩︎ Restaurer</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* ===== Remettre une seance a zero ===== */}
@@ -159,8 +195,9 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
           <h2 className={`${ui.h2} mb-1`}>🗑️ Effacer les données de test</h2>
           <p className={`${ui.hint} mb-3`}>
             Suppression <b>définitive</b> et sans retour des séances cochées, avec leurs équipes, tours, cartes, évaluations, tirs, flottes et
-            auto-évaluations. Les séances <b>programmées</b> ou <b>ouvertes</b> ne sont jamais cochées d&apos;avance : coche-les seulement si tu
-            veux vraiment les perdre. Mot de passe du ménage : <b className="text-danger-ink tracking-wider">{CLEANUP_PHRASE}</b>
+            auto-évaluations. Seules les séances de la <b>corbeille</b> sont cochées d&apos;avance, et les codes PIN et la fiabilité ne sont
+            remis à zéro que si tu coches leur case : coche le reste seulement si tu veux vraiment le perdre. Mot de passe du ménage :{" "}
+            <b className="text-danger-ink tracking-wider">{CLEANUP_PHRASE}</b>
           </p>
           {rows.length === 0 && !inv.pinCount && !inv.reliabilityCount && !inv.kept.cycles.length && !inv.kept.plans.length && !inv.kept.slots ? (
             <p className={ui.muted}>La base est déjà vierge : aucune séance, aucun code PIN, aucune programmation.</p>

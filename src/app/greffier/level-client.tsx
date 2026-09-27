@@ -9,7 +9,7 @@ import {
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
-import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, sendRocketAction, setEmomScoreAction, setLevelCapAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, sendRocketAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -238,7 +238,19 @@ export function LevelClient({
     }
     return m;
   }, [bundle.phases, bundle.child, phase, teams]);
-  const suggestionsDiff = useMemo(() => [...suggestions.entries()].filter(([id, s]) => s.stars !== starsOf(id)).length, [suggestions, starsOf]);
+  // Equipes dont la suggestion differe de leur parcours actuel, dans l'ordre des numeros.
+  const suggestionRows = useMemo(() => teams.filter((t) => { const s = suggestions.get(t.id); return !!s && s.stars !== starsOf(t.id); }).map((t) => ({ team: t, cur: starsOf(t.id), sg: suggestions.get(t.id)! })), [teams, suggestions, starsOf]);
+  const suggestionsDiff = suggestionRows.length;
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  function applySuggestions(rows: { team: LevelTeam; sg: { stars: Stars } }[]) {
+    run(async () => {
+      for (const { team, sg } of rows) {
+        const r = await setTeamStarsAction(sessionId, team.id, sg.stars);
+        if ("error" in r) return { error: `${team.name} : ${r.error}` };
+      }
+      return { ok: true };
+    });
+  }
   function createStar(st: Stars) { run(async () => { const r = await createStarTeamAction(sessionId, st); return "error" in r ? r : { ok: true }; }); }
   function numberTeams() { run(async () => { const r = await numberTeamsAction(sessionId); return "error" in r ? r : { ok: true }; }); }
   const cardsOf = useMemo(() => {
@@ -430,10 +442,59 @@ export function LevelClient({
         {view === "race" && (
           <>
             {suggestionsDiff > 0 && (
-              <p className={`${ui.alertInfo} mb-2 flex flex-wrap items-center gap-2`}>
-                <span>🔥 D&apos;après l&apos;échauffement, <b>{suggestionsDiff} équipe{suggestionsDiff > 1 ? "s" : ""}</b> pourrai{suggestionsDiff > 1 ? "en" : ""}t changer de parcours (monter ou descendre d&apos;une étoile).</span>
-                <button type="button" onClick={() => setView("settings")} className={`${btn.smPrimary} ml-auto`}>Voir les suggestions ⚙️</button>
-              </p>
+              <div className={`${ui.alertInfo} mb-2`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>🔥 D&apos;après l&apos;échauffement, <b>{suggestionsDiff} équipe{suggestionsDiff > 1 ? "s" : ""}</b> pourrai{suggestionsDiff > 1 ? "en" : ""}t changer de parcours. Rien ne change sans ton clic.</span>
+                  <button type="button" onClick={() => setShowSuggestions((v) => !v)} className={`${btn.smPrimary} ml-auto`}>{showSuggestions ? "Masquer" : "Voir les suggestions"}</button>
+                </div>
+                {showSuggestions && (
+                  <div className="mt-2 bg-card text-ink rounded-xl border border-line overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr>
+                          <th className={ui.th}>Équipe</th>
+                          <th className={ui.th}>Échauffement</th>
+                          <th className={ui.th}>Parcours actuel</th>
+                          <th className={ui.th}>Suggestion</th>
+                          <th className={ui.th}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {suggestionRows.map(({ team, cur, sg }) => (
+                          <tr key={team.id} className={ui.tr}>
+                            <td className="p-2">
+                              <b>{team.name}</b>
+                              <span className="block text-[11px] text-ink-3">{team.members.map((m) => m.name).join(", ")}</span>
+                            </td>
+                            <td className="p-2 tabular-nums">
+                              {sg.finishMs !== null ? (
+                                <>bouclé en <b>{fmt(sg.finishMs)}</b> <span className="text-ink-3">({Math.round((sg.ratio ?? 0) * 100)} % du temps prévu)</span></>
+                              ) : (
+                                <>pas bouclé : <b>{sg.levels}/{sg.total}</b> séries</>
+                              )}
+                            </td>
+                            <td className="p-2 font-bold text-accent-ink">{starsLabel(cur)}</td>
+                            <td className="p-2 font-bold">{sg.stars > cur ? "▲" : "▼"} <span className="text-accent-ink">{starsLabel(sg.stars)}</span> <span className="text-ink-3 font-normal text-xs">{starsName(sg.stars)}</span></td>
+                            <td className="p-2 text-right">
+                              <button type="button" disabled={pending} onClick={() => applySuggestions([{ team, sg }])} className={btn.smSea}>
+                                {sg.stars > cur ? "▲ Monter" : "▼ Descendre"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="p-2 flex flex-wrap items-center gap-2 border-t border-line">
+                      <span className={`${ui.hint} flex-1 min-w-[240px]`}>
+                        Règle : échauffement bouclé en 80 % du temps prévu ou moins → ★★★ ; jusqu&apos;à 120 % → ★★☆ ; au-delà → ★☆☆. Pas bouclé : ★★☆ s&apos;il a fait au moins les trois quarts des séries, sinon ★☆☆. Tu peux aussi tout régler à la main dans ⚙️ Réglages › Parcours des équipes.
+                      </span>
+                      <button type="button" disabled={pending} onClick={() => applySuggestions(suggestionRows)} className={btn.smPrimary}>
+                        Tout appliquer ({suggestionsDiff})
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {teams.length === 0 ? (
               <p className={`${ui.cardPad} ${ui.muted}`}>Aucune équipe : compose-les dans l&apos;onglet « Équipes &amp; arbitres ».</p>

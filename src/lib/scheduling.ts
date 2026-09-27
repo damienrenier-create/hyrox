@@ -1,7 +1,7 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { MAX_CLASSES, readSessionClasses, readCycleClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, notDeleted, readSessionClasses, readCycleClasses } from "@/lib/session-roles";
 import { groupSlots, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -44,7 +44,7 @@ export function isScheduled(s: SessionRow, nowMs = Date.now()): boolean {
 // Seances ouvertes maintenant. Les seances dont la fenetre est depassee sont fermees (isActive=false) au passage :
 // pas de cron necessaire, tout est calcule a la lecture.
 export async function listOpenSessions() {
-  const active = await db.orm.public.Session.where({ isActive: true }).orderBy((s) => s.createdAt.desc()).all();
+  const active = (await db.orm.public.Session.where({ isActive: true }).orderBy((s) => s.createdAt.desc()).all()).filter(notDeleted);
   const now = Date.now();
   const open = [];
   for (const s of active) {
@@ -153,7 +153,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
   const top = out.slice(0, limit);
   // Seances deja preparees : UNE requete groupee, pas une par creneau.
   const keys = top.map((u) => u.slotKey);
-  const prepared = keys.length ? await db.orm.public.Session.where((x) => x.slotKey.in(keys)).all() : [];
+  const prepared = keys.length ? (await db.orm.public.Session.where((x) => x.slotKey.in(keys)).all()).filter(notDeleted) : [];
   const byKey = new Map(prepared.map((x) => [x.slotKey, x.id]));
   for (const u of top) u.sessionId = byKey.get(u.slotKey) ?? null;
   return top;

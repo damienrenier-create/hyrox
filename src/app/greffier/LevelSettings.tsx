@@ -64,23 +64,14 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
           <h3 className={ui.h3}>Parcours des équipes</h3>
           <p className={`${ui.hint} mb-2`}>Trois parcours joués en même temps : ★☆☆ découverte (peu de force et de technique), ★★☆ équilibré, ★★★ force et cardio. Deux formats : <b>4-5+</b> (échelle de référence) et <b>1-3</b> (reps ÷ 1,7, 2 à 5 fiches, même travail par personne), choisi automatiquement d&apos;après l&apos;effectif (auto) et modifiable ici. Chaque équipe a son classement dans son parcours et son format. Modifiable tant que l&apos;équipe n&apos;a rien coché.{STARS.filter((st) => st !== 2 && !ladders[st]).length > 0 && <> ⚠️ {STARS.filter((st) => st !== 2 && !ladders[st]).map((st) => starsName(st)).join(" et ")} : pas d&apos;échelle {frozen ? "figée dans cette séance" : "dans l'atelier"}, ces équipes joueraient le 2 étoiles.</>}</p>
           {teamList.length === 0 ? <p className={ui.hint}>Pas encore d&apos;équipe.</p> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            <div className="flex flex-col gap-1.5">
               {teamList.map((t) => {
                 const cur = teamStarsOf(teamStars, t.id);
                 const sg = suggestions?.get(t.id);
                 return (
-                  <div key={t.id} className={`${ui.inset} px-2 py-1.5 flex items-center gap-2 flex-wrap`}>
-                    <span className="font-bold text-sm flex-1 truncate">
-                      {t.name}
-                      {sg && (
-                        <span className="block text-[11px] font-normal text-ink-2">
-                          🔥 {sg.finishMs !== null ? `échauffement bouclé en ${fmt(sg.finishMs)} (${Math.round((sg.ratio ?? 0) * 100)} % de l'estimation)` : `${sg.levels}/${sg.total} séries`} → suggestion <b className="text-ink">{starsLabel(sg.stars)}</b>
-                          {sg.stars !== cur && (
-                            <button type="button" disabled={pending} onClick={() => run(`${t.name} : parcours ${starsName(sg.stars)} (suggestion appliquée).`, async () => { const r = await setTeamStarsAction(sessionId, t.id, sg.stars); if (!("error" in r)) onChanged?.(); return r; })} className={`${btn.smSea} ml-2`}>{sg.stars > cur ? "▲ Monter" : "▼ Descendre"} → {starsLabel(sg.stars)}</button>
-                          )}
-                        </span>
-                      )}
-                    </span>
+                  <div key={t.id} className={cx(ui.inset, "px-2.5 py-1.5", sg && sg.stars !== cur && "border-brand/40")}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm whitespace-nowrap flex-1">{t.name}</span>
                     <div className={`${ui.segmented} inline-flex`}>
                       {STARS.map((st) => (
                         <button key={st} type="button" disabled={pending || cur === st} onClick={() => run(`${t.name} : parcours ${starsName(st)}.`, async () => { const r = await setTeamStarsAction(sessionId, t.id, st); if (!("error" in r)) onChanged?.(); return r; })} className={cx("px-2 py-1 rounded-lg text-xs font-bold", cur === st ? ui.segOn : ui.segOff)} title={starsName(st)}>
@@ -98,6 +89,19 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
                         );
                       })}
                     </div>
+                  </div>
+                  {sg && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
+                      <span>
+                        🔥 Échauffement {sg.finishMs !== null ? <>bouclé en <b className="text-ink">{fmt(sg.finishMs)}</b> ({Math.round((sg.ratio ?? 0) * 100)} % du temps prévu)</> : <>pas bouclé : <b className="text-ink">{sg.levels}/{sg.total}</b> séries</>} → suggestion <b className="text-ink">{starsLabel(sg.stars)}</b>
+                      </span>
+                      {sg.stars !== cur ? (
+                        <button type="button" disabled={pending} onClick={() => run(`${t.name} : parcours ${starsName(sg.stars)} (suggestion appliquée).`, async () => { const r = await setTeamStarsAction(sessionId, t.id, sg.stars); if (!("error" in r)) onChanged?.(); return r; })} className={btn.smSea}>{sg.stars > cur ? "▲ Monter" : "▼ Descendre"} en {starsLabel(sg.stars)}</button>
+                      ) : (
+                        <span className="text-success-ink font-bold">✓ déjà sur ce parcours</span>
+                      )}
+                    </div>
+                  )}
                   </div>
                 );
               })}

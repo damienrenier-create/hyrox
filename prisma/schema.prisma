@@ -122,6 +122,10 @@ model Session {
   refereeMode Boolean     @default(false) // Touche-Coule actif pour cette seance, independamment du wodType
   settings    Json?
   raceEndedAt DateTime?
+  // Suppression douce (Sartay 27/09) : la seance disparait de partout mais reste en base, restaurable
+  // depuis Nettoyage > Corbeille ; la suppression definitive reste le grand menage.
+  deletedAt   DateTime?
+  deletedBy   String?
   createdAt   DateTime    @default(now())
   // Rattachement au cycle / a la seance-type, ouverture manuelle ou automatique (voir src/lib/scheduling.ts)
   cycle       Cycle?      @relation(fields: [cycleId], references: [id])
