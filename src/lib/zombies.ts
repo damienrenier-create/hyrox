@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { activeCards, attemptEvents, cardSeconds, cardsForTeam, emomSchedule, emomWaveEvents, emomZombieSim, ladderFor, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, attemptEvents, cardSeconds, cardsForTeam, emomSchedule, emomWaveEvents, emomZombieSim, heartCarryBites, ladderFor, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -108,7 +108,9 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
       // Rattrape = coeur mange en entier (3 bouchees), bouchees conservees entre deux fiches (simulation).
       const cards = cardsForTeam(level, t.id, penalties);
       const ev = attemptEvents(level, t.id, ticks, p.attemptStartMs, penalties);
-      const sim = zombieSim(level, ev.initialTotalSec, ev.events, nowRace - p.attemptStartMs, fixed ?? zombieSpeedLevel(level.number, p.losses), cards.length, teamSizeOf(format));
+      // Coeur deja croque au niveau precedent (il reste en l'etat, sauf apres une vie perdue).
+      const carry = heartCarryBites(mine, t.id, ticks, losses, penalties, (l, k) => fixed ?? zombieSpeedLevel(l.number, k), teamSizeOf(format));
+      const sim = zombieSim(level, ev.initialTotalSec, ev.events, nowRace - p.attemptStartMs, fixed ?? zombieSpeedLevel(level.number, p.losses), cards.length, teamSizeOf(format), carry);
       if (sim.catchAtMs === null) break;
       const deadline = p.attemptStartMs + sim.catchAtMs;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.

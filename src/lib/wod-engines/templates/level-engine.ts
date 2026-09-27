@@ -299,10 +299,12 @@ export function zombieSim(
   sinceMs: number,
   speedLevel = level.number,
   n = activeCards(level).length,
-  team = DEFAULT_TEAM
+  team = DEFAULT_TEAM,
+  startBites = 0 // morceaux deja manges au niveau precedent (le coeur reste croque, Sartay 27/09)
 ): ZombieSim {
   const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team);
   const eatMs = zombieEatMs(speedLevel);
+  const carried = Math.max(0, Math.min(HEART_BITES - 1, Math.floor(startBites)));
   const total = Math.max(1, cardsTotalSec);
   const arrivalFor = (frac: number) => (n <= 1 ? bandMs : approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs));
   const posFor = (walked: number) => {
@@ -311,7 +313,7 @@ export function zombieSim(
     return 1 - ZOMBIE_ZONE + (ZOMBIE_ZONE * (walked - approachMs)) / (bandMs - approachMs);
   };
   const events = [...tickEvents].filter((e) => e.atMs >= 0).sort((a, b) => a.atMs - b.atMs);
-  let walked = 0, eaten = 0, t = 0, doneSec = 0, totalSec = total, catchAt: number | null = null;
+  let walked = 0, eaten = (carried * eatMs) / HEART_BITES, t = 0, doneSec = 0, totalSec = total, catchAt: number | null = null;
   const advance = (until: number) => {
     // De t a until, avec le coeur a la fraction courante : marche puis repas.
     const target = arrivalFor(doneSec / Math.max(1, totalSec));
@@ -336,9 +338,47 @@ export function zombieSim(
   const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * Math.min(1, Math.max(0, frac));
   const target = arrivalFor(frac);
   const contact = catchAt === null && walked >= target - 1e-6;
-  const bites = Math.min(HEART_BITES, Math.floor((eaten / eatMs) * HEART_BITES));
+  const bites = Math.min(HEART_BITES, Math.floor((eaten / eatMs) * HEART_BITES + 1e-9));
   const remainingMs = catchAt !== null ? 0 : Math.max(0, target - walked) + (eatMs - eaten);
   return { zombie: Math.max(0, Math.min(heart, posFor(walked))), heart, contact, bites, eatenMs: eaten, eatMs, catchAtMs: catchAt, remainingMs };
+}
+
+// Coeur croque d'un niveau a l'autre (Sartay 27/09 : « le coeur doit rester en l'etat au niveau suivant, sauf si
+// l'equipe perd le niveau »). Rejoue, dans l'ordre de l'equipe, chaque niveau boucle depuis la derniere vie
+// perdue : les morceaux manges au moment ou le niveau est boucle passent au suivant. Une vie perdue remet un
+// coeur neuf. Renvoie les morceaux (0 a 2) deja manges au depart de la tentative en cours. Deterministe : le
+// serveur (rattrapages) et l'ecran (affichage) obtiennent le meme coeur.
+export function heartCarryBites(
+  levels: FrozenLevel[],
+  teamId: string,
+  ticks: Tick[],
+  losses: Loss[] = [],
+  penalties: TeamPenalty[] = [],
+  speedOf: (level: FrozenLevel, lossesBefore: number) => number = (l, k) => zombieSpeedLevel(l.number, k),
+  team = DEFAULT_TEAM
+): number {
+  const mine = ticks.filter((t) => t.teamId === teamId);
+  const lossTimes = losses.filter((l) => l.teamId === teamId).map((l) => l.atMs);
+  const done = new Set(mine.map((t) => `${t.level}_${t.card}`));
+  let bites = 0;
+  let prevEnd = 0; // fin (chrono) du niveau boucle precedent
+  for (const l of levels) {
+    const act = cardsForTeam(l, teamId, penalties);
+    if (!act.length) continue;
+    if (!act.every(({ index }) => done.has(`${l.number}_${index}`))) break; // niveau en cours : fin du rejeu
+    const idx = new Set(act.map((a) => a.index));
+    const end = Math.max(0, ...mine.filter((t) => t.level === l.number && idx.has(t.card)).map((t) => t.atMs));
+    const lastLoss = Math.max(-Infinity, ...lossTimes.filter((x) => x <= end));
+    if (lastLoss >= prevEnd) bites = 0; // une vie perdue depuis le niveau precedent : coeur neuf
+    const start = Math.max(0, prevEnd, lastLoss);
+    const ev = attemptEvents(l, teamId, ticks, start, penalties);
+    const sim = zombieSim(l, ev.initialTotalSec, ev.events, Math.max(0, end - start), speedOf(l, lossTimes.filter((x) => x <= start).length), act.length, team, bites);
+    // Rattrapage que le serveur n'a pas enregistre (zombies coupes a ce moment-la, par ex.) : on ne punit pas deux fois.
+    bites = sim.catchAtMs !== null ? 0 : sim.bites;
+    prevEnd = end;
+  }
+  if (lossTimes.some((x) => x >= prevEnd && x > 0)) return 0; // chute depuis le dernier niveau boucle : coeur neuf
+  return Math.min(HEART_BITES - 1, bites);
 }
 // Evenements d'une tentative pour la simulation : fiches du niveau en cours cochees depuis le depart, et
 // penalites ajoutees pendant la tentative. Renvoie aussi la duree des fiches presentes AU DEPART.
@@ -439,7 +479,11 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
     }
   }
   // Depart de la tentative en cours : derniere fiche d'un niveau boucle (ou derniere vie perdue) la plus tardive.
-  const prevTicks = current ? mine.filter((t) => t.level < current.number).map((t) => t.atMs) : [];
+  // Les niveaux « precedents » sont ceux d'avant dans l'ORDRE de l'equipe, pas ceux de plus petit numero :
+  // a l'echauffement en differe (3, 4, 6, 1, 2), la serie 1 commence a la fin de la 6, pas au coup d'envoi
+  // (bug corrige le 27/09 : le zombie croyait la tentative commencee depuis le debut et devorait l'equipe).
+  const before = current ? new Set(levels.slice(0, levels.indexOf(current)).map((l) => l.number)) : new Set<number>();
+  const prevTicks = current ? mine.filter((t) => before.has(t.level)).map((t) => t.atMs) : [];
   const attemptStartMs = Math.max(0, ...prevTicks, ...myLosses.map((l) => l.atMs));
   return {
     teamId,

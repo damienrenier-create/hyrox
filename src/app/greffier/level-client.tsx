@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
@@ -272,6 +272,13 @@ export function LevelClient({
   // Mode zombies : quand un zombie touche un coeur, c'est le serveur qui tranche ; l'ecran se contente de
   // demander une relecture (une seule par rattrapage, pas a chaque seconde).
   const [caughtRefreshAt, setCaughtRefreshAt] = useState(0);
+  // Coeur croque au niveau precedent, par equipe (meme rejeu que le serveur).
+  const carryOf = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!bundle.zombies || bundle.emom) return m;
+    for (const t of teams) m.set(t.id, heartCarryBites(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, (l, k) => bundle.zombieSpeed ?? zombieSpeedLevel(l.number, k), teamSizeOf(formatOf(t.id))));
+    return m;
+  }, [bundle.zombies, bundle.emom, bundle.zombieSpeed, teams, ladderOf, ticks, live.losses, live.penalties, formatOf]);
   useEffect(() => {
     if (!bundle.zombies || phase !== "run" || isPaused) return;
     const raceNow = zombieMs;
@@ -280,13 +287,13 @@ export function LevelClient({
       const l = levelOf(p.teamId, p.currentLevel);
       if (!l) return false;
       const ev = attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties);
-      return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length, teamSizeOf(formatOf(p.teamId))).catchAtMs !== null;
+      return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length, teamSizeOf(formatOf(p.teamId)), carryOf.get(p.teamId) ?? 0).catchAtMs !== null;
     });
     if (due && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
       void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
     }
-  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelOf, caughtRefreshAt, sessionId, live.penalties, ticks, formatOf]);
+  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelOf, caughtRefreshAt, sessionId, live.penalties, ticks, formatOf, carryOf]);
 
   function refresh() {
     router.refresh();
@@ -529,6 +536,7 @@ export function LevelClient({
                           <motion.div key={t.id} layout transition={{ type: "spring", stiffness: 260, damping: 28 }} id={`team-row-${t.id}`}>
                             <TeamRow
                               team={t}
+                              carryBites={carryOf.get(t.id) ?? 0}
                               progress={p}
                               level={levelOf(t.id, p.currentLevel)}
                               stars={st}
@@ -1009,12 +1017,13 @@ const rankStyle = (rank: number) =>
 
 const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
 
-function TeamRow({ team, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
+function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
   stars: Stars;
   format?: Format; // 1-3 : zombie regle sur une equipe de 3
+  carryBites?: number; // morceaux de coeur deja manges au niveau precedent
   rank: number;
   coins?: CoinsState | null;
   impact?: { id: number; text: string } | null;
@@ -1045,7 +1054,7 @@ function TeamRow({ team, progress: p, level, stars, format = "big", rank, teamsC
   const totalSec = Math.max(1, p.currentTotalSec);
   const speedLevel = level ? (fixedSpeed ?? zombieSpeedLevel(level.number, p.losses)) : 1;
   const ev = level ? attemptEvents(level, team.id, ticks, p.attemptStartMs, penalties) : null;
-  const geo = level && zombies && ev ? zombieSim(level, ev.initialTotalSec, ev.events, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length, teamSizeOf(format)) : null;
+  const geo = level && zombies && ev ? zombieSim(level, ev.initialTotalSec, ev.events, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length, teamSizeOf(format), carryBites) : null;
   const danger = !!geo && (geo.contact || geo.remainingMs <= 20_000);
   const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
   // Pieces : fiche allegeable (la plus longue restante de l'echelle) et menu d'allegement.
