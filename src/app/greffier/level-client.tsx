@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
@@ -220,6 +220,19 @@ export function LevelClient({
   }
   // Classement par parcours pour les cibles de fusee.
   const rocketRows = useMemo(() => teams.map((t) => { const st = starsOf(t.id); return { teamId: t.id, stars: st, rankInStars: rankOf.get(t.id) ?? 0, groupSize: groupSize.get(st) ?? 1, finished: progress.get(t.id)?.currentLevel === null }; }), [teams, starsOf, rankOf, groupSize, progress]);
+  // Suggestions de parcours d'apres l'echauffement (avant le coup d'envoi, WOD principal seulement).
+  const suggestions = useMemo(() => {
+    const m = new Map<string, { stars: Stars; finishMs: number | null; ratio: number | null; levels: number; total: number }>();
+    const warm = bundle.phases.find((ph) => ph.kind === "warmup");
+    if (!warm || phase !== "pre" || bundle.child) return m;
+    for (const t of teams) {
+      const x = warm.byOrder[t.order];
+      if (!x || (x.finishMs === null && x.levels === 0)) continue;
+      m.set(t.id, { stars: suggestStars(x.finishMs, x.levels, warm.levelsTotal, warm.estimateMs), finishMs: x.finishMs, ratio: x.finishMs !== null && warm.estimateMs > 0 ? x.finishMs / warm.estimateMs : null, levels: x.levels, total: warm.levelsTotal });
+    }
+    return m;
+  }, [bundle.phases, bundle.child, phase, teams]);
+  const suggestionsDiff = useMemo(() => [...suggestions.entries()].filter(([id, s]) => s.stars !== starsOf(id)).length, [suggestions, starsOf]);
   function createStar(st: Stars) { run(async () => { const r = await createStarTeamAction(sessionId, st); return "error" in r ? r : { ok: true }; }); }
   function numberTeams() { run(async () => { const r = await numberTeamsAction(sessionId); return "error" in r ? r : { ok: true }; }); }
   const cardsOf = useMemo(() => {
@@ -410,6 +423,12 @@ export function LevelClient({
       <main className="max-w-[1800px] mx-auto p-3 sm:p-4">
         {view === "race" && (
           <>
+            {suggestionsDiff > 0 && (
+              <p className={`${ui.alertInfo} mb-2 flex flex-wrap items-center gap-2`}>
+                <span>🔥 D&apos;après l&apos;échauffement, <b>{suggestionsDiff} équipe{suggestionsDiff > 1 ? "s" : ""}</b> pourrai{suggestionsDiff > 1 ? "en" : ""}t changer de parcours (monter ou descendre d&apos;une étoile).</span>
+                <button type="button" onClick={() => setView("settings")} className={`${btn.smPrimary} ml-auto`}>Voir les suggestions ⚙️</button>
+              </p>
+            )}
             {teams.length === 0 ? (
               <p className={`${ui.cardPad} ${ui.muted}`}>Aucune équipe : compose-les dans l&apos;onglet « Équipes &amp; arbitres ».</p>
             ) : bundle.emom ? (
@@ -510,7 +529,7 @@ export function LevelClient({
         ))}
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
-        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} />}
+        {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} suggestions={suggestions} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} />}
       </main>
 
@@ -1225,7 +1244,7 @@ function TeamRow({ team, progress: p, level, stars, rank, teamsCount, yellow, ca
 // Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe. Copie client de
 // phaseExtras (level-context est un module serveur).
 function extrasFor(phases: LevelBundle["phases"], order: number): PhaseTeamTotals {
-  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0 };
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0, finishMs: null };
   for (const ph of phases) {
     const x = ph.byOrder[order];
     if (!x) continue;

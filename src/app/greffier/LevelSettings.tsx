@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { setTeamCountAction } from "./settings-actions";
 import { resetLevelAction, setLevelCapAction, setLevelRefereeModeAction, setTeamStarsAction, setZombiesAction } from "./level-actions";
 import { STARS, starsLabel, starsName, teamStarsOf, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Onglet Reglages du greffier Level : nombre d'equipes (avant le depart), temps impose (avant ou pendant),
 // activite des dispenses (demineur), et les raccourcis vers l'atelier et les fiches a imprimer.
-export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true, teamList = [], teamStars = {}, ladders = {}, isChild = false, onChanged }: {
+export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode, levelsCount, frozen, zombies = true, teamList = [], teamStars = {}, ladders = {}, isChild = false, onChanged, suggestions }: {
   sessionId: string;
   zombies?: boolean;
   teamList?: { id: string; name: string; order: number }[];
@@ -17,6 +18,7 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
   ladders?: Partial<Record<Stars, FrozenLevel[]>>;
   isChild?: boolean;
   onChanged?: () => void;
+  suggestions?: Map<string, { stars: Stars; finishMs: number | null; ratio: number | null; levels: number; total: number }>; // d'apres l'echauffement
   phase: "pre" | "run" | "post";
   numTeams: number;
   capMin: number | null;
@@ -63,9 +65,20 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {teamList.map((t) => {
                 const cur = teamStarsOf(teamStars, t.id);
+                const sg = suggestions?.get(t.id);
                 return (
-                  <div key={t.id} className={`${ui.inset} px-2 py-1.5 flex items-center gap-2`}>
-                    <span className="font-bold text-sm flex-1 truncate">{t.name}</span>
+                  <div key={t.id} className={`${ui.inset} px-2 py-1.5 flex items-center gap-2 flex-wrap`}>
+                    <span className="font-bold text-sm flex-1 truncate">
+                      {t.name}
+                      {sg && (
+                        <span className="block text-[11px] font-normal text-ink-2">
+                          🔥 {sg.finishMs !== null ? `échauffement bouclé en ${fmt(sg.finishMs)} (${Math.round((sg.ratio ?? 0) * 100)} % de l'estimation)` : `${sg.levels}/${sg.total} séries`} → suggestion <b className="text-ink">{starsLabel(sg.stars)}</b>
+                          {sg.stars !== cur && (
+                            <button type="button" disabled={pending} onClick={() => run(`${t.name} : parcours ${starsName(sg.stars)} (suggestion appliquée).`, async () => { const r = await setTeamStarsAction(sessionId, t.id, sg.stars); if (!("error" in r)) onChanged?.(); return r; })} className={`${btn.smSea} ml-2`}>{sg.stars > cur ? "▲ Monter" : "▼ Descendre"} → {starsLabel(sg.stars)}</button>
+                          )}
+                        </span>
+                      )}
+                    </span>
                     <div className={`${ui.segmented} inline-flex`}>
                       {STARS.map((st) => (
                         <button key={st} type="button" disabled={pending || cur === st} onClick={() => run(`${t.name} : parcours ${starsName(st)}.`, async () => { const r = await setTeamStarsAction(sessionId, t.id, st); if (!("error" in r)) onChanged?.(); return r; })} className={cx("px-2 py-1 rounded-lg text-xs font-bold", cur === st ? ui.segOn : ui.segOff)} title={starsName(st)}>

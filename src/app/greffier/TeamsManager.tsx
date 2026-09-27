@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   addRefereeAction,
   addTeamMemberAction,
+  createPersonAndAddAction,
   removeRefereeAction,
   removeTeamMemberAction,
   setSessionClassesAction,
@@ -325,6 +326,13 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
             scheduleRefresh();
             return null;
           }}
+          onCreate={async (p) => {
+            const res = await createPersonAndAddAction(active.id, p);
+            if ("error" in res) return res.error;
+            setTeams((ts) => ts.map((t) => (t.id === active.id ? { ...t, members: [...t.members.filter((m) => m.id !== res.member.id), res.member].sort(byLastName) } : t)));
+            scheduleRefresh();
+            return null;
+          }}
         />
       )}
 
@@ -411,7 +419,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
 // Modale de saisie intelligente : recherche (prefixe prenom/nom) restreinte aux classes choisies.
 function StudentPicker({
-  title, start = null, classes, picker, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote,
+  title, start = null, classes, picker, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote, onCreate,
 }: {
   title: string;
   start?: { number: number; label: string } | null; // atelier de depart, annonce en grand aux eleves
@@ -425,8 +433,12 @@ function StudentPicker({
   statusOf: (h: StudentHit) => { disabled: boolean; label: string | null };
   onPick: (h: StudentHit, note?: string) => Promise<string | null>;
   withNote?: boolean;
+  onCreate?: (p: { firstName: string; lastName: string; className: string; sex: string }) => Promise<string | null>; // hors listing
 }) {
   const [query, setQuery] = useState("");
+  // Hors listing : mini-fiche prete a partir de ce qui a ete tape (« Prenom Nom »).
+  const [creating, setCreating] = useState(false);
+  const [np, setNp] = useState({ firstName: "", lastName: "", className: "", sex: "" });
   const [note, setNote] = useState<string>(REFEREE_REASONS[0]);
   // Coequipiers habituels des personnes deja dans la liste, sans doublon ni personne deja presente.
   const memberKey = list.map((m) => m.id).join(",");
@@ -467,6 +479,22 @@ function StudentPicker({
         setError(err);
         return;
       }
+      setQuery("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    });
+  }
+  function openCreate() {
+    const parts = query.trim().split(/\s+/);
+    setNp({ firstName: parts[0] ?? "", lastName: parts.slice(1).join(" "), className: classes[0] ?? "", sex: "" });
+    setCreating(true);
+  }
+  function create() {
+    if (!onCreate) return;
+    setError("");
+    startTransition(async () => {
+      const err = await onCreate(np);
+      if (err) { setError(err); return; }
+      setCreating(false);
       setQuery("");
       setTimeout(() => inputRef.current?.focus(), 50);
     });
@@ -560,6 +588,22 @@ function StudentPicker({
           </ul>
         )}
         {query.trim().length > 0 && hits.length === 0 && <p className={`${ui.hint} mt-2`}>Personne ne correspond dans ces classes (ni chez les profs).</p>}
+        {onCreate && query.trim().length > 0 && !creating && (
+          <button type="button" onClick={openCreate} className={`${btn.ghost} mt-2`}>➕ Pas dans le listing ? Créer « {query.trim()} » et l&apos;ajouter</button>
+        )}
+        {onCreate && creating && (
+          <div className={`${ui.inset} mt-2 p-3 grid grid-cols-2 sm:grid-cols-[1fr_1fr_110px_80px] gap-2 items-end`}>
+            <label className="text-xs"><span className={ui.label}>Prénom</span><input value={np.firstName} onChange={(e) => setNp({ ...np, firstName: e.target.value })} className={ui.input} /></label>
+            <label className="text-xs"><span className={ui.label}>Nom</span><input value={np.lastName} onChange={(e) => setNp({ ...np, lastName: e.target.value })} className={ui.input} /></label>
+            <label className="text-xs"><span className={ui.label}>Classe</span><input value={np.className} onChange={(e) => setNp({ ...np, className: e.target.value })} list="picker-classes" placeholder="1P2, PROF…" className={ui.input} /><datalist id="picker-classes">{classes.map((c) => <option key={c} value={c} />)}<option value="PROF" /></datalist></label>
+            <label className="text-xs"><span className={ui.label}>Sexe</span><select value={np.sex} onChange={(e) => setNp({ ...np, sex: e.target.value })} className={ui.input}><option value="">—</option><option value="F">F</option><option value="M">M</option></select></label>
+            <div className="col-span-2 sm:col-span-4 flex gap-2">
+              <button type="button" onClick={create} disabled={pending || !np.firstName.trim() || !np.lastName.trim()} className={btn.primary}>Créer et ajouter</button>
+              <button type="button" onClick={() => setCreating(false)} className={btn.ghost}>Annuler</button>
+              <span className={`${ui.hint} self-center`}>Un profil existant au même nom est réutilisé. Pour qu&apos;il puisse se connecter, encodez sa date de naissance dans la console (Élèves).</span>
+            </div>
+          </div>
+        )}
 
         <p className={`${ui.label} mt-4`}>Déjà dans {title.startsWith("Ajouter") ? "la liste" : title} ({list.length})</p>
         <ul className="divide-y divide-line border border-line rounded-xl">

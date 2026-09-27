@@ -41,6 +41,32 @@ export async function updateStudentAction(fd: FormData) {
   redirect(`/admin/eleves/${id}?ok=` + encodeURIComponent("Fiche enregistrée."));
 }
 
+// Nouveau profil (nouvel eleve, collegue, stagiaire...) : nom, prenom, classe, sexe, date de naissance.
+// Le PIN se cree a la premiere connexion, comme pour un eleve importe.
+export async function createStudentAction(fd: FormData) {
+  await requireStaff();
+  const firstName = str(fd, "firstName");
+  const lastName = str(fd, "lastName");
+  const className = str(fd, "className").toUpperCase();
+  const sexRaw = str(fd, "sex");
+  const dob = str(fd, "dateOfBirth");
+  if (!firstName || !lastName) redirect("/admin/eleves?msg=" + encodeURIComponent("Prénom et nom sont obligatoires."));
+  if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) redirect("/admin/eleves?msg=" + encodeURIComponent("Date de naissance invalide."));
+  const dup = (await db.orm.public.User.where({ role: "STUDENT" }).all()).find((u) => (u.firstName ?? "").trim().toLowerCase() === firstName.toLowerCase() && (u.lastName ?? "").trim().toLowerCase() === lastName.toLowerCase());
+  if (dup) redirect(`/admin/eleves/${dup.id}?msg=` + encodeURIComponent("Ce profil existe déjà : le voici."));
+  const created = await db.orm.public.User.create({
+    role: "STUDENT",
+    name: `${firstName} ${lastName}`,
+    firstName,
+    lastName,
+    className: className || null,
+    sex: sexRaw === "M" || sexRaw === "F" ? sexRaw : null,
+    dateOfBirth: dob ? Temporal.Instant.from(`${dob}T00:00:00Z`) : null,
+  });
+  revalidatePath("/admin/eleves");
+  redirect(`/admin/eleves/${created.id}?ok=` + encodeURIComponent("Profil créé. L'élève choisira son PIN à sa première connexion."));
+}
+
 export async function resetStudentPinAction(fd: FormData) {
   await requireStaff();
   const id = str(fd, "id");

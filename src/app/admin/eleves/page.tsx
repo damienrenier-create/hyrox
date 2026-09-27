@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { TopBar } from "../../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
+import { createStudentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,19 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
           </label>
           <button type="submit" className={btn.primary}>Chercher</button>
         </form>
+
+        <details className={ui.cardPad}>
+          <summary className="cursor-pointer font-display font-extrabold text-ink">➕ Nouveau profil (élève, collègue, stagiaire…)</summary>
+          <form action={createStudentAction} className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_120px_110px_150px_auto] gap-3 items-end">
+            <label className="text-xs"><span className={ui.label}>Prénom</span><input name="firstName" required className={ui.input} autoCapitalize="words" /></label>
+            <label className="text-xs"><span className={ui.label}>Nom</span><input name="lastName" required className={ui.input} autoCapitalize="words" /></label>
+            <label className="text-xs"><span className={ui.label}>Classe</span><input name="className" list="classes-list" placeholder="ex. 1P2, PROF" className={ui.input} /><datalist id="classes-list">{classes.map((c) => <option key={c} value={c} />)}<option value="PROF" /></datalist></label>
+            <label className="text-xs"><span className={ui.label}>Sexe</span><select name="sex" defaultValue="" className={ui.input}><option value="">—</option><option value="F">F</option><option value="M">M</option></select></label>
+            <label className="text-xs"><span className={ui.label}>Né·e le</span><input name="dateOfBirth" type="date" className={ui.input} /></label>
+            <button type="submit" className={btn.primary}>Créer</button>
+          </form>
+          <p className={`${ui.hint} mt-2`}>Le PIN se crée à la première connexion (date de naissance + engagement), comme pour un élève importé. Une classe commençant par 7 est une classe de test, hors statistiques.</p>
+        </details>
 
         {!classe && !needle && !sex ? (
           <p className={`${ui.cardPad} ${ui.muted}`}>Choisis une classe ou tape un nom pour afficher des élèves.</p>

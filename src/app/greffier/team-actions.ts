@@ -85,6 +85,22 @@ export async function addTeamMemberAction(teamId: string, userId: string): Promi
   return { ok: true, member };
 }
 
+// Personne absente du listing (nouvel eleve, collegue, stagiaire) : creation d'un profil minimal puis ajout a
+// l'equipe. Le PIN se creera a sa premiere connexion. Un profil existant au meme nom est reutilise.
+export async function createPersonAndAddAction(teamId: string, p: { firstName: string; lastName: string; className: string; sex: string }): Promise<{ error: string } | { ok: true; member: MemberView }> {
+  await requireGreffier();
+  const firstName = p.firstName.trim();
+  const lastName = p.lastName.trim();
+  const className = p.className.trim().toUpperCase();
+  if (!firstName || !lastName) return { error: "Prénom et nom sont obligatoires." };
+  const all = await db.orm.public.User.where({ role: "STUDENT" }).all();
+  let user = all.find((u) => (u.firstName ?? "").trim().toLowerCase() === firstName.toLowerCase() && (u.lastName ?? "").trim().toLowerCase() === lastName.toLowerCase()) ?? null;
+  if (!user) {
+    user = await db.orm.public.User.create({ role: "STUDENT", name: `${firstName} ${lastName}`, firstName, lastName, className: className || null, sex: p.sex === "M" || p.sex === "F" ? p.sex : null });
+  }
+  return addTeamMemberAction(teamId, user.id);
+}
+
 export async function removeTeamMemberAction(teamId: string, userId: string): Promise<{ ok: true }> {
   await requireGreffier();
   const members = await db.orm.public.TeamMember.where({ teamId, userId }).all();

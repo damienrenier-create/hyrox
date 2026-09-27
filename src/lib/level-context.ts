@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { coinsEarned, coinsInPlay, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, warmupCoinsInPlay, type CoinEvent, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamStars, teamStarsOf, warmupCoinsInPlay, type CoinEvent, type EmomSettings, type FrozenLevel, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -43,8 +43,8 @@ export type LevelBundle = {
 
 // Totaux d'une seance enfant (echauffement ou finisher), par NUMERO d'equipe (les enfants copient les
 // equipes du parent avec de nouveaux identifiants mais le meme numero).
-export type PhaseTeamTotals = { reps: number; work: number; repsByExercise: Record<string, number>; losses: number; cards: number; score: number | null; levels: number; coins: number };
-export type PhaseTotals = { kind: "warmup" | "finisher"; sessionId: string; label: string; startedAtMs: number | null; byOrder: Record<number, PhaseTeamTotals> };
+export type PhaseTeamTotals = { reps: number; work: number; repsByExercise: Record<string, number>; losses: number; cards: number; score: number | null; levels: number; coins: number; finishMs: number | null };
+export type PhaseTotals = { kind: "warmup" | "finisher"; sessionId: string; label: string; startedAtMs: number | null; byOrder: Record<number, PhaseTeamTotals>; levelsTotal: number; estimateMs: number };
 export const PHASE_LABEL: Record<PhaseTotals["kind"], string> = { warmup: "Échauffement", finisher: "Finisher" };
 
 export function readChildren(settings: unknown): { warmup?: string; finisher?: string } {
@@ -78,9 +78,11 @@ export async function phaseTotals(kind: PhaseTotals["kind"], sessionId: string):
     const mine = orderedLevels(levels, order?.[t.id]);
     const p = progressOf(mine, t.id, ticks, losses, penalties);
     const coins = kind === "warmup" ? coinsEarned(mine, t.id, ticks, losses, penalties, warmupCoinsInPlay).total : 0;
-    byOrder[t.order ?? 0] = { reps: p.reps, work: p.weighted, repsByExercise: p.repsByExercise, losses: p.losses, cards: cards.filter((c) => c.teamId === t.id).length, score: scores[t.id] ?? null, levels: p.completedLevels, coins };
+    byOrder[t.order ?? 0] = { reps: p.reps, work: p.weighted, repsByExercise: p.repsByExercise, losses: p.losses, cards: cards.filter((c) => c.teamId === t.id).length, score: scores[t.id] ?? null, levels: p.completedLevels, coins, finishMs: p.finishedMs };
   }
-  return { kind, sessionId, label: s.label ?? PHASE_LABEL[kind], startedAtMs, byOrder };
+  // Estimation de la phase pour une equipe de 5 (transitions comprises) : sert a suggerer un parcours.
+  const estimateMs = levels.reduce((a, l) => a + estimateSeconds(activeCards(l).map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss), 0) * 1.1 * 1000;
+  return { kind, sessionId, label: s.label ?? PHASE_LABEL[kind], startedAtMs, byOrder, levelsTotal: levels.filter((l) => activeCards(l).length > 0).length, estimateMs };
 }
 
 export function readChild(settings: unknown): { kind: "warmup" | "finisher"; parentId: string } | null {
@@ -198,7 +200,7 @@ export { coinsInPlay };
 
 // Totaux d'une equipe sur les phases (echauffement + finisher), par numero d'equipe.
 export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals {
-  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0 };
+  const agg: PhaseTeamTotals = { reps: 0, work: 0, repsByExercise: {}, losses: 0, cards: 0, score: null, levels: 0, coins: 0, finishMs: null };
   for (const ph of bundle.phases) {
     const x = ph.byOrder[order];
     if (!x) continue;

@@ -119,7 +119,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   // Selecteur d'eleves PRECHARGE : les eleves des classes de la seance (toutes si aucune) + les profs, et pour
   // chacun ses coequipiers habituels. Plus aucune requete pendant la frappe : la suggestion est immediate.
-  const inScope = classes.length ? students.filter((u) => u.className && classes.includes(u.className)) : students;
+  // Les 1P (primo-arrivants, souvent integres a d'autres classes) sont toujours dans le perimetre (Sartay 27/09).
+  const inScope = classes.length ? students.filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className))) : students;
   const roster = [...inScope, ...users.filter((u) => STAFF_ROLES.includes(u.role as string))]
     .map(view)
     .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));

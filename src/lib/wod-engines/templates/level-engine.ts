@@ -79,6 +79,17 @@ export function ladderFor(levels: FrozenLevel[], ladders: Partial<Record<Stars, 
   return (stars === DEFAULT_STARS ? levels : ladders[stars]) ?? levels;
 }
 
+// Suggestion de parcours d'apres l'echauffement (Sartay 27/09) : boucle en 80 % de l'estimation ou moins -> 3
+// etoiles ; dans les 120 % -> 2 ; au-dela -> 1. Echauffement pas boucle : 2 etoiles si au moins trois quarts
+// des series, sinon 1.
+export function suggestStars(finishMs: number | null, levelsDone: number, levelsTotal: number, estimateMs: number): Stars {
+  if (finishMs !== null && estimateMs > 0) {
+    const r = finishMs / estimateMs;
+    return r <= 0.8 ? 3 : r <= 1.2 ? 2 : 1;
+  }
+  return levelsTotal > 0 && levelsDone / levelsTotal >= 0.75 ? 2 : 1;
+}
+
 // Ordre des niveaux propre a une equipe (echauffement en differe) : les numeros manquants sont ajoutes a la fin.
 export function orderedLevels(levels: FrozenLevel[], order?: number[] | null): FrozenLevel[] {
   if (!order || !order.length) return levels;
