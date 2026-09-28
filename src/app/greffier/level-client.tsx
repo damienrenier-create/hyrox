@@ -13,6 +13,7 @@ import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, 
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
+import { PaceReport } from "./PaceReport";
 import { RecordsTab } from "./RecordsTab";
 import { LevelArbitrage } from "./LevelArbitrage";
 import { LevelSettings } from "./LevelSettings";
@@ -617,6 +618,7 @@ export function LevelClient({
         )}
 
         {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} formatOf={formatOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} coinsOf={coinsOn ? coinsOf : null} />}
+        {view === "results" && phase === "post" && !bundle.child && !bundle.emom && <PaceReport sessionId={sessionId} />}
         {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={allLevels} extras={extras} phases={bundle.phases} />}
         {view === "ladder" && (bundle.frozen ? (
           <LevelLadderEditor sessionId={sessionId} levels={levels} ladders={bundle.ladders} teamStars={bundle.teamStars} teamFormats={bundle.teamFormats} catalog={bundle.catalog} ticks={live.ticks} onSaved={refresh} />

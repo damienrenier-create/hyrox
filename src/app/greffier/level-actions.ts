@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { listExercises, readFrozenFromSettings } from "@/lib/level";
 import { readEmomPlayerScores, activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderKey, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamFormats, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_FORMAT, DEFAULT_STARS, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { paceReport } from "@/lib/level-pace";
 import { applyDiscount, createStarTeam, launchRocket, numberTeams, sendRocket, settleRockets, startLevelRace, teamLadder } from "@/lib/level-coins";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
@@ -119,6 +120,12 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
 }
 
 // Finisher EMOM : score de la vague « max » (reps), saisi par le greffier, modifiable jusqu'a la fin du WOD.
+// Rapport de rythme de fin de seance (Sartay 28/09) : niveaux boucles anormalement vite ou lentement.
+export async function paceReportAction(sessionId: string): Promise<{ error: string } | Awaited<ReturnType<typeof paceReport>>> {
+  await requireLevelStaff(sessionId);
+  return paceReport(sessionId);
+}
+
 // Finisher (Sartay 28/09) : cordes de la derniere vague saisies joueur par joueur ; le score de l'equipe = la somme.
 export async function getEmomPlayerScoresAction(sessionId: string, teamId: string): Promise<{ error: string } | { ok: true; scores: Record<string, number> }> {
   const { session } = await requireLevelStaff(sessionId);
