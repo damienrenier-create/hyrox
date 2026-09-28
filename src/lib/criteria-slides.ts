@@ -18,9 +18,6 @@ body { font-family: "Segoe UI", Arial, sans-serif; color: #141414; background: #
 .top { display: flex; align-items: center; gap: 24px; }
 h1 { font-size: 46px; margin: 0; letter-spacing: -0.5px; white-space: nowrap; }
 .sub { font-size: 20px; color: #666; font-weight: 600; }
-.scale { margin-left: auto; display: flex; gap: 8px; }
-.scale span { background: #fff; border: 2px solid #e2e2e2; border-radius: 12px; padding: 6px 12px; font-size: 22px; font-weight: 700; white-space: nowrap; }
-.ti { color: #dc2626; } .i { color: #ea580c; } .s { color: #d97706; } .b { color: #4d7c0f; } .tb { color: #059669; } .e { color: #0284c7; }
 .grid { flex: 1; display: grid; grid-template-columns: repeat(${cols}, 1fr); grid-auto-rows: 1fr; gap: 12px; min-height: 0; }
 .c { background: #fff; border: 3px solid #e2e2e2; border-radius: 18px; padding: 10px 14px; display: flex; flex-direction: column; min-height: 0; }
 .c h3 { font-size: 25px; margin: 0 0 6px; color: #c0392b; line-height: 1.1; }
@@ -31,7 +28,7 @@ h1 { font-size: 46px; margin: 0; letter-spacing: -0.5px; white-space: nowrap; }
 .foot { font-size: 19px; color: #555; text-align: center; }
 </style></head><body>
 <div class="top"><h1>🧑‍⚖️ Critères des arbitres</h1><span class="sub">${esc(subtitle)} · coche seulement ce que tu as vraiment vu</span>
-<div class="scale"><span>1 = <b class="ti">TI</b></span><span>2 = <b class="i">I</b></span><span>3 = <b class="s">S</b></span><span>4 = <b class="b">B</b></span><span>5 = <b class="tb">TB</b></span><span>6 = <b class="e">E</b></span></div></div>
+</div>
 <div class="grid">${cells}</div>
 <div class="foot">Du plus important (en gras : sécurité, posture) au moins important (rythme, intensité). Sur ton téléphone, chaque critère est écrit en entier.</div>
 </body></html>`;
@@ -53,13 +50,10 @@ export function renderCriteriaSlides(labels: string[], subtitle: string): string
     <div class="steps">
       <div><b>1</b> Choisis un élève d'une autre équipe (jamais deux fois de suite la même équipe).</div>
       <div><b>2</b> Choisis l'exercice que tu l'as vu faire et encode les <b>reps observées</b>.</div>
-      <div><b>3</b> Coche les <b>critères que tu as vraiment vus</b>. Pas d'appréciation à choisir : l'appli la calcule.</div>
+      <div><b>3</b> Coche les <b>critères que tu as vraiment vus</b>, et seulement ceux-là.</div>
       <div><b>4</b> Tire une case du démineur. Chaque bombe trouvée te rapporte des points.</div>
     </div>
-    <div class="scale">
-      <span>1 critère = <b class="ti">TI</b></span><span>2 = <b class="i">I</b></span><span>3 = <b class="s">S</b></span><span>4 = <b class="b">B</b></span><span>5 = <b class="tb">TB</b></span><span>6 = <b class="e">E</b></span>
-    </div>
-    <p class="note">Les critères sont classés du plus important (sécurité, posture) au moins important (rythme, intensité). L'élève évalué reçoit son appréciation et un conseil construit sur les critères non réalisés. Sois honnête : les profs voient les évaluations qui ne collent pas avec celles des autres arbitres.</p>
+    <p class="note">Les critères sont classés du plus important (sécurité, posture) au moins important (rythme, intensité). Sois honnête : les profs voient les évaluations qui ne collent pas avec celles des autres arbitres.</p>
   </section>`);
   for (let i = 0; i < cards.length; i += 2) pages.push(`<section class="slide pair">${cards[i]}${cards[i + 1] ?? ""}</section>`);
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Critères des arbitres</title><style>
@@ -73,10 +67,7 @@ body { font-family: "Segoe UI", Arial, sans-serif; color: #141414; background: #
 .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .steps div { background: #fff; border: 3px solid #e2e2e2; border-radius: 22px; padding: 20px 26px; font-size: 32px; line-height: 1.3; }
 .steps b:first-child { display: inline-block; width: 52px; height: 52px; border-radius: 50%; background: #141414; color: #fff; text-align: center; line-height: 52px; margin-right: 12px; font-size: 30px; }
-.scale { display: flex; gap: 16px; margin: 30px 0 22px; flex-wrap: wrap; }
-.scale span { background: #fff; border: 3px solid #e2e2e2; border-radius: 16px; padding: 12px 22px; font-size: 32px; font-weight: 600; }
-.ti { color: #dc2626; } .i { color: #ea580c; } .s { color: #d97706; } .b { color: #4d7c0f; } .tb { color: #059669; } .e { color: #0284c7; }
-.note { font-size: 26px; color: #444; line-height: 1.35; margin: 0; }
+.note { font-size: 26px; color: #444; line-height: 1.35; margin: 30px 0 0; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
 .exo { background: #fff; border: 4px solid #e2e2e2; border-radius: 28px; padding: 26px 30px; display: flex; flex-direction: column; }
 .exo h2 { font-size: 60px; margin: 0 0 20px; display: flex; align-items: center; gap: 16px; }

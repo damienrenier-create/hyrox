@@ -200,7 +200,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
             <p className={ui.label}>Coche ce que tu as vraiment observé</p>
             <div className="mb-3">
               <CriteriaChecklist labels={exercise.criteria} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
-              <p className={`${ui.hint} mt-1`}>{met.filter(Boolean).length} critère{met.filter(Boolean).length > 1 ? "s" : ""} sur {exercise.criteria.length}. L&apos;appréciation de l&apos;élève en découle automatiquement.</p>
+              <p className={`${ui.hint} mt-1`}>{met.filter(Boolean).length} critère{met.filter(Boolean).length > 1 ? "s" : ""} sur {exercise.criteria.length}. Coche seulement ce que tu as vraiment vu.</p>
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setStep("exercise")} className={btn.ghost}>← Exercice</button>

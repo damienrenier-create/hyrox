@@ -61,7 +61,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
                 {editing === e.id ? null : (
                   <span className="flex items-center gap-2 whitespace-nowrap">
                     <b className="text-ink tabular-nums">{e.reps} reps</b>
-                    <b className={colorOf(e.note)}>{qualityCodeFromValue(e.note) ?? "?"}</b>
+                    {e.criteria ? <b className="text-ink-2">{e.criteria.filter((c) => c.met).length}/{e.criteria.length} critères</b> : <b className={colorOf(e.note)}>{qualityCodeFromValue(e.note) ?? "?"}</b>}
                     <button type="button" onClick={() => start(e)} className={btn.smSoft}>Corriger</button>
                   </span>
                 )}
