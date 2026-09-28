@@ -31,9 +31,11 @@ export const FINISHER_EMOM: EmomWaveDef[] = [
   { minutes: 2, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40]] },
   { minutes: 3, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
   { minutes: 4, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
-  { minutes: 5, cards: [], max: "CORDE" },
+  // Vague 5 (Sartay 28/09) : les fiches de la vague 4, puis maximum de cordes, tout le monde en meme temps
+  // (saisie par joueur, le score de l'equipe est la somme).
+  { minutes: 5, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]], max: "CORDE" },
 ];
-export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · MAX de ${w.max.toLowerCase()} (${w.minutes} min)` : `Vague ${i + 1} (${w.minutes} min)`, cards: w.cards }));
+export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · ${w.cards.length ? "fiches puis " : ""}MAX de ${w.max.toLowerCase()} (${w.minutes} min)` : `Vague ${i + 1} (${w.minutes} min)`, cards: w.cards }));
 
 // Ordre des niveaux par equipe : depart decale d'une serie par equipe, boucle sur les series ordinaires,
 // BOSS en dernier pour tout le monde. Les numeros de niveau sont ceux de l'echelle figee (1..n).

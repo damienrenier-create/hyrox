@@ -9,7 +9,7 @@ import {
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
-import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, sendRocketAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, getEmomPlayerScoresAction, setEmomPlayerScoresAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -204,28 +204,30 @@ export function LevelClient({
     setError("");
     void discountAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
-  const [rocketFor, setRocketFor] = useState<string | null>(null);
   const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
   // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
   const [impact, setImpact] = useState<{ id: number; teamId: string; text: string } | null>(null);
-  function launchRocket(fromId: string, exerciseId: string, reps: number, toId: string, label: string) {
-    setError("");
-    void sendRocketAction(sessionId, fromId, exerciseId, reps, toId).then((res) => {
-      if ("error" in res) { setError(res.error); return; }
-      setRocketFor(null);
-      mergeTeam(res.team);
-      // La fusee decolle de la ligne de l'expediteur, monte en arc et vient percuter la ligne de la cible.
-      const a = document.getElementById(`team-row-${fromId}`)?.getBoundingClientRect();
-      const b = document.getElementById(`team-row-${toId}`)?.getBoundingClientRect();
-      const text = `💥 +${reps} ${cap(label)} reçus de ${teamById.get(fromId)?.name ?? "l'adversaire"}`;
-      if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 }, toId, text });
-      else setImpact({ id: Date.now(), teamId: toId, text });
-      // La cible a une nouvelle fiche : relecture complete de l'etat vivant.
-      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
-    });
-  }
+  // Fusees automatiques (28/09) : le serveur les lance ; chaque ecran anime les nouveaux envois qu'il decouvre.
+  const seenSends = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const sends = live.coinEvents.filter((e) => e.kind === "send" && e.toTeamId);
+    if (seenSends.current === null) { seenSends.current = new Set(sends.map((e) => e.id)); return; }
+    const fresh = sends.filter((e) => !seenSends.current!.has(e.id));
+    if (!fresh.length) return;
+    for (const e of fresh) seenSends.current.add(e.id);
+    const e = fresh[fresh.length - 1];
+    const toId = e.toTeamId!;
+    // La fusee decolle de la ligne de l'expediteur, monte en arc et vient percuter la ligne de la cible.
+    const a = document.getElementById(`team-row-${e.teamId}`)?.getBoundingClientRect();
+    const b = document.getElementById(`team-row-${toId}`)?.getBoundingClientRect();
+    const text = `💥 +${e.reps ?? ""} ${cap(e.label ?? "")} reçus de ${teamById.get(e.teamId)?.name ?? "l'adversaire"}`;
+    if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 }, toId, text });
+    else setImpact({ id: Date.now(), teamId: toId, text });
+    // La cible a une nouvelle fiche : relecture complete de l'etat vivant.
+    void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.coinEvents]);
   // Classement par parcours pour les cibles de fusee.
-  const rocketRows = useMemo(() => teams.map((t) => { const g = groupOf(t.id); return { teamId: t.id, group: g, stars: starsOf(t.id), rankInGroup: rankOf.get(t.id) ?? 0, groupSize: groupSize.get(g) ?? 1, finished: progress.get(t.id)?.currentLevel === null }; }), [teams, groupOf, starsOf, rankOf, groupSize, progress]);
   // Suggestions de parcours d'apres l'echauffement (avant le coup d'envoi, WOD principal seulement).
   const suggestions = useMemo(() => {
     const m = new Map<string, { stars: Stars; finishMs: number | null; ratio: number | null; levels: number; total: number }>();
@@ -520,7 +522,8 @@ export function LevelClient({
                 zombieSpeed={bundle.zombieSpeed ?? EMOM_ZOMBIE_SPEED}
                 running={phase === "run" && !isPaused}
                 onToggle={toggleCard}
-                onScore={(teamId, reps) => { setError(""); void setEmomScoreAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
+                sessionId={sessionId}
+                onScore={(teamId, scores) => { setError(""); void setEmomPlayerScoresAction(sessionId, teamId, scores).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
               />
             ) : (
               <>
@@ -555,7 +558,6 @@ export function LevelClient({
                               coins={coinsOn ? coinsOf.get(t.id) ?? null : null}
                               impact={impact?.teamId === t.id ? impact : null}
                               onDiscount={(reps) => discount(t.id, reps)}
-                              onRocket={() => setRocketFor(t.id)}
                               onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
                               onYellow={(delta) => yellow(t.id, delta)}
                             />
@@ -579,18 +581,6 @@ export function LevelClient({
                   >🚀</motion.span>
                 )}
               </AnimatePresence>
-              {rocketFor && (
-                <RocketMenu
-                  team={teamById.get(rocketFor)!}
-                  stars={starsOf(rocketFor)}
-                  coins={coinsOf.get(rocketFor) ?? null}
-                  mastered={masteredExercises(ladderOf(rocketFor), rocketFor, ticks, live.penalties)}
-                  targets={rocketTargets(rocketFor, rocketRows).map((r) => ({ id: r.teamId, name: teamById.get(r.teamId)?.name ?? "?", stars: r.stars, rank: r.rankInGroup }))}
-                  sameGroupOnly={rocketRows.filter((r) => r.group === groupOf(rocketFor) && r.teamId !== rocketFor).length >= 2}
-                  onSend={(exerciseId, reps, toId, label) => launchRocket(rocketFor, exerciseId, reps, toId, label)}
-                  onClose={() => setRocketFor(null)}
-                />
-              )}
               </>
             )}
           </>
@@ -684,7 +674,8 @@ function liveFromBundle(b: LevelBundle): LevelLive {
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
-function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+function EmomBoard({ sessionId, waveMinutes, levels, teams, ticks, losses, scores, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+  sessionId: string;
   waveMinutes: number[];
   levels: FrozenLevel[];
   teams: LevelTeam[];
@@ -698,7 +689,7 @@ function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, 
   zombieSpeed: number;
   running: boolean;
   onToggle: (teamId: string, level: number, card: number, done: boolean) => void;
-  onScore: (teamId: string, reps: number) => void;
+  onScore: (teamId: string, scores: Record<string, number>) => void;
 }) {
   const wave = emomWaveAt(waveMinutes, raceMs);
   const schedule = emomSchedule(waveMinutes);
@@ -707,7 +698,8 @@ function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, 
   const ranked = emomRank(progress);
   const rankOf = new Map(ranked.map((p, i) => [p.teamId, i + 1]));
   const current = wave ? levels.find((l) => l.number === wave.wave) ?? null : null;
-  const isMax = !!current && activeCards(current).length === 0;
+  // Derniere vague = maximum de cordes (apres ses fiches s'il y en a, depuis le 28/09).
+  const isMax = !!wave && wave.wave === waveMinutes.length;
   return (
     <div className="space-y-2">
       <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
@@ -728,6 +720,7 @@ function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, 
         {teams.map((t) => (
           <EmomRow
             key={t.id}
+            sessionId={sessionId}
             team={t}
             progress={progress.find((x) => x.teamId === t.id)!}
             rank={rankOf.get(t.id) ?? 0}
@@ -747,13 +740,14 @@ function EmomBoard({ waveMinutes, levels, teams, ticks, losses, scores, raceMs, 
           />
         ))}
       </div>
-      <p className={ui.hint}>Les vagues s&apos;enchaînent au chrono, qu&apos;une équipe ait fini ou non. Dans une vague, la fiche suivante n&apos;apparaît qu&apos;une fois la précédente cochée. La dernière vague est un maximum de cordes : saisis le total, c&apos;est le score final.{zombies && <> Un zombie du palier {zombieTier(zombieSpeed)} part à chaque vague : il dévore le cœur si la vague n&apos;est pas bouclée à sa fin (💔 une vie).</>}</p>
+      <p className={ui.hint}>Les vagues s&apos;enchaînent au chrono, qu&apos;une équipe ait fini ou non. Dans une vague, la fiche suivante n&apos;apparaît qu&apos;une fois la précédente cochée. La dernière vague reprend les fiches de la vague 4, puis c&apos;est le maximum de cordes, tout le monde en même temps : saisis les cordes de chaque joueur (🪢), le total est le score final.{zombies && <> Un zombie du palier {zombieTier(zombieSpeed)} part à chaque vague : il dévore le cœur si la vague n&apos;est pas bouclée à sa fin (💔 une vie).</>}</p>
     </div>
   );
 }
 
 // Une equipe du finisher : rang, vagues, zombie de la vague en cours (palier 10), fiches a decouvrir.
-function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+function EmomRow({ sessionId, team: t, progress: p, rank, wave, current, isMax, over, ticks, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+  sessionId: string;
   team: LevelTeam;
   progress: EmomTeam;
   rank: number;
@@ -769,9 +763,10 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
   zombieSpeed: number;
   running: boolean;
   onToggle: (teamId: string, level: number, card: number, done: boolean) => void;
-  onScore: (teamId: string, reps: number) => void;
+  onScore: (teamId: string, scores: Record<string, number>) => void;
 }) {
-  const next = current && !isMax ? emomNextCard(current, t.id, ticks) : null;
+  const next = current ? emomNextCard(current, t.id, ticks) : null;
+  const maxOpen = (isMax && !next) || over; // fiches de la derniere vague bouclees (ou EMOM fini) : cordes
   const cards = current ? activeCards(current) : [];
   const doneCards = current ? cards.filter(({ index }) => ticks.some((k) => k.teamId === t.id && k.level === current.number && k.card === index)) : [];
   const sim = zombies && wave && current ? emomZombieSim(wave.endMs - wave.startMs, cards.length, cards.reduce((s, x) => s + cardSeconds(x.card), 0), emomWaveEvents(current, t.id, ticks, wave), raceMs - wave.startMs, zombieSpeed) : null;
@@ -817,7 +812,7 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
         </div>
       )}
       <div className="flex-1 min-w-0 flex items-center gap-2">
-        {current && !isMax && (
+        {current && !(isMax && !next) && (
           <>
             {doneCards.map(({ card, index }) => <span key={index} className={cx(ui.chip, ui.chipOk)}>✓ {card.reps} {cap(card.label)}</span>)}
             {next ? (
@@ -832,64 +827,62 @@ function EmomRow({ team: t, progress: p, rank, wave, current, isMax, over, ticks
             {doneCards.length > 0 && <button type="button" disabled={!canTick} onClick={() => onToggle(t.id, current.number, doneCards[doneCards.length - 1].index, true)} className="text-[10px] text-ink-3 underline">annuler</button>}
           </>
         )}
-        {(isMax || over) && <ScoreInput value={p.score} disabled={!canTick && !over} onSubmit={(n) => onScore(t.id, n)} />}
+        {maxOpen && <PlayerScores sessionId={sessionId} team={t} total={p.score} disabled={!canTick && !over} onSubmit={(s) => onScore(t.id, s)} />}
         {!current && !over && <span className={ui.hint}>En attente du départ.</span>}
       </div>
     </section>
   );
 }
 
-// Menu de la fusee : exercice maitrise, quantite (prix = reps x ponderation), cible (meme parcours sauf s'il
-// manque d'adversaires, jamais la derniere, jamais une equipe arrivee au bout).
-function RocketMenu({ team, stars, coins, mastered, targets, sameGroupOnly, onSend, onClose }: {
-  team: LevelTeam; stars: Stars; coins: CoinsState | null; mastered: ReturnType<typeof masteredExercises>; targets: { id: string; name: string; stars: Stars; rank: number }[]; sameGroupOnly: boolean;
-  onSend: (exerciseId: string, reps: number, toId: string, label: string) => void; onClose: () => void;
-}) {
-  const [pick, setPick] = useState<{ exerciseId: string; reps: number; price: number; label: string } | null>(null);
-  const bank = coins?.bank ?? 0;
+// Cordes de la derniere vague, joueur par joueur (tout le monde saute en meme temps) : total = score de l'equipe.
+function PlayerScores({ sessionId, team, total, disabled, onSubmit }: { sessionId: string; team: LevelTeam; total: number | null; disabled: boolean; onSubmit: (scores: Record<string, number>) => void }) {
+  const [open, setOpen] = useState(false);
+  const [vals, setVals] = useState<Record<string, string>>({});
+  function openIt() {
+    setOpen(true);
+    void getEmomPlayerScoresAction(sessionId, team.id).then((r) => {
+      if ("error" in r) return;
+      setVals(Object.fromEntries(team.members.map((m) => [m.id, r.scores[m.id] !== undefined ? String(r.scores[m.id]) : ""])));
+    });
+  }
+  const parsed = team.members.map((m) => ({ m, n: vals[m.id]?.trim() ? parseInt(vals[m.id], 10) : null }));
+  const bad = parsed.some(({ n }) => n !== null && (!Number.isInteger(n) || n < 0 || n > 5000));
+  const sum = parsed.reduce((s, { n }) => s + (n && n > 0 ? n : 0), 0);
   return (
-    <div className="fixed inset-0 z-40 bg-ink/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className={cx(ui.card, "w-full max-w-2xl p-4 space-y-3")} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2">
-          <span className="text-3xl">🚀</span>
-          <div className="flex-1">
-            <p className="font-display font-extrabold text-lg">Fusée de {team.name} <span className="text-accent-ink text-sm">{starsLabel(stars)}</span></p>
-            <p className={ui.hint}>Banque : <b className="text-ink">{bank} 🪙</b> · 1 pièce = 1 seconde de travail (reps × pondération). L'équipe visée reçoit la fiche à son prochain niveau.</p>
-          </div>
-          <button type="button" onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
-        </div>
-        {mastered.length === 0 ? (
-          <p className={ui.alertInfo}>Aucun exercice maîtrisé pour l&apos;instant : il faut avoir coché 3 fiches d&apos;un même exercice pour pouvoir l&apos;envoyer.</p>
-        ) : (
-          <div className="space-y-1.5">
-            <p className={ui.eyebrow}>1 · Exercice maîtrisé et quantité</p>
-            {mastered.map((m) => (
-              <div key={m.exerciseId} className={`${ui.inset} px-2 py-1.5 flex flex-wrap items-center gap-1.5`}>
-                <span className="font-bold text-sm w-36 truncate" title={`${m.count} fiches cochées · ${m.weight} 🪙/rep`}>{cap(m.label)} <span className="text-[10px] text-ink-3">×{m.count}</span></span>
-                {sendOptions(m.weight).map((o) => (
-                  <button key={o.reps} type="button" disabled={o.price > bank} onClick={() => setPick({ exerciseId: m.exerciseId, reps: o.reps, price: o.price, label: m.label })} className={cx("rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-40", pick?.exerciseId === m.exerciseId && pick.reps === o.reps ? "bg-ink text-white border-ink" : "bg-card border-line-2 hover:border-brand")}>
-                    {o.reps} reps · {o.price}🪙
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <p className={ui.eyebrow}>2 · Cible {sameGroupOnly ? `(même parcours ${starsLabel(stars)}, jamais la dernière)` : "(moins de deux adversaires dans le parcours : tout le monde, jamais la dernière d'un parcours)"}</p>
-          {targets.length === 0 ? <p className={ui.hint}>Aucune cible possible.</p> : (
-            <div className="flex flex-wrap gap-1.5">
-              {targets.map((t) => (
-                <button key={t.id} type="button" disabled={!pick} onClick={() => pick && onSend(pick.exerciseId, pick.reps, t.id, pick.label)} className={cx(btn.primary, "disabled:opacity-40")} title={pick ? `Envoyer ${pick.reps} ${cap(pick.label)} à ${t.name} pour ${pick.price} pièces` : "Choisis d'abord un exercice et une quantité"}>
-                  {t.name} <span className="text-[10px] opacity-80">{starsLabel(t.stars)} #{t.rank}</span>
-                </button>
-              ))}
+    <>
+      <button type="button" onClick={openIt} disabled={disabled} className={cx(btn.smPrimary, "flex-shrink-0")}>🪢 Cordes par joueur{total !== null ? ` · ${total}` : ""}</button>
+      {open && (
+        <div className={ui.backdrop} onClick={() => setOpen(false)}>
+          <div className={`${ui.sheet} max-w-md`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-display font-extrabold text-lg">🪢 {team.name} · MAX de cordes</p>
+              <button type="button" onClick={() => setOpen(false)} className={ui.close}>✕</button>
             </div>
-          )}
+            <form
+              className="space-y-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (bad) return;
+                onSubmit(Object.fromEntries(parsed.filter(({ n }) => n !== null).map(({ m, n }) => [m.id, n as number])));
+                setOpen(false);
+              }}
+            >
+              {team.members.map((m) => (
+                <label key={m.id} className="flex items-center gap-3">
+                  <span className="flex-1 font-bold">{m.name}</span>
+                  <input type="number" inputMode="numeric" min={0} max={5000} value={vals[m.id] ?? ""} onChange={(e) => setVals((v) => ({ ...v, [m.id]: e.target.value }))} className={`${ui.input} w-28 text-lg font-display font-extrabold tabular-nums`} placeholder="0" />
+                </label>
+              ))}
+              {team.members.length === 0 && <p className={ui.hint}>Aucun joueur dans cette équipe.</p>}
+              <div className="flex items-center justify-between pt-2 border-t border-line">
+                <span className="font-display font-extrabold text-xl tabular-nums">Total : {sum}</span>
+                <button type="submit" disabled={bad} className={btn.primary}>Valider</button>
+              </div>
+            </form>
+          </div>
         </div>
-        {pick && <p className={ui.hint}>Sélection : <b className="text-ink">{pick.reps} {cap(pick.label)}</b> pour <b className="text-ink">{pick.price} 🪙</b>. Touche l&apos;équipe visée pour lancer.</p>}
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -1017,7 +1010,7 @@ const rankStyle = (rank: number) =>
 
 const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
 
-function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
+function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onToggle, onYellow }: {
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
@@ -1028,7 +1021,6 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   coins?: CoinsState | null;
   impact?: { id: number; text: string } | null;
   onDiscount?: (reps: number) => void;
-  onRocket?: () => void;
   teamsCount: number;
   yellow: number;
   canTick: boolean;
@@ -1218,7 +1210,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
                 </button>
                 {coinOpen && (
                   <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
-                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "prête 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
+                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "construite, décolle dès qu'un exercice est maîtrisé 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
                     {target ? (
                       <>
                         <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
@@ -1307,7 +1299,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
 
       {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
       {coins && coins.stock > 0 && !finished && (
-        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : envoyer des reps à une équipe"><span className="inline-block animate-bounce">🚀</span></button>
+        <span className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée construite : elle décolle toute seule dès qu'une cible du top 4 est possible et que l'équipe maîtrise un exercice (3 fiches)"><span className="inline-block animate-bounce">🚀</span></span>
       )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">

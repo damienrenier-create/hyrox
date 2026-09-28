@@ -18,7 +18,8 @@ import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLev
 export * from "@/lib/mine-core";
 import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, layoutForRound, numbersOf, roundsOf, type Reveal } from "@/lib/mine-core";
 
-export type MineStudent = { userId: string; name: string; teamId: string; teamName: string };
+// `evals` (Sartay 28/09) : nombre d'evaluations de CET arbitre sur cet eleve dans la seance.
+export type MineStudent = { userId: string; name: string; teamId: string; teamName: string; evals: number };
 export type MineExercise = { exerciseId: string; label: string; suggested: boolean };
 export type MineCell = null | { mine: boolean; n: number };
 export type MineLeader = { refereeId: string; name: string; found: number; revealed: number };
@@ -58,10 +59,14 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
         .filter((m) => m.teamId === t.id)
         .map((m) => userById.get(m.userId))
         .filter((u): u is NonNullable<typeof u> => !!u)
-        .map((u) => { const n = memberNames(u); return { userId: u.id, name: `${n.firstName} ${n.lastName.charAt(0)}.`.trim(), teamId: t.id, teamName: t.name }; })
+        .map((u) => { const n = memberNames(u); return { userId: u.id, name: `${n.firstName} ${n.lastName.charAt(0)}.`.trim(), teamId: t.id, teamName: t.name, evals: 0 }; })
         .sort((a, b) => a.name.localeCompare(b.name, "fr"))
     );
   }
+
+  // Mes evaluations par eleve : l'arbitre voit qui il a deja evalue, combien de fois, et qui il n'a pas encore vu.
+  const myEvals = await db.orm.public.Evaluation.where({ sessionId, evaluatorId: refereeId }).all();
+  for (const e of myEvals) { const s = e.targetUserId ? students.find((x) => x.userId === e.targetUserId) : null; if (s) s.evals++; }
 
   // Exercices : ceux des niveaux en cours des equipes et du niveau suivant sont « suggeres » ; les autres de
   // l'echelle restent accessibles derriere « tous ».

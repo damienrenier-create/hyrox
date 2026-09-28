@@ -148,6 +148,11 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
           <div className="space-y-3">
             <RecentEvals sessionId={sessionId} items={view.recent} />
             {byTeam.length === 0 && <p className={`${ui.cardPad} ${ui.muted}`}>Aucun élève à arbitrer pour l&apos;instant.</p>}
+            {students.length > 0 && (
+              <p className={`${ui.hint} px-1`}>
+                Tu as évalué <b className="text-ink">{students.filter((s) => s.evals > 0).length}</b> élève{students.filter((s) => s.evals > 0).length > 1 ? "s" : ""} sur {students.length} · {students.reduce((n, s) => n + s.evals, 0)} évaluation{students.reduce((n, s) => n + s.evals, 0) > 1 ? "s" : ""} au total. En orange : ceux que tu n&apos;as pas encore évalués.
+              </p>
+            )}
             {byTeam.map(([teamId, g]) => {
               const blocked = teamId === excludedTeam;
               return (
@@ -155,8 +160,9 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
                   <p className="text-xs font-bold text-ink-2 px-1 mb-1">{g.teamName}{blocked && <span className="ml-2 font-normal text-ink-3">· arbitrée à l&apos;instant, revient après ta prochaine évaluation</span>}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {g.list.map((s) => (
-                      <button key={s.userId} type="button" disabled={blocked || pending} onClick={() => { setStudent(s); setExerciseId(null); setStep("exercise"); }} className={cx(ui.btn, "justify-start text-left", "bg-paper border border-line-2 hover:border-brand disabled:cursor-not-allowed")}>
-                        {s.name}
+                      <button key={s.userId} type="button" disabled={blocked || pending} onClick={() => { setStudent(s); setExerciseId(null); setStep("exercise"); }} className={cx(ui.btn, "justify-between text-left gap-2", s.evals === 0 ? "bg-warn-soft border-2 border-warn/60" : "bg-paper border border-line-2", "hover:border-brand disabled:cursor-not-allowed")}>
+                        <span className="truncate">{s.name}</span>
+                        {s.evals > 0 ? <span className={cx(ui.chip, ui.chipOk, "flex-shrink-0")} title={`Tu l'as évalué ${s.evals} fois`}>✓ {s.evals}</span> : <span className={cx(ui.chip, ui.chipWarn, "flex-shrink-0")}>à évaluer</span>}
                       </button>
                     ))}
                   </div>

@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { listExercises, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderKey, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamFormats, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_FORMAT, DEFAULT_STARS, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { readEmomPlayerScores, activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderKey, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamFormats, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_FORMAT, DEFAULT_STARS, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyDiscount, createStarTeam, numberTeams, sendRocket, settleRockets, startLevelRace, teamLadder } from "@/lib/level-coins";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
@@ -101,7 +101,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
   const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   // Rattrapages appliques : les reglages (fiches recues annulees) ont pu changer, on relit avant les fusees.
   const settingsNow = caught > 0 ? (await db.orm.public.Session.where({ id: sessionId }).first())?.settings ?? ctx.session.settings : ctx.session.settings;
-  const settled = rs?.startedAt && !rs.endedAt ? await settleRockets(sessionId, settingsNow, liveTicks, liveLosses, teamIds) : settingsNow;
+  const settled = rs?.startedAt && !rs.endedAt ? await settleRockets(sessionId, settingsNow, liveTicks, liveLosses, teamIds, true) : settingsNow;
   return {
     ticks: liveTicks,
     losses: liveLosses,
@@ -119,6 +119,31 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
 }
 
 // Finisher EMOM : score de la vague « max » (reps), saisi par le greffier, modifiable jusqu'a la fin du WOD.
+// Finisher (Sartay 28/09) : cordes de la derniere vague saisies joueur par joueur ; le score de l'equipe = la somme.
+export async function getEmomPlayerScoresAction(sessionId: string, teamId: string): Promise<{ error: string } | { ok: true; scores: Record<string, number> }> {
+  const { session } = await requireLevelStaff(sessionId);
+  return { ok: true, scores: readEmomPlayerScores(session.settings)[teamId] ?? {} };
+}
+export async function setEmomPlayerScoresAction(sessionId: string, teamId: string, input: Record<string, number>): Promise<TeamRes> {
+  const { session } = await requireLevelStaff(sessionId);
+  if (!readEmom(session.settings)) return { error: "Cette séance n'est pas un EMOM." };
+  const members = new Set((await db.orm.public.TeamMember.where({ teamId }).all()).map((m) => m.userId));
+  const clean: Record<string, number> = {};
+  for (const [uid, n] of Object.entries(input)) {
+    if (!members.has(uid)) continue;
+    if (!Number.isInteger(n) || n < 0 || n > 5000) return { error: "Nombre de cordes invalide (entre 0 et 5000)." };
+    clean[uid] = n;
+  }
+  const { rs, startedAtMs, pauses } = await raceClock(sessionId);
+  if (!rs?.startedAt) return { error: "Lance d'abord la course." };
+  // Relecture juste avant d'ecrire : deux greffiers peuvent saisir deux equipes en meme temps.
+  const fresh = ((await db.orm.public.Session.where({ id: sessionId }).first())?.settings as Record<string, unknown> | null) ?? {};
+  const total = Object.values(clean).reduce((s, n) => s + n, 0);
+  const settings = JSON.parse(JSON.stringify({ ...fresh, emomPlayerScores: { ...readEmomPlayerScores(fresh), [teamId]: clean }, emomScores: { ...readEmomScores(fresh), [teamId]: total } }));
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings });
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, startedAtMs, pauses, rs.id, settings) };
+}
+
 export async function setEmomScoreAction(sessionId: string, teamId: string, reps: number): Promise<TeamRes> {
   const { session } = await requireLevelStaff(sessionId);
   if (!readEmom(session.settings)) return { error: "Cette séance n'est pas un EMOM." };
@@ -199,13 +224,11 @@ export async function discountAction(sessionId: string, teamId: string, reps: nu
   if ("error" in r) return r;
   return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, r.settings) };
 }
+// Fusees : elles decollent toutes seules depuis le 28/09 (plus de choix de l'exercice ni de la cible).
 export async function sendRocketAction(sessionId: string, teamId: string, exerciseId: string, reps: number, toTeamId: string): Promise<TeamRes> {
   await requireLevelStaff(sessionId);
-  const gate = await raceOpen(sessionId);
-  if ("error" in gate) return gate;
-  const r = await sendRocket(sessionId, teamId, exerciseId, reps, toTeamId);
-  if ("error" in r) return r;
-  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, r.settings) };
+  void teamId; void exerciseId; void reps; void toTeamId; void sendRocket;
+  return { error: "Les fusées partent toutes seules : plus besoin de les lancer." };
 }
 
 export async function levelPauseAction(sessionId: string): Promise<Res> {

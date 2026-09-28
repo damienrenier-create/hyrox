@@ -7,7 +7,7 @@ import { phaseTotals, readChild, readChildren } from "@/lib/level-context";
 import { loadZombieContext } from "@/lib/zombies";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
-  parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
+  autoRocketPool, parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
   DISCOUNT_STEPS, LADDER_KEYS, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
@@ -42,19 +42,59 @@ export const spendingAllowed = (settings: unknown) => !readEmom(settings) && !re
 
 // La fusee se construit et se paie toute seule des que la banque atteint son prix, une en stock au plus.
 // Ecrit les reglages seulement s'il y a une construction ; renvoie les reglages a jour.
-export async function settleRockets(sessionId: string, settings: unknown, ticks: Tick[], losses: Loss[], teamIds: string[]): Promise<unknown> {
-  if (!spendingAllowed(settings)) return settings;
-  const due = teamIds.filter((teamId) => { const s = bankOf(settings, teamId, ticks, losses); return s.stock === 0 && s.bank >= ROCKET_PRICE; });
-  if (!due.length) return settings;
-  // Relecture avant d'ecrire : un autre appareil a pu construire entre-temps (stock recalcule sur le frais).
-  return writeSettings(sessionId, (fresh) => {
-    const events = [...readCoinEvents(fresh)];
-    for (const teamId of due) {
-      const s = coinsState(teamLadder(fresh, teamId), teamId, ticks, losses, readPenalties(fresh), events, readCoinsCarry(fresh));
-      if (s.stock === 0 && s.bank >= ROCKET_PRICE) events.push({ id: randomUUID(), teamId, kind: "rocket", coins: ROCKET_PRICE, at: Date.now() });
+// Construction (a 100 pieces) et, quand toutes les equipes sont connues (`launch`), decollage automatique
+// (Sartay 28/09) : cible tiree au sort dans le top 4 du parcours, charge choisie d'apres les pieces. Le tirage
+// est fait une fois, cote serveur, puis enregistre (fiche recue + evenement « send ») : tous les ecrans voient
+// la meme fusee.
+function planRockets(settings: Settings, teamIds: string[], ticks: Tick[], losses: Loss[], launch: boolean): { next: Settings; changed: boolean } {
+  const events = [...readCoinEvents(settings)];
+  const gifts = Array.isArray(settings.gifts) ? [...(settings.gifts as Record<string, unknown>[])] : [];
+  const carry = readCoinsCarry(settings);
+  const extrasNow = () => readPenalties({ ...settings, gifts });
+  const stateOf = (id: string) => coinsState(teamLadder(settings, id), id, ticks, losses, extrasNow(), events, carry);
+  let changed = false;
+  for (const id of teamIds) {
+    const s = stateOf(id);
+    if (s.stock === 0 && s.bank >= ROCKET_PRICE) { events.push({ id: randomUUID(), teamId: id, kind: "rocket", coins: ROCKET_PRICE, at: Date.now() }); changed = true; }
+  }
+  if (launch) {
+    const teamStars = readTeamStars(settings);
+    const teamFormats = readTeamFormats(settings);
+    const groupOf = (id: string) => parcoursKey(teamStarsOf(teamStars, id), teamFormatOf(teamFormats, id));
+    for (const id of teamIds) {
+      const mine = stateOf(id);
+      if (mine.stock < 1) continue;
+      const extras = extrasNow();
+      const progress = teamIds.map((x) => progressOf(teamLadder(settings, x), x, ticks, losses, extras));
+      const ranked = rankTeams(progress, (x) => stateOf(x).score);
+      const rows = teamIds.map((x) => {
+        const g = groupOf(x);
+        const p = progress.find((pp) => pp.teamId === x)!;
+        const lv = teamLadder(settings, x);
+        const at = lv.findIndex((l) => l.number === p.currentLevel);
+        const next = at >= 0 ? lv[at + 1] ?? null : null;
+        return { teamId: x, group: g, rankInGroup: ranked.filter((pp) => groupOf(pp.teamId) === g).findIndex((pp) => pp.teamId === x) + 1, finished: p.currentLevel === null, hasNext: !!next, next };
+      });
+      const sendTargets = events.filter((e) => e.kind === "send").sort((a, b) => a.at - b.at).map((e) => e.toTeamId ?? "");
+      const pool = autoRocketPool(id, rows, sendTargets);
+      const payload = rocketPayload(masteredExercises(teamLadder(settings, id), id, ticks, extras), mine.score);
+      if (!pool.length || !payload) continue; // la fusee attend une cible ou un exercice maitrise
+      const target = pool[Math.floor(Math.random() * pool.length)];
+      const giftId = randomUUID();
+      const at = Date.now();
+      gifts.push({ id: giftId, teamId: target.teamId, fromTeamId: id, level: target.next!.number, index: 200 + gifts.length, reps: payload.reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at });
+      events.push({ id: giftId, teamId: id, kind: "send", coins: 0, at, toTeamId: target.teamId, label: payload.label, reps: payload.reps, giftId, level: target.next!.number });
+      changed = true;
     }
-    return { ...fresh, coinEvents: events };
-  });
+  }
+  return { next: { ...settings, coinEvents: events, gifts }, changed };
+}
+export async function settleRockets(sessionId: string, settings: unknown, ticks: Tick[], losses: Loss[], teamIds: string[], launch = false): Promise<unknown> {
+  if (!spendingAllowed(settings)) return settings;
+  // Rien a faire sur l'etat connu : pas d'ecriture (le greffier interroge souvent).
+  if (!planRockets(settingsOf(settings), teamIds, ticks, losses, launch).changed) return settings;
+  // Relecture avant d'ecrire : un autre appareil a pu construire ou lancer entre-temps.
+  return writeSettings(sessionId, (fresh) => planRockets(fresh, teamIds, ticks, losses, launch).next);
 }
 
 // Chrono de course et coches/vies d'une seance (ms de course).

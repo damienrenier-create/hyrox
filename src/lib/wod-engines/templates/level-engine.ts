@@ -637,7 +637,51 @@ export function emomZombieSim(waveMs: number, n: number, totalSec: number, event
 export const ROCKET_PRICE = 100;
 export const MASTERY_COUNT = 3; // un exercice fait 3 fois (3 fiches cochees) devient envoyable
 export const DISCOUNT_STEPS = [5, 10, 25, 50, 100]; // reps retirees d'un coup a la fiche la plus a droite
-export const SEND_WORK_STEPS = [50, 100, 150, 200, 300]; // secondes de travail envoyees par la fusee
+export const SEND_WORK_STEPS = [50, 100, 150, 200, 300]; // secondes de travail envoyees par la fusee (ancien menu manuel)
+// ===== Fusee automatique (Sartay 28/09) =====
+// Plus de menu : des qu'elle est construite, la fusee decolle toute seule vers une equipe tiree au sort dans le
+// top 4 de son parcours (jamais elle-meme, jamais l'equipe touchee par la fusee precedente). Charge : un exercice
+// que l'equipe maitrise, d'autant plus « gros » (pondere) qu'elle a de pieces, et d'autant moins de reps qu'il
+// est gros : ~150 s de travail, entre 5 et 50 reps, multiples de 5.
+export const ROCKET_TOP = 4;
+export const ROCKET_WORK_S = 150;
+export const ROCKET_RICH_SPAN = 800; // pieces (score) au-dela du prix de la fusee pour atteindre l'exercice le plus lourd
+export function rocketPayload(mastered: Mastered[], score: number): (Mastered & { reps: number }) | null {
+  if (!mastered.length) return null;
+  const sorted = [...mastered].sort((a, b) => a.weight - b.weight || a.label.localeCompare(b.label, "fr"));
+  const f = Math.max(0, Math.min(1, (score - ROCKET_PRICE) / ROCKET_RICH_SPAN));
+  const pick = sorted[Math.round(f * (sorted.length - 1))];
+  const reps = Math.max(5, Math.min(50, Math.round(ROCKET_WORK_S / Math.max(0.1, pick.weight) / 5) * 5));
+  return { ...pick, reps };
+}
+// Cibles possibles : le top 4 du parcours de l'expediteur (tout le monde s'il y a moins de deux adversaires),
+// sans lui-meme, sans l'equipe touchee par la fusee precedente, sans les equipes arrivees au bout ou sur leur
+// dernier niveau (la fiche recue arrive au niveau suivant). `sendTargets` : cibles des fusees, dans l'ordre.
+export function autoRocketPool<T extends { teamId: string; group: string; rankInGroup: number; finished: boolean; hasNext: boolean }>(fromTeamId: string, teams: T[], sendTargets: string[]): T[] {
+  const me = teams.find((t) => t.teamId === fromTeamId);
+  if (!me) return [];
+  const same = teams.filter((t) => t.group === me.group && t.teamId !== fromTeamId);
+  const base = same.length >= 2 ? same : teams.filter((t) => t.teamId !== fromTeamId);
+  const ids = new Set(base.map((t) => t.teamId));
+  const last = [...sendTargets].reverse().find((id) => ids.has(id)) ?? null;
+  return [...base]
+    .sort((a, b) => a.rankInGroup - b.rankInGroup)
+    .slice(0, ROCKET_TOP)
+    .filter((t) => t.teamId !== last && !t.finished && t.hasNext);
+}
+// Finisher : cordes de la derniere vague saisies joueur par joueur (tout le monde en meme temps).
+export function readEmomPlayerScores(settings: unknown): Record<string, Record<string, number>> {
+  const raw = (settings as { emomPlayerScores?: unknown } | null)?.emomPlayerScores;
+  const out: Record<string, Record<string, number>> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [teamId, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    const m: Record<string, number> = {};
+    for (const [uid, n] of Object.entries(v as Record<string, unknown>)) if (typeof n === "number" && Number.isInteger(n) && n >= 0) m[uid] = n;
+    out[teamId] = m;
+  }
+  return out;
+}
 export const coinsInPlay = (levelNumber: number) => 10 * levelNumber;
 export const warmupCoinsInPlay = (levelNumber: number) => (isBoss(levelNumber) ? 20 : 10);
 export const coinsPct = (remaining: number) => (remaining <= 0 ? 0 : Math.min(100, Math.ceil(remaining * 10 - 1e-9) * 10));
