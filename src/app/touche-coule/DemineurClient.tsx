@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MineView, MineStudent } from "@/lib/mine";
 import { MINE_COLS, MINE_ROWS } from "@/lib/mine-core";
-import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fireAction, minePulseAction, type FireResult } from "./mine-actions";
 import { usePulse } from "../_components/usePulse";
 import { RecentEvals } from "./RecentEvals";
+import { CriteriaChecklist } from "../_components/CriteriaChecklist";
 import { btn, cx, ui } from "@/lib/ui";
 
 const DIGIT: Record<number, string> = { 1: "text-blue-600", 2: "text-green-700", 3: "text-red-600", 4: "text-indigo-800", 5: "text-amber-800", 6: "text-teal-700", 7: "text-black", 8: "text-gray-600" };
@@ -34,7 +34,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
   const [exerciseId, setExerciseId] = useState<string | null>(null);
   const [allExos, setAllExos] = useState(false);
   const [reps, setReps] = useState("");
-  const [note, setNote] = useState<number | null>(null);
+  const [met, setMet] = useState<boolean[]>([]); // criteres observes
   const [error, setError] = useState("");
   const [result, setResult] = useState<(FireResult & { row: number; col: number; id: number }) | null>(null);
   const [showBoard, setShowBoard] = useState(false);
@@ -49,7 +49,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
       setStudent(null);
       setExerciseId(null);
       setReps("");
-      setNote(null);
+      setMet([]);
       setStep("student");
       router.refresh();
     }, RESULT_MS);
@@ -80,22 +80,22 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
   function goEval() {
     if (!student || !exerciseId) return;
     setReps("");
-    setNote(null);
+    setMet(new Array(view.exercises.find((e) => e.exerciseId === exerciseId)?.criteria.length ?? 0).fill(false));
     setError("");
     setStep("eval");
   }
   function goBoard() {
     const n = parseInt(reps, 10);
     if (!Number.isInteger(n) || n < 0) { setError("Encode les reps observées."); return; }
-    if (note === null) { setError("Choisis une appréciation."); return; }
     setError("");
     setStep("board");
   }
   function fire(row: number, col: number) {
-    if (!student || !exerciseId || note === null || pending || result) return;
+    if (!student || !exerciseId || pending || result) return;
     const n = parseInt(reps, 10);
+    const checked = met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0);
     startTransition(async () => {
-      const res = await fireAction(sessionId, student.userId, exerciseId, n, note, row, col);
+      const res = await fireAction(sessionId, student.userId, exerciseId, n, checked, row, col);
       if ("error" in res) { setError(res.error); setStep("student"); setStudent(null); setExerciseId(null); router.refresh(); return; }
       setResult({ ...res, row, col, id: Date.now() });
     });
@@ -197,14 +197,10 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
             <p className="text-sm text-ink-2 font-bold mb-3">{cap(exercise.label)}</p>
             <label className={ui.label}>Répétitions observées</label>
             <input type="number" inputMode="numeric" min={0} max={999} value={reps} onChange={(e) => setReps(e.target.value)} autoFocus className={`${ui.input} text-2xl font-display font-extrabold tabular-nums mb-3`} placeholder="0" />
-            <p className={ui.label}>Qualité</p>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {QUALITY_LEVELS.map((q) => (
-                <button key={q.code} type="button" onClick={() => setNote(q.value)} className={cx("rounded-xl border px-2 py-2 text-sm font-bold transition", note === q.value ? "bg-ink text-white border-ink" : "bg-card border-line-2 hover:border-brand")}>
-                  <span className={cx("block font-display text-lg", note === q.value ? "text-white" : q.color)}>{q.code}</span>
-                  <span className="block text-[10px] font-normal opacity-80">{q.label}</span>
-                </button>
-              ))}
+            <p className={ui.label}>Coche ce que tu as vraiment observé</p>
+            <div className="mb-3">
+              <CriteriaChecklist labels={exercise.criteria} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
+              <p className={`${ui.hint} mt-1`}>{met.filter(Boolean).length} critère{met.filter(Boolean).length > 1 ? "s" : ""} sur {exercise.criteria.length}. L&apos;appréciation de l&apos;élève en découle automatiquement.</p>
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setStep("exercise")} className={btn.ghost}>← Exercice</button>

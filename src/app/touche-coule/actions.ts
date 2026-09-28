@@ -7,6 +7,7 @@ import { fleetFor, computeCells, generateRandomFleet, Orientation } from "@/lib/
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 import { refereeAccess } from "@/lib/referee-access";
 import { displayName } from "@/lib/staff-names";
+import { qualityFromCriteria, readCriteria } from "@/lib/level-criteria";
 
 export type Direction = "right" | "left" | "down" | "up";
 
@@ -565,6 +566,22 @@ export async function generateGhostFleetsAction(
 // Seul l'auteur, seulement ses evaluations de cette seance. Le tir n'est pas touche : toucher ou couler
 // ne depend pas des reps, seuls les reps et l'appreciation sont corriges.
 export type MyEvalEdit = { id: string; reps: number; note: number };
+// Correction par l'arbitre d'une evaluation a criteres (demineur) : il re-coche les criteres, l'appreciation suit.
+export async function updateMyEvaluationCriteriaAction(sessionId: string, evaluationId: string, reps: number, met: number[]): Promise<{ error: string } | { ok: true }> {
+  const evaluator = await getSession();
+  if (!evaluator) throw new Error("Non authentifié.");
+  if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
+  const ev = await db.orm.public.Evaluation.where({ id: evaluationId, sessionId }).first();
+  if (!ev) return { error: "Évaluation introuvable." };
+  if (ev.evaluatorId !== evaluator.id) return { error: "Tu ne peux corriger que tes propres évaluations." };
+  const old = readCriteria((ev as { criteria?: unknown }).criteria);
+  if (!old) return { error: "Cette évaluation n'a pas de critères." };
+  const checks = old.map((c, i) => ({ label: c.label, met: met.includes(i) }));
+  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
+  await db.orm.public.Evaluation.where({ id: ev.id }).update({ repsObserved: reps, note, criteria: JSON.parse(JSON.stringify(checks)) });
+  return { ok: true };
+}
+
 export async function updateMyEvaluationAction(sessionId: string, evaluationId: string, reps: number, note: number): Promise<{ error: string } | { ok: true }> {
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");

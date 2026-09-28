@@ -260,6 +260,9 @@ model Evaluation {
   note         Int      @default(0) // 5(TB), 4(B), 3(S), 0(I), -1(TI)
   isValidated  Boolean  @default(false)
   targetUserId String?  // WOD Level : eleve evalue individuellement (demineur) ; null = evaluation d'equipe
+  // Demineur (Sartay 28/09) : criteres de realisation observes par l'arbitre, figes a l'evaluation
+  // [{ label, met }] dans l'ordre d'importance ; l'appreciation (note) en est deduite, le commentaire de l'eleve aussi.
+  criteria     Json?
   createdAt    DateTime @default(now())
 
   shot Shot?

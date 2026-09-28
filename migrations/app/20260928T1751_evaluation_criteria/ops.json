@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.evaluation.criteria",
+    "label": "Add column \"criteria\" to \"evaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "criteria",
+        "table": "evaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"criteria\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "criteria"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"criteria\"",
+        "sql": "ALTER TABLE \"public\".\"evaluation\" ADD COLUMN \"criteria\" json"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"criteria\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "criteria"
+        ]
+      }
+    ]
+  }
+]

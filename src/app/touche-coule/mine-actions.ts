@@ -6,6 +6,7 @@ import { refereeAccess } from "@/lib/referee-access";
 import { readFrozenFromSettings } from "@/lib/level";
 import { activeCards, readLadders } from "@/lib/wod-engines/templates/level-engine";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
+import { criteriaFor, qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
 import { MINE_COLS, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf } from "@/lib/mine-core";
 import { toMs } from "@/lib/scheduling";
 
@@ -19,7 +20,7 @@ export async function fireAction(
   targetUserId: string,
   exerciseId: string,
   reps: number,
-  note: number,
+  met: number[], // index des criteres observes (Sartay 28/09 : l'arbitre ne choisit plus d'appreciation)
   row: number,
   col: number
 ): Promise<{ error: string } | FireResult> {
@@ -30,13 +31,18 @@ export async function fireAction(
   const access = await refereeAccess(sessionId, user);
   if (!access.allowed) return { error: access.reason ?? "Arbitrage non autorisé." };
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides (0 à 999)." };
-  if (!QUALITY_VALUES.includes(note)) return { error: "Appréciation invalide." };
+  if (!Array.isArray(met) || met.some((i) => !Number.isInteger(i) || i < 0 || i > 20)) return { error: "Critères invalides." };
+  void QUALITY_VALUES;
   if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row >= MINE_ROWS || col < 0 || col >= MINE_COLS) return { error: "Case inconnue." };
   if (targetUserId === user.id) return { error: "Tu ne t'arbitres pas toi-même 😉" };
 
   const levels = readFrozenFromSettings(session.settings);
   if (!levels.length) return { error: "Le WOD n'est pas lancé." };
-  if (![levels, ...Object.values(readLadders(session.settings))].flat().some((l) => activeCards(l).some(({ card }) => card.exerciseId === exerciseId))) return { error: "Exercice hors échelle." };
+  const exoCard = [levels, ...Object.values(readLadders(session.settings))].flat().flatMap((l) => activeCards(l)).find(({ card }) => card.exerciseId === exerciseId)?.card;
+  if (!exoCard) return { error: "Exercice hors échelle." };
+  // Appreciation deduite des criteres coches ; la grille est figee avec l'evaluation (commentaire de l'eleve).
+  const checks: CriterionCheck[] = criteriaFor(exoCard.label).map((label, i) => ({ label, met: met.includes(i) }));
+  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const membership = (await db.orm.public.TeamMember.where({ userId: targetUserId }).all()).find((m) => teams.some((t) => t.id === m.teamId));
@@ -60,7 +66,7 @@ export async function fireAction(
   const encodedRow = round * ROUND_STRIDE + row;
   if (mine.some((r) => r.row === encodedRow && r.col === col)) return { error: "Case déjà jouée." };
 
-  const evaluation = await db.orm.public.Evaluation.create({ sessionId, teamId, evaluatorId: user.id, exerciseId, repsObserved: reps, note, targetUserId });
+  const evaluation = await db.orm.public.Evaluation.create({ sessionId, teamId, evaluatorId: user.id, exerciseId, repsObserved: reps, note, targetUserId, criteria: JSON.parse(JSON.stringify(checks)) });
   try {
     await db.orm.public.MineReveal.create({ sessionId, refereeId: user.id, row: encodedRow, col, evaluationId: evaluation.id });
   } catch {

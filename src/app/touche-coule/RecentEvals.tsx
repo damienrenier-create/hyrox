@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { QUALITY_LEVELS, qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
-import { updateMyEvaluationAction } from "./actions";
+import { updateMyEvaluationAction, updateMyEvaluationCriteriaAction } from "./actions";
+import { CriteriaChecklist } from "../_components/CriteriaChecklist";
+import type { CriterionCheck } from "@/lib/level-criteria";
 import { btn, cx, ui } from "@/lib/ui";
 
-export type RecentEval = { id: string; teamName: string; exerciseLabel: string; reps: number; note: number; atMs: number };
+export type RecentEval = { id: string; teamName: string; exerciseLabel: string; reps: number; note: number; atMs: number; criteria?: CriterionCheck[] | null };
 
 // Les cinq dernieres evaluations de l'arbitre, repliees sous un bouton, chacune corrigeable en place.
 export function RecentEvals({ sessionId, items }: { sessionId: string; items: RecentEval[] }) {
@@ -15,6 +17,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
   const [editing, setEditing] = useState<string | null>(null);
   const [reps, setReps] = useState("");
   const [note, setNote] = useState<number | null>(null);
+  const [met, setMet] = useState<boolean[]>([]);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   if (!items.length) return null;
@@ -23,14 +26,17 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
     setEditing(e.id);
     setReps(String(e.reps));
     setNote(e.note);
+    setMet((e.criteria ?? []).map((c) => c.met));
     setError("");
   }
   function save(e: RecentEval) {
     const r = parseInt(reps, 10);
-    if (!Number.isInteger(r) || note === null) return;
+    if (!Number.isInteger(r) || (!e.criteria && note === null)) return;
     setError("");
     startTransition(async () => {
-      const res = await updateMyEvaluationAction(sessionId, e.id, r, note);
+      const res = e.criteria
+        ? await updateMyEvaluationCriteriaAction(sessionId, e.id, r, met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0))
+        : await updateMyEvaluationAction(sessionId, e.id, r, note as number);
       if ("error" in res) { setError(res.error); return; }
       setEditing(null);
       router.refresh();
@@ -72,6 +78,9 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
                       autoFocus
                     />
                   </div>
+                  {e.criteria ? (
+                    <CriteriaChecklist compact labels={e.criteria.map((c) => c.label)} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
+                  ) : (
                   <div className="flex flex-wrap gap-1">
                     {QUALITY_LEVELS.map((l) => (
                       <button
@@ -85,10 +94,11 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
                       </button>
                     ))}
                   </div>
+                  )}
                   {error && <p className={ui.alertErr}>{error}</p>}
                   <div className="flex gap-2 justify-end">
                     <button type="button" onClick={() => setEditing(null)} className={btn.smGhost}>Annuler</button>
-                    <button type="button" onClick={() => save(e)} disabled={pending || !reps || note === null} className={btn.smPrimary}>
+                    <button type="button" onClick={() => save(e)} disabled={pending || !reps || (!e.criteria && note === null)} className={btn.smPrimary}>
                       {pending ? "…" : "Enregistrer"}
                     </button>
                   </div>

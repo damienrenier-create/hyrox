@@ -1,0 +1,224 @@
+// Criteres de realisation (CR) des 21 exercices du WOD Level, fournis par Sartay le 28/09/2026, du plus
+// important (securite, posture) au moins important (intensite, rythme). Module pur : arbitres (demineur),
+// espace eleve (commentaire), recap du prof, dia des criteres.
+// Bareme : 1 critere coche = TI, 2 = I, 3 = S, 4 = B, 5 = TB, 6 = E (aucun critere = TI).
+
+import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
+
+export const CRITERIA: Record<string, string[]> = {
+  POMPES: [
+    "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes).",
+    "La poitrine touche ou frôle le sol à chaque descente.",
+    "Les bras sont complètement tendus lors de la remontée (fin de poussée).",
+    "Le bassin ne s'affaisse pas et ne se lève pas pendant le mouvement.",
+    "La descente est contrôlée (l'élève ne se laisse pas tomber).",
+    "L'élève maintient un rythme régulier et fait de son mieux.",
+  ],
+  "SQUATS JUMP": [
+    "Le bassin descend sous le niveau des genoux (squat profond) à la flexion.",
+    "L'extension des hanches et des jambes est complète lors du saut.",
+    "Les pieds décollent visiblement du sol lors de l'impulsion.",
+    "L'atterrissage se fait en douceur (amorti sur la pointe puis talon) pour protéger le dos.",
+    "Le dos reste droit et le regard droit devant pendant toute l'exécution.",
+    "L'enchaînement est fluide sans pause excessive au sol.",
+  ],
+  BURPEES: [
+    "La poitrine et les cuisses touchent le sol lors de la phase basse.",
+    "L'extension du corps est complète lors du saut final.",
+    "Les pieds décollent du sol et les mains tapent derrière/au-dessus de la tête à la fin du mouvement.",
+    "Le retour des pieds vers les mains se fait de manière dynamique et groupée.",
+    "L'élève ne s'écrase pas au sol (descente active).",
+    "L'intensité est maintenue tout au long de l'épreuve.",
+  ],
+  "COMMANDO BRAS": [
+    "Le corps reste bien aligné (planche) durant toute la transition.",
+    "Le bassin reste le plus stable possible (pas de balancement excessif de gauche à droite).",
+    "Les bras se tendent complètement lors de la montée sur les mains.",
+    "Les coudes viennent se placer exactement à l'endroit où se trouvaient les mains.",
+    "L'élève alterne le bras qui initie la montée (un coup à gauche, un coup à droite).",
+    "Le mouvement est contrôlé, sans utiliser l'élan des hanches.",
+  ],
+  "BREAK DANCE": [
+    "La jambe qui passe sous le corps est tendue au maximum.",
+    "Le bassin pivote, descend, mais ne se repose pas sur le sol.",
+    "Le tronc tourne correctement tout en gardant l'équilibre sur une main et un pied.",
+    "Le bras libre accompagne le mouvement en tirant vers l'arrière de manière dynamique.",
+    "Le retour en position initiale (quadrupédie) est stable.",
+    "L'enchaînement gauche/droite est rythmé et fluide.",
+  ],
+  "ONE REP": [
+    "Lors du gainage au sol, le dos est parfaitement plat et le corps aligné avant d'entamer les touches.",
+    "Le bassin reste le plus stable possible et ne vrille pas de gauche à droite lors des touches croisées.",
+    "Toutes les touches sont exécutées franchement et de manière croisée (main/épaule, main/genou, main/pied).",
+    "La descente et la remontée (crawling) sont contrôlées et sécurisées sur les appuis.",
+    "L'élève se redresse en station debout complète (extension totale) à la fin de la répétition.",
+    "L'exercice est réalisé avec rythme et sans pause au sol.",
+  ],
+  CORDE: [
+    "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).",
+    "Le dos est droit, les épaules sont relâchées et le regard est droit devant.",
+    "Le mouvement de la corde est initié par une rotation des poignets (et non par les bras entiers).",
+    "La corde passe de manière fluide et le mouvement est synchronisé.",
+    "L'élève maintient un rythme régulier, continu, en essayant de limiter les ratés.",
+    "L'intensité est maximale par rapport au niveau technique de l'élève.",
+  ],
+  "SMASH DOWN": [
+    "La balle est montée bien au-dessus de la tête, bras tendus, avant le lancer.",
+    "L'extension du corps est complète (chevilles, genoux, hanches) au point haut.",
+    "Le lancer vers le sol est explosif et propulsé avec force (la balle n'est pas juste lâchée).",
+    "Le dos reste droit : l'élève plie les jambes pour ramasser la balle.",
+    "L'élève accompagne la balle vers le bas de manière dynamique.",
+    "Le ramassage de la balle est immédiat pour un enchaînement rapide.",
+  ],
+  "WALL BALL SHOT": [
+    "Le squat est profond (creux des hanches sous les genoux) avant le lancer.",
+    "La balle touche la cible à la hauteur exacte demandée.",
+    "L'élève réceptionne la balle en amortissant directement dans un nouveau squat.",
+    "Le dos reste droit et le regard fixé sur la cible lors de la descente.",
+    "Le mouvement est un seul flux continu (les jambes propulsent la balle).",
+    "Les bras terminent en extension complète vers la cible.",
+  ],
+  "TIRE TAPIS AR": [
+    "L'élève qui tire garde le dos bien droit et le buste fier (il ne s'enroule pas vers l'avant).",
+    "L'effort est réalisé en poussant sur les jambes et en reculant avec le poids du corps.",
+    "La prise sur le tapis est ferme, stable et symétrique des deux côtés.",
+    "Le mouvement de traction est continu, l'élève ne s'arrête pas en chemin.",
+    "Le tapis reste en mouvement du point de départ au point d'arrivée.",
+    "L'élève met une intensité maximale et tracte son camarade avec une grande énergie.",
+  ],
+  "FLIP TAPIS": [
+    "L'élève plie bien les jambes (squat) et garde le dos droit pour soulever le tapis (pas de dos rond).",
+    "La poussée pour basculer le tapis est initiée par la force des jambes et des hanches.",
+    "Le regard reste fixé droit devant (toujours du même côté) pour garder une bonne posture.",
+    "L'élève gère la force et l'angle pour que le tapis retombe dans la zone définie sans s'éloigner de trop.",
+    "L'enchaînement est rapide et l'élève se replace immédiatement en squat pour la répétition suivante.",
+    "L'engagement physique est total, l'intensité est maintenue malgré le poids de l'obstacle.",
+  ],
+  "KB SNATCH": [
+    "La kettlebell termine au-dessus de la tête avec le bras complètement tendu et verrouillé.",
+    "Le mouvement est initié par une poussée explosive des hanches, non à la force du bras.",
+    "La kettlebell « roule » autour du poignet et ne tape pas violemment l'avant-bras à la réception.",
+    "Le corps est droit, épaule stable et bassin gainé en position haute.",
+    "La descente est contrôlée dans l'élan pour amorcer la répétition suivante.",
+    "Le rythme est soutenu et l'effort maximal.",
+  ],
+  "KB SWING": [
+    "Le mouvement est initié par une extension explosive du bassin (les hanches propulsent le poids).",
+    "Le dos reste droit, neutre et gainé.",
+    "Les bras servent de balancier et restent souples (ils ne tirent pas le poids).",
+    "La kettlebell atteint la hauteur demandée (yeux ou au-dessus de la tête).",
+    "En fin d'extension (debout), les fessiers et les abdominaux sont contractés.",
+    "La respiration accompagne l'effort (expiration lors de la montée du poids).",
+  ],
+  "KB TOUR": [
+    "Le dos reste parfaitement droit du début à la fin.",
+    "Les abdominaux et fessiers sont fortement contractés pour empêcher le bassin de bouger (aucun balancier).",
+    "Le transfert de la kettlebell d'une main à l'autre se fait de manière assurée et sécurisée.",
+    "Le chemin de la kettlebell reste près du corps, dans l'axe de la taille.",
+    "Le poids utilisé est pertinent et représente un vrai défi physique pour l'élève.",
+    "L'élève met de l'intensité et fait passer le poids à une vitesse soutenue.",
+  ],
+  "ALLER-RETOUR": [
+    "L'élève freine en abaissant son centre de gravité pour protéger ses appuis avant le demi-tour.",
+    "Le sol ou la ligne sont clairement touchés/franchis à chaque extrémité.",
+    "La relance après le changement de direction est immédiate et explosive.",
+    "L'élève ne ralentit pas avant d'avoir complètement passé la ligne d'arrivée finale.",
+    "L'allure de course correspond à un vrai sprint.",
+    "L'élève donne tout ce qu'il a, l'intensité est maximale de bout en bout.",
+  ],
+  "MONKEY SLIDE": [
+    "L'atterrissage se fait en douceur avec un amorti sécuritaire (pointes puis talons, genoux pliés).",
+    "Les mains prennent un appui franc, solide et stable sur le tapis central pendant la phase de vol.",
+    "L'élève descend bien en position de squat avant l'impulsion et lors de l'atterrissage.",
+    "Les pieds décollent et atterrissent simultanément.",
+    "L'enchaînement gauche-droite est fluide, la transition se fait sans s'écraser au sol.",
+    "L'élève maintient un rythme très soutenu et fait le minimum de pauses.",
+  ],
+  "PLANK SLIDE": [
+    "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes) tout au long de l'exercice.",
+    "Le bassin reste parallèle au sol et ne vrille pas lorsqu'un bras décolle pour attraper le disque.",
+    "Le mouvement croisé est respecté : la main droite vient chercher le disque à gauche (et inversement).",
+    "Le disque est tiré suffisamment loin de chaque côté (en débord du tapis) à chaque répétition.",
+    "Les deux mains reviennent se poser de manière stable sur le tapis entre chaque glissement.",
+    "Le mouvement est réalisé avec intensité et rythme, sans faire de pause au milieu.",
+  ],
+  "FENTES DISK": [
+    "Le genou arrière touche ou frôle doucement le sol à chaque répétition.",
+    "Le genou de la jambe avant reste dans l'axe et ne dépasse pas excessivement la pointe du pied.",
+    "L'extension des jambes est complète (retour debout) entre chaque pas.",
+    "Le buste reste bien droit et gainé (il ne s'affaisse pas vers l'avant).",
+    "Le disque est tenu fermement de manière stable.",
+    "L'équilibre latéral est parfaitement géré tout au long du déplacement.",
+  ],
+  TRACTIONS: [
+    "Le menton passe clairement au-dessus de la barre à chaque montée.",
+    "Les bras sont complètement tendus à la fin de la descente.",
+    "L'élève ne « saute » pas ou n'utilise pas de mouvement de balancier exagéré.",
+    "La descente est contrôlée et freinée.",
+    "La prise est symétrique et solide sur la barre.",
+    "L'élève met de l'intensité et fait du mieux qu'il peut.",
+  ],
+  "BOX JUMP": [
+    "Le saut se fait à pieds joints.",
+    "L'atterrissage se fait avec les deux pieds simultanément sur la box.",
+    "L'extension des hanches est complète (l'élève se tient bien droit) une fois sur la box.",
+    "La réception sur la box se fait de manière amortie (genoux fléchis, pas de choc rigide).",
+    "Le retour au sol est contrôlé pour éviter les blessures (saut amorti ou descente un pied après l'autre).",
+    "L'élève maintient un rythme continu sans pauses excessives.",
+  ],
+  "TOUR DE POUTRE": [
+    "Les passages s'effectuent de façon contrôlée, sans heurter la poutre violemment.",
+    "Lors du passage « au-dessus », l'élève s'élève suffisamment pour ne pas risquer de rester accroché.",
+    "Lors du passage « en dessous », l'élève maîtrise son mouvement pour ne pas frotter le dos ou la tête au sol.",
+    "Le retournement se fait de manière efficace et coordonnée.",
+    "Les transitions entre le dessus et le dessous sont immédiates.",
+    "L'élève se donne à 100 % pour boucler le circuit le plus rapidement possible.",
+  ],
+};
+
+// Exercice ajoute plus tard sans criteres : grille generique (meme ordre d'importance).
+export const GENERIC_CRITERIA = [
+  "Le dos reste droit et la posture est sécurisée pendant tout le mouvement.",
+  "L'amplitude du mouvement est complète à chaque répétition.",
+  "Le mouvement est contrôlé, sans élan ni à-coup dangereux.",
+  "La consigne de l'exercice est respectée (appuis, touches, zone).",
+  "L'enchaînement est fluide, sans pause excessive.",
+  "L'intensité est maintenue du début à la fin.",
+];
+
+export const criteriaFor = (label: string): string[] => CRITERIA[label.trim().toUpperCase()] ?? GENERIC_CRITERIA;
+
+export type CriterionCheck = { label: string; met: boolean };
+export function readCriteria(raw: unknown): CriterionCheck[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out = raw.filter((c): c is CriterionCheck => !!c && typeof c === "object" && typeof (c as CriterionCheck).label === "string" && typeof (c as CriterionCheck).met === "boolean");
+  return out.length ? out : null;
+}
+
+// Appreciation (valeur de l'echelle) d'apres les criteres coches : 6 criteres -> 1 = TI ... 6 = E ; une grille
+// d'une autre taille est ramenee a 6.
+export function qualityFromCriteria(met: number, total: number): number {
+  const scaled = total > 0 ? Math.round((met / total) * 6) : 0;
+  const idx = Math.max(0, Math.min(QUALITY_LEVELS.length - 1, scaled - 1)); // 0 ou 1 -> TI, 6 -> E
+  return QUALITY_LEVELS[idx].value;
+}
+
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, "");
+// « KB SNATCH » -> « KB snatch », « TIRE TAPIS AR » -> « Tire tapis AR » : sigles gardes en capitales.
+export const exoLabel = (label: string) => label.trim().split(" ").map((w, i) => (w === "KB" || w === "AR" ? w : i === 0 ? w.charAt(0) + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ");
+const exoName = exoLabel;
+
+// Commentaire constructif pour l'eleve : ce qui est acquis, puis les criteres non realises dans l'ordre
+// d'importance (securite et posture d'abord), formules comme des objectifs.
+export function criteriaComment(exerciseLabel: string, checks: CriterionCheck[]): string {
+  const met = checks.filter((c) => c.met);
+  const todo = checks.filter((c) => !c.met);
+  const exo = exoName(exerciseLabel);
+  if (!todo.length) return `Excellent en ${exo} : les ${checks.length} critères sont réalisés. Continue comme ça, tu peux servir d'exemple !`;
+  const parts: string[] = [];
+  parts.push(met.length ? `${exo} : ${met.length} critère${met.length > 1 ? "s" : ""} sur ${checks.length} déjà réalisé${met.length > 1 ? "s" : ""}, c'est une bonne base.` : `${exo} : c'est le moment de reprendre les bases, pas à pas.`);
+  parts.push(`Ton prochain objectif : ${lowerFirst(todo[0].label)}.`);
+  if (todo[1]) parts.push(`Ensuite, veille à ceci : ${lowerFirst(todo[1].label)}.`);
+  if (todo.length > 2) parts.push(`Encore ${todo.length - 2} point${todo.length - 2 > 1 ? "s" : ""} à travailler après ça : tu vas y arriver.`);
+  return parts.join(" ");
+}

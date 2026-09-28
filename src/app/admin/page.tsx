@@ -61,6 +61,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const openIds = new Set(open.map((s) => s.id));
   const scheduledIds = new Set(scheduled.map((s) => s.id));
   const past = allSessions.filter((s) => !openIds.has(s.id) && !scheduledIds.has(s.id)).slice(0, 3);
+  // Recaps a lire (Sartay 28/09) : WOD Level termines depuis moins de 24 h.
+  const recentRecaps = allSessions.filter((s) => s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && s.raceEndedAt && Date.now() - toMs(s.raceEndedAt) < 24 * 3600_000).slice(0, 6);
   // Pour la confirmation de la tete de mort : nombre d'equipes et WOD lance ou non.
   const pastInfo = new Map(
     await Promise.all(
@@ -147,6 +149,12 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
           </div>
         )}
         {msg && <p className={ui.alertErr}>⚠️ {msg}</p>}
+        {recentRecaps.length > 0 && (
+          <div className={`${ui.alertInfo} flex flex-wrap items-center gap-2`}>
+            <span>📋 Récap{recentRecaps.length > 1 ? "s" : ""} des dernières 24 h :</span>
+            {recentRecaps.map((s) => <Link key={s.id} href={`/admin/recap?session=${s.id}`} className={btn.smGhost}>{s.label ?? wodLabel(s.wodType)} · {readSessionClasses(s.settings).join(", ") || "toutes classes"} · {fmtDay(s.raceEndedAt)} {fmtTime(s.raceEndedAt)}</Link>)}
+          </div>
+        )}
 
         {/* ===== Seances ouvertes ===== */}
         <section className={card}>
@@ -222,6 +230,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Résultats</Link>
+                      {s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && <Link href={`/admin/recap?session=${s.id}`} className={btn.smGhost} title="Faits marquants par classe : arbitrages bizarres, équipes trop fortes ou trop faibles, triche suspectée, évaluations extrêmes">📋 Récap</Link>}
                       <Link href={`/admin/resultats?session=${s.id}`} className={btn.smGhost}>Consultation</Link>
                       <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
                       {s.refereeMode && s.wodType !== "LEVEL" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}

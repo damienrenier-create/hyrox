@@ -5,13 +5,14 @@ import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/leve
 import { memberNames } from "@/lib/staff-names";
 import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { SYNC_GRACE_MS, applyZombieCatches, readZombies } from "@/lib/zombies";
+import { readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
 // classements. Module serveur sans "use server" : importe par les pages et les actions, jamais expose.
 
 export type LevelTeam = { id: string; name: string; order: number; members: { id: string; name: string }[] };
 export type LevelTickRow = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
-export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; atMs: number };
+export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; refereeId: string; criteria: CriterionCheck[] | null; atMs: number };
 export type LevelBundle = {
   levels: FrozenLevel[]; // parcours 2 etoiles (echelle par defaut)
   ladders: Ladders; // parcours 1 et 3 etoiles s'ils existent, et les trois du petit format (s1, s2, s3)
@@ -171,7 +172,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     .map((e) => ({
       id: e.id, targetUserId: e.targetUserId as string, targetName: nameOf(e.targetUserId as string), teamId: e.teamId, teamName: teamName.get(e.teamId) ?? "?",
       exerciseId: e.exerciseId, exerciseLabel: labelOf.get(e.exerciseId) ?? e.exerciseId, reps: e.repsObserved, note: e.note,
-      refereeName: nameOf(e.evaluatorId), atMs: elapsed(startedAtMs, pauses, toMs(e.createdAt)) ?? 0,
+      refereeName: nameOf(e.evaluatorId), refereeId: e.evaluatorId, criteria: readCriteria((e as { criteria?: unknown }).criteria), atMs: elapsed(startedAtMs, pauses, toMs(e.createdAt)) ?? 0,
     }))
     .sort((a, b) => a.atMs - b.atMs);
 

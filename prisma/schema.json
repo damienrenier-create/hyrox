@@ -666,6 +666,13 @@
                   "kind": "scalar"
                 }
               },
+              "criteria": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
               "evaluatorId": {
                 "nullable": false,
                 "type": {
@@ -800,6 +807,9 @@
               "fields": {
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "criteria": {
+                  "column": "criteria"
                 },
                 "evaluatorId": {
                   "column": "evaluatorId"
@@ -3952,6 +3962,11 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "criteria": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": true
+                },
                 "evaluatorId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6280,7 +6295,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2fa65ffa86c6ffc339b2333e640ab5faaa34a6fc6330218ce9fd307f6d3800ee"
+    "storageHash": "e4a31a63c3326a10d030866be51514e4ceaee6fb15665f0c56653e3406838474"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",

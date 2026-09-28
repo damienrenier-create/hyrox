@@ -16,14 +16,16 @@ import { readStarSwitches, activeCards, ladderFor, orderedLevels, progressOf, re
 // sont rangees par manche dans MineReveal.row (row = manche x 100 + ligne). Score = bombes trouvees.
 
 export * from "@/lib/mine-core";
+import { criteriaFor, readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf, type Reveal } from "@/lib/mine-core";
 
 // `evals` (Sartay 28/09) : nombre d'evaluations de CET arbitre sur cet eleve dans la seance.
 export type MineStudent = { userId: string; name: string; teamId: string; teamName: string; evals: number };
-export type MineExercise = { exerciseId: string; label: string; suggested: boolean };
+// `criteria` (Sartay 28/09) : criteres de realisation a cocher par l'arbitre, du plus important au moins important.
+export type MineExercise = { exerciseId: string; label: string; suggested: boolean; criteria: string[] };
 export type MineCell = null | { mine: boolean; n: number };
 export type MineLeader = { refereeId: string; name: string; found: number; revealed: number };
-export type MineRecent = { id: string; teamName: string; exerciseLabel: string; reps: number; note: number; atMs: number };
+export type MineRecent = { id: string; teamName: string; exerciseLabel: string; reps: number; note: number; atMs: number; criteria: CriterionCheck[] | null };
 export type MineView = {
   students: MineStudent[];
   exercises: MineExercise[];
@@ -90,7 +92,7 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
     for (const l of mine) if (l.number === p.currentLevel || l.number === p.currentLevel + 1) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);
   }
   if (!suggestedIds.size) for (const l of levels) if (l.number <= 2) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);
-  const exercises: MineExercise[] = [...all.entries()].map(([exerciseId, label]) => ({ exerciseId, label, suggested: suggestedIds.has(exerciseId) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  const exercises: MineExercise[] = [...all.entries()].map(([exerciseId, label]) => ({ exerciseId, label, suggested: suggestedIds.has(exerciseId), criteria: criteriaFor(label) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
 
   const reveals = await db.orm.public.MineReveal.where({ sessionId }).all();
   const mine = reveals.filter((r) => r.refereeId === refereeId);
@@ -130,6 +132,7 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
     reps: e.repsObserved,
     note: e.note,
     atMs: at,
+    criteria: readCriteria((e as { criteria?: unknown }).criteria),
   }));
 
   void MINE_COUNT;

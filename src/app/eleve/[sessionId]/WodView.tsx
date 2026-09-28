@@ -29,6 +29,7 @@ export type RefereeEvalRow = {
   exerciseLabel: string;
   reps: number;
   quality: QualityCode | null;
+  comment?: string | null; // demineur : commentaire construit sur les criteres non realises
   at: number;
 };
 
@@ -155,6 +156,7 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
                             "—"
                           )}
                           {level && <span className="text-xs text-ink-3"> {level.label}</span>}
+                          {e.comment && <span className="block text-xs text-ink-2 mt-1 leading-snug">💬 {e.comment}</span>}
                         </td>
                       </tr>
                     );
