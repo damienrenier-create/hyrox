@@ -4,7 +4,7 @@ import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
 import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
-import { SYNC_GRACE_MS, applyZombieCatches, readZombies } from "@/lib/zombies";
+import { readZombies } from "@/lib/zombies";
 import { readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -107,7 +107,7 @@ export function readLevelCap(settings: unknown): number | null {
 
 export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> {
   // Des coches peuvent encore etre en route depuis l'ecran du greffier (sauvegarde a la minute) : delai de grace.
-  await applyZombieCatches(sessionId, undefined, undefined, { graceMs: SYNC_GRACE_MS });
+  // Plus de rattrapage a la lecture (28/09 soir) : les coches de la course peuvent encore etre sur le PC du greffier.
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) throw new Error("Séance introuvable.");
 

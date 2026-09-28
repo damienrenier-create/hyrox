@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
@@ -8,6 +8,7 @@ import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, ladderKey, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
+import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
 import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, launchRocketAction, getEmomPlayerScoresAction, setEmomPlayerScoresAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
@@ -24,14 +25,33 @@ import { btn, cx, ui } from "@/lib/ui";
 
 // Coche en attente de sauvegarde (greffier hors ligne) : heure du clic en temps de course.
 type PendingOp = { id: string; kind: "tick" | "untick"; teamId: string; level: number; card: number; atMs: number };
-const SYNC_EVERY_MS = 60_000;
+const RETRY_EVERY_MS = 60_000; // sauvegarde ratee (en pause, apres la fin) : nouvel essai a la minute ; mode « en ligne » : envoi a la minute
+// Mode de sauvegarde (Sartay 28/09 soir), memorise sur CE PC pour toutes les seances : « local » (defaut) = envoi a la
+// Pause, a la Fin du WOD et avant un bouton serveur ; « live » = comme avant, envoi toutes les minutes et tout de suite
+// pour un BOSS. Dans les deux cas l'ecran calcule zombies et vies lui-meme.
+type SyncMode = "local" | "live";
+const SYNC_MODE_KEY = "reps-level-sync-mode";
+const SYNC_MODE_EVENT = "reps-level-sync-mode";
+function readSyncMode(): SyncMode {
+  try { return localStorage.getItem(SYNC_MODE_KEY) === "live" ? "live" : "local"; } catch { return "local"; }
+}
+function subscribeSyncMode(cb: () => void) {
+  window.addEventListener("storage", cb);
+  window.addEventListener(SYNC_MODE_EVENT, cb);
+  return () => { window.removeEventListener("storage", cb); window.removeEventListener(SYNC_MODE_EVENT, cb); };
+}
+function writeSyncMode(m: SyncMode) {
+  try { localStorage.setItem(SYNC_MODE_KEY, m); } catch { /* navigation privee : reste sur le mode par defaut */ }
+  window.dispatchEvent(new Event(SYNC_MODE_EVENT));
+}
 const newOpId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | "teams" | "settings";
 
 // Greffier « Level » (PC projete, mais aussi telephone d'un prof qui valide un BOSS) : chrono centre, une
 // tuile par equipe avec son niveau en cours et ses fiches a cocher, classement en direct, recap des reps
 // par exercice, echelle de la seance modifiable en cours de route. Plusieurs appareils cochent en meme
-// temps : chaque coche est une ligne unique en base, et le pouls resynchronise les ecrans.
+// temps : chaque coche est une ligne unique en base. Depuis le 28/09 (soir), UN seul greffier pendant la course : ses
+// coches restent sur le PC jusqu'a la Pause ou la Fin du WOD (voir plus bas).
 export function LevelClient({
   sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false,
 }: {
@@ -62,10 +82,11 @@ export function LevelClient({
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  // Greffier hors ligne (Sartay 28/09) : chaque coche est gardee sur le PC (et dans le navigateur, pour survivre a un
-  // rechargement) avec l'heure exacte du clic, puis envoyee en lot toutes les minutes — ou tout de suite pour un
-  // BOSS, un zombie qui arrive, un autre bouton ou la fermeture de la page. L'ecran reste fluide : rien n'attend
-  // le reseau, la sauvegarde part en arriere-plan.
+  // Greffier hors ligne (Sartay 28/09, soir : « tout envoyer seulement a la pause ou en fin de WOD ») : chaque coche
+  // est gardee sur le PC (et dans le navigateur, pour survivre a un rechargement) avec l'heure exacte du clic. L'ecran
+  // calcule lui-meme zombies, vies, pieces et fusees avec le code du serveur (level-replay.ts). Rien ne part pendant
+  // la course : envoi a la Pause (chrono deja fige), a la Fin du WOD, au temps ecoule, avant un bouton qui passe par
+  // le serveur (fusee, allegement, carte jaune...), a la fermeture de la page, ou sur demande (clic sur 💾).
   const QUEUE_KEY = `reps-level-queue-${sessionId}`;
   const [queue, setQueueState] = useState<PendingOp[]>([]);
   const queueRef = useRef<PendingOp[]>([]);
@@ -76,6 +97,7 @@ export function LevelClient({
     try { localStorage.setItem(QUEUE_KEY, JSON.stringify(next)); } catch { /* navigation privee : file en memoire seulement */ }
   }
   const [sync, setSync] = useState<{ at: number | null; failed: boolean }>({ at: null, failed: false });
+  const syncMode = useSyncExternalStore(subscribeSyncMode, readSyncMode, () => "local" as SyncMode);
   const pendingMap = useMemo(() => new Map<string, boolean>(), []); // plus d'appel en vol par coche
   // Heure serveur du dernier etat applique par equipe : une reponse plus ancienne (taps qui se croisent) est
   // ignoree, et seule la coche terminee est liberee — les autres restent affichees telles que tapees.
@@ -140,14 +162,17 @@ export function LevelClient({
   const lastStructure = useRef<string | null>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  const pausedRef = useRef(isPaused);
+  pausedRef.current = isPaused;
   const flushing = useRef<Promise<void> | null>(null);
-  function flush(catchTeams: string[] = []): Promise<void> {
-    if (flushing.current) return flushing.current.then(() => (queueRef.current.length || catchTeams.length ? flush(catchTeams) : undefined));
+  function flush(read = false): Promise<void> {
+    if (flushing.current) return flushing.current.then(() => (queueRef.current.length || read ? flush(read) : undefined));
+    if (!queueRef.current.length && !read) return Promise.resolve(); // rien a envoyer : pas d'aller-retour
     const ops = queueRef.current;
     const p = (async () => {
       const t0 = Date.now();
       try {
-        const res = await fetch("/greffier/level-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId, ops, catchTeams }) });
+        const res = await fetch("/greffier/level-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId, ops, catchUp: true }) });
         const t1 = Date.now();
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as { results: { id: string; ok: boolean; error?: string }[]; live: LevelLive | { error: string }; serverNow: number };
@@ -163,7 +188,7 @@ export function LevelClient({
         }
         setSync({ at: Date.now(), failed: false });
       } catch {
-        setSync((s) => ({ ...s, failed: true })); // hors ligne : la file attend la prochaine minute
+        setSync((s) => ({ ...s, failed: true })); // hors ligne : la file reste sur le PC (nouvel essai en pause ou a la fin)
       } finally {
         flushing.current = null;
       }
@@ -171,25 +196,30 @@ export function LevelClient({
     flushing.current = p;
     return p;
   }
-  // Au chargement : file restee dans le navigateur (rechargement, coupure) puis premiere sauvegarde (horloge recalee).
+  // Au chargement : file restee dans le navigateur (rechargement, coupure). En course elle reste sur le PC ; en pause ou
+  // apres la fin, elle part tout de suite.
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? "[]");
       if (Array.isArray(saved) && saved.length) { queueRef.current = saved; setQueueState(saved); }
     } catch { /* rien */ }
-    const h = setTimeout(() => { void flush(); }, 1500);
+    const h = setTimeout(() => { if (queueRef.current.length && (phaseRef.current === "post" || pausedRef.current)) void flush(); }, 1500);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
-  // Sauvegarde a la minute (aussi en arriere-plan si des coches attendent).
+  // Mode « sur ce PC » : pendant la course, rien ne part tout seul. Mode « en ligne » : envoi a la minute (comme avant).
+  // En pause ou apres la fin, une sauvegarde ratee est retentee a la minute.
   useEffect(() => {
     const t = setInterval(() => {
-      if (phaseRef.current === "post" && !queueRef.current.length) return; // WOD termine : plus rien a sauver
-      if (document.visibilityState === "visible" || queueRef.current.length) void flush();
-    }, SYNC_EVERY_MS);
+      if (syncMode === "live" && phaseRef.current === "run" && !pausedRef.current) {
+        if (document.visibilityState === "visible" || queueRef.current.length) void flush(true);
+        return;
+      }
+      if (queueRef.current.length && (phaseRef.current === "post" || pausedRef.current)) void flush();
+    }, RETRY_EVERY_MS);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, syncMode]);
   // Fermeture ou changement de page : dernier envoi sans attendre de reponse.
   useEffect(() => {
     const onHide = () => {
@@ -220,29 +250,57 @@ export function LevelClient({
     run(() => setLevelCapAction(sessionId, n));
   }
 
-  // Coches effectives = etat sauvegarde + file d'attente (ajouts et retraits), a l'heure de leur clic.
-  const ticks: Tick[] = useMemo(() => {
-    const map = new Map<string, Tick>(live.ticks.map((t) => [`${t.teamId}_${t.level}_${t.card}`, { teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs }]));
-    for (const o of queue) {
-      const k = `${o.teamId}_${o.level}_${o.card}`;
-      if (o.kind === "tick") { if (!map.has(k)) map.set(k, { teamId: o.teamId, level: o.level, card: o.card, atMs: o.atMs }); }
-      else map.delete(k);
-    }
-    return [...map.values()];
-  }, [live.ticks, queue]);
-  // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
   // Format (4-5+ ou 1-3) : fixe dans les reglages (numerotation, coup d'envoi), sinon d'apres l'effectif.
   const formatOf = useCallback((teamId: string): Format => teamFormatOf(bundle.teamFormats, teamId, teams.find((t) => t.id === teamId)?.members.length), [bundle.teamFormats, teams]);
-  const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), formatOf(teamId), bundle.starSwitches?.[teamId]), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, bundle.teamStars, bundle.levelOrder, bundle.starSwitches, formatOf]);
-  const starsOf = useCallback((teamId: string): Stars => teamStarsOf(bundle.teamStars, teamId), [bundle.teamStars]);
+  // Rejeu local (28/09 soir) : etat sauvegarde + coches du PC, rejouees avec le code du serveur (level-replay.ts),
+  // puis zombies constates jusqu'a maintenant. Ce que l'ecran montre est exactement ce que la sauvegarde ecrira.
+  const replayCfg = useMemo<ReplayConfig>(() => ({
+    levels,
+    ladders: bundle.ladders,
+    order: bundle.levelOrder,
+    formatOf,
+    teamIds: teams.map((t) => t.id),
+    zombies: bundle.zombies,
+    fixedSpeed: bundle.zombieSpeed,
+    isMain: !bundle.child,
+    spending: !bundle.child && !bundle.emom,
+    emom: bundle.emom,
+    capMs,
+    coinsCarry: bundle.coinsCarry,
+    absOf: (ms) => (startedAtMs === null ? ms : absoluteFromRace(startedAtMs, pauses, ms, Date.now())),
+    newId: (key) => key, // cles stables d'un rendu a l'autre (le serveur tire de vrais identifiants)
+  }), [levels, bundle.ladders, bundle.levelOrder, formatOf, teams, bundle.zombies, bundle.zombieSpeed, bundle.child, bundle.emom, capMs, bundle.coinsCarry, startedAtMs, pauses]);
+  const baseState = useMemo<ReplayState>(() => ({
+    ticks: live.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs })),
+    losses: live.losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: l.atMs, soft: l.soft })),
+    penalties: live.penalties,
+    coinEvents: live.coinEvents,
+    teamStars: { ...bundle.teamStars },
+    switches: { ...(bundle.starSwitches ?? {}) },
+    voided: [],
+    newSwitches: {},
+  }), [live.ticks, live.losses, live.penalties, live.coinEvents, bundle.teamStars, bundle.starSwitches]);
+  const replayed = useMemo(() => replayQueue(baseState, replayCfg, queue), [baseState, replayCfg, queue]);
+  // Zombies constates jusqu'a maintenant (quelques ms par seconde) ; nouvel etat seulement si une vie tombe.
+  const local = useMemo(() => (phase !== "pre" && bundle.zombies ? catchUpNow(replayed, replayCfg, zombieMs) : replayed), [replayed, replayCfg, zombieMs, phase, bundle.zombies]);
+  const ticks: Tick[] = local.ticks;
+  const losses = local.losses;
+  const penalties = local.penalties;
+  // Parcours (descente de categorie a la 3e vie, decidee ici) : references stables tant que rien ne change.
+  const starsKey = JSON.stringify([local.teamStars, local.switches]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const starState = useMemo(() => ({ teamStars: local.teamStars, switches: local.switches }), [starsKey]);
+  // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
+  const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(starState.teamStars, teamId), formatOf(teamId), starState.switches[teamId]), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, starState, bundle.levelOrder, formatOf]);
+  const starsOf = useCallback((teamId: string): Stars => teamStarsOf(starState.teamStars, teamId), [starState]);
   // Groupe de classement = parcours + format : une equipe de 3 ne se compare pas a une equipe de 5.
   const groupOf = useCallback((teamId: string) => parcoursKey(starsOf(teamId), formatOf(teamId)), [starsOf, formatOf]);
   const mixedFormats = useMemo(() => new Set(teams.map((t) => formatOf(t.id))).size > 1, [teams, formatOf]);
   const levelOf = useCallback((teamId: string, number: number | null) => (number === null ? null : ladderOf(teamId).find((l) => l.number === number) ?? null), [ladderOf]);
   const allLevels = useMemo(() => [levels, ...Object.values(bundle.ladders)].flat(), [levels, bundle.ladders]);
-  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, live.losses, live.penalties)])), [teams, ladderOf, ticks, live.losses, live.penalties]);
+  const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, losses, penalties)])), [teams, ladderOf, ticks, losses, penalties]);
   // Classement : niveaux, vies, pieces gagnees (echauffement compris), fiches, rapidite.
-  const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.score); } return m; }, [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
+  const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.score); } return m; }, [teams, ladderOf, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
   const ranked = useMemo(() => rankTeams([...progress.values()], (id) => coinsForRank.get(id) ?? 0), [progress, coinsForRank]);
   // Rang DANS SON PARCOURS : un niveau 12 du 1 etoile ne se compare pas a un niveau 10 du 3 etoiles.
   const rankOf = useMemo(() => {
@@ -283,10 +341,10 @@ export function LevelClient({
   // Pieces (echauffement et WOD, pas le finisher) : gagnees d'apres les coches, banque = gagnees + report - depenses.
   const coinsOn = !bundle.emom;
   const inPlay = bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay;
-  const coinsOf = useMemo(() => new Map(teams.map((t) => [t.id, coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay)])), [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay]);
+  const coinsOf = useMemo(() => new Map(teams.map((t) => [t.id, coinsState(ladderOf(t.id), t.id, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, inPlay)])), [teams, ladderOf, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, inPlay]);
   function discount(teamId: string, reps: number) {
     setError("");
-    void flush().then(() => discountAction(sessionId, teamId, reps)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+    void flush(true).then(() => discountAction(sessionId, teamId, reps)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
   const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
   // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
@@ -294,7 +352,7 @@ export function LevelClient({
   // Fusee : le greffier clique, le serveur choisit cible et charge ; chaque ecran anime les nouveaux envois.
   function launchRocket(teamId: string) {
     setError("");
-    void flush().then(() => launchRocketAction(sessionId, teamId)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+    void flush(true).then(() => launchRocketAction(sessionId, teamId)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
   const seenSends = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -312,7 +370,7 @@ export function LevelClient({
     if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 }, toId, text });
     else setImpact({ id: Date.now(), teamId: toId, text });
     // La cible a une nouvelle fiche : sauvegarde + relecture complete de l'etat vivant.
-    void flush();
+    void flush(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.coinEvents]);
   // Classement par parcours pour les cibles de fusee.
@@ -351,39 +409,18 @@ export function LevelClient({
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   // Totaux des phases (echauffement + finisher) par equipe : classement, reps et export les additionnent au WOD.
   const extras = useMemo(() => new Map(teams.map((t) => [t.id, extrasFor(bundle.phases, t.order)])), [teams, bundle.phases]);
-  // Finisher : a chaque changement de vague, relecture apres 1,5 s (le serveur constate les vagues perdues a leur fin).
-  const emomWaveNo = bundle.emom ? (emomWaveAt(bundle.emom.waveMinutes, liveMs)?.wave ?? (liveMs >= emomTotalMs(bundle.emom.waveMinutes) ? 99 : 0)) : -1;
+  // Temps impose ecoule : plus aucune coche possible, les coches du PC partent tout de suite.
   useEffect(() => {
-    if (emomWaveNo <= 1 || phase !== "run") return;
-    const h = setTimeout(() => { void flush(teams.map((t) => t.id)); }, 1500); // vague finie : vies perdues constatees tout de suite
-    return () => clearTimeout(h);
+    if (timeUp) void flush(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emomWaveNo, phase, sessionId]);
-  // Mode zombies : quand un zombie touche un coeur, c'est le serveur qui tranche ; l'ecran se contente de
-  // demander une relecture (une seule par rattrapage, pas a chaque seconde).
-  const [caughtRefreshAt, setCaughtRefreshAt] = useState(0);
+  }, [timeUp]);
   // Coeur croque au niveau precedent, par equipe (meme rejeu que le serveur).
   const carryOf = useMemo(() => {
     const m = new Map<string, number>();
     if (!bundle.zombies || bundle.emom) return m;
-    for (const t of teams) m.set(t.id, heartCarryBites(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, (l, k) => bundle.zombieSpeed ?? zombieSpeedLevel(l.number, k), teamSizeOf(formatOf(t.id))));
+    for (const t of teams) m.set(t.id, heartCarryBites(ladderOf(t.id), t.id, ticks, losses, penalties, (l, k) => bundle.zombieSpeed ?? zombieSpeedLevel(l.number, k), teamSizeOf(formatOf(t.id))));
     return m;
-  }, [bundle.zombies, bundle.emom, bundle.zombieSpeed, teams, ladderOf, ticks, live.losses, live.penalties, formatOf]);
-  useEffect(() => {
-    if (!bundle.zombies || phase !== "run" || isPaused) return;
-    const raceNow = zombieMs;
-    const due = [...progress.values()].filter((p) => {
-      if (p.currentLevel === null) return false;
-      const l = levelOf(p.teamId, p.currentLevel);
-      if (!l) return false;
-      const ev = attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties);
-      return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length, teamSizeOf(formatOf(p.teamId)), carryOf.get(p.teamId) ?? 0).catchAtMs !== null;
-    });
-    if (due.length && Date.now() - caughtRefreshAt > 4000) {
-      setCaughtRefreshAt(Date.now());
-      void flush(due.map((p) => p.teamId)); // coches envoyees, puis le serveur constate la vie perdue de ces equipes
-    }
-  }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelOf, caughtRefreshAt, sessionId, live.penalties, ticks, formatOf, carryOf]);
+  }, [bundle.zombies, bundle.emom, bundle.zombieSpeed, teams, ladderOf, ticks, losses, penalties, formatOf]);
 
   function refresh() {
     router.refresh();
@@ -391,7 +428,7 @@ export function LevelClient({
   function run(action: () => Promise<{ error: string } | { ok: true }>) {
     setError("");
     startTransition(async () => {
-      await flush(); // les coches en attente passent avant (ordre des evenements)
+      await flush(true); // les coches en attente passent avant, zombies compris (ordre des evenements)
       const res = await action();
       if ("error" in res) setError(res.error);
       else refresh();
@@ -406,6 +443,16 @@ export function LevelClient({
     toggleFullscreen(true); // geste utilisateur : le navigateur accepte le plein ecran ici
     run(() => startLevelAction(sessionId));
   }
+  function handlePause() {
+    if (isPaused) { run(() => levelPauseAction(sessionId)); return; }
+    setError("");
+    startTransition(async () => {
+      const res = await levelPauseAction(sessionId); // chrono fige tout de suite (le zombie aussi)
+      if ("error" in res) { setError(res.error); return; }
+      await flush(true); // puis toutes les coches du PC partent, rejouees a leur heure
+      refresh();
+    });
+  }
   function handleEnd() {
     if (!confirm("Fin du WOD ? Le chrono s'arrête et le classement est figé.")) return;
     run(() => endLevelAction(sessionId));
@@ -418,13 +465,13 @@ export function LevelClient({
     const pendingTick = queueRef.current.find((o) => o.kind === "tick" && `${o.teamId}_${o.level}_${o.card}` === key);
     if (done && pendingTick) setQueue((q) => q.filter((o) => o.id !== pendingTick.id)); // pas encore envoyee : on l'oublie
     else setQueue((q) => [...q, { id: newOpId(), kind: done ? "untick" : "tick", teamId, level, card, atMs: elapsed(startedAtMs, pauses, Date.now() + clockOffset.current) ?? 0 }]);
-    // BOSS (souvent valide sur une tablette de prof) : envoi immediat, pour que l'ordre de la course suive.
-    if (levelOf(teamId, level)?.boss) void flush();
+    // Mode « en ligne » : un BOSS part tout de suite (comme avant).
+    if (syncMode === "live" && levelOf(teamId, level)?.boss) void flush(true);
     void untickCardAction; void tickCardAction;
   }
   function yellow(teamId: string, delta: 1 | -1) {
     setError("");
-    void flush().then(() => levelYellowCardAction(sessionId, teamId, delta)).then((res) => {
+    void flush(true).then(() => levelYellowCardAction(sessionId, teamId, delta)).then((res) => {
       if ("error" in res) setError(res.error);
       else mergeTeam(res.team);
     });
@@ -496,8 +543,8 @@ export function LevelClient({
           </div>
           <div className="text-right">
             {phase !== "pre" && (
-              <button type="button" onClick={() => void flush()} className={cx("text-[11px] font-bold tabular-nums", sync.failed ? "text-danger-ink" : queue.length ? "text-warn-ink" : "text-ink-3")} title="Les coches sont gardées sur ce PC et sauvegardées toutes les minutes. Clique pour sauver maintenant.">
-                {sync.failed ? `📴 hors ligne · ${queue.length} coche${queue.length > 1 ? "s" : ""} en attente` : queue.length ? `⏳ ${queue.length} coche${queue.length > 1 ? "s" : ""} à sauver` : "💾 tout est sauvé"}
+              <button type="button" onClick={() => void flush(true)} className={cx("text-[11px] font-bold tabular-nums", sync.failed ? "text-danger-ink" : queue.length ? "text-warn-ink" : "text-ink-3")} title="Pendant le WOD, les coches restent sur ce PC (rien n'attend le réseau) et partent sur le serveur à la Pause, à la Fin du WOD ou avant un bouton qui en a besoin. Clique pour sauver maintenant.">
+                {sync.failed ? `📴 sauvegarde ratée · ${queue.length} coche${queue.length > 1 ? "s" : ""} sur ce PC` : queue.length ? (syncMode === "live" ? `⏳ ${queue.length} coche${queue.length > 1 ? "s" : ""} à sauver` : `📍 ${queue.length} coche${queue.length > 1 ? "s" : ""} sur ce PC · envoi à la pause`) : "💾 tout est sauvé"}
               </button>
             )}
             <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : timeUp ? "Temps écoulé — déclare la fin du WOD" : "WOD en cours"}</p>
@@ -603,7 +650,7 @@ export function LevelClient({
                 teams={teams}
                 ticks={ticks}
                 scores={live.emomScores}
-                losses={live.losses}
+                losses={losses}
                 raceMs={liveMs}
                 canTick={canTick}
                 ended={phase === "post"}
@@ -613,7 +660,7 @@ export function LevelClient({
                 running={phase === "run" && !isPaused}
                 onToggle={toggleCard}
                 sessionId={sessionId}
-                onScore={(teamId, scores) => { setError(""); void flush().then(() => setEmomPlayerScoresAction(sessionId, teamId, scores)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
+                onScore={(teamId, scores) => { setError(""); void flush(true).then(() => setEmomPlayerScoresAction(sessionId, teamId, scores)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
               />
             ) : (
               <>
@@ -640,7 +687,7 @@ export function LevelClient({
                               pendingKeys={pendingMap}
                               zombies={bundle.zombies}
                               fixedSpeed={bundle.zombieSpeed}
-                              penalties={live.penalties.filter((x) => x.teamId === t.id)}
+                              penalties={penalties.filter((x) => x.teamId === t.id)}
                               ticks={ticks}
                               raceMs={zombieMs}
                               running={phase === "run" && !isPaused && !timeUp}
@@ -686,6 +733,20 @@ export function LevelClient({
         ))}
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
+        {view === "settings" && (
+          <div className={`${ui.cardPad} mb-3`}>
+            <p className="font-bold">💾 Sauvegarde des coches <span className={`${ui.hint} font-normal`}>· réglage de ce PC, pour toutes les séances</span></p>
+            <div className={`${ui.segmented} inline-flex flex-wrap mt-2`}>
+              <button type="button" onClick={() => writeSyncMode("local")} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", syncMode === "local" ? ui.segOn : ui.segOff)}>📍 Sur ce PC · envoi à la pause</button>
+              <button type="button" onClick={() => { writeSyncMode("live"); if (phase === "run") void flush(true); }} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", syncMode === "live" ? ui.segOn : ui.segOff)}>🌐 En ligne · envoi chaque minute</button>
+            </div>
+            <p className={`${ui.hint} mt-2`}>
+              {syncMode === "local"
+                ? "Pendant le WOD, rien ne part sur le serveur : l'écran calcule tout lui-même. Envoi à la Pause (chrono déjà figé), à la Fin du WOD, au temps écoulé, avant une fusée, un allègement ou une carte jaune, ou en cliquant sur 💾 en haut. Les coches survivent à un rechargement de la page sur ce PC."
+                : "Comme avant : les coches partent toutes les minutes et tout de suite pour un BOSS. L'écran calcule quand même zombies et vies lui-même (pas d'attente du serveur)."}
+            </p>
+          </div>
+        )}
         {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} teamFormats={bundle.teamFormats} formatOf={formatOf} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} suggestions={suggestions} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} onSetStars={bundle.child ? undefined : (teamId, st) => run(() => setTeamStarsAction(sessionId, teamId, st))} />}
       </main>
@@ -739,7 +800,7 @@ export function LevelClient({
             {phase === "pre" && <button onClick={handleStart} disabled={pending || teams.length === 0} className={btn.lgSuccess}>Lancer le WOD</button>}
             {phase === "run" && (
               <>
-                <button onClick={() => run(() => levelPauseAction(sessionId))} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>{isPaused ? "Reprendre" : "Pause"}</button>
+                <button onClick={handlePause} disabled={pending} className={isPaused ? btn.lgSuccess : btn.lgAccent}>{isPaused ? "Reprendre" : "Pause"}</button>
                 <button onClick={handleEnd} disabled={pending} className={btn.lgDanger}>Fin du WOD</button>
               </>
             )}
@@ -759,6 +820,33 @@ export function LevelClient({
       </footer>
     </div>
   );
+}
+
+// Caches du rejeu local, hors composant (cles = objets d'etat : liberes avec eux).
+// Une coche ajoutee au bout de la file ne rejoue que la nouvelle coche (un WOD sans pause peut en compter 1 000).
+const replayCache = new WeakMap<ReplayState, { cfg: ReplayConfig; ops: PendingOp[]; st: ReplayState }>();
+function replayQueue(base: ReplayState, cfg: ReplayConfig, queue: PendingOp[]): ReplayState {
+  const c = replayCache.get(base);
+  let st: ReplayState;
+  if (c && c.cfg === cfg && queue.length >= c.ops.length && c.ops.every((o, i) => queue[i] === o)) {
+    if (queue.length === c.ops.length) return c.st;
+    st = cloneState(c.st);
+    replayOps(cfg, st, queue.slice(c.ops.length), Number.POSITIVE_INFINITY);
+  } else {
+    st = cloneState(base);
+    replayOps(cfg, st, queue, Number.POSITIVE_INFINITY);
+  }
+  replayCache.set(base, { cfg, ops: queue, st });
+  return st;
+}
+// Constat des zombies jusqu'a maintenant, en repartant du dernier constat pour ce meme etat rejoue.
+const caughtCache = new WeakMap<ReplayState, ReplayState>();
+function catchUpNow(replayed: ReplayState, cfg: ReplayConfig, untilMs: number): ReplayState {
+  const prev = caughtCache.get(replayed) ?? replayed;
+  const next = cloneState(prev);
+  const out = catchUpAll(cfg, next, untilMs) > 0 ? next : prev;
+  caughtCache.set(replayed, out);
+  return out;
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {

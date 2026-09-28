@@ -10,7 +10,7 @@ import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
-import { SYNC_GRACE_MS, applyZombieCatches, loadZombieContext } from "@/lib/zombies";
+import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { hash32 } from "@/lib/mine-core";
@@ -23,7 +23,7 @@ const STAFF = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Etat « vivant » d'une seance Level : ce qui bouge pendant la course, sans les equipes, l'echelle ni le
 // catalogue. Les ecrans le rechargent a la place de la page entiere (30 a 40 requetes) a chaque pouls.
 export type LiveTick = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
-export type LiveLoss = { id: string; teamId: string; level: number; atMs: number };
+export type LiveLoss = { id: string; teamId: string; level: number; atMs: number; soft?: boolean };
 export type LiveCard = { id: string; teamId: string; atMs: number };
 export type LevelLive = {
   ticks: LiveTick[];
@@ -83,13 +83,12 @@ export async function levelLiveAction(sessionId: string, opts: { catchTeams?: st
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return { error: "Accès refusé." };
   const at = Date.now();
-  let ctx = await loadZombieContext(sessionId);
+  const ctx = await loadZombieContext(sessionId);
   if (!ctx) return { error: "Séance introuvable." };
-  // Coches des autres ecrans en route (jusqu'a une minute) : rattrapages constates avec un delai de grace, sauf
-  // pour les equipes que CET ecran signale (zombie arrive chez lui, ses coches viennent d'etre envoyees).
-  let caught = await applyZombieCatches(sessionId, undefined, ctx, { graceMs: SYNC_GRACE_MS });
-  for (const teamId of opts.catchTeams ?? []) caught += await applyZombieCatches(sessionId, teamId);
-  if (caught > 0) ctx = (await loadZombieContext(sessionId)) ?? ctx;
+  // Depuis le 28/09 (soir), aucun rattrapage a la lecture : l'ecran du greffier calcule les zombies sur ses coches
+  // locales et le serveur ne les ecrit qu'a la sauvegarde (Pause, Fin du WOD, bouton serveur).
+  void opts;
+  const caught = 0;
   const { rs, pauses } = ctx;
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const teamIds = ctx.teams.map((t) => t.id);
@@ -189,7 +188,6 @@ async function count(fn: () => Promise<{ n: number }>): Promise<number> {
 export async function levelPulseAction(sessionId: string): Promise<string> {
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return "";
-  await applyZombieCatches(sessionId);
   const [rs, teams, session] = await Promise.all([
     db.orm.public.RaceState.where({ sessionId }).first(),
     db.orm.public.Team.where({ sessionId }).all(),
