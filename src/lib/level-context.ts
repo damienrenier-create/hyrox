@@ -4,7 +4,7 @@ import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
 import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
-import { applyZombieCatches, readZombies } from "@/lib/zombies";
+import { SYNC_GRACE_MS, applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
 // classements. Module serveur sans "use server" : importe par les pages et les actions, jamais expose.
@@ -41,6 +41,7 @@ export type LevelBundle = {
   phases: PhaseTotals[]; // echauffement et finisher de ce WOD (vide pour une seance enfant) : totaux par equipe
   coinEvents: CoinEvent[]; // depenses de pieces (allegements, fusees construites, envois)
   coinsCarry: Record<string, number>; // pieces rapportees de l'echauffement, par equipe (figees au coup d'envoi)
+  serverNowMs: number; // heure du serveur au rendu : l'ecran recale son horloge dessus (coches datees au clic)
 };
 
 // Totaux d'une seance enfant (echauffement ou finisher), par NUMERO d'equipe (les enfants copient les
@@ -104,7 +105,8 @@ export function readLevelCap(settings: unknown): number | null {
 }
 
 export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> {
-  await applyZombieCatches(sessionId);
+  // Des coches peuvent encore etre en route depuis l'ecran du greffier (sauvegarde a la minute) : delai de grace.
+  await applyZombieCatches(sessionId, undefined, undefined, { graceMs: SYNC_GRACE_MS });
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) throw new Error("Séance introuvable.");
 
@@ -202,6 +204,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     phases,
     coinEvents: readCoinEvents(session.settings),
     coinsCarry: readCoinsCarry(session.settings),
+    serverNowMs: Date.now(),
   };
 }
 export { coinsInPlay };

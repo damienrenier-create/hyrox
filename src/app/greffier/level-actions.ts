@@ -10,7 +10,7 @@ import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
-import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
+import { SYNC_GRACE_MS, applyZombieCatches, loadZombieContext } from "@/lib/zombies";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { hash32 } from "@/lib/mine-core";
@@ -79,13 +79,17 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
 
 // L'unique appel du pouls (8 requetes, en parallele) : rattrapages calcules sur ces memes donnees (ecriture
 // seulement s'il y en a), etat vivant complet et signature de structure. Si rien n'a bouge, l'ecran ne rend rien.
-export async function levelLiveAction(sessionId: string): Promise<LevelLive | { error: string }> {
+export async function levelLiveAction(sessionId: string, opts: { catchTeams?: string[] } = {}): Promise<LevelLive | { error: string }> {
   const user = await getSession();
   if (!user || !STAFF.includes(user.role)) return { error: "Accès refusé." };
   const at = Date.now();
-  const ctx = await loadZombieContext(sessionId);
+  let ctx = await loadZombieContext(sessionId);
   if (!ctx) return { error: "Séance introuvable." };
-  const caught = await applyZombieCatches(sessionId, undefined, ctx);
+  // Coches des autres ecrans en route (jusqu'a une minute) : rattrapages constates avec un delai de grace, sauf
+  // pour les equipes que CET ecran signale (zombie arrive chez lui, ses coches viennent d'etre envoyees).
+  let caught = await applyZombieCatches(sessionId, undefined, ctx, { graceMs: SYNC_GRACE_MS });
+  for (const teamId of opts.catchTeams ?? []) caught += await applyZombieCatches(sessionId, teamId);
+  if (caught > 0) ctx = (await loadZombieContext(sessionId)) ?? ctx;
   const { rs, pauses } = ctx;
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const teamIds = ctx.teams.map((t) => t.id);
@@ -265,6 +269,8 @@ export async function endLevelAction(sessionId: string): Promise<Res> {
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs || !rs.startedAt) return { error: "La course n'a pas démarré." };
   if (rs.endedAt) return { ok: true };
+  // Fin du WOD : les coches viennent d'etre envoyees, on constate les derniers rattrapages sans delai de grace.
+  await applyZombieCatches(sessionId);
   const open = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).find((p) => p.to === null);
   await db.transaction(async (tx) => {
     const now = Temporal.Now.instant();

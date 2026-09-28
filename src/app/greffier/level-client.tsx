@@ -22,6 +22,10 @@ import type { PendingRequest } from "./referee-decisions";
 import { SessionStep, sessionDay, type SessionOption } from "./client";
 import { btn, cx, ui } from "@/lib/ui";
 
+// Coche en attente de sauvegarde (greffier hors ligne) : heure du clic en temps de course.
+type PendingOp = { id: string; kind: "tick" | "untick"; teamId: string; level: number; card: number; atMs: number };
+const SYNC_EVERY_MS = 60_000;
+const newOpId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | "teams" | "settings";
 
 // Greffier « Level » (PC projete, mais aussi telephone d'un prof qui valide un BOSS) : chrono centre, une
@@ -51,18 +55,33 @@ export function LevelClient({
   // Etat vivant (coches, vies, cartes, chrono) tenu localement : une coche remplace la ligne de son equipe,
   // le pouls recharge cet etat leger, et la page entiere n'est rechargee que si la structure change.
   const [live, setLive] = useState<LevelLive>(() => liveFromBundle(bundle));
-  useEffect(() => { setLive(liveFromBundle(bundle)); setOptimistic(new Map()); lastApplied.current = new Map(); }, [bundle]);
+  useEffect(() => { setLive(liveFromBundle(bundle)); lastApplied.current = new Map(); }, [bundle]);
   const { startedAtMs, endedAtMs, pauses } = live;
+  // Horloge recalee sur le serveur (les coches sont datees au clic) : decalage mesure a chaque sauvegarde.
+  const clockOffset = useRef(bundle.serverNowMs - Date.now());
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  // Coches en attente de confirmation serveur : l'ecran reagit au doigt, la reponse de la coche confirme.
-  const [optimistic, setOptimistic] = useState<Map<string, boolean>>(new Map());
+  // Greffier hors ligne (Sartay 28/09) : chaque coche est gardee sur le PC (et dans le navigateur, pour survivre a un
+  // rechargement) avec l'heure exacte du clic, puis envoyee en lot toutes les minutes — ou tout de suite pour un
+  // BOSS, un zombie qui arrive, un autre bouton ou la fermeture de la page. L'ecran reste fluide : rien n'attend
+  // le reseau, la sauvegarde part en arriere-plan.
+  const QUEUE_KEY = `reps-level-queue-${sessionId}`;
+  const [queue, setQueueState] = useState<PendingOp[]>([]);
+  const queueRef = useRef<PendingOp[]>([]);
+  function setQueue(fn: (q: PendingOp[]) => PendingOp[]) {
+    const next = fn(queueRef.current);
+    queueRef.current = next;
+    setQueueState(next);
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(next)); } catch { /* navigation privee : file en memoire seulement */ }
+  }
+  const [sync, setSync] = useState<{ at: number | null; failed: boolean }>({ at: null, failed: false });
+  const pendingMap = useMemo(() => new Map<string, boolean>(), []); // plus d'appel en vol par coche
   // Heure serveur du dernier etat applique par equipe : une reponse plus ancienne (taps qui se croisent) est
   // ignoree, et seule la coche terminee est liberee — les autres restent affichees telles que tapees.
   const lastApplied = useRef<Map<string, number>>(new Map());
   function mergeTeam(t: TeamLive, finishedKey?: string) {
-    if (finishedKey) setOptimistic((m) => { const n = new Map(m); n.delete(finishedKey); return n; });
+    void finishedKey;
     if (t.at <= (lastApplied.current.get(t.teamId) ?? 0)) return;
     lastApplied.current.set(t.teamId, t.at);
     setLive((l) => ({
@@ -111,7 +130,7 @@ export function LevelClient({
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    const t = setInterval(() => setNow(Date.now() + clockOffset.current), 1000);
     return () => clearInterval(t);
   }, [phase, isPaused]);
   // Pouls : UN appel toutes les 8 s (8 requetes en parallele) qui rend l'etat vivant + une signature de
@@ -119,29 +138,68 @@ export function LevelClient({
   // etat identique -> aucun rendu ; sinon -> remplacement local. Onglet cache : rien du tout.
   const lastLive = useRef<string | null>(null);
   const lastStructure = useRef<string | null>(null);
-  useEffect(() => {
-    if (phase === "post") return;
-    let stop = false;
-    let busy = false;
-    const tick = async () => {
-      if (stop || busy || (typeof document !== "undefined" && document.visibilityState !== "visible")) return;
-      busy = true;
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const flushing = useRef<Promise<void> | null>(null);
+  function flush(catchTeams: string[] = []): Promise<void> {
+    if (flushing.current) return flushing.current.then(() => (queueRef.current.length || catchTeams.length ? flush(catchTeams) : undefined));
+    const ops = queueRef.current;
+    const p = (async () => {
+      const t0 = Date.now();
       try {
-        const l = await levelLiveAction(sessionId);
-        if (stop || "error" in l) return;
-        if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); return; }
-        lastStructure.current = l.structure;
-        const key = JSON.stringify([l.ticks.map((t) => t.id), l.losses.map((x) => x.id), l.yellowCards.map((c) => c.id), l.penalties.length, l.penalties.map((x) => x.id ?? "").join(","), l.coinEvents.length, l.emomScores, l.pauses, l.startedAtMs, l.endedAtMs, l.raceEndedAtMs]);
-        if (key !== lastLive.current) { lastLive.current = key; applyLive(l); }
+        const res = await fetch("/greffier/level-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId, ops, catchTeams }) });
+        const t1 = Date.now();
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { results: { id: string; ok: boolean; error?: string }[]; live: LevelLive | { error: string }; serverNow: number };
+        clockOffset.current = data.serverNow - (t0 + t1) / 2;
+        const sent = new Set(ops.map((o) => o.id));
+        setQueue((q) => q.filter((o) => !sent.has(o.id)));
+        const bad = data.results.find((r) => !r.ok);
+        if (bad?.error) setError(`Coche refusée : ${bad.error}`);
+        if (!("error" in data.live)) {
+          const l = data.live;
+          if (lastStructure.current !== null && lastStructure.current !== l.structure) { lastStructure.current = l.structure; router.refresh(); }
+          else { lastStructure.current = l.structure; applyLive(l); }
+        }
+        setSync({ at: Date.now(), failed: false });
       } catch {
-        /* reseau : prochain tick */
+        setSync((s) => ({ ...s, failed: true })); // hors ligne : la file attend la prochaine minute
       } finally {
-        busy = false;
+        flushing.current = null;
       }
+    })();
+    flushing.current = p;
+    return p;
+  }
+  // Au chargement : file restee dans le navigateur (rechargement, coupure) puis premiere sauvegarde (horloge recalee).
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? "[]");
+      if (Array.isArray(saved) && saved.length) { queueRef.current = saved; setQueueState(saved); }
+    } catch { /* rien */ }
+    const h = setTimeout(() => { void flush(); }, 1500);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+  // Sauvegarde a la minute (aussi en arriere-plan si des coches attendent).
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (phaseRef.current === "post" && !queueRef.current.length) return; // WOD termine : plus rien a sauver
+      if (document.visibilityState === "visible" || queueRef.current.length) void flush();
+    }, SYNC_EVERY_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+  // Fermeture ou changement de page : dernier envoi sans attendre de reponse.
+  useEffect(() => {
+    const onHide = () => {
+      const ops = queueRef.current;
+      if (!ops.length) return;
+      try { navigator.sendBeacon("/greffier/level-sync", new Blob([JSON.stringify({ sessionId, ops })], { type: "application/json" })); } catch { /* rien */ }
     };
-    const t = setInterval(tick, 8000);
-    return () => { stop = true; clearInterval(t); };
-  }, [phase, sessionId, router]);
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [sessionId]);
 
   const liveMs = useMemo(() => {
     if (phase === "pre") return 0;
@@ -162,16 +220,16 @@ export function LevelClient({
     run(() => setLevelCapAction(sessionId, n));
   }
 
-  // Coches effectives = base + optimistes (ajouts et retraits en attente).
+  // Coches effectives = etat sauvegarde + file d'attente (ajouts et retraits), a l'heure de leur clic.
   const ticks: Tick[] = useMemo(() => {
-    const out: Tick[] = live.ticks.filter((t) => optimistic.get(`${t.teamId}_${t.level}_${t.card}`) !== false).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs }));
-    for (const [key, on] of optimistic) {
-      if (!on) continue;
-      const [teamId, level, card] = key.split("_");
-      if (!out.some((t) => t.teamId === teamId && t.level === Number(level) && t.card === Number(card))) out.push({ teamId, level: Number(level), card: Number(card), atMs: liveMs });
+    const map = new Map<string, Tick>(live.ticks.map((t) => [`${t.teamId}_${t.level}_${t.card}`, { teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs }]));
+    for (const o of queue) {
+      const k = `${o.teamId}_${o.level}_${o.card}`;
+      if (o.kind === "tick") { if (!map.has(k)) map.set(k, { teamId: o.teamId, level: o.level, card: o.card, atMs: o.atMs }); }
+      else map.delete(k);
     }
-    return out;
-  }, [live.ticks, optimistic, liveMs]);
+    return [...map.values()];
+  }, [live.ticks, queue]);
   // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
   // Format (4-5+ ou 1-3) : fixe dans les reglages (numerotation, coup d'envoi), sinon d'apres l'effectif.
   const formatOf = useCallback((teamId: string): Format => teamFormatOf(bundle.teamFormats, teamId, teams.find((t) => t.id === teamId)?.members.length), [bundle.teamFormats, teams]);
@@ -228,7 +286,7 @@ export function LevelClient({
   const coinsOf = useMemo(() => new Map(teams.map((t) => [t.id, coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay)])), [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, inPlay]);
   function discount(teamId: string, reps: number) {
     setError("");
-    void discountAction(sessionId, teamId, reps).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+    void flush().then(() => discountAction(sessionId, teamId, reps)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
   const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
   // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
@@ -236,7 +294,7 @@ export function LevelClient({
   // Fusee : le greffier clique, le serveur choisit cible et charge ; chaque ecran anime les nouveaux envois.
   function launchRocket(teamId: string) {
     setError("");
-    void launchRocketAction(sessionId, teamId).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+    void flush().then(() => launchRocketAction(sessionId, teamId)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
   }
   const seenSends = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -253,8 +311,8 @@ export function LevelClient({
     const text = `💥 +${e.reps ?? ""} ${cap(e.label ?? "")} reçus de ${teamById.get(e.teamId)?.name ?? "l'adversaire"}`;
     if (a && b) setFlight({ id: Date.now(), from: { x: a.right - 70, y: a.top + a.height / 2 - 18 }, to: { x: b.left + 120, y: b.top + b.height / 2 - 18 }, toId, text });
     else setImpact({ id: Date.now(), teamId: toId, text });
-    // La cible a une nouvelle fiche : relecture complete de l'etat vivant.
-    void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
+    // La cible a une nouvelle fiche : sauvegarde + relecture complete de l'etat vivant.
+    void flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.coinEvents]);
   // Classement par parcours pour les cibles de fusee.
@@ -297,7 +355,7 @@ export function LevelClient({
   const emomWaveNo = bundle.emom ? (emomWaveAt(bundle.emom.waveMinutes, liveMs)?.wave ?? (liveMs >= emomTotalMs(bundle.emom.waveMinutes) ? 99 : 0)) : -1;
   useEffect(() => {
     if (emomWaveNo <= 1 || phase !== "run") return;
-    const h = setTimeout(() => { void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); }); }, 1500);
+    const h = setTimeout(() => { void flush(teams.map((t) => t.id)); }, 1500); // vague finie : vies perdues constatees tout de suite
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emomWaveNo, phase, sessionId]);
@@ -314,16 +372,16 @@ export function LevelClient({
   useEffect(() => {
     if (!bundle.zombies || phase !== "run" || isPaused) return;
     const raceNow = zombieMs;
-    const due = [...progress.values()].some((p) => {
+    const due = [...progress.values()].filter((p) => {
       if (p.currentLevel === null) return false;
       const l = levelOf(p.teamId, p.currentLevel);
       if (!l) return false;
       const ev = attemptEvents(l, p.teamId, ticks, p.attemptStartMs, live.penalties);
       return zombieSim(l, ev.initialTotalSec, ev.events, raceNow - p.attemptStartMs, bundle.zombieSpeed ?? zombieSpeedLevel(l.number, p.losses), cardsForTeam(l, p.teamId, live.penalties).length, teamSizeOf(formatOf(p.teamId)), carryOf.get(p.teamId) ?? 0).catchAtMs !== null;
     });
-    if (due && Date.now() - caughtRefreshAt > 4000) {
+    if (due.length && Date.now() - caughtRefreshAt > 4000) {
       setCaughtRefreshAt(Date.now());
-      void levelLiveAction(sessionId).then((l) => { if (!("error" in l)) applyLive(l); });
+      void flush(due.map((p) => p.teamId)); // coches envoyees, puis le serveur constate la vie perdue de ces equipes
     }
   }, [bundle.zombies, phase, isPaused, zombieMs, progress, levelOf, caughtRefreshAt, sessionId, live.penalties, ticks, formatOf, carryOf]);
 
@@ -333,6 +391,7 @@ export function LevelClient({
   function run(action: () => Promise<{ error: string } | { ok: true }>) {
     setError("");
     startTransition(async () => {
+      await flush(); // les coches en attente passent avant (ordre des evenements)
       const res = await action();
       if ("error" in res) setError(res.error);
       else refresh();
@@ -356,21 +415,16 @@ export function LevelClient({
     if (done && !confirm("Annuler cette coche ?")) return;
     const key = `${teamId}_${level}_${card}`;
     setError("");
-    setOptimistic((m) => new Map(m).set(key, !done));
-    // Pas de useTransition ici : les taps rapides partent en parallele, chacun remplace la ligne de son equipe.
-    void (done ? untickCardAction(sessionId, teamId, level, card) : tickCardAction(sessionId, teamId, level, card)).then((res) => {
-      if ("error" in res) {
-        setError(res.error);
-        setOptimistic((m) => { const n = new Map(m); n.delete(key); return n; });
-        return;
-      }
-      mergeTeam(res.team, key);
-      if (res.caught) setError(bundle.emom ? `Le zombie a dévoré le cœur de ${teamById.get(teamId)?.name ?? "l'équipe"} : vague perdue.` : bundle.child ? `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.` : `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : une vie et la moitié de ses pièces en moins.`);
-    });
+    const pendingTick = queueRef.current.find((o) => o.kind === "tick" && `${o.teamId}_${o.level}_${o.card}` === key);
+    if (done && pendingTick) setQueue((q) => q.filter((o) => o.id !== pendingTick.id)); // pas encore envoyee : on l'oublie
+    else setQueue((q) => [...q, { id: newOpId(), kind: done ? "untick" : "tick", teamId, level, card, atMs: elapsed(startedAtMs, pauses, Date.now() + clockOffset.current) ?? 0 }]);
+    // BOSS (souvent valide sur une tablette de prof) : envoi immediat, pour que l'ordre de la course suive.
+    if (levelOf(teamId, level)?.boss) void flush();
+    void untickCardAction; void tickCardAction;
   }
   function yellow(teamId: string, delta: 1 | -1) {
     setError("");
-    void levelYellowCardAction(sessionId, teamId, delta).then((res) => {
+    void flush().then(() => levelYellowCardAction(sessionId, teamId, delta)).then((res) => {
       if ("error" in res) setError(res.error);
       else mergeTeam(res.team);
     });
@@ -441,6 +495,11 @@ export function LevelClient({
             )}
           </div>
           <div className="text-right">
+            {phase !== "pre" && (
+              <button type="button" onClick={() => void flush()} className={cx("text-[11px] font-bold tabular-nums", sync.failed ? "text-danger-ink" : queue.length ? "text-warn-ink" : "text-ink-3")} title="Les coches sont gardées sur ce PC et sauvegardées toutes les minutes. Clique pour sauver maintenant.">
+                {sync.failed ? `📴 hors ligne · ${queue.length} coche${queue.length > 1 ? "s" : ""} en attente` : queue.length ? `⏳ ${queue.length} coche${queue.length > 1 ? "s" : ""} à sauver` : "💾 tout est sauvé"}
+              </button>
+            )}
             <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : timeUp ? "Temps écoulé — déclare la fin du WOD" : "WOD en cours"}</p>
             {!focus && (
               <>
@@ -548,13 +607,13 @@ export function LevelClient({
                 raceMs={liveMs}
                 canTick={canTick}
                 ended={phase === "post"}
-                pendingKeys={optimistic}
+                pendingKeys={pendingMap}
                 zombies={bundle.zombies}
                 zombieSpeed={bundle.zombieSpeed ?? EMOM_ZOMBIE_SPEED}
                 running={phase === "run" && !isPaused}
                 onToggle={toggleCard}
                 sessionId={sessionId}
-                onScore={(teamId, scores) => { setError(""); void setEmomPlayerScoresAction(sessionId, teamId, scores).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
+                onScore={(teamId, scores) => { setError(""); void flush().then(() => setEmomPlayerScoresAction(sessionId, teamId, scores)).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); }); }}
               />
             ) : (
               <>
@@ -578,7 +637,7 @@ export function LevelClient({
                               teamsCount={group.length}
                               yellow={cardsOf.get(t.id) ?? 0}
                               canTick={canTick}
-                              pendingKeys={optimistic}
+                              pendingKeys={pendingMap}
                               zombies={bundle.zombies}
                               fixedSpeed={bundle.zombieSpeed}
                               penalties={live.penalties.filter((x) => x.teamId === t.id)}

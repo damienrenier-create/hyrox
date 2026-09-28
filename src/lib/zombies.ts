@@ -47,7 +47,12 @@ export async function loadZombieContext(sessionId: string, onlyTeamId?: string):
   return { session, rs, pauses: pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })), teams, ticks, losses };
 }
 
-export async function applyZombieCatches(sessionId: string, onlyTeamId?: string, preloaded?: ZombieContext | null): Promise<number> {
+// Greffier hors ligne (28/09) : les coches arrivent jusqu'a une minute apres le clic. Les rattrapages ne sont donc
+// constates qu'au-dela d'un delai de grace (`graceMs`), sauf pour les equipes que l'ecran du greffier signale
+// (zombie au contact chez lui, coches deja envoyees). `untilRaceMs` : constat jusqu'a l'heure d'une coche rejouee.
+export const SYNC_GRACE_MS = 75_000;
+export type CatchOptions = { untilRaceMs?: number; graceMs?: number };
+export async function applyZombieCatches(sessionId: string, onlyTeamId?: string, preloaded?: ZombieContext | null, opts: CatchOptions = {}): Promise<number> {
   const ctx = preloaded ?? (await loadZombieContext(sessionId, onlyTeamId));
   if (!ctx) return 0;
   const { session, rs, pauses, teams } = ctx;
@@ -62,7 +67,7 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   // (le zombie se fige avec le chrono, il ne devore pas les coeurs pendant que le greffier declare la fin).
   const capMin = (session.settings as { levelCapMin?: unknown } | null)?.levelCapMin;
   const capMs = typeof capMin === "number" && Number.isFinite(capMin) && capMin > 0 ? Math.round(capMin) * 60_000 : null;
-  const nowRace = Math.min(elapsed(startedAtMs, pauses, nowMs) ?? 0, capMs ?? Number.POSITIVE_INFINITY);
+  const nowRace = Math.max(0, Math.min(elapsed(startedAtMs, pauses, nowMs) ?? 0, capMs ?? Number.POSITIVE_INFINITY, opts.untilRaceMs ?? Number.POSITIVE_INFINITY) - (opts.graceMs ?? 0));
   let ticks: (Tick & { id: string })[] = ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
   const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;
