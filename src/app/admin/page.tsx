@@ -62,7 +62,10 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const scheduledIds = new Set(scheduled.map((s) => s.id));
   const past = allSessions.filter((s) => !openIds.has(s.id) && !scheduledIds.has(s.id)).slice(0, 3);
   // Recaps a lire (Sartay 28/09) : WOD Level termines depuis moins de 24 h.
-  const recentRecaps = allSessions.filter((s) => s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && s.raceEndedAt && Date.now() - toMs(s.raceEndedAt) < 24 * 3600_000).slice(0, 6);
+  // Un faux depart (aucune fiche cochee) n'a rien a raconter : pas de lien.
+  const recapCandidates = allSessions.filter((s) => s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && s.raceEndedAt && Date.now() - toMs(s.raceEndedAt) < 24 * 3600_000).slice(0, 10);
+  const played = await Promise.all(recapCandidates.map((s) => db.orm.public.LevelTick.where({ sessionId: s.id }).first()));
+  const recentRecaps = recapCandidates.filter((_, i) => played[i]).slice(0, 6);
   // Pour la confirmation de la tete de mort : nombre d'equipes et WOD lance ou non.
   const pastInfo = new Map(
     await Promise.all(

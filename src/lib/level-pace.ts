@@ -99,17 +99,20 @@ export const PACE_FAST = 0.5;
 export const PACE_SLOW = 2;
 export type PaceFlag = { teamId: string; teamName: string; level: number; boss: boolean; stars: Stars; format: Format; durationMs: number; referenceMs: number; ratio: number; basis: "moyenne" | "théorie"; n: number; kind: "fast" | "slow" };
 export type PaceTeam = { teamId: string; teamName: string; stars: Stars; format: Format; levels: number; ratio: number; fast: number; slow: number };
+// Chaque niveau boucle de la seance avec sa reference (recap des admins : detail des temps equipe par equipe).
+export type PaceRun = { teamId: string; level: number; boss: boolean; durationMs: number; referenceMs: number; ratio: number; basis: "moyenne" | "théorie"; n: number };
 // Sans assez de passages sur un niveau, la reference est le temps theorique multiplie par le facteur observe sur
 // toutes les seances (les equipes mettent en pratique environ 2 fois le temps theorique : relais, deplacements).
 export function observedFactor(runs: LevelRun[], boss: boolean): number {
   const r = runs.filter((x) => x.boss === boss && x.estimateMs > 0).map((x) => x.durationMs / x.estimateMs).sort((a, b) => a - b);
   return r.length ? r[Math.floor(r.length / 2)] : 1;
 }
-export async function paceReport(sessionId: string): Promise<{ flags: PaceFlag[]; teams: PaceTeam[] }> {
+export async function paceReport(sessionId: string): Promise<{ flags: PaceFlag[]; teams: PaceTeam[]; runs: PaceRun[] }> {
   const all = await levelRuns();
   const mine = all.filter((r) => r.sessionId === sessionId);
   const factor = { true: observedFactor(all, true), false: observedFactor(all, false) } as Record<string, number>;
   const flags: PaceFlag[] = [];
+  const runs: PaceRun[] = [];
   const perTeam = new Map<string, { run: LevelRun; ratio: number }[]>();
   for (const r of mine) {
     const others = all.filter((o) => paceKey(o) === paceKey(r) && !(o.sessionId === r.sessionId && o.teamId === r.teamId)).map((o) => o.durationMs).sort((a, b) => a - b);
@@ -118,6 +121,7 @@ export async function paceReport(sessionId: string): Promise<{ flags: PaceFlag[]
     if (referenceMs <= 0) continue;
     const ratio = r.durationMs / referenceMs;
     perTeam.set(r.teamId, [...(perTeam.get(r.teamId) ?? []), { run: r, ratio }]);
+    runs.push({ teamId: r.teamId, level: r.level, boss: r.boss, durationMs: r.durationMs, referenceMs, ratio, basis: byAvg ? "moyenne" : "théorie", n: others.length });
     const kind = ratio < PACE_FAST ? "fast" : ratio > PACE_SLOW ? "slow" : null;
     if (kind) flags.push({ teamId: r.teamId, teamName: r.teamName, level: r.level, boss: r.boss, stars: r.stars, format: r.format, durationMs: r.durationMs, referenceMs, ratio, basis: byAvg ? "moyenne" : "théorie", n: others.length, kind });
   }
@@ -131,5 +135,5 @@ export async function paceReport(sessionId: string): Promise<{ flags: PaceFlag[]
     fast: rs.filter((x) => x.ratio < PACE_FAST).length,
     slow: rs.filter((x) => x.ratio > PACE_SLOW).length,
   })).sort((a, b) => a.ratio - b.ratio);
-  return { flags: flags.sort((a, b) => a.ratio - b.ratio), teams };
+  return { flags: flags.sort((a, b) => a.ratio - b.ratio), teams, runs };
 }
