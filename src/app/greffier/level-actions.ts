@@ -95,8 +95,8 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
     caught > 0 ? db.orm.public.LevelTick.where({ sessionId }).all() : Promise.resolve(ctx.ticks as { id: string; teamId: string; level: number; card: number; at: unknown; by: string }[]),
     caught > 0 ? db.orm.public.LevelLoss.where({ sessionId }).all() : Promise.resolve(ctx.losses as { id: string; teamId: string; level: number; at: unknown }[]),
   ]);
-  const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; teamFormat?: unknown; levelCapMin?: unknown } | null;
-  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? "", s?.teamFormat ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
+  const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; teamFormat?: unknown; starSwitch?: unknown; levelCapMin?: unknown } | null;
+  const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? "", s?.teamFormat ?? "", s?.starSwitch ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
   const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   // Rattrapages appliques : les reglages (fiches recues annulees) ont pu changer, on relit avant les fusees.

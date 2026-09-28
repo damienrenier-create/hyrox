@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MineView, MineStudent } from "@/lib/mine";
-import { MINE_COLS, MINE_COUNT, MINE_ROWS } from "@/lib/mine-core";
+import { MINE_COLS, MINE_ROWS } from "@/lib/mine-core";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fireAction, minePulseAction, type FireResult } from "./mine-actions";
 import { usePulse } from "../_components/usePulse";
@@ -109,7 +109,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
         <a href={back} aria-label="Retour" className="w-9 h-9 rounded-full bg-paper hover:bg-line text-ink-2 flex items-center justify-center font-bold text-lg flex-shrink-0">‹</a>
         <div className="min-w-0 flex-1">
           <p className={ui.eyebrow}>💣 Démineur · {sessionLabel}</p>
-          <p className="text-xs text-ink-2 truncate">{ended ? "WOD terminé · l'arbitrage reste ouvert" : `Carte ${view.round + 1} · ${view.foundInRound}/${MINE_COUNT} bombes trouvées`}</p>
+          <p className="text-xs text-ink-2 truncate">{ended ? "WOD terminé · l'arbitrage reste ouvert" : `Carte ${view.round + 1} · ${view.foundInRound}/${view.roundMines} bombes trouvées`}</p>
         </div>
         <button type="button" onClick={() => setShowBoard((v) => !v)} className={cx(ui.chip, ui.chipAccent, "text-sm px-3 py-1")} title="Classement des arbitres">
           💣 {view.found}{me >= 0 && <span className="ml-1 opacity-70">#{me + 1}</span>}
@@ -238,7 +238,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
         {result && (
           <motion.div key={result.id} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 top-24 z-40 flex justify-center pointer-events-none">
             <span className={cx("rounded-2xl px-5 py-3 font-display font-extrabold text-xl shadow-pop text-center", result.mine ? "bg-danger text-white" : "bg-card border border-line text-ink")}>
-              {result.mine ? `💥 BOMBE trouvée ! ${result.foundInRound}/${MINE_COUNT}` : result.n ? `${result.n} bombe${result.n > 1 ? "s" : ""} autour` : `Rien autour… ${result.opened.length} case${result.opened.length > 1 ? "s" : ""} ouverte${result.opened.length > 1 ? "s" : ""}`}
+              {result.mine ? `💥 BOMBE trouvée ! ${result.foundInRound}/${result.roundMines ?? view.roundMines}` : result.n ? `${result.n} bombe${result.n > 1 ? "s" : ""} autour` : `Rien autour… ${result.opened.length} case${result.opened.length > 1 ? "s" : ""} ouverte${result.opened.length > 1 ? "s" : ""}`}
               {result.roundDone && <span className="block text-sm font-bold mt-1">🏆 Carte terminée, une nouvelle t&apos;attend !</span>}
             </span>
           </motion.div>

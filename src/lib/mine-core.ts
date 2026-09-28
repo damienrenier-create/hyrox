@@ -33,7 +33,11 @@ function mulberry32(seed: number) {
 }
 
 // Disposition des bombes d'une manche : deterministe (seance + carte tiree au sort parmi 4 + manche).
-export function layoutForRound(sessionId: string, round: number): boolean[][] {
+// `dense` (Sartay 28/09 : « enlever les cases vides, quitte a rajouter des 1 et quelques bombes ») : tant qu'il
+// reste une case sans bombe autour, une bombe est ajoutee a cote d'elle (la ou elle couvre le plus de cases
+// vides). Plus de cascade : chaque case ouverte affiche un chiffre. Les cartes deja jouees gardent l'ancienne
+// disposition (voir mineDense).
+export function layoutForRound(sessionId: string, round: number, dense = false): boolean[][] {
   const pick = hash32(`${sessionId}#pick`) % MINE_LAYOUTS;
   const rnd = mulberry32(hash32(`${sessionId}#${pick}#round${round}`));
   const all: [number, number][] = [];
@@ -44,7 +48,37 @@ export function layoutForRound(sessionId: string, round: number): boolean[][] {
   }
   const mines = Array.from({ length: MINE_ROWS }, () => Array<boolean>(MINE_COLS).fill(false));
   for (const [r, c] of all.slice(0, MINE_COUNT)) mines[r][c] = true;
+  if (dense) fillEmpty(mines, rnd);
   return mines;
+}
+function fillEmpty(mines: boolean[][], rnd: () => number): void {
+  for (let guard = 0; guard < MINE_ROWS * MINE_COLS; guard++) {
+    const nums = numbersOf(mines);
+    const zeros: [number, number][] = [];
+    for (let r = 0; r < MINE_ROWS; r++) for (let c = 0; c < MINE_COLS; c++) if (!mines[r][c] && nums[r][c] === 0) zeros.push([r, c]);
+    if (!zeros.length) return;
+    const isZero = (r: number, c: number) => r >= 0 && r < MINE_ROWS && c >= 0 && c < MINE_COLS && !mines[r][c] && nums[r][c] === 0;
+    const [zr, zc] = zeros[Math.floor(rnd() * zeros.length)];
+    let best: [number, number] | null = null;
+    let bestScore = -1;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const r = zr + dr, c = zc + dc;
+      if (r < 0 || r >= MINE_ROWS || c < 0 || c >= MINE_COLS || mines[r][c]) continue;
+      let score = 0;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (isZero(r + a, c + b)) score++;
+      score += rnd() * 0.5; // departage au hasard (deterministe : graine de la manche)
+      if (score > bestScore) { bestScore = score; best = [r, c]; }
+    }
+    if (!best) return;
+    mines[best[0]][best[1]] = true;
+  }
+}
+export const mineCountOf = (mines: boolean[][]) => mines.reduce((n, row) => n + row.filter(Boolean).length, 0);
+// Carte « dense » (sans case vide) pour une seance : les seances dont le demineur n'a pas encore ete joue, ou
+// marquees mineDense ; une seance deja jouee sans marque garde l'ancienne carte (scores inchanges).
+export function mineDense(settings: unknown, hasReveals: boolean): boolean {
+  const v = (settings as { mineDense?: unknown } | null)?.mineDense;
+  return v === true || (v === undefined && !hasReveals);
 }
 
 export function numbersOf(mines: boolean[][]): number[][] {
@@ -86,16 +120,16 @@ export function floodFrom(mines: boolean[][], numbers: number[][], r0: number, c
 export type Reveal = { refereeId: string; row: number; col: number; evaluationId: string | null };
 
 // Manche en cours d'un arbitre = la premiere manche dont il n'a pas encore trouve toutes les bombes.
-export function roundsOf(sessionId: string, reveals: Reveal[]): { round: number; found: number; foundInRound: number; revealed: number } {
+export function roundsOf(sessionId: string, reveals: Reveal[], dense = false): { round: number; found: number; foundInRound: number; revealed: number } {
   let round = 0;
   let found = 0;
   let foundInRound = 0;
   for (;;) {
-    const mines = layoutForRound(sessionId, round);
+    const mines = layoutForRound(sessionId, round, dense);
     const mine = reveals.filter((x) => Math.floor(x.row / ROUND_STRIDE) === round);
     const f = mine.filter((x) => mines[x.row % ROUND_STRIDE]?.[x.col]).length;
     found += f;
-    if (f < MINE_COUNT) {
+    if (f < mineCountOf(mines)) {
       foundInRound = f;
       break;
     }

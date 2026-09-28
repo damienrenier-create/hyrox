@@ -3,7 +3,7 @@ import { readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { readStarSwitches, activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Demineur des arbitres (WOD Level), version « deux listes » (Sartay, 24/09 soir) :
 //   1. l'arbitre choisit un eleve qui joue, puis un exercice (liste alphabetique limitee aux niveaux en cours
@@ -16,7 +16,7 @@ import { activeCards, ladderFor, orderedLevels, progressOf, readLadders, readLev
 // sont rangees par manche dans MineReveal.row (row = manche x 100 + ligne). Score = bombes trouvees.
 
 export * from "@/lib/mine-core";
-import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, layoutForRound, numbersOf, roundsOf, type Reveal } from "@/lib/mine-core";
+import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf, type Reveal } from "@/lib/mine-core";
 
 // `evals` (Sartay 28/09) : nombre d'evaluations de CET arbitre sur cet eleve dans la seance.
 export type MineStudent = { userId: string; name: string; teamId: string; teamName: string; evals: number };
@@ -30,6 +30,7 @@ export type MineView = {
   lastTeamId: string | null; // equipe de ma derniere evaluation : exclue tant qu'il y a d'autres equipes
   teamsCount: number;
   round: number;
+  roundMines: number; // bombes de la carte en cours (varie depuis les cartes sans case vide)
   cells: MineCell[][]; // ma grille de la manche en cours
   foundInRound: number;
   found: number; // toutes manches confondues
@@ -83,7 +84,7 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   const all = new Map<string, string>();
   for (const l of [levels, ...Object.values(ladders)].flat()) for (const { card } of activeCards(l)) all.set(card.exerciseId, card.label);
   for (const t of teams) {
-    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id)), order?.[t.id]);
+    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id), readStarSwitches(session.settings)[t.id]), order?.[t.id]);
     const p = progressOf(mine, t.id, ticks, [], penalties);
     if (p.currentLevel === null) continue;
     for (const l of mine) if (l.number === p.currentLevel || l.number === p.currentLevel + 1) for (const { card } of activeCards(l)) suggestedIds.add(card.exerciseId);
@@ -93,8 +94,10 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
 
   const reveals = await db.orm.public.MineReveal.where({ sessionId }).all();
   const mine = reveals.filter((r) => r.refereeId === refereeId);
-  const { round, found, foundInRound, revealed } = roundsOf(sessionId, mine);
-  const mines = layoutForRound(sessionId, round);
+  const dense = mineDense(session.settings, reveals.length > 0);
+  const { round, found, foundInRound, revealed } = roundsOf(sessionId, mine, dense);
+  const mines = layoutForRound(sessionId, round, dense);
+  const roundMines = mineCountOf(mines);
   const numbers = numbersOf(mines);
   const cells: MineCell[][] = Array.from({ length: MINE_ROWS }, () => Array<MineCell>(MINE_COLS).fill(null));
   for (const r of mine) {
@@ -129,5 +132,6 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
     atMs: at,
   }));
 
-  return { students, exercises, lastTeamId, teamsCount: teams.length, round, cells, foundInRound, found, revealed, leaderboard, recent };
+  void MINE_COUNT;
+  return { students, exercises, lastTeamId, teamsCount: teams.length, round, roundMines, cells, foundInRound, found, revealed, leaderboard, recent };
 }

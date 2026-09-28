@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -17,6 +17,7 @@ export type LevelBundle = {
   ladders: Ladders; // parcours 1 et 3 etoiles s'ils existent, et les trois du petit format (s1, s2, s3)
   teamStars: Record<string, Stars>; // parcours choisi par equipe (2 par defaut)
   teamFormats: Record<string, Format>; // format fixe par equipe (sinon : d'apres l'effectif, 1 a 3 -> small)
+  starSwitches: Record<string, StarSwitch>; // descentes de categorie (3 vies perdues) : echelle composee
   frozen: boolean; // true = echelle figee dans la seance (course lancee) ; false = echelle vive de l'atelier
   teams: LevelTeam[];
   ticks: LevelTickRow[];
@@ -177,6 +178,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     ladders,
     teamStars: readTeamStars(session.settings),
     teamFormats: readTeamFormats(session.settings),
+    starSwitches: readStarSwitches(session.settings),
     frozen,
     teams,
     ticks,
@@ -218,9 +220,9 @@ export function phaseExtras(bundle: LevelBundle, order: number): PhaseTeamTotals
 }
 
 // Echelle d'une equipe : son parcours (etoiles), dans son ordre (echauffement en differe).
-export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "teamStars" | "teamFormats" | "teams" | "levelOrder">, teamId: string): FrozenLevel[] {
+export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "teamStars" | "teamFormats" | "starSwitches" | "teams" | "levelOrder">, teamId: string): FrozenLevel[] {
   const format = teamFormatOf(bundle.teamFormats, teamId, bundle.teams.find((t) => t.id === teamId)?.members.length);
-  return orderedLevels(ladderFor(bundle.levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), format), bundle.levelOrder?.[teamId]);
+  return orderedLevels(ladderFor(bundle.levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), format, bundle.starSwitches[teamId]), bundle.levelOrder?.[teamId]);
 }
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {

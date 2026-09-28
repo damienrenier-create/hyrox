@@ -174,7 +174,7 @@ export function LevelClient({
   // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
   // Format (4-5+ ou 1-3) : fixe dans les reglages (numerotation, coup d'envoi), sinon d'apres l'effectif.
   const formatOf = useCallback((teamId: string): Format => teamFormatOf(bundle.teamFormats, teamId, teams.find((t) => t.id === teamId)?.members.length), [bundle.teamFormats, teams]);
-  const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), formatOf(teamId)), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, bundle.teamStars, bundle.levelOrder, formatOf]);
+  const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(bundle.teamStars, teamId), formatOf(teamId), bundle.starSwitches?.[teamId]), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, bundle.teamStars, bundle.levelOrder, bundle.starSwitches, formatOf]);
   const starsOf = useCallback((teamId: string): Stars => teamStarsOf(bundle.teamStars, teamId), [bundle.teamStars]);
   // Groupe de classement = parcours + format : une equipe de 3 ne se compare pas a une equipe de 5.
   const groupOf = useCallback((teamId: string) => parcoursKey(starsOf(teamId), formatOf(teamId)), [starsOf, formatOf]);
@@ -1040,11 +1040,13 @@ const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500,
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
-const STAR_BG: Record<Stars, string> = { 3: "#f4c2c7", 2: "#bcd4f0", 1: "#bde5c8" };
+const STAR_BG: Record<Stars, string> = { 3: "#e59aa3", 2: "#94b9e3", 1: "#95d0a8" };
+// Fond de chaque ligne d'equipe (28/09 : couleurs encore plus marquees) ; BOSS et echelle bouclee gardent leur teinte.
+const STAR_ROW: Record<Stars, string> = { 3: "#fbdadd", 2: "#d7e6f7", 1: "#d6f0de" };
 // Bord gauche de chaque ligne : la couleur franche du parcours (28/09, « augmenter le contraste »).
 const STAR_STRONG: Record<Stars, string> = { 3: "#c0392b", 2: "#2471a3", 1: "#1e8449" };
 // Filigrane « ÉQUIPE n » colore selon le parcours (Sartay 28/09 : la couleur remplace les etoiles a l'ecran).
-const STAR_INK: Record<Stars, string> = { 3: "rgba(160, 35, 25, 0.62)", 2: "rgba(25, 85, 135, 0.62)", 1: "rgba(20, 105, 55, 0.62)" };
+const STAR_INK: Record<Stars, string> = { 3: "rgba(150, 30, 20, 0.7)", 2: "rgba(20, 75, 125, 0.7)", 1: "rgba(15, 95, 45, 0.7)" };
 
 function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
   onRocket?: () => void;
@@ -1202,7 +1204,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
-      style={{ borderLeft: `6px solid ${STAR_STRONG[stars]}` }}
+      style={{ borderLeft: `10px solid ${STAR_STRONG[stars]}`, ...(boss || finished ? {} : { background: STAR_ROW[stars] }) }}
       className={cx(ui.card, "relative px-2 py-0.5 flex items-center gap-2 min-w-0 h-16 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse", levelFlash && "levelup", shaking && "shake")}
     >
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
@@ -1280,6 +1282,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
         <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-0 flex items-baseline gap-1 select-none pointer-events-none">
           <span className="font-display font-black text-[0.9rem] tracking-[0.2em] uppercase" style={{ color: STAR_INK[stars] }}>Équipe</span>
           <span className="font-display font-black text-[3rem] leading-none" style={{ color: STAR_INK[stars] }}>{team.order}</span>
+          <span className="font-display font-black text-2xl leading-none ml-1" style={{ color: STAR_INK[stars] }}>{"★".repeat(stars)}</span>
         </span>
         {!finished && level && (
           <>

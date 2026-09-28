@@ -7,7 +7,7 @@ import { phaseTotals, readChild, readChildren } from "@/lib/level-context";
 import { loadZombieContext } from "@/lib/zombies";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
-  autoRocketPool, pickRocketTarget, parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
+  autoRocketPool, pickRocketTarget, parcoursKey, readStarSwitches, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
   DISCOUNT_STEPS, LADDER_KEYS, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
@@ -31,7 +31,7 @@ async function writeSettings(sessionId: string, patch: (fresh: Settings) => Sett
 
 // Echelle d'une equipe dans une seance : son parcours (etoiles) dans son ordre.
 export function teamLadder(settings: unknown, teamId: string): FrozenLevel[] {
-  return orderedLevels(ladderFor(readFrozenFromSettings(settings), readLadders(settings), teamStarsOf(readTeamStars(settings), teamId), teamFormatOf(readTeamFormats(settings), teamId)), readLevelOrder(settings)?.[teamId]);
+  return orderedLevels(ladderFor(readFrozenFromSettings(settings), readLadders(settings), teamStarsOf(readTeamStars(settings), teamId), teamFormatOf(readTeamFormats(settings), teamId), readStarSwitches(settings)[teamId]), readLevelOrder(settings)?.[teamId]);
 }
 // Banque d'une equipe (pieces gagnees + report de l'echauffement - depenses), sur l'echelle de son parcours.
 export function bankOf(settings: unknown, teamId: string, ticks: Tick[], losses: Loss[]) {
@@ -226,9 +226,21 @@ export async function numberTeams(sessionId: string): Promise<number> {
   const settings = await freshSettings(sessionId);
   const teamStars = readTeamStars(settings);
   const teams = (await db.orm.public.Team.where({ sessionId }).all()).sort((a, b) => teamStarsOf(teamStars, b.id) - teamStarsOf(teamStars, a.id) || (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "fr"));
+  // Sartay 28/09 : une equipe numerotee garde son numero pour toujours (il est annonce aux eleves), meme si les
+  // numeros ne se suivent plus d'un parcours a l'autre. Seules les equipes provisoires (creees par parcours,
+  // numero >= 1000) en recoivent un : les plus petits libres, 3 etoiles d'abord.
+  const PROVISIONAL = 1000;
+  const isNumbered = (o: number | null) => (o ?? 0) >= 1 && (o ?? 0) < PROVISIONAL;
+  const used = new Set(teams.filter((t) => isNumbered(t.order)).map((t) => t.order as number));
   let n = 0;
   let changed = 0;
-  for (const t of teams) { n++; if (t.order !== n || t.name !== `Équipe ${n}`) { await db.orm.public.Team.where({ id: t.id }).update({ order: n, name: `Équipe ${n}` }); changed++; } }
+  for (const t of teams) {
+    if (isNumbered(t.order)) continue;
+    do n++; while (used.has(n));
+    used.add(n);
+    await db.orm.public.Team.where({ id: t.id }).update({ order: n, name: `Équipe ${n}` });
+    changed++;
+  }
   // Format des equipes (Sartay 27/09) : fige ici d'apres l'effectif (1 a 3 membres -> petit format), sauf
   // choix explicite dans les reglages. Les enfants (echauffement, finisher) en heritent, le zombie s'y regle.
   const formats = readTeamFormats(settings);

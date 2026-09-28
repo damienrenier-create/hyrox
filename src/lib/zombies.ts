@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomSchedule, emomWaveEvents, emomZombieSim, heartCarryBites, ladderFor, readCoinEvents, readCoinsCarry, SOFT_LOSSES, ZOMBIE_COIN_LOSS, type CoinEvent, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { readStarSwitches, DEMOTE_AT_LOSSES, type StarSwitch, type Stars, activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomSchedule, emomWaveEvents, emomZombieSim, heartCarryBites, ladderFor, readCoinEvents, readCoinsCarry, SOFT_LOSSES, ZOMBIE_COIN_LOSS, type CoinEvent, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -77,6 +77,8 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const coinEvents: CoinEvent[] = readCoinEvents(session.settings);
   const coinsCarry = readCoinsCarry(session.settings);
   const zombieCoins: CoinEvent[] = []; // pieces mangees a enregistrer
+  const switches = readStarSwitches(session.settings);
+  const newSwitches: Record<string, StarSwitch> = {}; // descentes de categorie a enregistrer
   const penalties = readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined }));
 
   // Finisher (EMOM) : une vie perdue par vague non bouclee a sa fin ; les coches restent (les vagues
@@ -104,7 +106,7 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
 
   for (const t of teams) {
     const format = teamFormatOf(teamFormats, t.id);
-    const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), format), order?.[t.id]);
+    let mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), format, switches[t.id]), order?.[t.id]);
     for (let guard = 0; guard < 20; guard++) {
       const p = progressOf(mine, t.id, ticks, losses, penalties);
       if (p.currentLevel === null) break;
@@ -145,15 +147,32 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
         const lostCoins = Math.floor(bank * ZOMBIE_COIN_LOSS);
         if (lostCoins > 0) zombieCoins.push({ id: lossRow.id, teamId: t.id, kind: "zombie", coins: lostCoins, at: nowMs, level: p.currentLevel });
       }
+      // 3e vie perdue au WOD principal : l'equipe descend d'une categorie (une seule fois), sans perdre son niveau ;
+      // la nouvelle echelle commence au niveau suivant.
+      const st = teamStarsOf(teamStars, t.id);
+      if (isMain && !switches[t.id] && st > 1 && losses.filter((x) => x.teamId === t.id).length === DEMOTE_AT_LOSSES) {
+        const cur = progressOf(mine, t.id, ticks, losses, penalties).currentLevel;
+        const at = mine.findIndex((l) => l.number === cur);
+        const next = at >= 0 ? mine[at + 1] : undefined;
+        if (next) {
+          const sw: StarSwitch = { from: st, to: (st - 1) as Stars, fromLevel: next.number };
+          switches[t.id] = sw;
+          newSwitches[t.id] = sw;
+          teamStars[t.id] = sw.to;
+          mine = orderedLevels(ladderFor(levels, ladders, sw.to, format, sw), order?.[t.id]);
+        }
+      }
     }
   }
-  if (voided.size || zombieCoins.length) {
+  if (voided.size || zombieCoins.length || Object.keys(newSwitches).length) {
     // Relecture juste avant d'ecrire : un autre appareil a pu depenser des pieces ou lancer une fusee entre-temps.
     const fresh = ((await db.orm.public.Session.where({ id: sessionId }).first())?.settings as Record<string, unknown> | null) ?? {};
     const gifts = (Array.isArray(fresh.gifts) ? (fresh.gifts as Record<string, unknown>[]) : []).map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g));
     const existing = Array.isArray(fresh.coinEvents) ? (fresh.coinEvents as { id?: unknown }[]) : [];
     const coinEventsNext = [...existing, ...zombieCoins.filter((z) => !existing.some((e) => e.id === z.id))];
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, coinEvents: coinEventsNext })) });
+    const starsNext = { ...readTeamStars(fresh), ...Object.fromEntries(Object.entries(newSwitches).map(([id, sw]) => [id, sw.to])) };
+    const switchNext = { ...readStarSwitches(fresh), ...newSwitches };
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, coinEvents: coinEventsNext, teamStars: starsNext, starSwitch: switchNext })) });
   }
   return applied;
 }

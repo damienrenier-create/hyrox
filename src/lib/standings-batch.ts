@@ -7,7 +7,7 @@ import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/template
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
 import { toMs } from "@/lib/scheduling";
 import { readFrozenFromSettings } from "@/lib/level";
-import { ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { readStarSwitches, ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Classements de PLUSIEURS seances en une poignee de requetes groupees (.in) au lieu d'une cascade par
 // seance / par equipe / par eleve. La page Resultats passait 14 s a faire ~520 allers-retours.
@@ -172,7 +172,7 @@ function levelStandingsBatch(
   const ladders = readLadders(session.settings);
   const teamStars = readTeamStars(session.settings);
   const teamFormats = readTeamFormats(session.settings);
-  const ladderOf = new Map(rawTeams.map((t) => [t.id, orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id)), order?.[t.id])]));
+  const ladderOf = new Map(rawTeams.map((t) => [t.id, orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id), readStarSwitches(session.settings)[t.id]), order?.[t.id])]));
   const ranked = rankTeams(rawTeams.map((t) => progressOf(ladderOf.get(t.id)!, t.id, ticks, losses, penalties)));
   const teamName = new Map(rawTeams.map((t) => [t.id, t.name]));
   const finishedAtMs: Record<string, number> = {};

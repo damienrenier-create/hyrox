@@ -6,10 +6,10 @@ import { refereeAccess } from "@/lib/referee-access";
 import { readFrozenFromSettings } from "@/lib/level";
 import { activeCards, readLadders } from "@/lib/wod-engines/templates/level-engine";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
-import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, numbersOf, roundsOf } from "@/lib/mine-core";
+import { MINE_COLS, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf } from "@/lib/mine-core";
 import { toMs } from "@/lib/scheduling";
 
-export type FireResult = { ok: true; mine: boolean; n: number; opened: [number, number, number][]; found: number; foundInRound: number; roundDone: boolean };
+export type FireResult = { ok: true; mine: boolean; n: number; opened: [number, number, number][]; found: number; foundInRound: number; roundMines: number; roundDone: boolean };
 
 // Demineur : evaluer un eleve sur un exercice (reps + qualite), puis tirer sur une case de la grille.
 // Regles : pas soi-meme, pas sa propre equipe, et jamais deux fois d'affilee la meme equipe quand il y en a
@@ -49,7 +49,14 @@ export async function fireAction(
   }
 
   const mine = await db.orm.public.MineReveal.where({ sessionId, refereeId: user.id }).all();
-  const { round } = roundsOf(sessionId, mine);
+  // Carte sans case vide pour toute seance dont le demineur n'avait pas encore commence (marquee au premier tir).
+  const anyReveal = mine.length > 0 || !!(await db.orm.public.MineReveal.where({ sessionId }).first());
+  const dense = mineDense(session.settings, anyReveal);
+  if (dense && (session.settings as { mineDense?: unknown } | null)?.mineDense === undefined) {
+    const fresh = ((await db.orm.public.Session.where({ id: sessionId }).first())?.settings as Record<string, unknown> | null) ?? {};
+    if (fresh.mineDense === undefined) await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, mineDense: true })) });
+  }
+  const { round } = roundsOf(sessionId, mine, dense);
   const encodedRow = round * ROUND_STRIDE + row;
   if (mine.some((r) => r.row === encodedRow && r.col === col)) return { error: "Case déjà jouée." };
 
@@ -61,7 +68,7 @@ export async function fireAction(
     return { error: "Case déjà jouée." };
   }
 
-  const mines = layoutForRound(sessionId, round);
+  const mines = layoutForRound(sessionId, round, dense);
   const numbers = numbersOf(mines);
   const isMine = mines[row][col];
   const opened: [number, number, number][] = [];
@@ -78,9 +85,10 @@ export async function fireAction(
     }
   }
   const after = await db.orm.public.MineReveal.where({ sessionId, refereeId: user.id }).all();
-  const s = roundsOf(sessionId, after);
-  const foundInRound = s.round === round ? s.foundInRound : MINE_COUNT;
-  return { ok: true, mine: isMine, n: numbers[row][col], opened, found: s.found, foundInRound, roundDone: s.round > round };
+  const s = roundsOf(sessionId, after, dense);
+  const roundMines = mineCountOf(mines);
+  const foundInRound = s.round === round ? s.foundInRound : roundMines;
+  return { ok: true, mine: isMine, n: numbers[row][col], opened, found: s.found, foundInRound, roundMines, roundDone: s.round > round };
 }
 
 // Pouls de l'ecran demineur : cases revelees (tous arbitres), fiches cochees (les listes d'exercices suivent

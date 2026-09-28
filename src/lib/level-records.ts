@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, coinsEarned, coinsInPlay, fmtIntensity, fmtTheoretical, ladderFor, parcoursKey, progressOf, readEmomScores, readLadders, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, warmupCoinsInPlay, type Format, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { readStarSwitches, activeCards, coinsEarned, coinsInPlay, fmtIntensity, fmtTheoretical, ladderFor, parcoursKey, progressOf, readEmomScores, readLadders, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, warmupCoinsInPlay, type Format, type FrozenLevel, type Loss, type Stars, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import { wodLabel } from "@/lib/student-sessions";
 import { isTestClass, notDeleted } from "@/lib/session-roles";
@@ -119,7 +119,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     for (const t of teams) {
       const stars = teamStarsOf(teamStars, t.id);
       const format: Format = teamFormatOf(teamFormats, t.id, (membersBy.get(t.id) ?? []).length);
-      const lv = ladderFor(levels, ladders, stars, format);
+      const lv = ladderFor(levels, ladders, stars, format, readStarSwitches(s.settings)[t.id]);
       const cardWeight = cardWeightOf(parcoursKey(stars, format), lv);
       const p = progressOf(lv, t.id, ticks, losses, readPenalties(s.settings));
       const score = scores[t.id] ?? null;

@@ -119,7 +119,27 @@ export function readLadders(settings: unknown): Ladders {
 }
 // Echelle d'un parcours. Petit format : son echelle, sinon le petit 2 etoiles, sinon (seance figee avant le
 // petit format) l'echelle big ; un parcours 1 ou 3 etoiles absent retombe sur le 2 etoiles.
-export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars, format: Format = DEFAULT_FORMAT): FrozenLevel[] {
+// Descente de categorie (Sartay 28/09) : a 3 vies perdues au WOD principal, une equipe descend d'une categorie.
+// Elle garde son niveau : elle finit le niveau en cours sur l'ancienne echelle, et joue la nouvelle a partir du
+// niveau suivant (`fromLevel`). settings.starSwitch[teamId] ; settings.teamStars porte deja la nouvelle categorie.
+export const DEMOTE_AT_LOSSES = 3;
+export type StarSwitch = { from: Stars; to: Stars; fromLevel: number };
+export function readStarSwitches(settings: unknown): Record<string, StarSwitch> {
+  const raw = (settings as { starSwitch?: unknown } | null)?.starSwitch;
+  const out: Record<string, StarSwitch> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const o = v as { from?: unknown; to?: unknown; fromLevel?: unknown } | null;
+    if (o && [1, 2, 3].includes(o.from as number) && [1, 2, 3].includes(o.to as number) && typeof o.fromLevel === "number") out[k] = { from: o.from as Stars, to: o.to as Stars, fromLevel: o.fromLevel };
+  }
+  return out;
+}
+export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars, format: Format = DEFAULT_FORMAT, sw?: StarSwitch | null): FrozenLevel[] {
+  if (sw) {
+    const before = ladderFor(levels, ladders, sw.from, format).filter((l) => l.number < sw.fromLevel);
+    const after = ladderFor(levels, ladders, sw.to, format).filter((l) => l.number >= sw.fromLevel);
+    return [...before, ...after];
+  }
   if (format === "small") {
     const s = ladders[`s${stars}`] ?? ladders.s2;
     if (s?.length) return s;
