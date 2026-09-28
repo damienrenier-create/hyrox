@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { activeCards, coinsEarned, coinsInPlay, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { applyZombieCatches, readZombies } from "@/lib/zombies";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -71,7 +71,7 @@ export async function phaseTotals(kind: PhaseTotals["kind"], sessionId: string):
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const pauses = pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
   const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const order = readLevelOrder(s.settings);
   const penalties = readPenalties(s.settings);
   const scores = readEmomScores(s.settings);
@@ -149,7 +149,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     rs ? db.orm.public.YellowCard.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
     db.orm.public.LevelLoss.where({ sessionId }).all(),
   ]);
-  const losses = rawLosses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const losses = rawLosses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const ticks: LevelTickRow[] = rawTicks.map((t) => {
     const abs = toMs(t.at);
     return { id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, abs) ?? 0, absMs: abs, by: t.by };
@@ -225,7 +225,7 @@ export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "
 // Progression de chaque equipe, classee. Meme calcul pour le greffier, l'espace eleve et les records.
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
   const inPlay = bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay;
-  const coins = (teamId: string) => bundle.emom ? 0 : coinsEarned(levelsForTeam(bundle, teamId), teamId, bundle.ticks, bundle.losses, bundle.penalties, inPlay).total + (bundle.coinsCarry[teamId] ?? 0);
+  const coins = (teamId: string) => bundle.emom ? 0 : coinsState(levelsForTeam(bundle, teamId), teamId, bundle.ticks, bundle.losses, bundle.penalties, bundle.coinEvents, bundle.coinsCarry, inPlay).score;
   return rankTeams(bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties)), coins);
 }
 

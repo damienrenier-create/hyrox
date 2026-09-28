@@ -182,7 +182,7 @@ export function LevelClient({
   const allLevels = useMemo(() => [levels, ...Object.values(bundle.ladders)].flat(), [levels, bundle.ladders]);
   const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, live.losses, live.penalties)])), [teams, ladderOf, ticks, live.losses, live.penalties]);
   // Classement : niveaux, vies, pieces gagnees (echauffement compris), fiches, rapidite.
-  const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.earned + st.carry); } return m; }, [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
+  const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.score); } return m; }, [teams, ladderOf, ticks, live.losses, live.penalties, live.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
   const ranked = useMemo(() => rankTeams([...progress.values()], (id) => coinsForRank.get(id) ?? 0), [progress, coinsForRank]);
   // Rang DANS SON PARCOURS : un niveau 12 du 1 etoile ne se compare pas a un niveau 10 du 3 etoiles.
   const rankOf = useMemo(() => {
@@ -333,7 +333,7 @@ export function LevelClient({
         return;
       }
       mergeTeam(res.team, key);
-      if (res.caught) setError(bundle.emom ? `Le zombie a dévoré le cœur de ${teamById.get(teamId)?.name ?? "l'équipe"} : vague perdue.` : `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.`);
+      if (res.caught) setError(bundle.emom ? `Le zombie a dévoré le cœur de ${teamById.get(teamId)?.name ?? "l'équipe"} : vague perdue.` : bundle.child ? `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : elle retombe au niveau précédent.` : `Le zombie a rattrapé ${teamById.get(teamId)?.name ?? "l'équipe"} : une vie et la moitié de ses pièces en moins.`);
     });
   }
   function yellow(teamId: string, delta: 1 | -1) {
@@ -347,14 +347,14 @@ export function LevelClient({
   function exportCsv() {
     const exercises = exerciseColumnsWith(allLevels, extras);
     const hasPhases = bundle.phases.length > 0;
-    const head = ["Rang (dans son parcours)", "Équipe", "Parcours", "Format", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Pièces gagnées", "Pièces en banque", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
+    const head = ["Rang (dans son parcours)", "Équipe", "Parcours", "Format", "Membres", "Niveaux bouclés", "Niveau en cours", "Fiches du niveau", "Dernière coche", "Reps", "Travail (s)", "Cartes jaunes", "Vies perdues", "Pièces gagnées", "Pièces en banque", "Pièces perdues (zombie)", "Score pièces", "Échelle bouclée à", ...(hasPhases ? ["Reps WOD seul", ...bundle.phases.map((ph) => `Reps ${ph.kind === "warmup" ? "échauffement" : "finisher"}`), "Finisher (cordes)"] : []), ...exercises];
     const lines = ranked.map((p) => {
       const t = teamById.get(p.teamId)!;
       const ex = extras.get(p.teamId) ?? extrasFor([], 0);
       return [
         rankOf.get(p.teamId), t.name, starsLabel(starsOf(p.teamId)), formatLabel(formatOf(p.teamId)), t.members.map((m) => m.name).join(" / "), p.completedLevels, p.currentLevel ?? "terminé",
         p.currentLevel ? `${p.currentDone}/${p.currentTotal}` : "", p.lastTickMs !== null ? fmt(p.lastTickMs) : "", p.reps + ex.reps, Math.round(p.weighted + ex.work), (cardsOf.get(p.teamId) ?? 0) + ex.cards, p.losses + ex.losses,
-        (coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0), coinsOf.get(p.teamId)?.bank ?? 0,
+        (coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0), coinsOf.get(p.teamId)?.bank ?? 0, coinsOf.get(p.teamId)?.lost ?? 0, coinsOf.get(p.teamId)?.score ?? 0,
         p.finishedMs !== null ? fmt(p.finishedMs) : "", ...(hasPhases ? [p.reps, ...bundle.phases.map((ph) => ph.byOrder[t.order]?.reps ?? 0), ex.score ?? ""] : []), ...exercises.map((e) => (p.repsByExercise[e] ?? 0) + (ex.repsByExercise[e] ?? 0)),
       ];
     });
@@ -1218,7 +1218,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
                 </button>
                 {coinOpen && (
                   <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
-                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées · fusée : {coins.stock ? "prête 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
+                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "prête 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
                     {target ? (
                       <>
                         <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
@@ -1371,7 +1371,7 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.reps, (x) => x.reps) : undefined}>{p.reps + ex.reps}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, p.losses, (x) => x.losses) : undefined}>{p.losses + ex.losses}</td>
                 <td className="p-2 text-right tabular-nums" title={hasPhases ? phaseBreakdown(phases, t.order, cardsOf.get(p.teamId) ?? 0, (x) => x.cards) : undefined}>{(cardsOf.get(p.teamId) ?? 0) + ex.cards}</td>
-                {coinsOf && <td className="p-2 text-right tabular-nums" title={`${coinsOf.get(p.teamId)?.earned ?? 0} gagnées au WOD + ${coinsOf.get(p.teamId)?.carry ?? 0} de l'échauffement · ${coinsOf.get(p.teamId)?.spent ?? 0} dépensées`}><b>{(coinsOf.get(p.teamId)?.earned ?? 0) + (coinsOf.get(p.teamId)?.carry ?? 0)}</b> <span className="text-ink-3">· {coinsOf.get(p.teamId)?.bank ?? 0}</span></td>}
+                {coinsOf && <td className="p-2 text-right tabular-nums" title={`${coinsOf.get(p.teamId)?.earned ?? 0} gagnées au WOD + ${coinsOf.get(p.teamId)?.carry ?? 0} de l'échauffement − ${coinsOf.get(p.teamId)?.lost ?? 0} mangées par le zombie · ${coinsOf.get(p.teamId)?.spent ?? 0} dépensées`}><b>{coinsOf.get(p.teamId)?.score ?? 0}</b> <span className="text-ink-3">· {coinsOf.get(p.teamId)?.bank ?? 0}</span></td>}
                 {hasFinisher && <td className="p-2 text-right tabular-nums font-bold">{ex.score !== null ? `${ex.score} cordes` : "—"}</td>}
               </tr>
             );

@@ -100,7 +100,7 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
     const pauseMarks = pauses.map((p) => elapsed(startedAtMs, pauses, p.from) ?? 0);
     const endMs = rs.endedAt ? elapsed(startedAtMs, pauses, toMs(rs.endedAt)) ?? 0 : null;
     const ticks: Tick[] = (ticksBy.get(s.id) ?? []).map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-    const losses: Loss[] = (lossesBy.get(s.id) ?? []).map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+    const losses: Loss[] = (lossesBy.get(s.id) ?? []).map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
     const teams = (teamsBy.get(s.id) ?? []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const sessionLabel = s.label ?? wodLabel(s.wodType);
     const dateMs = dateOf(s);

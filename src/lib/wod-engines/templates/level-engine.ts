@@ -12,7 +12,9 @@ export type LevelCard = { exerciseId: string; reps: number };
 // depend plus du catalogue). `off` = fiche retiree par le greffier en cours de WOD : elle ne compte plus,
 // sans decaler les index des fiches voisines (les coches y font reference par index).
 export type FrozenCard = LevelCard & { label: string; weight: number; off?: boolean };
-export type FrozenLevel = { number: number; name: string | null; boss: boolean; cards: FrozenCard[] };
+// `zombieRef` (Sartay 28/09) : fiches de REFERENCE pour le temps du zombie, quand les fiches jouees ont ete
+// allegees sans vouloir changer ce temps (echauffement divise par 2 ou 3, zombie inchange).
+export type FrozenLevel = { number: number; name: string | null; boss: boolean; cards: FrozenCard[]; zombieRef?: { reps: number; weight: number }[] };
 
 export const isBoss = (number: number) => number > 0 && number % BOSS_EVERY === 0;
 
@@ -33,7 +35,7 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
   const out: FrozenLevel[] = [];
   for (const l of raw) {
     if (!l || typeof l !== "object") continue;
-    const o = l as { number?: unknown; name?: unknown; cards?: unknown };
+    const o = l as { number?: unknown; name?: unknown; cards?: unknown; zombieRef?: unknown };
     if (typeof o.number !== "number") continue;
     const cards: FrozenCard[] = [];
     for (const c of Array.isArray(o.cards) ? o.cards : []) {
@@ -41,7 +43,8 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
       if (typeof k.exerciseId !== "string" || typeof k.reps !== "number" || typeof k.label !== "string" || typeof k.weight !== "number") continue;
       cards.push({ exerciseId: k.exerciseId, reps: k.reps, label: k.label, weight: k.weight, ...(k.off === true ? { off: true } : {}) });
     }
-    out.push({ number: o.number, name: typeof o.name === "string" ? o.name : null, boss: isBoss(o.number), cards });
+    const ref = Array.isArray(o.zombieRef) ? (o.zombieRef as { reps?: unknown; weight?: unknown }[]).filter((r) => typeof r?.reps === "number" && typeof r?.weight === "number").map((r) => ({ reps: r.reps as number, weight: r.weight as number })) : [];
+    out.push({ number: o.number, name: typeof o.name === "string" ? o.name : null, boss: isBoss(o.number), cards, ...(ref.length ? { zombieRef: ref } : {}) });
   }
   return out.sort((a, b) => a.number - b.number);
 }
@@ -258,7 +261,7 @@ export function zombieMarginS(speedLevel: number): number {
 export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DEFAULT_TEAM): { approachMs: number; bandMs: number; n: number } {
   const act = activeCards(level);
   const n = Math.max(1, act.length);
-  const est = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
+  const est = estimateSeconds(level.zombieRef?.length ? level.zombieRef : act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
   const bonus = zombieBonusS(level.number) * 1000;
   const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000 + bonus;
   return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 + bonus : 0, bandMs: band, n };
@@ -395,7 +398,11 @@ export function attemptEvents(level: FrozenLevel, teamId: string, ticks: Tick[],
   const mine = penalties.filter((p) => p.teamId === teamId && p.level === level.number);
   const later = mine.filter((p) => typeof p.atMs === "number" && p.atMs >= attemptStartMs);
   const initialTotalSec = cards.reduce((s, x) => s + cardSeconds(x.card), 0) - later.reduce((s, p) => s + p.reps * p.weight, 0);
+  // Fiches deja cochees AVANT le depart de la tentative (vie perdue « douce » : l'equipe garde son niveau et ses
+  // fiches) : elles comptent des le depart, le coeur est deja eloigne d'autant.
+  const doneBefore = ticks.filter((t) => t.teamId === teamId && t.level === level.number && t.atMs < attemptStartMs && secOf.has(t.card)).reduce((s, t) => s + secOf.get(t.card)!, 0);
   const events: AttemptEvent[] = [
+    ...(doneBefore > 0 ? [{ atMs: 0, sec: doneBefore, kind: "tick" } as AttemptEvent] : []),
     ...ticks.filter((t) => t.teamId === teamId && t.level === level.number && t.atMs >= attemptStartMs && secOf.has(t.card)).map((t): AttemptEvent => ({ atMs: t.atMs - attemptStartMs, sec: secOf.get(t.card)!, kind: "tick" })),
     ...later.map((p): AttemptEvent => ({ atMs: (p.atMs as number) - attemptStartMs, sec: p.reps * p.weight, kind: "penalty" })),
   ];
@@ -422,7 +429,11 @@ export const zombieTier = (speedLevel: number) => Math.max(1, Math.min(ZOMBIE_TI
 
 // ===== Progression d'une equipe =====
 export type Tick = { teamId: string; level: number; card: number; atMs: number };
-export type Loss = { teamId: string; level: number; atMs: number };
+// `soft` (Sartay 28/09) : vie perdue sans descente de niveau (les 5 premieres du WOD principal) ; les fiches
+// cochees restent, seul le zombie repart du debut (coeur neuf).
+export type Loss = { teamId: string; level: number; atMs: number; soft?: boolean };
+export const SOFT_LOSSES = 5;
+export const ZOMBIE_COIN_LOSS = 0.5; // part des pieces en banque perdue a chaque vie perdue (WOD principal)
 export type TeamProgress = {
   teamId: string;
   completedLevels: number; // niveaux entierement valides, dans l'ordre
@@ -637,7 +648,9 @@ export type CoinsEarned = { total: number; perLevel: CoinLevel[] };
 // derniere coche, rapporte au temps theorique du niveau tel qu'elle l'a joue.
 export function coinsEarned(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[] = [], extras: TeamPenalty[] = [], inPlay: (levelNumber: number) => number = coinsInPlay): CoinsEarned {
   const mine = ticks.filter((t) => t.teamId === teamId);
-  const myLosses = losses.filter((l) => l.teamId === teamId).map((l) => l.atMs);
+  // Seule une vie perdue AVEC descente relance le chrono des pieces d'un niveau : apres une vie « douce », l'equipe
+  // continue le meme niveau, son temps court toujours depuis la fin du niveau precedent.
+  const myLosses = losses.filter((l) => l.teamId === teamId && !l.soft).map((l) => l.atMs);
   const perLevel: CoinLevel[] = [];
   let prevEnd = 0;
   let total = 0;
@@ -658,11 +671,13 @@ export function coinsEarned(levels: FrozenLevel[], teamId: string, ticks: Tick[]
   }
   return { total, perLevel };
 }
-export type CoinEvent = { id: string; teamId: string; kind: "discount" | "rocket" | "send"; coins: number; at: number; toTeamId?: string; label?: string; reps?: number; giftId?: string; level?: number; index?: number };
+// « zombie » (Sartay 28/09) : la moitie des pieces en banque perdue a chaque vie perdue au WOD principal (id = la
+// vie perdue, pour ne jamais la compter deux fois).
+export type CoinEvent = { id: string; teamId: string; kind: "discount" | "rocket" | "send" | "zombie"; coins: number; at: number; toTeamId?: string; label?: string; reps?: number; giftId?: string; level?: number; index?: number };
 export function readCoinEvents(settings: unknown): CoinEvent[] {
   const raw = (settings as { coinEvents?: unknown } | null)?.coinEvents;
   if (!Array.isArray(raw)) return [];
-  return raw.filter((e): e is CoinEvent => !!e && typeof e === "object" && typeof (e as CoinEvent).teamId === "string" && typeof (e as CoinEvent).coins === "number" && ["discount", "rocket", "send"].includes((e as CoinEvent).kind));
+  return raw.filter((e): e is CoinEvent => !!e && typeof e === "object" && typeof (e as CoinEvent).teamId === "string" && typeof (e as CoinEvent).coins === "number" && ["discount", "rocket", "send", "zombie"].includes((e as CoinEvent).kind));
 }
 export function readCoinsCarry(settings: unknown): Record<string, number> {
   const raw = (settings as { coinsCarry?: unknown } | null)?.coinsCarry;
@@ -671,15 +686,18 @@ export function readCoinsCarry(settings: unknown): Record<string, number> {
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === "number" && v >= 0) out[k] = Math.floor(v);
   return out;
 }
-export type CoinsState = { earned: number; carry: number; spent: number; bank: number; rockets: number; sends: number; stock: number; perLevel: CoinLevel[] };
+// `lost` = pieces mangees par le zombie (vies perdues) : elles sortent de la banque ET du score de classement
+// (`score` = gagnees + report - perdues ; les pieces depensees, elles, comptent toujours au classement).
+export type CoinsState = { earned: number; carry: number; spent: number; lost: number; score: number; bank: number; rockets: number; sends: number; stock: number; perLevel: CoinLevel[] };
 export function coinsState(levels: FrozenLevel[], teamId: string, ticks: Tick[], losses: Loss[], extras: TeamPenalty[], events: CoinEvent[], carry: Record<string, number>, inPlay: (levelNumber: number) => number = coinsInPlay): CoinsState {
   const e = coinsEarned(levels, teamId, ticks, losses, extras, inPlay);
   const mine = events.filter((x) => x.teamId === teamId);
-  const spent = mine.reduce((s, x) => s + x.coins, 0);
+  const spent = mine.filter((x) => x.kind !== "zombie").reduce((s, x) => s + x.coins, 0);
+  const lost = mine.filter((x) => x.kind === "zombie").reduce((s, x) => s + x.coins, 0);
   const rockets = mine.filter((x) => x.kind === "rocket").length;
   const sends = mine.filter((x) => x.kind === "send").length;
   const c = carry[teamId] ?? 0;
-  return { earned: e.total, carry: c, spent, bank: Math.max(0, e.total + c - spent), rockets, sends, stock: Math.max(0, rockets - sends), perLevel: e.perLevel };
+  return { earned: e.total, carry: c, spent, lost, score: Math.max(0, e.total + c - lost), bank: Math.max(0, e.total + c - spent - lost), rockets, sends, stock: Math.max(0, rockets - sends), perLevel: e.perLevel };
 }
 // Reps « rondes » pour une duree de travail : dizaines (ponderation <= 3), multiples de 5 (4 a 8), unites au-dela.
 export function roundRepsFor(weight: number, seconds: number): number {

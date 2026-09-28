@@ -8,15 +8,19 @@
 
 export type ChildKind = "warmup" | "finisher";
 
-export type SeriesDef = { name: string; boss?: boolean; cards: [label: string, reps: number][] };
+// `zombieRef` : fiches de reference pour le temps du zombie (celles d'avant l'allegement du 28/09).
+export type SeriesDef = { name: string; boss?: boolean; cards: [label: string, reps: number][]; zombieRef?: [label: string, reps: number][] };
 
+// 28/09 (Sartay : « beaucoup plus facile, divise par 2 ou 3, ne pas changer le temps du zombie ») : reps divisees
+// par 3 quand le resultat reste rond, sinon par 2 ; le tire tapis reste a 1. Le zombie garde le temps des
+// anciennes series (zombieRef), donc les equipes ont beaucoup plus de marge.
 export const WARMUP_SERIES: SeriesDef[] = [
-  { name: "Série A", cards: [["SMASH DOWN", 20], ["CORDE", 100], ["ONE REP", 30]] },
-  { name: "Série B", cards: [["WALL BALL SHOT", 20], ["FLIP TAPIS", 20], ["KB SWING", 50], ["CORDE", 10]] },
-  { name: "Série C", cards: [["POMPES", 30], ["WALL BALL SHOT", 30], ["TRACTIONS", 30]] },
-  { name: "Série D", cards: [["SMASH DOWN", 30], ["BREAK DANCE", 20], ["KB SNATCH", 60]] },
-  { name: "Série E", cards: [["TIRE TAPIS AR", 1], ["ALLER-RETOUR", 10], ["CORDE", 100]] },
-  { name: "BOSS · Horde", boss: true, cards: [["BURPEES", 60]] },
+  { name: "Série A", cards: [["SMASH DOWN", 10], ["CORDE", 50], ["ONE REP", 10]], zombieRef: [["SMASH DOWN", 20], ["CORDE", 100], ["ONE REP", 30]] },
+  { name: "Série B", cards: [["WALL BALL SHOT", 10], ["FLIP TAPIS", 10], ["KB SWING", 25], ["CORDE", 5]], zombieRef: [["WALL BALL SHOT", 20], ["FLIP TAPIS", 20], ["KB SWING", 50], ["CORDE", 10]] },
+  { name: "Série C", cards: [["POMPES", 10], ["WALL BALL SHOT", 10], ["TRACTIONS", 10]], zombieRef: [["POMPES", 30], ["WALL BALL SHOT", 30], ["TRACTIONS", 30]] },
+  { name: "Série D", cards: [["SMASH DOWN", 10], ["BREAK DANCE", 10], ["KB SNATCH", 20]], zombieRef: [["SMASH DOWN", 30], ["BREAK DANCE", 20], ["KB SNATCH", 60]] },
+  { name: "Série E", cards: [["TIRE TAPIS AR", 1], ["ALLER-RETOUR", 5], ["CORDE", 50]], zombieRef: [["TIRE TAPIS AR", 1], ["ALLER-RETOUR", 10], ["CORDE", 100]] },
+  { name: "BOSS · Horde", boss: true, cards: [["BURPEES", 20]], zombieRef: [["BURPEES", 60]] },
 ];
 
 // Finisher (Sartay) : EMOM en cinq vagues cadencees par le chrono. Dans une vague les fiches se decouvrent

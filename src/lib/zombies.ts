@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
-import { activeCards, attemptEvents, cardSeconds, cardsForTeam, emomSchedule, emomWaveEvents, emomZombieSim, heartCarryBites, ladderFor, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomSchedule, emomWaveEvents, emomZombieSim, heartCarryBites, ladderFor, readCoinEvents, readCoinsCarry, SOFT_LOSSES, ZOMBIE_COIN_LOSS, type CoinEvent, orderedLevels, progressOf, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel, EMOM_ZOMBIE_SPEED, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
 
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
@@ -32,7 +32,7 @@ export type ZombieContext = {
   pauses: { from: number; to: number | null }[];
   teams: { id: string }[];
   ticks: { id: string; teamId: string; level: number; card: number; at: unknown }[];
-  losses: { teamId: string; level: number; at: unknown }[];
+  losses: { teamId: string; level: number; at: unknown; soft?: boolean }[];
 };
 
 export async function loadZombieContext(sessionId: string, onlyTeamId?: string): Promise<ZombieContext | null> {
@@ -64,7 +64,7 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const capMs = typeof capMin === "number" && Number.isFinite(capMin) && capMin > 0 ? Math.round(capMin) * 60_000 : null;
   const nowRace = Math.min(elapsed(startedAtMs, pauses, nowMs) ?? 0, capMs ?? Number.POSITIVE_INFINITY);
   let ticks: (Tick & { id: string })[] = ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   let applied = 0;
   const order = readLevelOrder(session.settings);
   const fixed = readFixedZombie(session.settings);
@@ -72,6 +72,11 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
   const teamStars = readTeamStars(session.settings);
   const teamFormats = readTeamFormats(session.settings);
   const voided = new Set<string>(); // fiches recues (fusees) annulees par une chute
+  // WOD principal (pas l'echauffement ni le finisher) : regles du 28/09 (vies douces, pieces perdues).
+  const isMain = !(session.settings as { child?: unknown } | null)?.child;
+  const coinEvents: CoinEvent[] = readCoinEvents(session.settings);
+  const coinsCarry = readCoinsCarry(session.settings);
+  const zombieCoins: CoinEvent[] = []; // pieces mangees a enregistrer
   const penalties = readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined }));
 
   // Finisher (EMOM) : une vie perdue par vague non bouclee a sa fin ; les coches restent (les vagues
@@ -115,26 +120,40 @@ export async function applyZombieCatches(sessionId: string, onlyTeamId?: string,
       const deadline = p.attemptStartMs + sim.catchAtMs;
       // Rattrape : vie perdue a l'instant exact ou le zombie a touche le coeur, retour au niveau precedent.
       const catchAbs = absoluteFromRace(startedAtMs, pauses, deadline, nowMs);
-      await db.orm.public.LevelLoss.create({ sessionId, teamId: t.id, level: p.currentLevel, at: Temporal.Instant.fromEpochMilliseconds(Math.round(catchAbs)) });
-      // Retour au niveau precedent DANS L'ORDRE DE L'EQUIPE : on efface les fiches du niveau en cours et du
-      // precedent de sa sequence (au premier niveau de la sequence, seulement le niveau en cours).
-      const seq = mine.map((l) => l.number);
-      const at = seq.indexOf(p.currentLevel);
-      const doomedLevels = new Set(at > 0 ? [seq[at - 1], p.currentLevel] : [p.currentLevel]);
-      const doomed = ticks.filter((x) => x.teamId === t.id && doomedLevels.has(x.level));
-      for (const x of doomed) await db.orm.public.LevelTick.where({ id: x.id }).delete();
-      ticks = ticks.filter((x) => !doomed.includes(x));
-      losses.push({ teamId: t.id, level: p.currentLevel, atMs: deadline });
+      // Sartay 28/09 : au WOD principal, les 5 premieres vies perdues sont « douces » (pas de descente, fiches
+      // gardees, le zombie repart du debut avec un coeur neuf) ; ensuite, retour au niveau precedent comme avant.
+      const soft = isMain && losses.filter((x) => x.teamId === t.id).length < SOFT_LOSSES;
+      const lossRow = await db.orm.public.LevelLoss.create({ sessionId, teamId: t.id, level: p.currentLevel, soft, at: Temporal.Instant.fromEpochMilliseconds(Math.round(catchAbs)) });
+      if (!soft) {
+        // Retour au niveau precedent DANS L'ORDRE DE L'EQUIPE : on efface les fiches du niveau en cours et du
+        // precedent de sa sequence (au premier niveau de la sequence, seulement le niveau en cours).
+        const seq = mine.map((l) => l.number);
+        const at = seq.indexOf(p.currentLevel);
+        const doomedLevels = new Set(at > 0 ? [seq[at - 1], p.currentLevel] : [p.currentLevel]);
+        const doomed = ticks.filter((x) => x.teamId === t.id && doomedLevels.has(x.level));
+        for (const x of doomed) await db.orm.public.LevelTick.where({ id: x.id }).delete();
+        ticks = ticks.filter((x) => !doomed.includes(x));
+        // Les fiches recues d'une fusee qui ne sont pas dans un niveau encore boucle apres la chute sont effacees.
+        const kept = new Set(seq.slice(0, Math.max(0, at - 1)));
+        for (const g of penalties) if (g.kind === "gift" && g.teamId === t.id && g.id && !kept.has(g.level)) voided.add(g.id);
+      }
+      losses.push({ teamId: t.id, level: p.currentLevel, atMs: deadline, soft });
       applied++;
-      // Les fiches recues d'une fusee qui ne sont pas dans un niveau encore boucle apres la chute sont effacees.
-      const kept = new Set(seq.slice(0, Math.max(0, at - 1)));
-      for (const g of penalties) if (g.kind === "gift" && g.teamId === t.id && g.id && !kept.has(g.level)) voided.add(g.id);
+      // Chaque vie perdue au WOD principal coute la moitie des pieces en banque (arrondi vers le bas).
+      if (isMain) {
+        const bank = coinsState(mine, t.id, ticks, losses, penalties, [...coinEvents, ...zombieCoins], coinsCarry, coinsInPlay).bank;
+        const lostCoins = Math.floor(bank * ZOMBIE_COIN_LOSS);
+        if (lostCoins > 0) zombieCoins.push({ id: lossRow.id, teamId: t.id, kind: "zombie", coins: lostCoins, at: nowMs, level: p.currentLevel });
+      }
     }
   }
-  if (voided.size) {
-    const prev = (session.settings as Record<string, unknown> | null) ?? {};
-    const gifts = (Array.isArray(prev.gifts) ? (prev.gifts as Record<string, unknown>[]) : []).map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g));
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, gifts })) });
+  if (voided.size || zombieCoins.length) {
+    // Relecture juste avant d'ecrire : un autre appareil a pu depenser des pieces ou lancer une fusee entre-temps.
+    const fresh = ((await db.orm.public.Session.where({ id: sessionId }).first())?.settings as Record<string, unknown> | null) ?? {};
+    const gifts = (Array.isArray(fresh.gifts) ? (fresh.gifts as Record<string, unknown>[]) : []).map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g));
+    const existing = Array.isArray(fresh.coinEvents) ? (fresh.coinEvents as { id?: unknown }[]) : [];
+    const coinEventsNext = [...existing, ...zombieCoins.filter((z) => !existing.some((e) => e.id === z.id))];
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, coinEvents: coinEventsNext })) });
   }
   return applied;
 }

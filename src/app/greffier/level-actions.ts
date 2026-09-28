@@ -62,7 +62,7 @@ async function teamLive(sessionId: string, teamId: string, startedAtMs: number |
     rsId ? db.orm.public.YellowCard.where({ raceStateId: rsId, teamId }).all() : Promise.resolve([]),
   ]);
   const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
-  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const settled = await settleRockets(sessionId, settings, liveTicks, liveLosses, [teamId]);
   return {
     teamId,
@@ -98,7 +98,7 @@ export async function levelLiveAction(sessionId: string): Promise<LevelLive | { 
   const s = ctx.session.settings as { levels?: unknown; ladders?: unknown; teamStars?: unknown; teamFormat?: unknown; levelCapMin?: unknown } | null;
   const structure = `${teamIds.length}|${members.n}|${hash32(JSON.stringify([s?.levels ?? "", s?.ladders ?? "", s?.teamStars ?? "", s?.teamFormat ?? ""]))}|${readLevelCap(ctx.session.settings) ?? 0}|${startedAtMs ?? 0}|${rs?.endedAt ? 1 : 0}`;
   const liveTicks = ticks.map(liveTick(startedAtMs, pauses));
-  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const liveLosses = losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   // Rattrapages appliques : les reglages (fiches recues annulees) ont pu changer, on relit avant les fusees.
   const settingsNow = caught > 0 ? (await db.orm.public.Session.where({ id: sessionId }).first())?.settings ?? ctx.session.settings : ctx.session.settings;
   const settled = rs?.startedAt && !rs.endedAt ? await settleRockets(sessionId, settingsNow, liveTicks, liveLosses, teamIds) : settingsNow;
@@ -360,7 +360,7 @@ export async function levelYellowCardAction(sessionId: string, teamId: string, d
     await db.orm.public.YellowCard.create({ raceStateId: gate.rsId, teamId });
     const [ticks, losses] = await Promise.all([db.orm.public.LevelTick.where({ sessionId, teamId }).all(), db.orm.public.LevelLoss.where({ sessionId, teamId }).all()]);
     const levels = teamLadder(session.settings, teamId);
-    const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), readPenalties(session.settings));
+    const p = progressOf(levels, teamId, ticks.map((t): Tick => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(t.at)) ?? 0 })), losses.map((l): Loss => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(gate.startedAtMs, gate.pauses, toMs(l.at)) ?? 0 })), readPenalties(session.settings));
     if (p.currentLevel !== null) {
       const k = mine.length;
       penalties = [...penalties, { teamId, level: p.currentLevel, index: PENALTY_INDEX0 + k, reps: PENALTY_STEPS[Math.min(k, PENALTY_STEPS.length - 1)], label: "CORDE", weight: 1, at: Date.now() }];
@@ -404,6 +404,7 @@ export async function updateSessionLevelsAction(sessionId: string, input: Frozen
       const reps = Math.max(1, Math.min(10000, Math.round(c.reps)));
       return { exerciseId: c.exerciseId, reps, label: e?.label ?? c.label, weight: e?.weight ?? c.weight, ...(c.off ? { off: true } : {}) };
     }),
+    ...(l.zombieRef ? { zombieRef: l.zombieRef } : {}), // temps du zombie de reference (echauffement allege) conserve
   }));
   for (const [i, prev] of current.entries()) {
     const next = levels[i];

@@ -63,7 +63,7 @@ async function raceData(sessionId: string, teamId?: string) {
   if (!ctx?.rs?.startedAt) return null;
   const startedAtMs = toMs(ctx.rs.startedAt);
   const ticks: Tick[] = ctx.ticks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, ctx.pauses, toMs(t.at)) ?? 0 }));
-  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, ctx.pauses, toMs(l.at)) ?? 0 }));
+  const losses: Loss[] = ctx.losses.map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, ctx.pauses, toMs(l.at)) ?? 0 }));
   return { ctx, ticks, losses };
 }
 
@@ -119,7 +119,7 @@ export async function sendRocket(sessionId: string, teamId: string, exerciseId: 
   const groupOf = (id: string) => parcoursKey(teamStarsOf(teamStars, id), teamFormatOf(teamFormats, id));
   const carry = readCoinsCarry(settings);
   const progress = ctx.teams.map((t) => progressOf(teamLadder(settings, t.id), t.id, ticks, losses, extras));
-  const ranked = rankTeams(progress, (id) => bankOf(settings, id, ticks, losses).earned + (carry[id] ?? 0));
+  const ranked = rankTeams(progress, (id) => bankOf(settings, id, ticks, losses).score);
   const rows = ctx.teams.map((t) => {
     const group = groupOf(t.id);
     const grp = ranked.filter((p) => groupOf(p.teamId) === group);

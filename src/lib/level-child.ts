@@ -30,6 +30,8 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
       if (!e) throw new Error(`Exercice inconnu dans les séries : ${label}`);
       return { exerciseId: e.id, reps, label: e.label, weight: e.weight };
     }),
+    // Temps du zombie calcule sur les series d'avant l'allegement (echauffement divise par 2 ou 3, zombie inchange).
+    ...(s.zombieRef ? { zombieRef: s.zombieRef.map(([label, reps]) => ({ reps, weight: catalog.get(label)?.weight ?? 0 })) } : {}),
   }));
   // Le BOSS des series est reconnu par son drapeau, pas par « tous les 5 » : il porte le numero qui le rend
   // BOSS pour le moteur (multiple de 5), les autres series gardent 1..n.

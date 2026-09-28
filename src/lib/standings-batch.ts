@@ -164,7 +164,7 @@ function levelStandingsBatch(
 ): SessionStandings {
   const levels = readFrozenFromSettings(session.settings);
   const ticks: Tick[] = rawTicks.map((t) => ({ teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 }));
-  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
+  const losses: Loss[] = rawLosses.map((l) => ({ teamId: l.teamId, level: l.level, soft: !!(l as { soft?: unknown }).soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 }));
   const lastAbs = new Map<string, number>();
   for (const t of rawTicks) lastAbs.set(t.teamId, Math.max(lastAbs.get(t.teamId) ?? 0, toMs(t.at)));
   const order = readLevelOrder(session.settings);

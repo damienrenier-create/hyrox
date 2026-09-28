@@ -127,10 +127,10 @@ export function LevelSettings({ sessionId, phase, numTeams, capMin, refereeMode,
 
       <section className={ui.cardPad}>
         <h3 className={ui.h3}>Mode zombies</h3>
-        <p className={`${ui.hint} mb-2`}>Sur chaque niveau, un zombie atteint la première fiche en 1 min puis traverse les fiches au rythme « durée du niveau + marge » (+3 min au niveau 1, −2 min au niveau 20, et elle continue de fondre jusqu'au 25). Chaque fiche cochée éloigne le cœur, une carte jaune le rapproche. Au contact, le zombie mange le cœur en trois bouchées (30 s au palier 1, 10 s à partir du palier 20) : cœur dévoré = une vie perdue et retour au niveau précédent, et le zombie descend de trois paliers. Le classement compte les niveaux, puis les vies perdues. Le zombie se fige au temps imposé.</p>
+        <p className={`${ui.hint} mb-2`}>Sur chaque niveau, un zombie atteint la première fiche en 1 min puis traverse les fiches au rythme « durée du niveau + marge » (+3 min au niveau 1, −2 min au niveau 20, et elle continue de fondre jusqu'au 25). Chaque fiche cochée éloigne le cœur, une carte jaune le rapproche. Au contact, le zombie mange le cœur en trois bouchées (30 s au palier 1, 10 s à partir du palier 20) : cœur dévoré = une vie perdue et le zombie qui descend de trois paliers. Au WOD principal, chaque vie perdue coûte aussi la moitié des pièces en banque, et les 5 premières ne font pas redescendre : les fiches cochées restent et le zombie repart du début avec un cœur neuf ; à partir de la 6ᵉ, retour au niveau précédent. À l&apos;échauffement, retour au niveau précédent comme avant, sans perte de pièces. Le classement compte les niveaux, puis les vies perdues. Le zombie se fige au temps imposé.</p>
         <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
           <input type="checkbox" checked={zombies} disabled={pending} onChange={(e) => run(e.target.checked ? "Mode zombies activé." : "Mode zombies désactivé.", () => setZombiesAction(sessionId, e.target.checked))} className={ui.check} />
-          🧟 Zombies (vies et retour au niveau précédent)
+          🧟 Zombies (vies, pièces perdues, retour au niveau précédent après 5 vies)
         </label>
       </section>
 

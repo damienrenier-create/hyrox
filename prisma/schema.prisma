@@ -484,6 +484,9 @@ model LevelLoss {
   teamId    String
   level     Int
   at        DateTime @default(now())
+  // Vie perdue « douce » (Sartay 28/09) : les 5 premieres du WOD principal, sans descente de niveau (les fiches
+  // cochees restent) ; au-dela, retour au niveau precedent. Dans les deux cas, -50 % des pieces.
+  soft      Boolean  @default(false)
 
   @@index([sessionId])
 }

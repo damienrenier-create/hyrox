@@ -1113,6 +1113,13 @@
                   "kind": "scalar"
                 }
               },
+              "soft": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "teamId": {
                 "nullable": false,
                 "type": {
@@ -1152,6 +1159,9 @@
                 },
                 "sessionId": {
                   "column": "sessionId"
+                },
+                "soft": {
+                  "column": "soft"
                 },
                 "teamId": {
                   "column": "teamId"
@@ -4339,6 +4349,15 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "soft": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
                 "teamId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6261,7 +6280,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "97cd79e33a98e3554d7f93b78be23a1378924f99bc1b85e919317496f05ab141"
+    "storageHash": "2fa65ffa86c6ffc339b2333e640ab5faaa34a6fc6330218ce9fd307f6d3800ee"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",
