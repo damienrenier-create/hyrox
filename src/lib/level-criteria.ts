@@ -176,6 +176,33 @@ export const CRITERIA: Record<string, string[]> = {
   ],
 };
 
+// Version courte (2 a 5 mots, meme ordre) pour la dia unique a projeter aux arbitres ; l'arbitre coche toujours
+// les phrases completes ci-dessus.
+export const SHORT_CRITERIA: Record<string, string[]> = {
+  POMPES: ["Corps aligné", "Poitrine au sol", "Bras tendus en haut", "Bassin fixe", "Descente contrôlée", "Rythme régulier"],
+  "SQUATS JUMP": ["Squat profond", "Extension complète", "Pieds décollent", "Réception amortie", "Dos droit, regard devant", "Enchaînement fluide"],
+  BURPEES: ["Poitrine et cuisses au sol", "Extension au saut", "Décolle, mains en haut", "Pieds ramenés groupés", "Ne s'écrase pas", "Intensité maintenue"],
+  "COMMANDO BRAS": ["Planche alignée", "Bassin stable", "Bras tendus en haut", "Coudes à la place des mains", "Bras alternés", "Sans élan des hanches"],
+  "BREAK DANCE": ["Jambe tendue sous le corps", "Bassin ne touche pas le sol", "Tronc tourne, en équilibre", "Bras libre dynamique", "Retour stable à 4 pattes", "Gauche/droite rythmé"],
+  "ONE REP": ["Planche, dos plat", "Bassin ne vrille pas", "Touches franches et croisées", "Crawling contrôlé", "Debout complet à la fin", "Rythme, sans pause"],
+  CORDE: ["Sauts souples, amortis", "Dos droit, épaules relâchées", "Rotation des poignets", "Corde fluide", "Rythme régulier", "Intensité maximale"],
+  "SMASH DOWN": ["Balle au-dessus de la tête", "Extension complète", "Lancer explosif", "Dos droit au ramassage", "Accompagne la balle", "Ramassage immédiat"],
+  "WALL BALL SHOT": ["Squat profond", "Cible à la bonne hauteur", "Réception en squat", "Dos droit, regard cible", "Un seul flux continu", "Bras tendus vers la cible"],
+  "TIRE TAPIS AR": ["Dos droit, buste fier", "Pousse avec les jambes", "Prise ferme, symétrique", "Traction continue", "Tapis toujours en mouvement", "Intensité maximale"],
+  "FLIP TAPIS": ["Squat, dos droit", "Poussée jambes et hanches", "Regard devant", "Tapis dans la zone", "Replacement immédiat", "Engagement total"],
+  "KB SNATCH": ["Bras verrouillé en haut", "Poussée des hanches", "La KB roule, ne tape pas", "Corps droit, gainé", "Descente contrôlée", "Rythme soutenu"],
+  "KB SWING": ["Explosion du bassin", "Dos droit, gainé", "Bras souples", "Hauteur atteinte", "Fessiers et abdos serrés", "Expire en montant"],
+  "KB TOUR": ["Dos droit", "Bassin immobile, gainé", "Passage de main sûr", "KB près du corps", "Poids adapté, vrai défi", "Vitesse soutenue"],
+  "ALLER-RETOUR": ["Freine en s'abaissant", "Ligne touchée", "Relance explosive", "Ne ralentit pas avant la ligne", "Vrai sprint", "Intensité maximale"],
+  "MONKEY SLIDE": ["Réception amortie", "Appui franc des mains", "Squat avant et après", "Pieds ensemble", "Gauche/droite fluide", "Rythme soutenu"],
+  "PLANK SLIDE": ["Planche alignée", "Bassin ne vrille pas", "Main croisée", "Disque loin de chaque côté", "Mains stables entre deux", "Rythme, sans pause"],
+  "FENTES DISK": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Retour debout complet", "Buste droit, gainé", "Disque tenu ferme", "Équilibre géré"],
+  TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
+  "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
+  "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
+};
+export const shortCriteriaFor = (label: string): string[] => SHORT_CRITERIA[label.trim().toUpperCase()] ?? criteriaFor(label);
+
 // Exercice ajoute plus tard sans criteres : grille generique (meme ordre d'importance).
 export const GENERIC_CRITERIA = [
   "Le dos reste droit et la posture est sécurisée pendant tout le mouvement.",

@@ -1,7 +1,41 @@
 // Dia des criteres pour les arbitres (eleves dispenses), a projeter avant le WOD (Sartay 28/09). Module pur :
 // servi par /admin/level/criteres et utilise pour generer le PDF. 16:9, 2 exercices par dia, une dia de regle.
 
-import { CRITERIA, criteriaFor, exoLabel } from "@/lib/level-criteria";
+import { CRITERIA, criteriaFor, exoLabel, shortCriteriaFor } from "@/lib/level-criteria";
+
+// Dia UNIQUE (Sartay 28/09 : « faut le faire tenir en 1 dia ») : les 21 exercices, 6 criteres courts chacun,
+// grille 7 x 3, bareme en tete. Les phrases completes restent sur le telephone de l'arbitre.
+export function renderCriteriaOneSlide(labels: string[], subtitle: string): string {
+  const known = Object.keys(CRITERIA);
+  const ordered = [...labels.filter((l) => known.includes(l.toUpperCase())).sort((a, b) => known.indexOf(a.toUpperCase()) - known.indexOf(b.toUpperCase())), ...labels.filter((l) => !known.includes(l.toUpperCase()))];
+  const cols = ordered.length > 18 ? 7 : ordered.length > 12 ? 6 : ordered.length > 8 ? 4 : 3;
+  const cells = ordered.map((l) => `<div class="c"><h3>${esc(exoLabel(l))}</h3><ol>${shortCriteriaFor(l).map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>`).join("");
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Critères des arbitres</title><style>
+@page { size: 1920px 1080px; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+body { font-family: "Segoe UI", Arial, sans-serif; color: #141414; background: #fbfaf6; padding: 22px 30px 16px; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; align-items: center; gap: 24px; }
+h1 { font-size: 46px; margin: 0; letter-spacing: -0.5px; white-space: nowrap; }
+.sub { font-size: 20px; color: #666; font-weight: 600; }
+.scale { margin-left: auto; display: flex; gap: 8px; }
+.scale span { background: #fff; border: 2px solid #e2e2e2; border-radius: 12px; padding: 6px 12px; font-size: 22px; font-weight: 700; white-space: nowrap; }
+.ti { color: #dc2626; } .i { color: #ea580c; } .s { color: #d97706; } .b { color: #4d7c0f; } .tb { color: #059669; } .e { color: #0284c7; }
+.grid { flex: 1; display: grid; grid-template-columns: repeat(${cols}, 1fr); grid-auto-rows: 1fr; gap: 12px; min-height: 0; }
+.c { background: #fff; border: 3px solid #e2e2e2; border-radius: 18px; padding: 10px 14px; display: flex; flex-direction: column; min-height: 0; }
+.c h3 { font-size: 25px; margin: 0 0 6px; color: #c0392b; line-height: 1.1; }
+.c ol { margin: 0; padding-left: 26px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.c li { font-size: 20px; line-height: 1.18; }
+.c li::marker { font-weight: 800; color: #999; }
+.c li:nth-child(-n+2) { font-weight: 700; }
+.foot { font-size: 19px; color: #555; text-align: center; }
+</style></head><body>
+<div class="top"><h1>🧑‍⚖️ Critères des arbitres</h1><span class="sub">${esc(subtitle)} · coche seulement ce que tu as vraiment vu</span>
+<div class="scale"><span>1 = <b class="ti">TI</b></span><span>2 = <b class="i">I</b></span><span>3 = <b class="s">S</b></span><span>4 = <b class="b">B</b></span><span>5 = <b class="tb">TB</b></span><span>6 = <b class="e">E</b></span></div></div>
+<div class="grid">${cells}</div>
+<div class="foot">Du plus important (en gras : sécurité, posture) au moins important (rythme, intensité). Sur ton téléphone, chaque critère est écrit en entier.</div>
+</body></html>`;
+}
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 // « KB SNATCH » -> « KB snatch », « TIRE TAPIS AR » -> « Tire tapis AR » : sigles gardes en capitales.

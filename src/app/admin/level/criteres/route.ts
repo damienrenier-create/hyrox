@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listExercises, readFrozenFromSettings } from "@/lib/level";
-import { renderCriteriaSlides } from "@/lib/criteria-slides";
+import { renderCriteriaOneSlide, renderCriteriaSlides } from "@/lib/criteria-slides";
 import { CRITERIA } from "@/lib/level-criteria";
 import { activeCards, readLadders } from "@/lib/wod-engines/templates/level-engine";
 
@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const user = await getSession();
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) return Response.redirect(new URL("/", req.url), 307);
-  const sessionId = new URL(req.url).searchParams.get("session");
+  const params = new URL(req.url).searchParams;
+  const sessionId = params.get("session");
+  const detail = params.get("detail") === "1"; // version detaillee (2 exercices par dia) ; par defaut, une seule dia
   let labels: string[] = [];
   let subtitle = "Les 21 exercices du WOD Level";
   if (sessionId) {
@@ -27,5 +29,5 @@ export async function GET(req: Request) {
     const cat = (await listExercises()).filter((e) => e.active).map((e) => e.label);
     labels = cat.length ? cat : Object.keys(CRITERIA);
   }
-  return new Response(renderCriteriaSlides(labels, subtitle), { headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(detail ? renderCriteriaSlides(labels, subtitle) : renderCriteriaOneSlide(labels, subtitle), { headers: { "content-type": "text/html; charset=utf-8" } });
 }
