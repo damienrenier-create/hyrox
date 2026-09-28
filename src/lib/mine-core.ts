@@ -50,9 +50,65 @@ export function layoutForRound(sessionId: string, round: number, dense = false):
     [all[i], all[j]] = [all[j], all[i]];
   }
   const mines = Array.from({ length: MINE_ROWS }, () => Array<boolean>(MINE_COLS).fill(false));
-  for (const [r, c] of all.slice(0, dense && round > 0 ? mineCountForRound(round) : MINE_COUNT)) mines[r][c] = true;
+  if (dense && round > 0) {
+    // Cartes suivantes (Sartay 28/09) : jamais plus de 4 cases a 0 collees. On tire plusieurs dispositions (graine
+    // de la manche, donc toujours la meme carte) et on garde celle qui demande le moins de bombes en plus.
+    let best: boolean[][] | null = null;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const cells: [number, number][] = [];
+      for (let r = 0; r < MINE_ROWS; r++) for (let c = 0; c < MINE_COLS; c++) cells.push([r, c]);
+      for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+      const m = Array.from({ length: MINE_ROWS }, () => Array<boolean>(MINE_COLS).fill(false));
+      for (const [r, c] of cells.slice(0, mineCountForRound(round))) m[r][c] = true;
+      capZeroClusters(m, rnd, MAX_ZERO_CLUSTER);
+      if (!best || mineCountOf(m) < mineCountOf(best)) best = m;
+    }
+    return best!;
+  }
+  for (const [r, c] of all.slice(0, MINE_COUNT)) mines[r][c] = true;
   if (dense && round === 0) fillEmpty(mines, rnd);
   return mines;
+}
+export const MAX_ZERO_CLUSTER = 4;
+// Groupes de cases a 0 qui se touchent (8 voisins, comme la cascade).
+export function zeroClusters(mines: boolean[][]): [number, number][][] {
+  const nums = numbersOf(mines);
+  const seen = new Set<string>();
+  const out: [number, number][][] = [];
+  for (let r = 0; r < MINE_ROWS; r++) for (let c = 0; c < MINE_COLS; c++) {
+    if (mines[r][c] || nums[r][c] !== 0 || seen.has(`${r}_${c}`)) continue;
+    const group: [number, number][] = [];
+    const stack: [number, number][] = [[r, c]];
+    seen.add(`${r}_${c}`);
+    while (stack.length) {
+      const [a, b] = stack.pop()!;
+      group.push([a, b]);
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const rr = a + dr, cc = b + dc, k = `${rr}_${cc}`;
+        if ((dr || dc) && rr >= 0 && rr < MINE_ROWS && cc >= 0 && cc < MINE_COLS && !seen.has(k) && !mines[rr][cc] && nums[rr][cc] === 0) { seen.add(k); stack.push([rr, cc]); }
+      }
+    }
+    out.push(group);
+  }
+  return out;
+}
+// Casse les groupes de 0 trop grands : une bombe au coeur du plus grand groupe (la case a 0 qui a le plus de
+// voisins a 0), jusqu'a ce qu'aucun groupe ne depasse max.
+function capZeroClusters(mines: boolean[][], rnd: () => number, max: number): void {
+  for (let guard = 0; guard < MINE_ROWS * MINE_COLS; guard++) {
+    const big = zeroClusters(mines).filter((g) => g.length > max).sort((a, b) => b.length - a.length)[0];
+    if (!big) return;
+    const inBig = new Set(big.map(([r, c]) => `${r}_${c}`));
+    let pick = big[0];
+    let score = -1;
+    for (const [r, c] of big) {
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if ((dr || dc) && inBig.has(`${r + dr}_${c + dc}`)) n++;
+      const sc = n + rnd() * 0.5;
+      if (sc > score) { score = sc; pick = [r, c]; }
+    }
+    mines[pick[0]][pick[1]] = true;
+  }
 }
 function fillEmpty(mines: boolean[][], rnd: () => number): void {
   for (let guard = 0; guard < MINE_ROWS * MINE_COLS; guard++) {
