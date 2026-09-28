@@ -557,11 +557,11 @@ export function LevelClient({
               />
             ) : (
               <>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                 {FORMATS.flatMap((fm) => ([3, 2, 1] as Stars[]).map((st) => ({ fm, st, key: parcoursKey(st, fm) }))).filter(({ key }) => teams.some((t) => groupOf(t.id) === key)).map(({ fm, st, key }) => {
                   const group = ranked.filter((p) => groupOf(p.teamId) === key).sort((a, b) => bossOrder.cmp(a.teamId, b.teamId));
                   return (
-                    <section key={key} className="rounded-2xl p-1.5 flex flex-col gap-1.5" style={{ background: STAR_BG[st] }}>
+                    <section key={key} className="rounded-xl p-1 flex flex-col gap-1" style={{ background: STAR_BG[st] }}>
                       {group.map((p) => {
                         const t = teamById.get(p.teamId)!;
                         return (
@@ -1040,9 +1040,11 @@ const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500,
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
-const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
+const STAR_BG: Record<Stars, string> = { 3: "#f4c2c7", 2: "#bcd4f0", 1: "#bde5c8" };
+// Bord gauche de chaque ligne : la couleur franche du parcours (28/09, « augmenter le contraste »).
+const STAR_STRONG: Record<Stars, string> = { 3: "#c0392b", 2: "#2471a3", 1: "#1e8449" };
 // Filigrane « ÉQUIPE n » colore selon le parcours (Sartay 28/09 : la couleur remplace les etoiles a l'ecran).
-const STAR_INK: Record<Stars, string> = { 3: "rgba(192, 57, 43, 0.55)", 2: "rgba(36, 113, 163, 0.55)", 1: "rgba(30, 132, 73, 0.55)" };
+const STAR_INK: Record<Stars, string> = { 3: "rgba(160, 35, 25, 0.62)", 2: "rgba(25, 85, 135, 0.62)", 1: "rgba(20, 105, 55, 0.62)" };
 
 function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
   onRocket?: () => void;
@@ -1200,15 +1202,16 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   return (
     <section
       title={team.members.map((m) => m.name).join(", ")}
-      className={cx(ui.card, "relative px-2 py-1 flex items-center gap-2 min-w-0 h-20 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse", levelFlash && "levelup", shaking && "shake")}
+      style={{ borderLeft: `6px solid ${STAR_STRONG[stars]}` }}
+      className={cx(ui.card, "relative px-2 py-0.5 flex items-center gap-2 min-w-0 h-16 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse", levelFlash && "levelup", shaking && "shake")}
     >
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
       <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
-        <span className={cx("relative w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
+        <span className={cx("relative w-12 h-12 rounded-xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
           {rank > 0 ? (
             <>
               <span className="text-[9px] font-bold tracking-widest opacity-70">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "RANG"}</span>
-              <span className="text-2xl">#<Odometer value={rank} /></span>
+              <span className="text-xl">#<Odometer value={rank} /></span>
             </>
           ) : "—"}
           <AnimatePresence>
@@ -1222,6 +1225,28 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
             <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate" title={`Parcours ${starsName(stars)}`}>{team.name}</span>
             {format !== "big" && <span className="text-[10px] font-bold text-ink-2 bg-line rounded px-1 flex-shrink-0" title={formatName(format)}>{formatLabel(format)}</span>}
             {zombies && <span className={cx("font-display font-black text-xl leading-none tabular-nums flex-shrink-0", p.losses > 0 ? "text-danger-ink" : "text-ink-3")} title="Vies perdues">💔<Odometer value={p.losses} /></span>}
+          {coins && (
+            <span className="relative">
+              <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0 font-display font-black text-lg leading-tight border-2 flex-shrink-0", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3", coinBurst && "coinpulse")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
+                🪙<Odometer value={coins.bank} />
+              </button>
+              {coinOpen && (
+                <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
+                  <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "prête 🚀 (clique dessus)" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
+                  {target ? (
+                    <>
+                      <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
+                      <span className="flex flex-wrap gap-1">
+                        {DISCOUNT_STEPS.map((n) => { const k = Math.min(n, target.card.reps - 1); const cost = k * target.card.weight; return (
+                          <button key={n} type="button" disabled={!canTick || k <= 0 || cost > coins.bank} onClick={() => { setCoinOpen(false); onDiscount?.(n); }} className={cx(btn.smSoft, "disabled:opacity-40")} title={`${cost} pièces`}>−{k} · {cost}🪙</button>
+                        ); })}
+                      </span>
+                    </>
+                  ) : <span className="block text-[11px] text-ink-3">Rien à alléger sur ce niveau.</span>}
+                </span>
+              )}
+            </span>
+          )}
           </div>
           <div className="flex items-baseline gap-1.5 min-w-0" title={level?.name ?? undefined}>
             {finished ? (
@@ -1233,30 +1258,6 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
               </>
             ) : (
               <span className={ui.hint}>Échelle vide.</span>
-            )}
-          </div>
-          <div className="text-[11px] text-ink-2 tabular-nums flex items-center gap-2 mt-0.5">
-            {coins && (
-              <span className="relative">
-                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display font-black text-lg leading-tight border-2", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3", coinBurst && "coinpulse")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
-                  🪙<Odometer value={coins.bank} />
-                </button>
-                {coinOpen && (
-                  <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
-                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "prête 🚀 (clique dessus)" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
-                    {target ? (
-                      <>
-                        <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
-                        <span className="flex flex-wrap gap-1">
-                          {DISCOUNT_STEPS.map((n) => { const k = Math.min(n, target.card.reps - 1); const cost = k * target.card.weight; return (
-                            <button key={n} type="button" disabled={!canTick || k <= 0 || cost > coins.bank} onClick={() => { setCoinOpen(false); onDiscount?.(n); }} className={cx(btn.smSoft, "disabled:opacity-40")} title={`${cost} pièces`}>−{k} · {cost}🪙</button>
-                          ); })}
-                        </span>
-                      </>
-                    ) : <span className="block text-[11px] text-ink-3">Rien à alléger sur ce niveau.</span>}
-                  </span>
-                )}
-              </span>
             )}
           </div>
         </div>
