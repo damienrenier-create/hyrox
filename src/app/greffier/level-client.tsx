@@ -1332,7 +1332,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
 
       {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
       {coins && coins.stock > 0 && !finished && (
-        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : clique pour la lancer (cible : le concurrent direct, sinon le top 4 en partant du premier, sinon au hasard ; charge : un exercice maîtrisé, d'autant plus gros que l'équipe a de pièces)"><span className="inline-block animate-bounce">🚀</span></button>
+        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : clique pour la lancer (cible : le concurrent direct — dans le top 4 l'équipe juste devant, le premier vise le deuxième —, sinon le top 4 en partant du premier, sinon au hasard ; charge : un exercice maîtrisé, d'autant plus gros que l'équipe a de pièces)"><span className="inline-block animate-bounce">🚀</span></button>
       )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">

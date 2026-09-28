@@ -666,8 +666,8 @@ export function rocketPayload(mastered: Mastered[], score: number): (Mastered & 
   const reps = Math.max(5, Math.min(50, Math.round(ROCKET_WORK_S / Math.max(0.1, pick.weight) / 5) * 5));
   return { ...pick, reps };
 }
-// Cible d'une fusee (Sartay 28/09, la fusee part au clic) : 1) le concurrent direct, l'equipe la plus proche au
-// classement hors top 4 et jamais la derniere (a egalite, celle de devant) ; 2) sinon le top 4 en partant du
+// Cible d'une fusee (Sartay 28/09, la fusee part au clic) : 1) le concurrent direct (top 4 : l'equipe juste devant,
+// le premier vise le deuxieme ; au-dela : la plus proche hors top 4, jamais la derniere) ; 2) sinon le top 4 en partant du
 // premier ; 3) sinon au hasard (jamais la derniere). Toujours : ni soi, ni l'equipe touchee par la fusee
 // precedente du parcours, ni une equipe arrivee au bout ou sur son dernier niveau. Parcours avec moins de deux
 // adversaires : toutes les equipes.
@@ -680,9 +680,13 @@ export function pickRocketTarget<T extends { teamId: string; group: string; rank
   const last = [...sendTargets].reverse().find((id) => ids.has(id)) ?? null;
   const ok = (t: T) => !t.finished && t.hasNext && t.teamId !== last;
   const isLast = (t: T) => t.groupSize > 1 && t.rankInGroup === t.groupSize;
-  const rival = base
-    .filter((t) => ok(t) && t.rankInGroup > ROCKET_TOP && !isLast(t))
-    .sort((a, b) => Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0];
+  // Concurrent direct. Top 4 (Sartay 28/09) : l equipe juste devant (4 sur 3, 3 sur 2, 2 sur 1), le premier sur le
+  // deuxieme. Au-dela du top 4 : l equipe la plus proche hors top 4, jamais la derniere (a egalite, celle de devant).
+  const rival = me.rankInGroup <= ROCKET_TOP
+    ? base.filter((t) => t.group === me.group).find((t) => t.rankInGroup === (me.rankInGroup === 1 ? 2 : me.rankInGroup - 1) && ok(t) && !isLast(t))
+    : base
+        .filter((t) => ok(t) && t.rankInGroup > ROCKET_TOP && !isLast(t))
+        .sort((a, b) => Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0];
   if (rival) return { target: rival, why: "rival" };
   const top = base.filter((t) => ok(t) && t.rankInGroup <= ROCKET_TOP && !isLast(t)).sort((a, b) => a.rankInGroup - b.rankInGroup)[0];
   if (top) return { target: top, why: "top" };
