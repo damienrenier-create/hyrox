@@ -37,6 +37,9 @@ function mulberry32(seed: number) {
 // reste une case sans bombe autour, une bombe est ajoutee a cote d'elle (la ou elle couvre le plus de cases
 // vides). Plus de cascade : chaque case ouverte affiche un chiffre. Les cartes deja jouees gardent l'ancienne
 // disposition (voir mineDense).
+// Cartes suivantes (Sartay 28/09) : de plus en plus difficiles, avec MOINS de bombes a chaque carte (16, 14, 12,
+// 10, puis 8) et donc des cases a 0 qui s ouvrent en cascade. Seule la premiere carte est sans case vide.
+export const mineCountForRound = (round: number) => Math.max(8, 18 - 2 * round);
 export function layoutForRound(sessionId: string, round: number, dense = false): boolean[][] {
   const pick = hash32(`${sessionId}#pick`) % MINE_LAYOUTS;
   const rnd = mulberry32(hash32(`${sessionId}#${pick}#round${round}`));
@@ -47,8 +50,8 @@ export function layoutForRound(sessionId: string, round: number, dense = false):
     [all[i], all[j]] = [all[j], all[i]];
   }
   const mines = Array.from({ length: MINE_ROWS }, () => Array<boolean>(MINE_COLS).fill(false));
-  for (const [r, c] of all.slice(0, MINE_COUNT)) mines[r][c] = true;
-  if (dense) fillEmpty(mines, rnd);
+  for (const [r, c] of all.slice(0, dense && round > 0 ? mineCountForRound(round) : MINE_COUNT)) mines[r][c] = true;
+  if (dense && round === 0) fillEmpty(mines, rnd);
   return mines;
 }
 function fillEmpty(mines: boolean[][], rnd: () => number): void {

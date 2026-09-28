@@ -225,7 +225,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
                 ) : cell.mine ? (
                   <span key={`${r}_${c}`} className={cx("aspect-square rounded-md bg-danger text-white flex items-center justify-center text-lg", isHit && "ring-2 ring-accent")}>💣</span>
                 ) : (
-                  <span key={`${r}_${c}`} className={cx("aspect-square rounded-md bg-card border border-line flex items-center justify-center font-display font-extrabold text-base", DIGIT[cell.n] ?? "text-ink-3", isHit && "ring-2 ring-accent")}>{cell.n || ""}</span>
+                  <span key={`${r}_${c}`} className={cx("aspect-square rounded-md bg-card border border-line flex items-center justify-center font-display font-extrabold text-base", DIGIT[cell.n] ?? "text-ink-3", isHit && "ring-2 ring-accent")}>{cell.n}</span>
                 );
               }))}
             </div>
