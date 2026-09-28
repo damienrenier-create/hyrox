@@ -7,7 +7,7 @@ import { phaseTotals, readChild, readChildren } from "@/lib/level-context";
 import { loadZombieContext } from "@/lib/zombies";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
-  autoRocketPool, parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
+  autoRocketPool, pickRocketTarget, parcoursKey, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
   DISCOUNT_STEPS, LADDER_KEYS, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
@@ -46,7 +46,8 @@ export const spendingAllowed = (settings: unknown) => !readEmom(settings) && !re
 // (Sartay 28/09) : cible tiree au sort dans le top 4 du parcours, charge choisie d'apres les pieces. Le tirage
 // est fait une fois, cote serveur, puis enregistre (fiche recue + evenement « send ») : tous les ecrans voient
 // la meme fusee.
-function planRockets(settings: Settings, teamIds: string[], ticks: Tick[], losses: Loss[], launch: boolean): { next: Settings; changed: boolean } {
+function planRockets(settings: Settings, teamIds: string[], ticks: Tick[], losses: Loss[], launch: boolean, launchOnly: string | null = null): { next: Settings; changed: boolean; blocked: string | null } {
+  let blocked: string | null = null;
   const events = [...readCoinEvents(settings)];
   const gifts = Array.isArray(settings.gifts) ? [...(settings.gifts as Record<string, unknown>[])] : [];
   const carry = readCoinsCarry(settings);
@@ -76,10 +77,13 @@ function planRockets(settings: Settings, teamIds: string[], ticks: Tick[], losse
         return { teamId: x, group: g, rankInGroup: ranked.filter((pp) => groupOf(pp.teamId) === g).findIndex((pp) => pp.teamId === x) + 1, finished: p.currentLevel === null, hasNext: !!next, next };
       });
       const sendTargets = events.filter((e) => e.kind === "send").sort((a, b) => a.at - b.at).map((e) => e.toTeamId ?? "");
-      const pool = autoRocketPool(id, rows, sendTargets);
+      if (launchOnly && launchOnly !== id) continue;
+      const groupSize = (g: string) => rows.filter((r) => r.group === g).length;
+      const pick = pickRocketTarget(id, rows.map((r) => ({ ...r, groupSize: groupSize(r.group) })), sendTargets);
+      void autoRocketPool;
       const payload = rocketPayload(masteredExercises(teamLadder(settings, id), id, ticks, extras), mine.score);
-      if (!pool.length || !payload) continue; // la fusee attend une cible ou un exercice maitrise
-      const target = pool[Math.floor(Math.random() * pool.length)];
+      if (!pick || !payload) { if (launchOnly) blocked = !payload ? "Aucun exercice maîtrisé pour l'instant (3 fiches du même exercice)." : "Aucune cible possible pour l'instant."; continue; }
+      const target = pick.target;
       const giftId = randomUUID();
       const at = Date.now();
       gifts.push({ id: giftId, teamId: target.teamId, fromTeamId: id, level: target.next!.number, index: 200 + gifts.length, reps: payload.reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at });
@@ -87,14 +91,31 @@ function planRockets(settings: Settings, teamIds: string[], ticks: Tick[], losse
       changed = true;
     }
   }
-  return { next: { ...settings, coinEvents: events, gifts }, changed };
+  return { next: { ...settings, coinEvents: events, gifts }, changed, blocked };
+}
+// Lancer la fusee d'une equipe (clic du greffier, Sartay 28/09) : cible et charge choisies par la regle, jamais
+// par le greffier. Toutes les equipes sont chargees (le classement decide de la cible).
+export async function launchRocket(sessionId: string, teamId: string): Promise<Res & { settings?: unknown }> {
+  const settings = await freshSettings(sessionId);
+  if (!spendingAllowed(settings)) return { error: "Les fusées se lancent sur le WOD principal seulement." };
+  const data = await raceData(sessionId);
+  if (!data) return { error: "Lance d'abord la course." };
+  const ids = data.ctx.teams.map((t) => t.id);
+  const dry = planRockets(settings, ids, data.ticks, data.losses, true, teamId);
+  if (!dry.changed || !readCoinEvents(dry.next).some((e) => e.kind === "send" && e.teamId === teamId && !readCoinEvents(settings).some((x) => x.id === e.id))) {
+    return { error: bankOf(settings, teamId, data.ticks, data.losses).stock < 1 ? "Pas de fusée construite (100 pièces)." : dry.blocked ?? "La fusée ne peut pas partir pour l'instant." };
+  }
+  const next = await writeSettings(sessionId, (fresh) => planRockets(fresh, ids, data.ticks, data.losses, true, teamId).next);
+  return { ok: true, settings: next };
 }
 export async function settleRockets(sessionId: string, settings: unknown, ticks: Tick[], losses: Loss[], teamIds: string[], launch = false): Promise<unknown> {
   if (!spendingAllowed(settings)) return settings;
-  // Rien a faire sur l'etat connu : pas d'ecriture (le greffier interroge souvent).
-  if (!planRockets(settingsOf(settings), teamIds, ticks, losses, launch).changed) return settings;
+  // Rien a faire sur l'etat connu : pas d'ecriture (le greffier interroge souvent). Depuis le 28/09 (soir), la
+  // fusee ne decolle plus toute seule : settle ne fait que la construire.
+  void launch;
+  if (!planRockets(settingsOf(settings), teamIds, ticks, losses, false).changed) return settings;
   // Relecture avant d'ecrire : un autre appareil a pu construire ou lancer entre-temps.
-  return writeSettings(sessionId, (fresh) => planRockets(fresh, teamIds, ticks, losses, launch).next);
+  return writeSettings(sessionId, (fresh) => planRockets(fresh, teamIds, ticks, losses, false).next);
 }
 
 // Chrono de course et coches/vies d'une seance (ms de course).

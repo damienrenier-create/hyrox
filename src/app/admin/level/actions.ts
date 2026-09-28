@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { LEVEL_STAFF, freezeLevels, listLevels, seedDefaultExercises } from "@/lib/level";
+import { LEVEL_STAFF, catalogByLabel, freezeLevels, listExercises, listLevels, seedDefaultExercises } from "@/lib/level";
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { isBoss, readCards, MAX_CARDS, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type LevelCard, type Stars } from "@/lib/wod-engines/templates/level-engine";
-import { shrinkFrozenLevel } from "@/lib/level-proposals";
+import { deriveLevel } from "@/lib/level-proposals";
 import { asFormat, asStars } from "@/lib/level";
 
 // Catalogue d'exercices et echelle des niveaux du WOD Level. Profs, coachs ET greffier construisent ;
@@ -98,16 +98,19 @@ export async function createLevelAction(stars: Stars = DEFAULT_STARS, format: Fo
 // rondes, 5 fiches max, meme travail par personne), a retoucher ensuite niveau par niveau. Tant que l'echelle
 // 1-3 d'un parcours est vide, c'est cette derivation qui est figee au coup d'envoi ; la copier ici sert a la
 // personnaliser. Remplacer une echelle 1-3 existante est reserve a DAMZER.
-export async function deriveSmallLadderAction(stars: Stars): Promise<Res & { levels?: number }> {
+export async function deriveSmallLadderAction(stars: Stars, format: Format = "small"): Promise<Res & { levels?: number }> {
   const user = await requireLevelStaff();
-  const existing = await listLevels(asStars(stars), "small");
-  if (existing.length && user.role !== "MASTER_ADMIN") return { error: "Remplacer l'échelle 1-3 est réservé à DAMZER." };
+  const fm = asFormat(format);
+  if (fm === "big") return { error: "L'échelle 5+ est la référence : elle ne se dérive pas." };
+  const existing = await listLevels(asStars(stars), fm);
+  if (existing.length && user.role !== "MASTER_ADMIN") return { error: "Remplacer une échelle dérivée est réservé à DAMZER." };
   const big = await freezeLevels(asStars(stars), "big");
-  if (!big.some((l) => l.cards.length > 0)) return { error: "L'échelle 4-5+ de ce parcours est vide : compose-la d'abord." };
-  const derived = big.map((l) => shrinkFrozenLevel(l));
+  if (!big.some((l) => l.cards.length > 0)) return { error: "L'échelle 5+ de ce parcours est vide : compose-la d'abord." };
+  const cat = catalogByLabel(await listExercises());
+  const derived = big.map((l) => deriveLevel(l, fm, cat));
   await db.transaction(async (tx) => {
     for (const l of existing) await tx.orm.public.Level.where({ id: l.id }).delete();
-    for (const l of derived) await tx.orm.public.Level.create({ format: "small", stars: asStars(stars), number: l.number, name: l.name, cards: l.cards.map((c) => ({ exerciseId: c.exerciseId, reps: c.reps })) });
+    for (const l of derived) await tx.orm.public.Level.create({ format: fm, stars: asStars(stars), number: l.number, name: l.name, cards: l.cards.map((c) => ({ exerciseId: c.exerciseId, reps: c.reps })) });
   });
   revalidatePath(PATH);
   return { ok: true, levels: derived.length };

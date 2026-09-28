@@ -42,7 +42,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
   const phaseQ = PHASES.find((p) => p.q && p.q === sp.phase)?.q ?? "";
   const phase = PHASES.find((p) => p.q === phaseQ)?.v ?? "wod";
   const stars = (["1", "2", "3"].includes(sp.etoiles ?? "") ? Number(sp.etoiles) : null) as Stars | null;
-  const format = (sp.format === "small" || sp.format === "big" ? sp.format : null) as Format | null;
+  const format = (sp.format === "small" || sp.format === "mid" || sp.format === "big" ? sp.format : null) as Format | null;
   const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase, stars, format }) : await buildPyramideRecords({ sex, grade, period });
   const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }) => {
     const p = new URLSearchParams();
@@ -160,7 +160,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
                             <span className="block text-ink-3 text-[10px] truncate">{r.classes || "sans classe"} · {day(r.dateMs)}</span>
                           </span>
                           {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
-                          <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format === "small" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName("small")}>1-3</span> : null}{r.display}</span>
+                          <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format && r.format !== "big" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName(r.format)}>{formatLabel(r.format)}</span> : null}{r.display}</span>
                         </li>
                       );
                     })}

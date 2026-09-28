@@ -347,7 +347,7 @@ export function SessionStep({ to, dir }: { to: SessionOption | null; dir: "older
 }
 
 export function GreffierClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, canCorrect = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, isMaster = false, showConsole = false, canCorrect = false, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker,
 }: {
   sessionId: string;
   sessionLabel: string;
@@ -355,6 +355,7 @@ export function GreffierClient({
   olderSession: SessionOption | null;
   newerSession: SessionOption | null;
   isMaster?: boolean;
+  showConsole?: boolean; // profs et coachs : lien vers la console (nouvel onglet)
   picker: PickerData; // roster precharge + coequipiers habituels (voir TeamsManager)
   canCorrect?: boolean; // DAMZER et GREFFIER : retirer un tour precis (les coachs ne suppriment rien)
   bundle: RaceContextBundle;
@@ -843,6 +844,7 @@ export function GreffierClient({
               </>
             )}
             {board && <a href={`/touche-coule?session=${sessionId}`} className={btn.lgGhost} title="Arbitrer cette séance (Touché-Coulé) sans quitter le greffier à quelqu'un d'autre">🏴‍☠️ Arbitrer</a>}
+              {showConsole && <a href="/admin" target="_blank" rel="noopener" className={btn.lgGhost} title="Ouvrir la console dans un nouvel onglet : le WOD reste ouvert ici">🏠 Console ↗</a>}
               <LogoutButton />
             <button onClick={exportCsv} className={btn.lgDark}>Exporter CSV</button>
           </div>

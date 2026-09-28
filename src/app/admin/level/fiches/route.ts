@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, freezeLadders, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, estimateSeconds, fmtTheoretical, formatName, readLadders, starsLabel, starsName, teamSizeOf, LADDER_KEYS, type Format, type Ladders, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, estimateSeconds, fmtTheoretical, formatLabel, formatName, formatOfLadderKey, readLadders, starsLabel, starsName, starsOfLadderKey, teamSizeOf, LADDER_KEYS, type Ladders } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 export const dynamic = "force-dynamic";
@@ -32,11 +32,11 @@ export async function GET(req: Request) {
     ladders = Object.fromEntries(LADDER_KEYS.filter((k) => all[k].length).map((k) => [k, all[k]])) as Ladders;
     title = "Échelle commune";
   }
-  const levels = LADDER_KEYS.flatMap((k) => (ladders[k] ?? []).map((l) => ({ ...l, stars: (typeof k === "number" ? k : Number(k.slice(1))) as Stars, format: (typeof k === "number" ? "big" : "small") as Format })));
+  const levels = LADDER_KEYS.flatMap((k) => (ladders[k] ?? []).map((l) => ({ ...l, stars: starsOfLadderKey(k), format: formatOfLadderKey(k) })));
   const multi = LADDER_KEYS.filter((k) => ladders[k]?.length).length > 1;
   const cards = levels.flatMap((l) => {
     const act = activeCards(l);
-    const star = multi ? `${starsLabel(l.stars)}${l.format === "small" ? " 1-3" : ""} · ` : "";
+    const star = multi ? `${starsLabel(l.stars)}${l.format !== "big" ? ` ${formatLabel(l.format)}` : ""} · ` : "";
     const head = `<div class="card head${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number}</div><div class="name">${esc(l.name ? l.name.replace(/^BOSS · /, "") : l.boss ? "Boss" : `Niveau ${l.number}`)}</div><div class="list">${esc(act.map(({ card }) => `${card.reps} ${cap(card.label)}`).join(" · "))}</div><div class="meta">${star ? starsName(l.stars) + " · " + formatName(l.format) + " · " : ""}≈ ${fmtTheoretical(estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), l.boss, teamSizeOf(l.format)))}${l.boss ? " · toute l'équipe en même temps, validé par un prof" : " · une fiche par membre, en relais"}</div></div>`;
     return [head, ...act.map(({ card, index }) => `<div class="card${l.boss ? " boss" : ""}"><div class="lvl">${star}${l.boss ? "BOSS" : "Niveau"} ${l.number} · fiche ${index + 1}/${act.length}</div><div class="reps">${card.reps}</div><div class="exo">${esc(cap(card.label))}</div><div class="meta">${l.boss ? `à ${teamSizeOf(l.format)} en simultané` : `≈ ${fmtTheoretical(card.reps * card.weight)} pour un membre`}</div></div>`)];
   });

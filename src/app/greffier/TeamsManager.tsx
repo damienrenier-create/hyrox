@@ -41,6 +41,7 @@ type Props = {
   starsOf?: (teamId: string) => Stars;
   onCreateStar?: (stars: Stars) => void;
   onNumber?: () => void;
+  onSetStars?: (teamId: string, stars: Stars) => void; // changer le parcours d'une equipe en un clic
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -48,7 +49,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -221,8 +222,17 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
               onKeyDown={(e) => { if (e.key === "Enter") { setActiveTeamId(team.id); setError(""); } }}
               className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card cursor-pointer", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
+              {starsOf && onSetStars && (
+                <div className={`${ui.segmented} flex w-full mb-2`} onClick={(e) => e.stopPropagation()} title="Parcours de l'équipe (modifiable tant qu'elle n'a rien coché)">
+                  {STARS.map((st) => (
+                    <button key={st} type="button" disabled={pending || starsOf(team.id) === st} onClick={() => onSetStars(team.id, st as Stars)} className={cx("flex-1 px-2 py-1.5 rounded-lg text-sm font-bold", starsOf(team.id) === st ? ui.segOn : ui.segOff)}>
+                      {starsLabel(st as Stars)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex justify-between items-center gap-2 mb-1">
-                <span className="font-display font-bold text-lg">{team.name}{starsOf && <span className="ml-1.5 text-xs text-accent-ink font-sans font-bold" title={`Parcours ${starsName(starsOf(team.id))}`}>{starsLabel(starsOf(team.id))}</span>}</span>
+                <span className="font-display font-bold text-lg">{team.name}{starsOf && !onSetStars && <span className="ml-1.5 text-xs text-accent-ink font-sans font-bold" title={`Parcours ${starsName(starsOf(team.id))}`}>{starsLabel(starsOf(team.id))}</span>}</span>
                 <span className="flex items-center gap-1.5 flex-shrink-0">
                   <span className={cx(ui.chip, team.members.length ? ui.chipOk : ui.chipMuted)}>
                     {team.members.length} élève{team.members.length > 1 ? "s" : ""}

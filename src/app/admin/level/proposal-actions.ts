@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listExercises, listLevels, seedDefaultExercises } from "@/lib/level";
-import { materialize, proposalByKey, shrinkFrozenLevel } from "@/lib/level-proposals";
+import { deriveLevel, materialize, proposalByKey } from "@/lib/level-proposals";
 import { isBoss, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 
 // Charge une proposition de 25 niveaux (A a F) dans une echelle VIDE. Avec `replace`, DAMZER (seul)
@@ -17,7 +17,7 @@ export async function loadProposalAction(key: string, replace = false, stars: St
   const proposal = proposalByKey(key);
   if (!proposal) return { error: "Proposition inconnue." };
   if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
-  if (format !== "big" && format !== "small") return { error: "Format inconnu." };
+  if (format !== "big" && format !== "mid" && format !== "small") return { error: "Format inconnu." };
   const existing = await listLevels(stars, format);
   if (existing.length > 0) {
     if (!replace) return { error: "L'échelle n'est pas vide : supprime les niveaux existants avant de charger une proposition." };
@@ -25,6 +25,7 @@ export async function loadProposalAction(key: string, replace = false, stars: St
   }
   await seedDefaultExercises(user.name);
   const byLabel = new Map((await listExercises()).map((e) => [e.label.trim().toUpperCase(), e]));
+  const cat = new Map([...byLabel.entries()].map(([k, e]) => [k, { id: e.id, weight: e.weight, label: e.label }]));
   const levels = materialize(proposal).map((l, i) => {
     const number = i + 1;
     const frozen: FrozenLevel = {
@@ -37,7 +38,7 @@ export async function loadProposalAction(key: string, replace = false, stars: St
         return { exerciseId: e.id, reps, label: e.label, weight: e.weight };
       }),
     };
-    const fl = format === "small" ? shrinkFrozenLevel(frozen) : frozen;
+    const fl = deriveLevel(frozen, format, cat);
     return { format, stars, number, name: fl.name, cards: fl.cards.map((c) => ({ exerciseId: c.exerciseId, reps: c.reps })) };
   });
   await db.transaction(async (tx) => {

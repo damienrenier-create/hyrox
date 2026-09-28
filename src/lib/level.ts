@@ -4,14 +4,15 @@ import {
   isBoss, readCards, readFrozenLevels, readLadders, ladderFor, statsOf, MAX_CARDS, STARS, DEFAULT_STARS, DEFAULT_FORMAT,
   type Format, type FrozenLevel, type LadderKey, type LevelCard, type Stars,
 } from "@/lib/wod-engines/templates/level-engine";
-import { shrinkFrozenLevel } from "@/lib/level-proposals";
+import { deriveLevel, type CatalogByLabel } from "@/lib/level-proposals";
 
 // WOD Level, cote serveur : catalogue d'exercices ponderes, echelle des niveaux, et son gel dans une seance.
 
 export type ExerciseRow = { id: string; label: string; weight: number; active: boolean; order: number };
 export type LevelRow = { id: string; format: Format; stars: Stars; number: number; name: string | null; cards: LevelCard[] };
 export const asStars = (v: unknown): Stars => (v === 1 || v === 3 ? v : DEFAULT_STARS);
-export const asFormat = (v: unknown): Format => (v === "small" ? "small" : DEFAULT_FORMAT);
+export const asFormat = (v: unknown): Format => (v === "small" ? "small" : v === "mid" ? "mid" : DEFAULT_FORMAT);
+export const catalogByLabel = (exercises: ExerciseRow[]): CatalogByLabel => new Map(exercises.map((e) => [e.label.trim().toUpperCase(), { id: e.id, weight: e.weight, label: e.label }]));
 export const LEVEL_STAFF = ["MASTER_ADMIN", "ADMIN", "GREFFIER"] as const;
 
 export { DEFAULT_EXERCISES } from "@/lib/level-catalog";
@@ -64,10 +65,13 @@ export async function freezeLadders(): Promise<Record<LadderKey, FrozenLevel[]>>
   const [levels, exercises] = await Promise.all([listLevels(), listExercises()]);
   const byId = new Map(exercises.map((e) => [e.id, e]));
   const big = (st: Stars) => freezeRows(levels.filter((l) => l.stars === st && l.format === "big"), byId);
-  const out: Record<LadderKey, FrozenLevel[]> = { 1: big(1), 2: big(2), 3: big(3), s1: [], s2: [], s3: [] };
+  const out: Record<LadderKey, FrozenLevel[]> = { 1: big(1), 2: big(2), 3: big(3), m1: [], m2: [], m3: [], s1: [], s2: [], s3: [] };
+  const cat = catalogByLabel(exercises);
   for (const st of STARS) {
-    const rows = levels.filter((l) => l.stars === st && l.format === "small");
-    out[`s${st}`] = rows.length ? freezeRows(rows, byId) : out[st].map((l) => shrinkFrozenLevel(l));
+    for (const fm of ["mid", "small"] as const) {
+      const rows = levels.filter((l) => l.stars === st && l.format === fm);
+      out[(fm === "mid" ? `m${st}` : `s${st}`) as LadderKey] = rows.length ? freezeRows(rows, byId) : out[st].map((l) => deriveLevel(l, fm, cat));
+    }
   }
   return out;
 }

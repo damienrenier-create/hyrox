@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
+  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, ladderKey, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
   type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
-import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, getEmomPlayerScoresAction, setEmomPlayerScoresAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
+import { createStarTeamAction, discountAction, endLevelAction, levelLiveAction, levelPauseAction, levelYellowCardAction, numberTeamsAction, launchRocketAction, getEmomPlayerScoresAction, setEmomPlayerScoresAction, setEmomScoreAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive, type TeamLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
@@ -28,10 +28,11 @@ type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | 
 // par exercice, echelle de la seance modifiable en cours de route. Plusieurs appareils cochent en meme
 // temps : chaque coche est une ligne unique en base, et le pouls resynchronise les ecrans.
 export function LevelClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false,
 }: {
   sessionId: string;
   isMaster?: boolean;
+  showConsole?: boolean; // profs et coachs : lien vers la console (nouvel onglet, le WOD reste ouvert)
   sessionLabel: string;
   sessionOptions: SessionOption[];
   olderSession: SessionOption | null;
@@ -191,6 +192,30 @@ export function LevelClient({
     for (const p of ranked) { const g = groupOf(p.teamId); const n = (seen.get(g) ?? 0) + 1; seen.set(g, n); m.set(p.teamId, n); }
     return m;
   }, [ranked, groupOf]);
+  // Ordre de la course (Sartay 28/09) : les places ne bougent qu'apres un BOSS. Dans une categorie : BOSS passes
+  // (le plus en premier), puis l'ordre dans lequel le dernier BOSS a ete passe, puis le numero d'equipe. Avant
+  // le premier BOSS, pas de rang affiche. Le classement complet (resultats, fusees) reste inchange.
+  const bossOrder = useMemo(() => {
+    const info = new Map<string, { bosses: number; lastAt: number; order: number }>();
+    for (const t of teams) {
+      const lv = ladderOf(t.id);
+      let bosses = 0, lastAt = 0;
+      for (const l of lv) {
+        if (!l.boss) continue;
+        const cards = cardsForTeam(l, t.id, live.penalties);
+        const done = cards.map(({ index }) => ticks.find((x) => x.teamId === t.id && x.level === l.number && x.card === index)).filter((x): x is Tick => !!x);
+        if (!cards.length || done.length < cards.length) continue;
+        bosses++;
+        lastAt = Math.max(...done.map((x) => x.atMs));
+      }
+      info.set(t.id, { bosses, lastAt, order: t.order });
+    }
+    const cmp = (a: string, b: string) => { const x = info.get(a)!, y = info.get(b)!; return y.bosses - x.bosses || (x.bosses ? x.lastAt - y.lastAt : 0) || x.order - y.order; };
+    const rank = new Map<string, number>();
+    const seen = new Map<string, number>();
+    for (const id of teams.map((t) => t.id).sort(cmp)) { const g = groupOf(id); const n = (seen.get(g) ?? 0) + 1; seen.set(g, n); rank.set(id, info.get(id)!.bosses > 0 ? n : 0); }
+    return { cmp, rank };
+  }, [teams, ladderOf, live.penalties, ticks, groupOf]);
   const groupSize = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of teams) m.set(groupOf(t.id), (m.get(groupOf(t.id)) ?? 0) + 1);
@@ -207,7 +232,11 @@ export function LevelClient({
   const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
   // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
   const [impact, setImpact] = useState<{ id: number; teamId: string; text: string } | null>(null);
-  // Fusees automatiques (28/09) : le serveur les lance ; chaque ecran anime les nouveaux envois qu'il decouvre.
+  // Fusee : le greffier clique, le serveur choisit cible et charge ; chaque ecran anime les nouveaux envois.
+  function launchRocket(teamId: string) {
+    setError("");
+    void launchRocketAction(sessionId, teamId).then((res) => { if ("error" in res) setError(res.error); else mergeTeam(res.team); });
+  }
   const seenSends = useRef<Set<string> | null>(null);
   useEffect(() => {
     const sends = live.coinEvents.filter((e) => e.kind === "send" && e.toTeamId);
@@ -517,6 +546,7 @@ export function LevelClient({
                 losses={live.losses}
                 raceMs={liveMs}
                 canTick={canTick}
+                ended={phase === "post"}
                 pendingKeys={optimistic}
                 zombies={bundle.zombies}
                 zombieSpeed={bundle.zombieSpeed ?? EMOM_ZOMBIE_SPEED}
@@ -529,10 +559,9 @@ export function LevelClient({
               <>
               <div className="flex flex-col gap-2">
                 {FORMATS.flatMap((fm) => ([3, 2, 1] as Stars[]).map((st) => ({ fm, st, key: parcoursKey(st, fm) }))).filter(({ key }) => teams.some((t) => groupOf(t.id) === key)).map(({ fm, st, key }) => {
-                  const group = ranked.filter((p) => groupOf(p.teamId) === key);
+                  const group = ranked.filter((p) => groupOf(p.teamId) === key).sort((a, b) => bossOrder.cmp(a.teamId, b.teamId));
                   return (
                     <section key={key} className="rounded-2xl p-1.5 flex flex-col gap-1.5" style={{ background: STAR_BG[st] }}>
-                      <p className="px-2 pt-0.5 text-[11px] font-display font-extrabold tracking-widest text-ink/60 uppercase">{starsLabel(st)} Parcours {starsName(st)}{mixedFormats ? ` · ${formatName(fm)}` : ""} · {group.length} équipe{group.length > 1 ? "s" : ""}</p>
                       {group.map((p) => {
                         const t = teamById.get(p.teamId)!;
                         return (
@@ -544,7 +573,7 @@ export function LevelClient({
                               level={levelOf(t.id, p.currentLevel)}
                               stars={st}
                               format={fm}
-                              rank={rankOf.get(t.id) ?? 0}
+                              rank={bossOrder.rank.get(t.id) ?? 0}
                               teamsCount={group.length}
                               yellow={cardsOf.get(t.id) ?? 0}
                               canTick={canTick}
@@ -558,6 +587,7 @@ export function LevelClient({
                               coins={coinsOn ? coinsOf.get(t.id) ?? null : null}
                               impact={impact?.teamId === t.id ? impact : null}
                               onDiscount={(reps) => discount(t.id, reps)}
+                              onRocket={() => launchRocket(t.id)}
                               onToggle={(level, card, done) => toggleCard(t.id, level, card, done)}
                               onYellow={(delta) => yellow(t.id, delta)}
                             />
@@ -596,7 +626,7 @@ export function LevelClient({
         {view === "records" && <RecordsTab isMaster={isMaster} sessionId={sessionId} wod="level" />}
         {view === "arbitrage" && <LevelArbitrage evaluations={bundle.evaluations} onChanged={refresh} />}
         {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} teamFormats={bundle.teamFormats} formatOf={formatOf} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} suggestions={suggestions} />}
-        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} />}
+        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} onSetStars={bundle.child ? undefined : (teamId, st) => run(() => setTeamStarsAction(sessionId, teamId, st))} />}
       </main>
 
       <footer className="fixed bottom-0 inset-x-0 z-20 bg-card/95 backdrop-blur border-t border-line px-2 py-1.5">
@@ -653,6 +683,7 @@ export function LevelClient({
               </>
             )}
             {phase === "post" && <span className={`${ui.btnLg} bg-success-soft text-success-ink`}>🏁 WOD terminé</span>}
+            {showConsole && <a href="/admin" target="_blank" rel="noopener" className={btn.lgGhost} title="Ouvrir la console dans un nouvel onglet : le WOD reste ouvert ici">🏠 Console ↗</a>}
             <button type="button" onClick={() => setMoreOpen((v) => !v)} className={btn.lgGhost} aria-label="Plus d'actions" title="Exporter, arbitrer, plein écran, déconnexion">⋯</button>
             {moreOpen && (
               <div className="absolute bottom-full right-0 mb-2 w-56 rounded-2xl bg-card border border-line shadow-pop p-2 flex flex-col gap-1" onMouseLeave={() => setMoreOpen(false)}>
@@ -674,8 +705,9 @@ function liveFromBundle(b: LevelBundle): LevelLive {
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
-function EmomBoard({ sessionId, waveMinutes, levels, teams, ticks, losses, scores, raceMs, canTick, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
+function EmomBoard({ sessionId, waveMinutes, levels, teams, ticks, losses, scores, raceMs, canTick, ended = false, pendingKeys, zombies, zombieSpeed, running, onToggle, onScore }: {
   sessionId: string;
+  ended?: boolean; // finisher termine : les cordes se saisissent encore
   waveMinutes: number[];
   levels: FrozenLevel[];
   teams: LevelTeam[];
@@ -693,7 +725,7 @@ function EmomBoard({ sessionId, waveMinutes, levels, teams, ticks, losses, score
 }) {
   const wave = emomWaveAt(waveMinutes, raceMs);
   const schedule = emomSchedule(waveMinutes);
-  const over = raceMs >= emomTotalMs(waveMinutes);
+  const over = ended || raceMs >= emomTotalMs(waveMinutes);
   const progress = teams.map((t) => emomProgress(levels, t.id, ticks, scores, losses));
   const ranked = emomRank(progress);
   const rankOf = new Map(ranked.map((p, i) => [p.teamId, i + 1]));
@@ -766,7 +798,7 @@ function EmomRow({ sessionId, team: t, progress: p, rank, wave, current, isMax, 
   onScore: (teamId: string, scores: Record<string, number>) => void;
 }) {
   const next = current ? emomNextCard(current, t.id, ticks) : null;
-  const maxOpen = (isMax && !next) || over; // fiches de la derniere vague bouclees (ou EMOM fini) : cordes
+  const maxOpen = (isMax && !next) || over; // fiches de la derniere vague bouclees, ou EMOM fini/termine : cordes
   const cards = current ? activeCards(current) : [];
   const doneCards = current ? cards.filter(({ index }) => ticks.some((k) => k.teamId === t.id && k.level === current.number && k.card === index)) : [];
   const sim = zombies && wave && current ? emomZombieSim(wave.endMs - wave.startMs, cards.length, cards.reduce((s, x) => s + cardSeconds(x.card), 0), emomWaveEvents(current, t.id, ticks, wave), raceMs - wave.startMs, zombieSpeed) : null;
@@ -1009,8 +1041,11 @@ const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
 const STAR_BG: Record<Stars, string> = { 3: "#fbe9ea", 2: "#e7f0fb", 1: "#e8f6ec" };
+// Filigrane « ÉQUIPE n » colore selon le parcours (Sartay 28/09 : la couleur remplace les etoiles a l'ecran).
+const STAR_INK: Record<Stars, string> = { 3: "rgba(192, 57, 43, 0.55)", 2: "rgba(36, 113, 163, 0.55)", 1: "rgba(30, 132, 73, 0.55)" };
 
-function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onToggle, onYellow }: {
+function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
+  onRocket?: () => void;
   team: LevelTeam;
   progress: TeamProgress;
   level: FrozenLevel | null;
@@ -1184,33 +1219,31 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 min-w-0">
-            <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate">{team.name}</span>
-            <span className="text-[11px] font-bold text-accent-ink tracking-tight flex-shrink-0" title={`Parcours ${starsName(stars)}`}>{starsLabel(stars)}</span>
-            {format === "small" && <span className="text-[10px] font-bold text-ink-2 bg-line rounded px-1 flex-shrink-0" title={formatName("small")}>1-3</span>}
-            {zombies && <span className="text-xs font-bold tabular-nums" title="Vies perdues">💔<Odometer value={p.losses} /></span>}
+            <span className="inline-flex items-center rounded-md bg-ink text-white font-display font-extrabold text-[11px] px-1.5 py-0.5 uppercase tracking-wide truncate" title={`Parcours ${starsName(stars)}`}>{team.name}</span>
+            {format !== "big" && <span className="text-[10px] font-bold text-ink-2 bg-line rounded px-1 flex-shrink-0" title={formatName(format)}>{formatLabel(format)}</span>}
+            {zombies && <span className={cx("font-display font-black text-xl leading-none tabular-nums flex-shrink-0", p.losses > 0 ? "text-danger-ink" : "text-ink-3")} title="Vies perdues">💔<Odometer value={p.losses} /></span>}
           </div>
           <div className="flex items-baseline gap-1.5 min-w-0" title={level?.name ?? undefined}>
             {finished ? (
               <span className="font-display font-extrabold text-sm text-success-ink">🏁 Bouclée{p.finishedMs !== null && <> à {fmt(p.finishedMs)}</>}</span>
             ) : level ? (
               <>
-                <span className={cx("font-display font-extrabold text-xl leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
-                <span className="text-[11px] font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
+                <span className={cx("font-display font-black text-3xl leading-none", boss ? "text-danger-ink" : "text-ink")}>{boss ? "BOSS" : "Niv."} {level.number}</span>
+                <span className="text-xs font-bold tabular-nums text-ink-2">{p.currentDone}/{p.currentTotal}</span>
               </>
             ) : (
               <span className={ui.hint}>Échelle vide.</span>
             )}
           </div>
-          <div className="text-[11px] text-ink-2 tabular-nums flex items-center gap-2">
-            <span><Odometer value={p.reps} className="font-bold text-ink text-sm" /> reps</span>
+          <div className="text-[11px] text-ink-2 tabular-nums flex items-center gap-2 mt-0.5">
             {coins && (
               <span className="relative">
-                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-bold text-[11px] border", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3", coinBurst && "coinpulse")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
+                <button type="button" onClick={() => setCoinOpen((v) => !v)} className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display font-black text-lg leading-tight border-2", coins.bank > 0 ? "bg-accent-soft border-accent text-accent-ink" : "bg-paper border-line text-ink-3", coinBurst && "coinpulse")} title={`Pièces : ${coins.earned} gagnées${coins.carry ? ` + ${coins.carry} de l'échauffement` : ""} · ${coins.spent} dépensées · ${coins.bank} en banque · fusée ${coins.stock ? "prête" : `à ${ROCKET_PRICE}`}`}>
                   🪙<Odometer value={coins.bank} />
                 </button>
                 {coinOpen && (
                   <span className="absolute left-0 top-full mt-1 z-30 w-56 rounded-xl bg-card border border-line shadow-pop p-2 text-left" onMouseLeave={() => setCoinOpen(false)}>
-                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "construite, décolle dès qu'un exercice est maîtrisé 🚀" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
+                    <span className="block text-[10px] text-ink-3 mb-1">{coins.earned + coins.carry} gagnées · {coins.spent} dépensées{coins.lost ? ` · ${coins.lost} mangées par le zombie` : ""} · fusée : {coins.stock ? "prête 🚀 (clique dessus)" : `${Math.min(ROCKET_PRICE, coins.bank)}/${ROCKET_PRICE}`}</span>
                     {target ? (
                       <>
                         <span className="block text-[11px] font-bold text-ink mb-1">Alléger « {target.card.reps} {cap(target.card.label)} » ({target.card.weight} 🪙/rep)</span>
@@ -1244,8 +1277,8 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
           ))}
         </AnimatePresence>
         <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-0 flex items-baseline gap-1 select-none pointer-events-none">
-          <span className="font-display font-black text-[0.9rem] tracking-[0.2em] text-ink/35 uppercase">Équipe</span>
-          <span className="font-display font-black text-[3rem] leading-none text-ink/35">{team.order}</span>
+          <span className="font-display font-black text-[0.9rem] tracking-[0.2em] uppercase" style={{ color: STAR_INK[stars] }}>Équipe</span>
+          <span className="font-display font-black text-[3rem] leading-none" style={{ color: STAR_INK[stars] }}>{team.order}</span>
         </span>
         {!finished && level && (
           <>
@@ -1299,7 +1332,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
 
       {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
       {coins && coins.stock > 0 && !finished && (
-        <span className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée construite : elle décolle toute seule dès qu'une cible du top 4 est possible et que l'équipe maîtrise un exercice (3 fiches)"><span className="inline-block animate-bounce">🚀</span></span>
+        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : clique pour la lancer (cible : le concurrent direct, sinon le top 4 en partant du premier, sinon au hasard ; charge : un exercice maîtrisé, d'autant plus gros que l'équipe a de pièces)"><span className="inline-block animate-bounce">🚀</span></button>
       )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">
@@ -1355,7 +1388,7 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
             return (
               <tr key={p.teamId} className={ui.tr}>
                 <td className="p-2 font-display font-extrabold">{rankOf.get(p.teamId) ?? "—"}</td>
-                <td className="p-2 font-bold">{t.name} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(st)}{fm === "small" ? " · 1-3" : ""}</span></td>
+                <td className="p-2 font-bold">{t.name} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(st)}{fm !== "big" ? ` · ${formatLabel(fm)}` : ""}</span></td>
                 <td className={`p-2 ${ui.hint}`}>{t.members.map((m) => m.name).join(", ")}</td>
                 <td className="p-2 text-right tabular-nums font-bold">{p.completedLevels}</td>
                 <td className="p-2">{p.currentLevel ? <span className={cx(l?.boss && "text-danger-ink font-bold")}>{levelLabel(l)} · {p.currentDone}/{p.currentTotal}</span> : <span className="text-success-ink font-bold">🏁 {p.finishedMs !== null ? fmt(p.finishedMs) : ""}</span>}</td>
@@ -1416,7 +1449,7 @@ function LadderPreview({ levels, ladders }: { levels: FrozenLevel[]; ladders: Le
   const [format, setFormat] = useState<Format>("big");
   const shown = ladderFor(levels, ladders, stars, format);
   const available = STARS.filter((st) => st === 2 || (ladders[st]?.length ?? 0) > 0);
-  const smallMissing = format === "small" && !ladders[`s${stars}`]?.length;
+  const smallMissing = format !== "big" && !ladders[ladderKey(stars, format)]?.length;
   return (
     <div className="space-y-2">
       <p className={`${ui.cardPad} ${ui.muted}`}>
@@ -1436,7 +1469,7 @@ function LadderPreview({ levels, ladders }: { levels: FrozenLevel[]; ladders: Le
           </button>
         ))}
       </div>
-      {smallMissing && <p className={ui.alertInfo}>Pas d&apos;échelle 1-3 figée pour ce parcours : ses équipes de 1 à 3 jouent l&apos;échelle affichée (4-5+).</p>}
+      {smallMissing && <p className={ui.alertInfo}>Pas d&apos;échelle {formatLabel(format)} figée pour ce parcours : ses {formatName(format)} jouent l&apos;échelle affichée (5+).</p>}
       {shown.length === 0 && <p className={ui.alertWarn}>Aucun niveau : l&apos;atelier Level est vide.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
         {shown.map((l) => (

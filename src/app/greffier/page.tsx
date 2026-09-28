@@ -134,6 +134,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     return (
       <LevelClient
         sessionId={session.id}
+        showConsole={evaluator.role !== "GREFFIER"}
         sessionLabel={session.label ?? wodLabel(session.wodType)}
         sessionOptions={options}
         olderSession={olderSession}
@@ -154,6 +155,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     return (
       <FeteForaineClient
         sessionId={session.id}
+        showConsole={evaluator.role !== "GREFFIER"}
         sessionLabel={session.label ?? wodLabel(session.wodType)}
         sessionOptions={options}
         olderSession={olderSession}
@@ -175,6 +177,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   return (
     <GreffierClient
       sessionId={session.id}
+      showConsole={evaluator.role !== "GREFFIER"}
       sessionLabel={session.label ?? wodLabel(session.wodType)}
       sessionOptions={options}
       olderSession={olderSession}

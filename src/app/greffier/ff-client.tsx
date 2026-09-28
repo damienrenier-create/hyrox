@@ -30,8 +30,9 @@ type View = "race" | "results" | "runners" | "teams" | "arbitrage";
 // avec les identifiants permanents (coureurs = membres d'equipe), la persistance Postgres et les onglets communs
 // (Equipes & arbitres, Arbitrage). Ecran PC projete.
 export function FeteForaineClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll, picker,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, exercisesAll, picker, showConsole = false,
 }: {
+  showConsole?: boolean; // profs et coachs : lien vers la console (nouvel onglet)
   sessionId: string;
   sessionLabel: string;
   sessionOptions: SessionOption[];
@@ -187,6 +188,7 @@ export function FeteForaineClient({
                 <button onClick={handleReset} disabled={pending} className={btn.lgGhost} title="Terminée par erreur : tout remettre à zéro et repartir (double confirmation)">↺ Remettre à zéro</button>
               </>
             )}
+            {showConsole && <a href="/admin" target="_blank" rel="noopener" className={btn.lgGhost} title="Ouvrir la console dans un nouvel onglet : le WOD reste ouvert ici">🏠 Console ↗</a>}
             <button onClick={exportCsv} className={btn.lgDark}>Exporter vers Excel</button>
           </div>
         </div>

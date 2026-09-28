@@ -14,7 +14,7 @@
 // Module pur (pas de base) : sert a l'atelier /admin/level et au rapport PDF.
 
 import { DEFAULT_EXERCISES } from "./level-catalog";
-import { SMALL_MAX_CARDS, SMALL_RATIO, type FrozenLevel } from "./wod-engines/templates/level-engine";
+import { MAX_CARDS, MID_RATIO, SMALL_MAX_CARDS, SMALL_RATIO, type Format, type FrozenLevel } from "./wod-engines/templates/level-engine";
 
 // ===== Petit format (Sartay 27/09) : equipes de 1 a 3 =====
 // Un niveau big (equipe de 5) devient un niveau small : chaque fiche divisee par 1,7 (5/3), reps arrondies
@@ -23,6 +23,43 @@ import { SMALL_MAX_CARDS, SMALL_RATIO, type FrozenLevel } from "./wod-engines/te
 // Au-dela de 5 : on garde la plus longue fiche de chaque famille du socle (bras, jambes, cardio) puis les
 // plus longues, et le travail des fiches retirees se redistribue au prorata sur celles qui restent : le
 // travail par personne reste celui des equipes de 5. Un BOSS garde sa fiche unique (reps ÷ 1,7).
+// Equipes de 3 (Sartay 28/09 : « pas tout a fait les memes exos que les equipes de 4 ou 5, pour diluer les
+// files ») : sur chaque niveau ordinaire, UNE fiche d'un atelier tres demande est remplacee par un exercice de la
+// meme famille sur un autre materiel (ou au sol), a travail egal. Ordre : l'atelier le plus rare d'abord.
+export const SMALL_SWAPS: [from: string, to: string[]][] = [
+  ["TIRE TAPIS AR", ["ALLER-RETOUR"]],
+  ["FLIP TAPIS", ["BURPEES", "BREAK DANCE"]],
+  ["TRACTIONS", ["COMMANDO BRAS", "POMPES"]],
+  ["BOX JUMP", ["SQUATS JUMP", "BURPEES"]],
+  ["KB SWING", ["SMASH DOWN", "WALL BALL SHOT"]],
+  ["KB SNATCH", ["WALL BALL SHOT", "SMASH DOWN"]],
+  ["KB TOUR", ["PLANK SLIDE", "COMMANDO BRAS"]],
+  ["FENTES DISK", ["SQUATS JUMP", "MONKEY SLIDE"]],
+];
+export type CatalogByLabel = Map<string, { id: string; weight: number; label: string }>;
+function swapOne(level: FrozenLevel, catalog: CatalogByLabel): FrozenLevel {
+  if (level.boss) return level;
+  const labels = new Set(level.cards.map((c) => c.label.trim().toUpperCase()));
+  for (const [from, alts] of SMALL_SWAPS) {
+    const i = level.cards.findIndex((c) => !c.off && c.label.trim().toUpperCase() === from);
+    if (i < 0) continue;
+    const alt = alts.map((a) => catalog.get(a)).find((e) => e && !labels.has(e.label.trim().toUpperCase()));
+    if (!alt) continue;
+    const c = level.cards[i];
+    const reps = roundSmallReps((c.reps * c.weight) / alt.weight);
+    const cards = level.cards.map((x, k) => (k === i ? { exerciseId: alt.id, reps, label: alt.label, weight: alt.weight } : x));
+    return { ...level, cards };
+  }
+  return level;
+}
+// Echelle d'un format derivee de l'echelle 5+ : equipes de 4 = reps ÷ 1,25 (memes fiches) ; equipes de 1 a 3 =
+// reps ÷ 1,7, 5 fiches max, puis un echange d'exercice par niveau (catalogue requis pour les identifiants).
+export function deriveLevel(level: FrozenLevel, format: Format, catalog?: CatalogByLabel): FrozenLevel {
+  if (format === "mid") return shrinkFrozenLevel(level, MID_RATIO, MAX_CARDS);
+  if (format === "small") { const s = shrinkFrozenLevel(level, SMALL_RATIO, SMALL_MAX_CARDS); return catalog ? swapOne(s, catalog) : s; }
+  return level;
+}
+
 export function roundSmallReps(raw: number): number {
   const step = raw >= 100 ? 10 : raw >= 20 ? 5 : raw >= 8 ? 2 : 1;
   return Math.max(1, Math.round(raw / step) * step);

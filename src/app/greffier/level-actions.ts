@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { listExercises, readFrozenFromSettings } from "@/lib/level";
 import { readEmomPlayerScores, activeCards, cardsForTeam, emomNextCard, emomWaveAt, isBoss, ladderKey, progressOf, readCoinEvents, readEmom, readEmomScores, readFrozenLevels, readLadders, readPenalties, readTeamFormats, readTeamStars, MAX_CARDS, PENALTY_INDEX0, PENALTY_STEPS, DEFAULT_FORMAT, DEFAULT_STARS, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type TeamPenalty, type Tick } from "@/lib/wod-engines/templates/level-engine";
-import { applyDiscount, createStarTeam, numberTeams, sendRocket, settleRockets, startLevelRace, teamLadder } from "@/lib/level-coins";
+import { applyDiscount, createStarTeam, launchRocket, numberTeams, sendRocket, settleRockets, startLevelRace, teamLadder } from "@/lib/level-coins";
 import { createChildSession } from "@/lib/level-child";
 import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
@@ -224,7 +224,17 @@ export async function discountAction(sessionId: string, teamId: string, reps: nu
   if ("error" in r) return r;
   return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, r.settings) };
 }
-// Fusees : elles decollent toutes seules depuis le 28/09 (plus de choix de l'exercice ni de la cible).
+// Fusee (28/09, soir) : le greffier clique, la regle choisit la cible (concurrent direct, puis top 4 depuis le
+// premier, puis hasard) et la charge (exercice maitrise d'apres les pieces).
+export async function launchRocketAction(sessionId: string, teamId: string): Promise<TeamRes> {
+  await requireLevelStaff(sessionId);
+  const gate = await raceOpen(sessionId);
+  if ("error" in gate) return gate;
+  const r = await launchRocket(sessionId, teamId);
+  if ("error" in r) return r;
+  return { ok: true, caught: false, team: await teamLive(sessionId, teamId, gate.startedAtMs, gate.pauses, gate.rsId, r.settings) };
+}
+// Ancien envoi manuel (exercice et cible choisis) : desactive.
 export async function sendRocketAction(sessionId: string, teamId: string, exerciseId: string, reps: number, toTeamId: string): Promise<TeamRes> {
   await requireLevelStaff(sessionId);
   void teamId; void exerciseId; void reps; void toTeamId; void sendRocket;
@@ -448,7 +458,7 @@ export async function updateSessionLevelsAction(sessionId: string, input: Frozen
 // Format d'une equipe (4-5+ ou 1-3), meme verrou que le parcours : modifiable tant qu'elle n'a rien coche.
 export async function setTeamFormatAction(sessionId: string, teamId: string, format: Format): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
-  if (format !== "big" && format !== "small") return { error: "Format inconnu." };
+  if (format !== "big" && format !== "mid" && format !== "small") return { error: "Format inconnu." };
   const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const ticked = await db.orm.public.LevelTick.where({ sessionId, teamId }).first();

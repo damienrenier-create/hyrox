@@ -162,7 +162,7 @@ export function RecordsTab({ isMaster = false, sessionId = null, wod = "pyramide
                       </span>
                     </span>
                     {r.bk && <span className="inline-flex items-center rounded px-1 text-[9px] font-black leading-4 bg-ink text-white" title="BK · une pause du chrono est tombée entre 20 et 80 % du WOD de cette équipe">BK</span>}
-                    <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format === "small" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName("small")}>1-3</span> : null}{r.display}</span>
+                    <span className="font-display font-extrabold text-ink tabular-nums whitespace-nowrap">{wod === "level" && r.stars && stars === null ? <span className="text-[10px] text-accent-ink mr-1" title={`Parcours ${starsName(r.stars as Stars)}`}>{starsLabel(r.stars as Stars)}</span> : null}{wod === "level" && r.format && r.format !== "big" ? <span className="text-[10px] text-ink-2 mr-1" title={formatName(r.format)}>{formatLabel(r.format)}</span> : null}{r.display}</span>
                     {isMaster && (
                       <button
                         type="button"

@@ -71,19 +71,25 @@ export const teamStarsOf = (teamStars: Record<string, Stars>, teamId: string): S
 // Deux types de parcours : « big » (equipes de 4, 5 et plus : l'echelle de reference) et « small » (equipes de
 // 1 a 3 : reps divisees par 1,7, 2 a 5 fiches par niveau, meme travail par personne). Chaque type a ses trois
 // parcours 1, 2, 3 etoiles ; les echelles small d'une seance vivent dans settings.ladders sous "s1", "s2", "s3".
-export type Format = "big" | "small";
-export const FORMATS: Format[] = ["big", "small"];
+// 28/09 : troisieme format « mid » pour les equipes de 4 (reps ÷ 1,25, entre celles de 3 et de 5) ; ses echelles
+// vivent sous "m1", "m2", "m3".
+export type Format = "big" | "mid" | "small";
+export const FORMATS: Format[] = ["big", "mid", "small"];
 export const DEFAULT_FORMAT: Format = "big";
 export const SMALL_MAX_MEMBERS = 3; // 1 a 3 membres -> petit format par defaut
 export const SMALL_TEAM = 3; // taille de reference du petit format (estimations, zombie)
 export const SMALL_RATIO = 1.7;
 export const SMALL_MAX_CARDS = 5;
-export const formatLabel = (f: Format) => (f === "small" ? "1-3" : "4-5+");
-export const formatName = (f: Format) => (f === "small" ? "équipes de 1 à 3" : "équipes de 4, 5 et plus");
-export const teamSizeOf = (f: Format) => (f === "small" ? SMALL_TEAM : DEFAULT_TEAM);
-export type LadderKey = Stars | `s${Stars}`;
-export const LADDER_KEYS: LadderKey[] = [1, 2, 3, "s1", "s2", "s3"];
-export const ladderKey = (stars: Stars, format: Format = DEFAULT_FORMAT): LadderKey => (format === "small" ? `s${stars}` : stars);
+export const MID_TEAM = 4; // equipes de 4
+export const MID_RATIO = 1.25; // 5 / 4
+export const formatLabel = (f: Format) => (f === "small" ? "1-3" : f === "mid" ? "4" : "5+");
+export const formatName = (f: Format) => (f === "small" ? "équipes de 1 à 3" : f === "mid" ? "équipes de 4" : "équipes de 5 et plus");
+export const teamSizeOf = (f: Format) => (f === "small" ? SMALL_TEAM : f === "mid" ? MID_TEAM : DEFAULT_TEAM);
+export type LadderKey = Stars | `s${Stars}` | `m${Stars}`;
+export const LADDER_KEYS: LadderKey[] = [1, 2, 3, "m1", "m2", "m3", "s1", "s2", "s3"];
+export const ladderKey = (stars: Stars, format: Format = DEFAULT_FORMAT): LadderKey => (format === "small" ? `s${stars}` : format === "mid" ? `m${stars}` : stars);
+export const formatOfLadderKey = (k: LadderKey): Format => (typeof k === "number" ? "big" : k.startsWith("s") ? "small" : "mid");
+export const starsOfLadderKey = (k: LadderKey): Stars => (typeof k === "number" ? k : (Number(k.slice(1)) as Stars));
 // Groupe de classement (une equipe se compare a celles du meme parcours ET du meme format).
 export const parcoursKey = (stars: Stars, format: Format = DEFAULT_FORMAT) => `${format}-${stars}`;
 export type Ladders = Partial<Record<LadderKey, FrozenLevel[]>>;
@@ -91,12 +97,14 @@ export function readTeamFormats(settings: unknown): Record<string, Format> {
   const raw = (settings as { teamFormat?: unknown } | null)?.teamFormat;
   const out: Record<string, Format> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === "big" || v === "small") out[k] = v;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === "big" || v === "mid" || v === "small") out[k] = v;
   return out;
 }
-// Format d'une equipe : celui fixe dans les reglages, sinon d'apres son effectif (1 a 3 -> small), sinon big.
+// Format d'une equipe : celui fixe dans les reglages, sinon d'apres son effectif (1 a 3 -> small, 4 -> mid), sinon big.
 export function teamFormatOf(formats: Record<string, Format>, teamId: string, memberCount?: number): Format {
-  return formats[teamId] ?? (memberCount !== undefined && memberCount > 0 && memberCount <= SMALL_MAX_MEMBERS ? "small" : DEFAULT_FORMAT);
+  if (formats[teamId]) return formats[teamId];
+  if (memberCount === undefined || memberCount <= 0) return DEFAULT_FORMAT;
+  return memberCount <= SMALL_MAX_MEMBERS ? "small" : memberCount === MID_TEAM ? "mid" : DEFAULT_FORMAT;
 }
 export function readLadders(settings: unknown): Ladders {
   const raw = (settings as { ladders?: unknown } | null)?.ladders;
@@ -115,6 +123,10 @@ export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars,
   if (format === "small") {
     const s = ladders[`s${stars}`] ?? ladders.s2;
     if (s?.length) return s;
+  }
+  if (format === "mid") {
+    const m = ladders[`m${stars}`] ?? ladders.m2;
+    if (m?.length) return m;
   }
   return (stars === DEFAULT_STARS ? levels : ladders[stars]) ?? levels;
 }
@@ -654,6 +666,30 @@ export function rocketPayload(mastered: Mastered[], score: number): (Mastered & 
   const reps = Math.max(5, Math.min(50, Math.round(ROCKET_WORK_S / Math.max(0.1, pick.weight) / 5) * 5));
   return { ...pick, reps };
 }
+// Cible d'une fusee (Sartay 28/09, la fusee part au clic) : 1) le concurrent direct, l'equipe la plus proche au
+// classement hors top 4 et jamais la derniere (a egalite, celle de devant) ; 2) sinon le top 4 en partant du
+// premier ; 3) sinon au hasard (jamais la derniere). Toujours : ni soi, ni l'equipe touchee par la fusee
+// precedente du parcours, ni une equipe arrivee au bout ou sur son dernier niveau. Parcours avec moins de deux
+// adversaires : toutes les equipes.
+export function pickRocketTarget<T extends { teamId: string; group: string; rankInGroup: number; groupSize: number; finished: boolean; hasNext: boolean }>(fromTeamId: string, teams: T[], sendTargets: string[], random: () => number = Math.random): { target: T; why: "rival" | "top" | "random" } | null {
+  const me = teams.find((t) => t.teamId === fromTeamId);
+  if (!me) return null;
+  const same = teams.filter((t) => t.group === me.group && t.teamId !== fromTeamId);
+  const base = same.length >= 2 ? same : teams.filter((t) => t.teamId !== fromTeamId);
+  const ids = new Set(base.map((t) => t.teamId));
+  const last = [...sendTargets].reverse().find((id) => ids.has(id)) ?? null;
+  const ok = (t: T) => !t.finished && t.hasNext && t.teamId !== last;
+  const isLast = (t: T) => t.groupSize > 1 && t.rankInGroup === t.groupSize;
+  const rival = base
+    .filter((t) => ok(t) && t.rankInGroup > ROCKET_TOP && !isLast(t))
+    .sort((a, b) => Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0];
+  if (rival) return { target: rival, why: "rival" };
+  const top = base.filter((t) => ok(t) && t.rankInGroup <= ROCKET_TOP && !isLast(t)).sort((a, b) => a.rankInGroup - b.rankInGroup)[0];
+  if (top) return { target: top, why: "top" };
+  const rest = base.filter((t) => ok(t) && !isLast(t));
+  return rest.length ? { target: rest[Math.floor(random() * rest.length)], why: "random" } : null;
+}
+
 // Cibles possibles : le top 4 du parcours de l'expediteur (tout le monde s'il y a moins de deux adversaires),
 // sans lui-meme, sans l'equipe touchee par la fusee precedente, sans les equipes arrivees au bout ou sur leur
 // dernier niveau (la fiche recue arrive au niveau suivant). `sendTargets` : cibles des fusees, dans l'ordre.

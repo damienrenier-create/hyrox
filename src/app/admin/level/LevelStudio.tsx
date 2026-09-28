@@ -84,19 +84,19 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
                 </button>
               ))}
             </div>
-            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio ; chacun en deux formats, équipes de 4-5+ et équipes de 1 à 3 (reps ÷ 1,7, 2 à 5 fiches, même travail par personne). Chaque équipe choisit son parcours dans les réglages du greffier, son format suit son effectif ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
+            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio ; chacun en trois formats : équipes de 5 et plus (référence), équipes de 4 (reps ÷ 1,25) et équipes de 1 à 3 (reps ÷ 1,7, 2 à 5 fiches, un exercice remplacé par niveau pour désengorger les ateliers ; même travail par personne). Chaque équipe choisit son parcours dans les réglages du greffier, son format suit son effectif ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
           </div>
-          {levels.length === 0 && format === "small" && (
+          {levels.length === 0 && format !== "big" && (
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
               <div className="flex-1 min-w-[240px]">
-                <b className="text-ink">Échelle 1-3 {starsName(star)} : dérivée automatiquement</b>
-                <p className={ui.hint}>Tant qu&apos;elle est vide, les équipes de 1 à 3 jouent l&apos;échelle 4-5+ du même parcours divisée par 1,7 (reps arrondies, 5 fiches max, travail des fiches retirées redistribué), dérivée au coup d&apos;envoi de chaque séance. Pour la retoucher niveau par niveau, copie-la ici.</p>
+                <b className="text-ink">Échelle {formatLabel(format)} {starsName(star)} : dérivée automatiquement</b>
+                <p className={ui.hint}>Tant qu&apos;elle est vide, les {formatName(format)} jouent l&apos;échelle 5+ du même parcours {format === "mid" ? "divisée par 1,25 (mêmes fiches, reps arrondies)" : "divisée par 1,7 (reps arrondies, 5 fiches max, travail des fiches retirées redistribué, et un atelier très demandé remplacé par niveau : tire tapis → aller-retour, tractions → commando bras, KB → balles…)"}, dérivée au coup d&apos;envoi de chaque séance. Pour la retoucher niveau par niveau, copie-la ici.</p>
               </div>
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(`Échelle 1-3 ${starsName(star)} copiée depuis l'échelle 4-5+ (÷ 1,7).`, async () => {
-                  const r = await deriveSmallLadderAction(star);
+                onClick={() => run(`Échelle ${formatLabel(format)} ${starsName(star)} copiée depuis l'échelle 5+.`, async () => {
+                  const r = await deriveSmallLadderAction(star, format);
                   return "error" in r ? r : { ok: true };
                 })}
                 className={btn.accent}
@@ -112,7 +112,7 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
               <div className="flex-1 min-w-[240px]">
                 <b className="text-ink">Partir d&apos;une proposition de 25 niveaux</b>
-                <p className={ui.hint}>{format === "small" ? "Réduite au format 1-3 (reps ÷ 1,7, 5 fiches max)" : "Équipes de 5"}, difficulté croissante, BOSS aux niveaux 5, 10, 15, 20 et 25. Tout reste modifiable ensuite.</p>
+                <p className={ui.hint}>{format === "small" ? "Réduite au format 1-3 (reps ÷ 1,7, 5 fiches max, échanges d'ateliers)" : format === "mid" ? "Réduite au format 4 (reps ÷ 1,25)" : "Équipes de 5"}, difficulté croissante, BOSS aux niveaux 5, 10, 15, 20 et 25. Tout reste modifiable ensuite.</p>
               </div>
               <select value={proposal} onChange={(e) => setProposal(e.target.value)} className={`${ui.input} max-w-[260px]`}>
                 {PROPOSALS.map((p) => <option key={p.key} value={p.key}>{p.key} · {p.title}</option>)}
@@ -172,21 +172,21 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
                 >
                   Remplacer par la proposition
                 </button>
-                {format === "small" && (
+                {format !== "big" && (
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() =>
-                      confirm(`Remplacer TOUTE l'échelle 1-3 ${starsName(star)} par l'échelle 4-5+ divisée par 1,7 ? Les niveaux actuels sont perdus.`) &&
-                      run(`Échelle 1-3 ${starsName(star)} re-dérivée de l'échelle 4-5+.`, async () => {
-                        const r = await deriveSmallLadderAction(star);
+                      confirm(`Remplacer TOUTE l'échelle ${formatLabel(format)} ${starsName(star)} par l'échelle 5+ dérivée ? Les niveaux actuels sont perdus.`) &&
+                      run(`Échelle ${formatLabel(format)} ${starsName(star)} re-dérivée de l'échelle 5+.`, async () => {
+                        const r = await deriveSmallLadderAction(star, format);
                         return "error" in r ? r : { ok: true };
                       })
                     }
                     className={btn.smDanger}
-                    title="Repart de l'échelle 4-5+ du même parcours, divisée par 1,7"
+                    title="Repart de l'échelle 5+ du même parcours"
                   >
-                    Re-dériver du 4-5+ (÷ 1,7)
+                    Re-dériver du 5+ ({format === "mid" ? "÷ 1,25" : "÷ 1,7"})
                   </button>
                 )}
               </>
@@ -204,7 +204,7 @@ function Catalog({ exercises, levels, isMaster, run }: { exercises: ExerciseRow[
   const [weight, setWeight] = useState("");
   const usage = useMemo(() => {
     const m = new Map<string, string[]>();
-    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), `${l.format === "small" ? "1-3 " : ""}${"★".repeat(l.stars)}${l.number}`]);
+    for (const l of levels) for (const c of l.cards) m.set(c.exerciseId, [...(m.get(c.exerciseId) ?? []), `${l.format !== "big" ? `${formatLabel(l.format)} ` : ""}${"★".repeat(l.stars)}${l.number}`]);
     return m;
   }, [levels]);
 
