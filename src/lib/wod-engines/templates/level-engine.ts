@@ -238,6 +238,12 @@ export const ZOMBIE_LOSS_PENALTY = 3;
 export const ZOMBIE_TOP_LEVEL = 25; // dernier palier de l'echelle (bloc 21-24 + BOSS 25, Sartay 25/09)
 export const ZOMBIE_TIERS = 13; // sprites z01..z13 (palier = ceil(niveau / 2))
 const MIN_ZONE_S = 15;
+// Temps en plus avant le zombie (Sartay 28/09, en pleine seance) : +1 min a TOUS les niveaux, et encore +2 min
+// au niveau 1, +1 min 30 au niveau 2, +1 min au niveau 3. Le zombie marche plus lentement jusqu a la premiere
+// fiche : l arrivee au coeur recule d autant, quelle que soit l avance de l equipe.
+export const ZOMBIE_BONUS_S = 60;
+export const ZOMBIE_EARLY_BONUS_S: Record<number, number> = { 1: 120, 2: 90, 3: 60 };
+export const zombieBonusS = (levelNumber: number) => ZOMBIE_BONUS_S + (ZOMBIE_EARLY_BONUS_S[levelNumber] ?? 0);
 
 export const zombieSpeedLevel = (levelNumber: number, losses: number) => Math.max(1, levelNumber - ZOMBIE_LOSS_PENALTY * losses);
 // La marge fond de +3 min (niveau 1) a -2 min (niveau 20) et CONTINUE de fondre jusqu'au niveau 25
@@ -253,8 +259,9 @@ export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DE
   const act = activeCards(level);
   const n = Math.max(1, act.length);
   const est = estimateSeconds(act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
-  const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000;
-  return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 : 0, bandMs: band, n };
+  const bonus = zombieBonusS(level.number) * 1000;
+  const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000 + bonus;
+  return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 + bonus : 0, bandMs: band, n };
 }
 // Le coeur a trois morceaux : arrive dessus, le zombie se colle et le mange en ZOMBIE_EAT (30 s au palier 1,
 // 10 s au palier 20). L'equipe ne retombe qu'une fois les trois morceaux manges ; si elle eloigne le coeur
