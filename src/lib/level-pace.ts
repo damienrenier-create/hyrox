@@ -5,7 +5,7 @@ import { isTestClass, notDeleted } from "@/lib/session-roles";
 import { teamLadder } from "@/lib/level-coins";
 import { readChild } from "@/lib/level-context";
 import {
-  activeCards, coinsEarned, estimateSeconds, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf,
+  activeCards, coinsEarned, estimateSeconds, readPenalties, readStarSwitches, starsAtLevel, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf,
   type Format, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
@@ -72,7 +72,7 @@ export async function levelRuns(onlySessionIds?: string[]): Promise<LevelRun[]> 
       for (const c of coinsEarned(ladder, t.id, ticks, losses, extras).perLevel) {
         const lv = ladder.find((l) => l.number === c.level);
         if (!lv) continue;
-        const stars: Stars = sw ? (c.level >= sw.fromLevel ? sw.to : sw.from) : teamStarsOf(teamStars, t.id);
+        const stars: Stars = starsAtLevel(sw, teamStarsOf(teamStars, t.id), c.level);
         const est = estimateSeconds(activeCards(lv).map(({ card }) => ({ reps: card.reps, weight: card.weight })), lv.boss, teamSizeOf(format)) * 1000;
         out.push({ sessionId: s.id, teamId: t.id, teamName: t.name, stars, format, members: mem.length, level: c.level, boss: lv.boss, durationMs: c.elapsedMs, estimateMs: est });
       }

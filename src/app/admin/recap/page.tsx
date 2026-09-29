@@ -39,10 +39,10 @@ function TeamCard({ s }: { s: TeamSheet }) {
         {s.openLevel && <> · arrêtée au niveau {s.openLevel.level}</>}
         {s.paceRatio !== null && <> · rythme <b className={s.paceRatio < 0.7 ? "text-danger" : s.paceRatio > 1.5 ? "text-warn-ink" : ""}>{pct(s.paceRatio)}</b> que les autres équipes</>}
       </p>
-      {(s.losses.length > 0 || s.cards.length > 0 || s.switched) && (
+      {(s.losses.length > 0 || s.cards.length > 0 || s.switches.length > 0) && (
         <p className="text-sm">
           {s.losses.length > 0 && <>💀 {s.losses.length} vie{s.losses.length > 1 ? "s" : ""} perdue{s.losses.length > 1 ? "s" : ""}{lostHard ? ` (dont ${lostHard} avec descente)` : ""} : {s.losses.map((l) => `niv. ${l.level} à ${fmt(l.atMs)}`).join(", ")}. </>}
-          {s.switched && <>⬇️ descendue {starsLabel(s.switched.from)} → {starsLabel(s.switched.to)} au niveau {s.switched.fromLevel}. </>}
+          {s.switches.map((sw, i) => <span key={i}>{sw.to < sw.from ? "⬇️ descendue" : "⬆️ montée"} {starsLabel(sw.from)} → {starsLabel(sw.to)} au niveau {sw.fromLevel}. </span>)}
           {s.cards.length > 0 && <>🟧 {s.cards.length} carte{s.cards.length > 1 ? "s" : ""} jaune{s.cards.length > 1 ? "s" : ""} à {s.cards.map(fmt).join(", ")}.</>}
         </p>
       )}

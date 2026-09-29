@@ -1,9 +1,9 @@
 import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
-  heartCarryBites, ladderFor, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
+  hasDemotion, heartCarryBites, ladderFor, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
   DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, PENALTY_INDEX0, PENALTY_STEPS, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
-  type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type TeamPenalty, type Tick,
+  type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type TeamPenalty, type Tick,
 } from "./level-engine";
 
 // Rejeu du WOD Level (Sartay 28-29/09, « la séance doit pouvoir être jouée 100 % hors ligne et envoyée à la fin »)
@@ -71,13 +71,14 @@ export type ReplayState = {
   giftCount: number; // fiches recues jamais creees (annulees comprises) : index des suivantes
   removedPenalties: { teamId: string; index: number }[]; // cartes jaunes retirees (les penalites n'ont pas d'identifiant en base)
   scoredTeams: string[]; // equipes dont les cordes ont ete saisies
+  bossEntry: Record<string, BossEntry>; // 1re de sa categorie en entrant dans son BOSS en cours ? (montee de categorie)
 };
 
 export function cloneState(s: ReplayState): ReplayState {
   return {
     ticks: [...s.ticks], losses: [...s.losses], penalties: [...s.penalties], coinEvents: [...s.coinEvents], teamStars: { ...s.teamStars }, switches: { ...s.switches },
     voided: [...s.voided], newSwitches: { ...s.newSwitches }, pauses: s.pauses.map((p) => ({ ...p })), yellowCards: [...s.yellowCards], endedAtMs: s.endedAtMs,
-    emomScores: { ...s.emomScores }, emomPlayerScores: { ...s.emomPlayerScores }, giftCount: s.giftCount, removedPenalties: [...s.removedPenalties], scoredTeams: [...s.scoredTeams],
+    emomScores: { ...s.emomScores }, emomPlayerScores: { ...s.emomPlayerScores }, giftCount: s.giftCount, removedPenalties: [...s.removedPenalties], scoredTeams: [...s.scoredTeams], bossEntry: { ...s.bossEntry },
   };
 }
 
@@ -173,12 +174,12 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     // 3e vie perdue au WOD principal : l'equipe descend d'une categorie (une seule fois), sans perdre son niveau ;
     // la nouvelle echelle commence au niveau suivant.
     const stars = teamStarsOf(st.teamStars, teamId);
-    if (cfg.isMain && cfg.demote !== false && !st.switches[teamId] && stars > 1 && st.losses.filter((x) => x.teamId === teamId).length === DEMOTE_AT_LOSSES) {
+    if (cfg.isMain && cfg.demote !== false && !hasDemotion(st.switches[teamId]) && stars > 1 && st.losses.filter((x) => x.teamId === teamId).length === DEMOTE_AT_LOSSES) {
       const cur = progressOf(mine, teamId, st.ticks, st.losses, st.penalties).currentLevel;
       const at = mine.findIndex((l) => l.number === cur);
       const next = at >= 0 ? mine[at + 1] : undefined;
       if (next) {
-        const sw: StarSwitch = { from: stars, to: (stars - 1) as Stars, fromLevel: next.number };
+        const sw: StarSwitch = { from: stars, to: (stars - 1) as Stars, fromLevel: next.number, ...(st.switches[teamId] ? { prev: st.switches[teamId] } : {}) };
         st.switches[teamId] = sw;
         st.newSwitches[teamId] = sw;
         st.teamStars[teamId] = sw.to;
@@ -279,13 +280,60 @@ export function applyRocket(cfg: ReplayConfig, st: ReplayState, teamId: string, 
   const payload = rocketPayload(masteredExercises(replayLadder(cfg, st, teamId), teamId, st.ticks, st.penalties), mine.score);
   if (!payload) return "Aucun exercice maîtrisé pour l'instant (3 fiches du même exercice).";
   if (!pick) return "Aucune cible possible pour l'instant.";
+  // Sartay 29/09 : la fusee se construit toute seule a 100 pieces, puis CHAQUE envoi coute la charge (reps x ponderation,
+  // 1 piece par seconde de travail, comme l'allegement). Banque trop courte : la charge est reduite a ce qu'elle
+  // peut payer (par 5), jamais sous 5 reps.
+  const w = Math.max(0.1, payload.weight);
+  const affordable = Math.floor(mine.bank / w);
+  const reps = Math.min(payload.reps, affordable >= 5 ? Math.floor(affordable / 5) * 5 : affordable);
+  if (reps < 5) return `Il faut ${5 * payload.weight} pièces pour envoyer 5 ${payload.label} ; l'équipe en a ${mine.bank}.`;
+  const cost = reps * payload.weight;
   const target = pick.target;
   const giftId = cfg.newId(`gift:${teamId}:${Math.round(absMs)}`);
   const at = Math.round(absMs);
-  st.penalties.push({ id: giftId, teamId: target.teamId, fromTeamId: teamId, level: target.next!.number, index: 200 + st.giftCount, reps: payload.reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at, atMs: raceMs, kind: "gift" });
+  st.penalties.push({ id: giftId, teamId: target.teamId, fromTeamId: teamId, level: target.next!.number, index: 200 + st.giftCount, reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at, atMs: raceMs, kind: "gift" });
   st.giftCount++;
-  st.coinEvents.push({ id: giftId, teamId, kind: "send", coins: 0, at, toTeamId: target.teamId, label: payload.label, reps: payload.reps, giftId, level: target.next!.number });
+  st.coinEvents.push({ id: giftId, teamId, kind: "send", coins: cost, at, toTeamId: target.teamId, label: payload.label, reps, giftId, level: target.next!.number });
   return null;
+}
+
+// Rang d'une equipe dans sa categorie (parcours x format) a l'instant `raceMs`, et taille de la categorie : toutes
+// les equipes d'abord rattrapees jusque-la (le classement depend des vies et des pieces de chacune).
+export function groupRank(cfg: ReplayConfig, st: ReplayState, teamId: string, raceMs: number): { rank: number; size: number } {
+  catchUpAll(cfg, st, raceMs);
+  const groupOf = (id: string) => parcoursKey(teamStarsOf(st.teamStars, id), cfg.formatOf(id));
+  const g = groupOf(teamId);
+  const ids = cfg.teamIds.filter((x) => groupOf(x) === g);
+  const progress = ids.map((x) => progressOf(replayLadder(cfg, st, x), x, st.ticks, st.losses, st.penalties));
+  const score = (x: string) => coinsState(replayLadder(cfg, st, x), x, st.ticks, st.losses, st.penalties, st.coinEvents, cfg.coinsCarry).score;
+  return { rank: rankTeams(progress, score).findIndex((p) => p.teamId === teamId) + 1, size: ids.length };
+}
+// 1re d'une categorie d'au moins deux equipes (seule dans sa categorie, une equipe n'est « premiere » de personne).
+const leads = (r: { rank: number; size: number }) => r.rank === 1 && r.size >= 2;
+
+// Montee de categorie (Sartay 29/09) : l'equipe est 1re de sa categorie quand elle ENTRE dans un BOSS (derniere
+// fiche du niveau d'avant) et l'est encore quand elle le BOUCLE -> +1 etoile a partir du niveau suivant, sans perdre
+// son niveau (comme la descente, a l'envers). A chaque BOSS, jusqu'a 3 etoiles. WOD principal seulement. Categorie
+// d'au moins deux equipes, a l'entree comme a la sortie.
+export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: string, level: number, raceMs: number): void {
+  if (!cfg.isMain || cfg.emom) return;
+  const ladder = replayLadder(cfg, st, teamId);
+  const idx = ladder.findIndex((l) => l.number === level);
+  const lv = ladder[idx];
+  if (!lv) return;
+  const p = progressOf(ladder, teamId, st.ticks, st.losses, st.penalties);
+  if (p.currentLevel === level) return; // niveau pas encore boucle
+  const next = ladder[idx + 1];
+  if (next?.boss) st.bossEntry[teamId] = { level: next.number, first: leads(groupRank(cfg, st, teamId, raceMs)) };
+  if (!lv.boss) return;
+  const entry = st.bossEntry[teamId];
+  const stars = teamStarsOf(st.teamStars, teamId);
+  if (!entry || entry.level !== lv.number || !entry.first || stars >= 3 || !next) return;
+  if (!leads(groupRank(cfg, st, teamId, raceMs))) return;
+  const sw: StarSwitch = { from: stars, to: (stars + 1) as Stars, fromLevel: next.number, ...(st.switches[teamId] ? { prev: st.switches[teamId] } : {}) };
+  st.switches[teamId] = sw;
+  st.newSwitches[teamId] = sw;
+  st.teamStars[teamId] = sw.to;
 }
 
 // Finisher : cordes de la derniere vague, joueur par joueur ; le score de l'equipe = la somme.
@@ -375,6 +423,7 @@ export function replayOps(cfg: ReplayConfig, st: ReplayState, ops: ReplayOp[]): 
         if (error) break;
         st.ticks.push({ id: cfg.newId(`tick:${teamId}:${op.level}:${op.card}:${op.id}`), teamId, level: op.level!, card: op.card!, atMs: raceMs });
         buildRocket(cfg, st, teamId, abs);
+        checkPromotion(cfg, st, teamId, op.level!, raceMs);
         break;
       }
       case "yellow": error = applyYellow(cfg, st, teamId, op.delta === -1 ? -1 : 1, raceMs, abs); break;

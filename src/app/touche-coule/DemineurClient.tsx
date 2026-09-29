@@ -174,7 +174,8 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
 
         {step === "exercise" && student && (
           <div className="space-y-2">
-            <p className={ui.hint}>Exercice observé chez <b className="text-ink">{student.name}</b> ({student.teamName}). <button type="button" onClick={() => setStep("student")} className="underline">changer d&apos;élève</button></p>
+            <button type="button" onClick={() => { setStudent(null); setExerciseId(null); setStep("student"); }} className={`${btn.ghost} w-full justify-center`}>← Retour : ce n&apos;est pas le bon élève</button>
+            <p className={ui.hint}>Exercice observé chez <b className="text-ink">{student.name}</b> ({student.teamName}).</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {exercises.map((e) => (
                 <button key={e.exerciseId} type="button" onClick={() => { setExerciseId(e.exerciseId); }} className={cx(ui.btn, "justify-start text-left", exerciseId === e.exerciseId ? "bg-ink text-white" : "bg-paper border border-line-2 hover:border-brand")}>
@@ -203,6 +204,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
               <p className={`${ui.hint} mt-1`}>{met.filter(Boolean).length} critère{met.filter(Boolean).length > 1 ? "s" : ""} sur {exercise.criteria.length}. Coche seulement ce que tu as vraiment vu.</p>
             </div>
             <div className="flex gap-2">
+              <button type="button" onClick={() => { setStudent(null); setExerciseId(null); setStep("student"); }} className={btn.ghost} title="Mauvais élève : retour à la liste">← Élève</button>
               <button type="button" onClick={() => setStep("exercise")} className={btn.ghost}>← Exercice</button>
               <button type="button" onClick={goBoard} className={`${btn.lgDanger} flex-1`}>🔥 Choisir une case</button>
             </div>

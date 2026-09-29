@@ -11,7 +11,7 @@ import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
-import { readGifts } from "@/lib/wod-engines/templates/level-engine";
+import { readBossEntry, readGifts, type BossEntry } from "@/lib/wod-engines/templates/level-engine";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { hash32 } from "@/lib/mine-core";
@@ -41,6 +41,7 @@ export type LevelLive = {
   emomScores: Record<string, number>;
   coinEvents: CoinEvent[];
   giftCount: number; // fiches recues jamais creees (annulees comprises)
+  bossEntry: Record<string, BossEntry>;
 };
 export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; score: number | null; at: number; coinEvents: CoinEvent[] };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
@@ -122,6 +123,7 @@ export async function levelLiveAction(sessionId: string, opts: { catchTeams?: st
     emomScores: readEmomScores(settled),
     coinEvents: readCoinEvents(settled),
     giftCount: readGifts(settled).length,
+    bossEntry: readBossEntry(settled),
   };
 }
 

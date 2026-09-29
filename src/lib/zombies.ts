@@ -4,7 +4,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import {
-  readCoinEvents, readCoinsCarry, readEmom, readEmomPlayerScores, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf,
+  readBossEntry, readCoinEvents, readCoinsCarry, readEmom, readEmomPlayerScores, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf,
   type TeamPenalty,
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, catchUpTeam, cloneState, nowRace, type ReplayConfig, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
@@ -105,6 +105,7 @@ export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boole
     giftCount: Array.isArray(gifts) ? gifts.length : 0,
     removedPenalties: [],
     scoredTeams: [],
+    bossEntry: readBossEntry(settings),
   };
   return { cfg, st, initial: cloneState(st), rsId: rs.id, startedAtMs, nowMs, nowRaceMs: nowRace(cfg, st) };
 }
@@ -144,7 +145,8 @@ export async function persistReplay(sessionId: string, r: ServerReplay, by: stri
   const newDiscs = st.penalties.filter((p) => p.kind === "discount" && !discIds.has(p.id));
   const raw = (p: TeamPenalty) => { const { kind, atMs, ...rest } = p; void kind; void atMs; return rest; };
   const rowsChanged = added.length || removed.length || newLosses.length || newCards.length || removedCards.length || newPauses.length || closedPauses.length || ended !== null;
-  const settingsChanged = newEvents.length || voided.size || Object.keys(switches).length || newGifts.length || newPens.length || st.removedPenalties.length || newDiscs.length || st.scoredTeams.length || appliedOpIds.length;
+  const bossEntryChanged = JSON.stringify(st.bossEntry) !== JSON.stringify(initial.bossEntry);
+  const settingsChanged = newEvents.length || voided.size || Object.keys(switches).length || newGifts.length || newPens.length || st.removedPenalties.length || newDiscs.length || st.scoredTeams.length || appliedOpIds.length || bossEntryChanged;
   if (!rowsChanged && !settingsChanged) return { ticksAdded: 0, ticksRemoved: 0, losses: 0 };
 
   const tickRow = (t: ReplayState["ticks"][number]) => ({ id: t.id, sessionId, teamId: t.teamId, level: t.level, card: t.card, by, at: abs(t.atMs) });
@@ -198,7 +200,8 @@ export async function persistReplay(sessionId: string, r: ServerReplay, by: stri
     const emomScores = { ...readEmomScores(fresh), ...Object.fromEntries(st.scoredTeams.map((id) => [id, st.emomScores[id] ?? 0])) };
     const emomPlayerScores = { ...readEmomPlayerScores(fresh), ...Object.fromEntries(st.scoredTeams.map((id) => [id, st.emomPlayerScores[id] ?? {}])) };
     const appliedOps = [...readAppliedOps(fresh), ...appliedOpIds].slice(-APPLIED_OPS_KEPT);
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, penalties, discounts, coinEvents, teamStars, starSwitch, emomScores, emomPlayerScores, appliedOps })) });
+    const bossEntry = { ...readBossEntry(fresh), ...st.bossEntry };
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, penalties, discounts, coinEvents, teamStars, starSwitch, emomScores, emomPlayerScores, appliedOps, bossEntry })) });
   }
   return { ticksAdded: added.length, ticksRemoved: removed.length, losses: newLosses.length };
 }

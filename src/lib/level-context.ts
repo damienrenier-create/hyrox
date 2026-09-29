@@ -5,7 +5,7 @@ import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/leve
 import { memberNames } from "@/lib/staff-names";
 import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readZombies } from "@/lib/zombies";
-import { readGifts } from "@/lib/wod-engines/templates/level-engine";
+import { readBossEntry, readGifts, type BossEntry } from "@/lib/wod-engines/templates/level-engine";
 import { readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -37,6 +37,7 @@ export type LevelBundle = {
   levelOrder: LevelOrder | null; // echauffement en differe : ordre des niveaux par equipe
   zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale
   giftCount: number; // fiches recues (fusees) jamais creees, annulees comprises : index de la prochaine = 200 + giftCount
+  bossEntry: Record<string, BossEntry>; // 1re de sa categorie en entrant dans son BOSS (montee de categorie)
   child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
   penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
   emom: EmomSettings | null; // finisher : vagues cadencees
@@ -201,6 +202,7 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     levelOrder: readLevelOrder(session.settings),
     zombieSpeed: readFixedZombie(session.settings),
     giftCount: readGifts(session.settings).length,
+    bossEntry: readBossEntry(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
     penalties: readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     emom: readEmom(session.settings),

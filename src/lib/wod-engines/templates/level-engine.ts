@@ -123,20 +123,53 @@ export function readLadders(settings: unknown): Ladders {
 // Elle garde son niveau : elle finit le niveau en cours sur l'ancienne echelle, et joue la nouvelle a partir du
 // niveau suivant (`fromLevel`). settings.starSwitch[teamId] ; settings.teamStars porte deja la nouvelle categorie.
 export const DEMOTE_AT_LOSSES = 3;
-export type StarSwitch = { from: Stars; to: Stars; fromLevel: number };
+// Changement de categorie d'une equipe en cours de WOD : descente a la 3e vie perdue (28/09), montee quand elle est
+// 1re de sa categorie sur tout un BOSS (29/09). Plusieurs changements s'enchainent par `prev` (le plus recent en tete) :
+// l'echelle de l'equipe = celle de `from` (elle-meme composee avec `prev`) avant `fromLevel`, celle de `to` ensuite.
+export type StarSwitch = { from: Stars; to: Stars; fromLevel: number; prev?: StarSwitch };
+function readSwitch(v: unknown, depth = 0): StarSwitch | null {
+  const o = v as { from?: unknown; to?: unknown; fromLevel?: unknown; prev?: unknown } | null;
+  if (!o || depth > 10 || ![1, 2, 3].includes(o.from as number) || ![1, 2, 3].includes(o.to as number) || typeof o.fromLevel !== "number") return null;
+  const prev = o.prev ? readSwitch(o.prev, depth + 1) : null;
+  return { from: o.from as Stars, to: o.to as Stars, fromLevel: o.fromLevel, ...(prev ? { prev } : {}) };
+}
 export function readStarSwitches(settings: unknown): Record<string, StarSwitch> {
   const raw = (settings as { starSwitch?: unknown } | null)?.starSwitch;
   const out: Record<string, StarSwitch> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const o = v as { from?: unknown; to?: unknown; fromLevel?: unknown } | null;
-    if (o && [1, 2, 3].includes(o.from as number) && [1, 2, 3].includes(o.to as number) && typeof o.fromLevel === "number") out[k] = { from: o.from as Stars, to: o.to as Stars, fromLevel: o.fromLevel };
+    const sw = readSwitch(v);
+    if (sw) out[k] = sw;
+  }
+  return out;
+}
+// Changements d'une equipe, du plus ancien au plus recent.
+export function switchChain(sw: StarSwitch | null | undefined): StarSwitch[] {
+  const out: StarSwitch[] = [];
+  for (let s = sw ?? undefined; s; s = s.prev) out.unshift(s);
+  return out;
+}
+export const hasDemotion = (sw: StarSwitch | null | undefined) => switchChain(sw).some((s) => s.to < s.from);
+// Parcours joue par l'equipe a un niveau donne (`current` = son parcours actuel).
+export function starsAtLevel(sw: StarSwitch | null | undefined, current: Stars, level: number): Stars {
+  if (!sw) return current;
+  return level >= sw.fromLevel ? sw.to : starsAtLevel(sw.prev, sw.from, level);
+}
+// Montee de categorie : equipe 1re de sa categorie en entrant dans un BOSS (`first`), relevee a l'entree.
+export type BossEntry = { level: number; first: boolean };
+export function readBossEntry(settings: unknown): Record<string, BossEntry> {
+  const raw = (settings as { bossEntry?: unknown } | null)?.bossEntry;
+  const out: Record<string, BossEntry> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const o = v as { level?: unknown; first?: unknown } | null;
+    if (o && typeof o.level === "number" && typeof o.first === "boolean") out[k] = { level: o.level, first: o.first };
   }
   return out;
 }
 export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars, format: Format = DEFAULT_FORMAT, sw?: StarSwitch | null): FrozenLevel[] {
   if (sw) {
-    const before = ladderFor(levels, ladders, sw.from, format).filter((l) => l.number < sw.fromLevel);
+    const before = ladderFor(levels, ladders, sw.from, format, sw.prev ?? null).filter((l) => l.number < sw.fromLevel);
     const after = ladderFor(levels, ladders, sw.to, format).filter((l) => l.number >= sw.fromLevel);
     return [...before, ...after];
   }
@@ -290,9 +323,12 @@ export function zombieMarginS(speedLevel: number): number {
 // Bande complete (ms de chrono) et approche : avec une seule fiche (BOSS), le zombie traverse tout d'un
 // mouvement uniforme ; sinon il touche la premiere fiche a 1 min, puis la zone en (bande - 1 min).
 // `team` = effectif de reference (5, ou 3 pour le petit format) : l'estimation du niveau en depend.
-export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DEFAULT_TEAM): { approachMs: number; bandMs: number; n: number } {
+// `cards` = fiches REELLEMENT en jeu pour l'equipe (fiches recues et penalites comprises). Bug corrige le 29/09 : un
+// BOSS qui recevait une fiche (fusee, carte jaune) comptait 2 fiches pour le coeur mais 1 pour la marche (approche
+// nulle) -> zombie colle au coeur des le depart, une vie perdue toutes les 25-30 s.
+export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DEFAULT_TEAM, cards = activeCards(level).length): { approachMs: number; bandMs: number; n: number } {
   const act = activeCards(level);
-  const n = Math.max(1, act.length);
+  const n = Math.max(1, cards);
   const est = estimateSeconds(level.zombieRef?.length ? level.zombieRef : act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
   const bonus = zombieBonusS(level.number) * 1000;
   const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000 + bonus;
@@ -312,7 +348,7 @@ export function zombieEatMs(speedLevel: number): number {
 // l'equipe, penalites comprises) : une longue fiche eloigne plus le coeur, une penalite le rapproche.
 // Arrivee du zombie au coeur (ms depuis le depart de la tentative).
 export function zombieArrivalMs(level: FrozenLevel, frac: number, speedLevel = level.number, n = activeCards(level).length, team = DEFAULT_TEAM): number {
-  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team);
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team, n);
   if (n <= 1) return bandMs;
   return approachMs + Math.min(1, Math.max(0, frac)) * (bandMs - approachMs);
 }
@@ -344,7 +380,7 @@ export function zombieSim(
   team = DEFAULT_TEAM,
   startBites = 0 // morceaux deja manges au niveau precedent (le coeur reste croque, Sartay 27/09)
 ): ZombieSim {
-  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team);
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, team, n);
   const eatMs = zombieEatMs(speedLevel);
   const carried = Math.max(0, Math.min(HEART_BITES - 1, Math.floor(startBites)));
   const total = Math.max(1, cardsTotalSec);
@@ -444,7 +480,7 @@ export function attemptEvents(level: FrozenLevel, teamId: string, ticks: Tick[],
 export type ZombieGeometry = { zombie: number; heart: number; remainingMs: number; contact: boolean; bites: number; eatMs: number };
 // Positions (0..1 de la piste) du zombie et du coeur pour l'ecran, contact, morceaux manges, temps restant.
 export function zombieGeometry(level: FrozenLevel, frac: number, sinceMs: number, speedLevel = level.number, n = activeCards(level).length): ZombieGeometry {
-  const { approachMs, bandMs } = zombieTimeline(level, speedLevel);
+  const { approachMs, bandMs } = zombieTimeline(level, speedLevel, DEFAULT_TEAM, n);
   const f = Math.min(1, Math.max(0, frac));
   const heart = 1 - ZOMBIE_ZONE + ZOMBIE_ZONE * f;
   let zombie: number;

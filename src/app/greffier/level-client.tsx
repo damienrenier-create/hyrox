@@ -145,6 +145,7 @@ export function LevelClient({
     giftCount: live.giftCount,
     removedPenalties: [],
     scoredTeams: [],
+    bossEntry: live.bossEntry,
   }), [live, bundle.teamStars, bundle.starSwitches]);
   // Une operation ajoutee au bout de la file ne rejoue que celle-la (un WOD sans pause peut en compter 1 000).
   const replayed = useMemo(() => replayQueue(baseState, replayCfg, queue), [baseState, replayCfg, queue]);
@@ -172,12 +173,21 @@ export function LevelClient({
     if (typeof document === "undefined") return;
     const on = force ?? !document.fullscreenElement;
     try {
-      if (on && !document.fullscreenElement) void document.documentElement.requestFullscreen?.();
+      if (on && !document.fullscreenElement) void document.documentElement.requestFullscreen?.()?.catch?.(() => {});
       else if (!on && document.fullscreenElement) void document.exitFullscreen?.();
     } catch {
       /* navigateur sans plein ecran : tant pis */
     }
   }
+  // Sartay 29/09 : tant que la course tourne (WOD, echauffement, finisher, pause comprise), l'ecran reste en plein
+  // ecran. Le navigateur en sort tout seul (touche Echap, boite de confirmation, rechargement) et n'accepte d'y
+  // revenir que sur un geste : le prochain clic, n'importe ou, l'y remet.
+  useEffect(() => {
+    if (phase !== "run") return;
+    const onClick = () => { if (!document.fullscreenElement) toggleFullscreen(true); };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "run" || isPaused) return;
@@ -349,7 +359,20 @@ export function LevelClient({
   function discount(teamId: string, reps: number) { queueOp({ kind: "discount", teamId, reps }); }
   const [flight, setFlight] = useState<{ id: number; from: { x: number; y: number }; to: { x: number; y: number }; toId: string; text: string } | null>(null);
   // Impact : la ligne visee tremble et affiche ce qu'elle vient de recevoir.
-  const [impact, setImpact] = useState<{ id: number; teamId: string; text: string } | null>(null);
+  const [impact, setImpact] = useState<{ id: number; teamId: string; text: string; good?: boolean } | null>(null);
+  // Montee (1re de sa categorie sur tout un BOSS) ou descente (3e vie perdue) : annoncee sur la ligne de l'equipe.
+  const seenStars = useRef<Record<string, Stars> | null>(null);
+  useEffect(() => {
+    const now = Object.fromEntries(teams.map((t) => [t.id, teamStarsOf(starState.teamStars, t.id)])) as Record<string, Stars>;
+    const prev = seenStars.current;
+    seenStars.current = now;
+    if (!prev || phase !== "run") return;
+    const changed = teams.find((t) => prev[t.id] !== undefined && prev[t.id] !== now[t.id]);
+    if (!changed) return;
+    const up = now[changed.id] > prev[changed.id];
+    setImpact({ id: Date.now(), teamId: changed.id, text: up ? `⬆️ Monte en ${starsLabel(now[changed.id])} : 1re de sa catégorie sur tout le BOSS !` : `⬇️ Descend en ${starsLabel(now[changed.id])} (3e vie perdue)`, good: up });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starState]);
   // Fusee : le greffier clique, la regle choisit cible et charge ici meme (le seul tirage au sort est garde dans
   // l'operation pour que le serveur rejoue la meme fusee) ; l'ecran anime chaque nouvel envoi.
   function launchRocket(teamId: string) { queueOp({ kind: "rocket", teamId, draw: Math.random() }); }
@@ -842,7 +865,7 @@ function catchUpNow(replayed: ReplayState, cfg: ReplayConfig, untilMs: number): 
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0, giftCount: b.giftCount };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0, giftCount: b.giftCount, bossEntry: b.bossEntry };
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
@@ -1199,7 +1222,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   carryBites?: number; // morceaux de coeur deja manges au niveau precedent
   rank: number;
   coins?: CoinsState | null;
-  impact?: { id: number; text: string } | null;
+  impact?: { id: number; text: string; good?: boolean } | null;
   onDiscount?: (reps: number) => void;
   teamsCount: number;
   yellow: number;
@@ -1330,8 +1353,8 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   useEffect(() => {
     if (!impact || impact.id === lastImpact.current) return;
     lastImpact.current = impact.id;
-    setShaking(true);
-    setToast({ id: impact.id, text: impact.text, bad: true });
+    if (!impact.good) setShaking(true);
+    setToast({ id: impact.id, text: impact.text, bad: !impact.good });
     const h = setTimeout(() => setShaking(false), 700);
     return () => clearTimeout(h);
   }, [impact]);
@@ -1348,6 +1371,19 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
       style={{ borderLeft: `10px solid ${STAR_STRONG[stars]}`, ...(boss || finished ? {} : { background: STAR_ROW[stars] }) }}
       className={cx(ui.card, "relative px-2 py-0.5 flex items-center gap-2 min-w-0 h-16 transition-colors", boss && "border-danger/60 bg-danger-soft/40", finished && "border-success/60 bg-success-soft/40", danger && !finished && "ring-2 ring-danger", toast?.bad && "bg-danger-soft animate-pulse", levelFlash && "levelup", shaking && "shake")}
     >
+      {/* Tout a gauche (Sartay 29/09) : la fusee, construite toute seule a 100 pieces ; chaque envoi coute la charge. */}
+      {coins && (
+        <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
+          {coins.stock > 0 && !finished ? (
+            <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : clique pour la lancer. L'envoi coûte la charge (reps × pondération, 1 pièce par seconde de travail) ; banque trop courte : charge réduite. Cible : le concurrent direct (dans le top 4 l'équipe juste devant, le premier vise le deuxième), sinon le top 4 en partant du premier, sinon au hasard. Charge : un exercice maîtrisé, d'autant plus gros que l'équipe a de pièces."><span className="inline-block animate-bounce">🚀</span></button>
+          ) : (
+            <span className="w-12 h-12 rounded-xl border-2 border-dashed border-line flex flex-col items-center justify-center text-ink-3 leading-none opacity-60" title={`Fusée : se construit toute seule à ${ROCKET_PRICE} pièces en banque`}>
+              <span className="text-base grayscale">🚀</span>
+              <span className="text-[9px] font-bold tabular-nums">{Math.min(ROCKET_PRICE, coins.bank)}/{ROCKET_PRICE}</span>
+            </span>
+          )}
+        </div>
+      )}
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
       <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
         <span className={cx("relative w-12 h-12 rounded-xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
@@ -1475,10 +1511,6 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
         </AnimatePresence>
       </div>
 
-      {/* La fusee, construite des que la banque atteint son prix : un clic ouvre le menu d'envoi. */}
-      {coins && coins.stock > 0 && !finished && (
-        <button type="button" onClick={onRocket} disabled={!canTick} className="rocketpop w-12 h-12 rounded-xl flex items-center justify-center text-3xl flex-shrink-0 disabled:opacity-40" style={{ background: "#efe4ff", border: "2px solid #a06cd5" }} title="Fusée prête : clique pour la lancer (cible : le concurrent direct — dans le top 4 l'équipe juste devant, le premier vise le deuxième —, sinon le top 4 en partant du premier, sinon au hasard ; charge : un exercice maîtrisé, d'autant plus gros que l'équipe a de pièces)"><span className="inline-block animate-bounce">🚀</span></button>
-      )}
       {/* Tout a droite : la carte jaune, qui ajoute une fiche de penalite (10, 20, 30… 1000 cordes). */}
       <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-12">
         <button type="button" onClick={() => onYellow(1)} disabled={!canTick} className="w-10 h-10 rounded-lg bg-accent hover:bg-accent-hover text-ink font-display font-black text-base flex items-center justify-center disabled:opacity-30 shadow-sm" title={`Carte jaune : +${PENALTY_STEPS[Math.min(yellow, PENALTY_STEPS.length - 1)]} cordes de pénalité`}>

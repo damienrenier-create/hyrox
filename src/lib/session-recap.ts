@@ -7,7 +7,7 @@ import { displayName } from "@/lib/staff-names";
 import { exoLabel } from "@/lib/level-criteria";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, starsLabel, teamFormatOf, teamStarsOf, type Format, type Stars, type StarSwitch } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, starsLabel, switchChain, teamFormatOf, teamStarsOf, type Format, type Stars, type StarSwitch } from "@/lib/wod-engines/templates/level-engine";
 
 // Recap d'une seance Level pour les admins (Sartay 28/09), classe par classe : les faits a retenir.
 // - Fiche de chaque equipe : noms complets, parcours et rang, temps niveau par niveau compares a la mediane des
@@ -27,7 +27,7 @@ export type TeamSheet = {
   teamId: string;
   name: string;
   stars: Stars; // parcours en fin de WOD (apres une eventuelle descente)
-  switched: StarSwitch | null;
+  switches: StarSwitch[]; // changements de categorie, du plus ancien au plus recent (descente a la 3e vie, montee sur un BOSS)
   format: Format;
   members: RecapMember[];
   rank: number; // rang dans son parcours
@@ -112,7 +112,7 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
       teamId: t.id,
       name: t.name,
       stars: finalStars(t.id),
-      switched: bundle.starSwitches[t.id] ?? null,
+      switches: switchChain(bundle.starSwitches[t.id]),
       format: teamFormatOf(bundle.teamFormats, t.id, t.members.length),
       members: t.members.map((m) => {
         const es = evalsOf.get(m.id) ?? [];
@@ -193,7 +193,10 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
     }
     for (const t of teams) {
       const s = sheets.get(t.id)!;
-      if (s.switched) teamsLevel.push({ tone: "bad", text: `${who(t.id)} est descendue de ${starsLabel(s.switched.from)} à ${starsLabel(s.switched.to)} au niveau ${s.switched.fromLevel} (3 vies perdues).` });
+      for (const sw of s.switches) {
+        if (sw.to < sw.from) teamsLevel.push({ tone: "bad", text: `${who(t.id)} est descendue de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (3 vies perdues).` });
+        else teamsLevel.push({ tone: "good", text: `${who(t.id)} est montée de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (1re de sa catégorie sur tout un BOSS).` });
+      }
       if (s.losses.length >= 5) teamsLevel.push({ tone: "bad", text: `${who(t.id)} a perdu ${s.losses.length} vies (${s.completedLevels} niveaux bouclés).` });
       if (s.rank === 1 && s.rankOf > 1) teamsLevel.push({ tone: "good", text: `${who(t.id)} termine 1re du parcours ${starsLabel(s.stars)} (${s.completedLevels} niveaux, ${lives(s.losses.length)}).` });
     }
