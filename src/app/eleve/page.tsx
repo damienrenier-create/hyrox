@@ -26,6 +26,8 @@ export default async function ElevePage() {
   // ranges par cycle puis par type de WOD ; rien d'autre.
   const history = mine.filter((r) => !openIds.has(r.sessionId) && r.recorded);
   const byCycle = groupHistory(history);
+  const recordedIds = new Set(mine.filter((r) => r.recorded).map((r) => r.sessionId));
+  const selfEvals = (await db.orm.public.SelfEvaluation.where({ studentId: user.id }).all()).filter((e) => recordedIds.has(e.sessionId)).length;
 
   const cards = [];
   for (const s of openSessions) {
@@ -108,6 +110,16 @@ export default async function ElevePage() {
             </div>
           )}
         </section>
+
+        {(selfEvals > 0 || history.length > 0) && (
+          <Link href="/eleve/auto-evaluations" className={`flex items-center justify-between gap-3 ${ui.card} border-brand/40 hover:border-brand p-3 transition`}>
+            <span>
+              <span className="block font-display font-extrabold text-ink">📝 Mes auto-évaluations</span>
+              <span className="block text-xs text-ink-2">{selfEvals ? `${selfEvals} auto-évaluation${selfEvals > 1 ? "s" : ""} · mon évolution critère par critère` : "Mon évolution critère par critère"}</span>
+            </span>
+            <span className="text-ink-3 text-xl">›</span>
+          </Link>
+        )}
 
         {byCycle.map((c) => (
           <section key={c.key} className="space-y-3">
