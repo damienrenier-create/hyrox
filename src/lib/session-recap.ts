@@ -23,7 +23,7 @@ import { activeCards, starsLabel, switchChain, STARS, teamFormatOf, teamStarsOf,
 
 export type RecapFact = { tone: "bad" | "good" | "warn" | "info"; text: string };
 export type RecapSelfEval = { grade: number | null; codes: Record<string, string>; forme: string | null; review: number | null };
-export type RecapMember = { id: string; name: string; className: string; evals: number; avgGrade: number | null; avgCode: string | null; selfEval: RecapSelfEval | null };
+export type RecapMember = { id: string; name: string; sortName: string; className: string; evals: number; avgGrade: number | null; avgCode: string | null; selfEval: RecapSelfEval | null };
 export type RecapLevel = PaceRun & { lost: number }; // lost = vies perdues sur ce niveau
 export type RecapPhase = { levels: number; total: number; finishMs: number | null; losses: number; cards: number; score: number | null };
 export type TeamSheet = {
@@ -89,6 +89,8 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
   const users = ids.length ? await db.orm.public.User.where((u) => u.id.in(ids)).all() : [];
   const classOf = new Map(users.map((u) => [u.id, u.role === "STUDENT" ? u.className ?? "?" : STAFF_CLASS]));
   const fullName = new Map(users.map((u) => [u.id, displayName(u)]));
+  // Tri alphabetique par NOM de famille (vue « par élève » du recap).
+  const sortNameOf = new Map(users.map((u) => [u.id, `${u.lastName ?? ""} ${u.firstName ?? ""}`.trim() || displayName(u)]));
   const nameOf = (id: string, fallback = "?") => fullName.get(id) ?? fallback;
   // Auto-evaluations des eleves et avis du prof sur cette seance.
   const [selfRows, reviewRows] = await Promise.all([db.orm.public.SelfEvaluation.where({ sessionId }).all(), db.orm.public.SelfEvalReview.where({ sessionId }).all()]);
@@ -144,7 +146,7 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
       members: t.members.map((m) => {
         const es = evalsOf.get(m.id) ?? [];
         const avg = es.length ? es.reduce((s, e) => s + gradeOf(e.note), 0) / es.length : null;
-        return { id: m.id, name: nameOf(m.id, m.name), className: classOf.get(m.id) === STAFF_CLASS ? "prof" : classOf.get(m.id) ?? "?", evals: es.length, avgGrade: avg, avgCode: avg === null ? null : nearestCode(avg), selfEval: selfOf.get(m.id) ?? null };
+        return { id: m.id, name: nameOf(m.id, m.name), sortName: sortNameOf.get(m.id) ?? m.name, className: classOf.get(m.id) === STAFF_CLASS ? "prof" : classOf.get(m.id) ?? "?", evals: es.length, avgGrade: avg, avgCode: avg === null ? null : nearestCode(avg), selfEval: selfOf.get(m.id) ?? null };
       }),
       rank: r.rank,
       rankOf: r.of,

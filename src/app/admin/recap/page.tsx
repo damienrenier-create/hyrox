@@ -99,10 +99,52 @@ function TeamCard({ t }: { t: TeamRecap }) {
 
 // Recap d'une seance Level pour les admins (Sartay 28/09 ; par numero d'equipe depuis le 30/09) : les arbitres
 // d'abord (ils ne sont dans aucune equipe), puis chaque equipe dans l'ordre de ses numeros.
-export default async function RecapPage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
+// Vue par eleve (Sartay 29/09 nuit : « filtrer par élève par ordre alphabétique et par classe ; l'affichage de base
+// c'est par équipe ») : une ligne par eleve, triee par nom de famille, avec son equipe et son resultat.
+type StudentLine = { m: TeamRecap["sheet"]["members"][number]; team: TeamRecap["sheet"] };
+function StudentsTable({ lines }: { lines: StudentLine[] }) {
+  return (
+    <div className={`${ui.card} overflow-x-auto`}>
+      <table className="w-full text-sm">
+        <thead>
+          <tr>
+            <th className={ui.th}>Élève</th>
+            <th className={ui.th}>Classe</th>
+            <th className={ui.th}>Équipe</th>
+            <th className={`${ui.th} text-right`}>Niveaux</th>
+            <th className={`${ui.th} text-right`}>Rang</th>
+            <th className={`${ui.th} text-right`} title="Évaluations reçues des arbitres et leur moyenne">Arbitres</th>
+            <th className={`${ui.th} text-right`}>Auto-éval</th>
+            <th className={`${ui.th} text-right`}>Forme</th>
+            <th className={`${ui.th} text-right`}>Prof</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map(({ m, team }) => (
+            <tr key={m.id} className={ui.tr}>
+              <td className="p-1.5"><Link href={`/admin/eleves/${m.id}`} className="font-bold hover:underline">{m.name}</Link></td>
+              <td className="p-1.5 text-ink-2">{m.className}</td>
+              <td className="p-1.5 whitespace-nowrap">{team.name} <span className="text-[10px] text-warn-ink font-bold">{starsLabel(team.stars)}</span>{team.suspicious.length > 0 && <span title={team.suspicious.join("\n")}> ⚠️</span>}</td>
+              <td className="p-1.5 text-right tabular-nums">{team.completedLevels}/{team.totalLevels}</td>
+              <td className="p-1.5 text-right tabular-nums">{team.rankOf > 0 ? `${team.rank}/${team.rankOf}` : "—"}</td>
+              <td className="p-1.5 text-right tabular-nums">{m.evals ? <>{m.evals} · <b className={gradeTone(m.avgGrade)}>{m.avgCode}</b></> : <span className="text-ink-3">—</span>}</td>
+              <td className="p-1.5 text-right tabular-nums">{m.selfEval?.grade != null ? <b className={gradeTone(m.selfEval.grade)}>{fmtGrade(m.selfEval.grade)}/5</b> : <span className="text-ink-3">pas rendue</span>}</td>
+              <td className="p-1.5 text-right">{m.selfEval?.forme ?? <span className="text-ink-3">—</span>}</td>
+              <td className="p-1.5 text-right tabular-nums">{m.selfEval?.review != null ? <b className={gradeTone(m.selfEval.review)}>{fmtGrade(m.selfEval.review)}/5</b> : <span className="text-ink-3">—</span>}</td>
+            </tr>
+          ))}
+          {lines.length === 0 && <tr><td colSpan={9} className={`p-3 ${ui.muted}`}>Aucun élève.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default async function RecapPage({ searchParams }: { searchParams: Promise<{ session?: string; vue?: string; classe?: string }> }) {
   const user = await getSession();
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) redirect("/");
-  const { session } = await searchParams;
+  const { session, vue: vueQ, classe } = await searchParams;
+  const vue = vueQ === "eleves" || vueQ === "classes" ? vueQ : "equipes";
   const recap = session ? await buildSessionRecap(session) : null;
   const start = recap?.startedAtMs ? new Date(recap.startedAtMs).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
   const subtitle = recap
@@ -130,7 +172,37 @@ export default async function RecapPage({ searchParams }: { searchParams: Promis
               <Facts facts={recap.referees} empty="Rien à signaler." />
             </section>
             {recap.teams.length === 0 && <p className={ui.muted}>Aucune équipe dans cette séance.</p>}
-            <div className="grid gap-4 xl:grid-cols-2">{recap.teams.map((t) => <TeamCard key={t.sheet.teamId} t={t} />)}</div>
+            {(() => {
+              const lines: StudentLine[] = recap.teams.flatMap((t) => t.sheet.members.map((m) => ({ m, team: t.sheet }))).sort((a, b) => a.m.sortName.localeCompare(b.m.sortName, "fr"));
+              const classesHere = [...new Set(lines.map((l) => l.m.className))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+              const href = (v: string, c?: string) => `/admin/recap?session=${recap.sessionId}${v !== "equipes" ? `&vue=${v}` : ""}${c ? `&classe=${encodeURIComponent(c)}` : ""}`;
+              const shown = classe ? lines.filter((l) => l.m.className === classe) : lines;
+              return (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className={`${ui.segmented} inline-flex`}>
+                      {([["equipes", "Par équipe"], ["eleves", "Par élève (A→Z)"], ["classes", "Par classe"]] as const).map(([v, label]) => (
+                        <Link key={v} href={href(v, v === "equipes" ? undefined : classe)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", vue === v ? ui.segOn : ui.segOff)}>{label}</Link>
+                      ))}
+                    </div>
+                    {vue !== "equipes" && classesHere.length > 1 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <Link href={href(vue)} className={cx(ui.pill, !classe ? ui.pillOn : ui.pillOff)}>Toutes les classes</Link>
+                        {classesHere.map((c) => <Link key={c} href={href(vue, c)} className={cx(ui.pill, classe === c ? ui.pillOn : ui.pillOff)}>{c}</Link>)}
+                      </div>
+                    )}
+                  </div>
+                  {vue === "equipes" && <div className="grid gap-4 xl:grid-cols-2">{recap.teams.map((t) => <TeamCard key={t.sheet.teamId} t={t} />)}</div>}
+                  {vue === "eleves" && <StudentsTable lines={shown} />}
+                  {vue === "classes" && classesHere.filter((c) => !classe || c === classe).map((c) => (
+                    <section key={c} className="space-y-2">
+                      <h2 className={ui.h2}>{c} <span className={ui.hint}>· {lines.filter((l) => l.m.className === c).length} élève(s)</span></h2>
+                      <StudentsTable lines={lines.filter((l) => l.m.className === c)} />
+                    </section>
+                  ))}
+                </>
+              );
+            })()}
           </>
         )}
       </main>
