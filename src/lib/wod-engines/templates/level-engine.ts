@@ -163,8 +163,8 @@ export function starsAtLevel(sw: StarSwitch | null | undefined, current: Stars, 
 // ===== Reorientation (Sartay 29/09 soir : « on ne perd jamais de niveau !! on descend seulement de parcours si on
 // perd trop de vies ») — seances lancees depuis (settings.levelRules = 2) =====
 // - toutes les vies du WOD principal sont douces (fiches gardees, coeur neuf) ;
-// - descente d'un parcours a la 1re vie perdue, puis a la 3e, la 6e, la 10e, la 15e... (1 coeur, puis 2 de plus,
-//   puis 3, puis 4) ; jamais sous 1 etoile ;
+// - descente d'un parcours a la 2e vie perdue, puis a la 4e, la 7e, la 11e, la 16e... (2 coeurs, puis 2 de plus,
+//   puis 3, puis 4 ; decale d'une vie le 29/09 soir : « commence la descente apres la 2e vie perdue ») ; jamais sous 1 etoile ;
 // - montee d'un parcours (jamais au-dessus de 5) quand l'equipe est 1re de son parcours (au moins deux equipes) en
 //   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle 3 niveaux
 //   de suite nettement plus vite que la reference (mediane des seances deja jouees, figee au coup d'envoi) : c'est la
@@ -178,9 +178,11 @@ export function readReorient(settings: unknown): boolean {
 export const PROMOTE_LEAD_STREAK = 3;
 export const PROMOTE_FAST_STREAK = 3;
 export const PROMOTE_FAST_RATIO = 0.75; // niveau boucle en 75 % (ou moins) du temps de reference
-// Descente a la n-ieme vie perdue quand n est triangulaire : 1, 3, 6, 10, 15...
+// Descente a la n-ieme vie perdue quand n - 1 est triangulaire : 2, 4, 7, 11, 16... (1, 3, 6, 10, 15 decales d'une vie).
+export const DEMOTE_OFFSET = 1;
 export function demotesAtLoss(n: number): boolean {
-  for (let k = 1, t = 1; t <= n; k++, t += k) if (t === n) return true;
+  const m = n - DEMOTE_OFFSET;
+  for (let k = 1, t = 1; t <= m; k++, t += k) if (t === m) return true;
   return false;
 }
 // Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours, et nettement plus vite que la

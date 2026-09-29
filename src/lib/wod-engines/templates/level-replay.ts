@@ -52,7 +52,7 @@ export type ReplayConfig = {
   now: () => number; // « maintenant » absolu (ecran : horloge recalee ; serveur : heure de la lecture)
   newId: (key: string) => string; // ecran : la cle elle-meme (stable d'un rendu a l'autre) ; serveur : un uuid
   demote?: boolean; // descente de categorie a la 3e vie (defaut : oui ; non pour rejouer une seance d'avant le 28/09 17 h 49)
-  // Regles du 29/09 soir (5 parcours, settings.levelRules = 2) : vies toutes douces, descente a la 1re, 3e, 6e, 10e
+  // Regles du 29/09 soir (5 parcours, settings.levelRules = 2) : vies toutes douces, descente a la 2e, 4e, 7e, 11e
   // vie, trois facons de monter, classement commun a tout l'ecran (niveau x etoiles). Sinon : regles d'avant.
   reorient?: boolean;
   paceRef?: PaceRef | null; // reference de rythme figee au coup d'envoi (montee « trop rapide »)
@@ -181,7 +181,7 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
       if (lost > 0) st.coinEvents.push({ id: lossId, teamId, kind: "zombie", coins: lost, at: Math.round(absOf(cfg, st, deadline)), level: p.currentLevel });
     }
     // Descente d'un parcours, sans perdre son niveau ; la nouvelle echelle commence au niveau suivant. Regles du
-    // 29/09 soir : a la 1re vie perdue, puis a la 3e, la 6e, la 10e... ; avant : a la 3e, une seule fois.
+    // 29/09 soir : a la 2e vie perdue, puis a la 4e, la 7e, la 11e... ; avant : a la 3e, une seule fois.
     const stars = teamStarsOf(st.teamStars, teamId);
     const count = st.losses.filter((x) => x.teamId === teamId).length;
     const demote = cfg.reorient ? demotesAtLoss(count) : !hasDemotion(st.switches[teamId]) && count === DEMOTE_AT_LOSSES;
