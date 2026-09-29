@@ -140,7 +140,8 @@ export const CRITERIA: Record<string, string[]> = {
   ],
   "PLANK SLIDE": [
     "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes) tout au long de l'exercice.",
-    "Le bassin reste parallèle au sol et ne vrille pas lorsqu'un bras décolle pour attraper le disque.",
+    // Sartay 29/09 nuit : « remplace ce critère par : le poids est déposé en débord de tapis ».
+    "Le poids est déposé en débord de tapis.",
     "Le mouvement croisé est respecté : la main droite vient chercher le disque à gauche (et inversement).",
     "Le disque est tiré suffisamment loin de chaque côté (en débord du tapis) à chaque répétition.",
     "Les deux mains reviennent se poser de manière stable sur le tapis entre chaque glissement.",
@@ -229,7 +230,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "KB TOUR": ["Dos droit", "Bassin immobile, gainé", "Passage de main sûr", "KB près du corps", "Poids adapté, vrai défi", "Vitesse soutenue"],
   "ALLER-RETOUR": ["Court sur toute la longueur", "Ligne touchée", "Relance explosive", "Ne ralentit pas avant la ligne", "Vrai sprint", "Intensité maximale"],
   "MONKEY SLIDE": ["Réception amortie", "Appui franc des mains", "Squat avant et après", "Pieds ensemble", "Gauche/droite fluide", "Rythme soutenu"],
-  "PLANK SLIDE": ["Planche alignée", "Bassin ne vrille pas", "Main croisée", "Disque loin de chaque côté", "Mains stables entre deux", "Rythme, sans pause"],
+  "PLANK SLIDE": ["Planche alignée", "Poids en débord du tapis", "Main croisée", "Disque loin de chaque côté", "Mains stables entre deux", "Rythme, sans pause"],
   "FENTES DISK": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Retour debout complet", "Buste droit, gainé", "Disque tenu ferme", "Équilibre géré"],
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
@@ -278,7 +279,7 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   "KB TOUR": ["🧍", "🧱", "🤝", "⏱️"],
   "ALLER-RETOUR": ["🏃", "👆", "⚡", "🔥"],
   "MONKEY SLIDE": ["🪶", "✋", "⬇️", "⏱️"],
-  "PLANK SLIDE": ["📏", "🧱", "🔀", "⏱️"],
+  "PLANK SLIDE": ["📏", "📍", "🔀", "⏱️"],
   "FENTES DISK": ["🦵", "🎯", "🧍", "⏱️"],
   TRACTIONS: ["🔝", "💪", "🚫", "🔥"],
   "BOX JUMP": ["👣", "📦", "🧍", "⏱️"],
