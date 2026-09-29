@@ -11,6 +11,7 @@ import {
 import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayOp, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
 import { levelPoints, rankGlobal, DEFAULT_STARS } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
+import type { CombinedStandings } from "@/lib/level-combined";
 import { createTwinSessionAction } from "./settings-actions";
 import { createStarTeamAction, numberTeamsAction, getEmomPlayerScoresAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
@@ -56,8 +57,9 @@ type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | 
 // temps : chaque coche est une ligne unique en base. Depuis le 28/09 (soir), UN seul greffier pendant la course : ses
 // coches restent sur le PC jusqu'a la Pause ou la Fin du WOD (voir plus bas).
 export function LevelClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false, screens = [],
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false, screens = [], combined = null,
 }: {
+  combined?: CombinedStandings | null; // ecrans jumeaux : classement combine des ecrans termines
   screens?: { id: string; label: string }[]; // seances jumelles du meme creneau (un greffier par ecran), celle-ci comprise
   sessionId: string;
   isMaster?: boolean;
@@ -162,9 +164,9 @@ export function LevelClient({
   const pauses = replayed.pauses;
   const endedAtMs = replayed.endedAtMs;
   // Ajouter une operation : verifiee tout de suite sur l'etat local (meme reponse que le serveur), puis en file.
-  function queueOp(op: Omit<ReplayOp, "id" | "absMs" | "atMs">): boolean {
+  function queueOp(op: Omit<ReplayOp, "id" | "absMs" | "atMs">, atAbsMs?: number): boolean {
     setError("");
-    const absMs = Date.now() + clockOffset.current;
+    const absMs = atAbsMs ?? Date.now() + clockOffset.current;
     const full: ReplayOp = { ...op, id: newOpId(), absMs, atMs: startedAtMs === null ? 0 : elapsed(startedAtMs, pauses, absMs) ?? 0 };
     const [res] = replayOps(replayCfg, cloneState(replayed), [full]);
     if (!res.ok) { setError(res.error ?? "Refusé."); return false; }
@@ -487,9 +489,12 @@ export function LevelClient({
   }
   // Fin du WOD : locale (chrono arrete, classement fige), puis envoi de toute la seance ; s'il rate, nouvel essai
   // toutes les 30 s, l'ecran reste utilisable (classement, reps) sur ce PC.
+  // Arret sur image (Sartay 29/09 nuit) : la fin est datee a l'instant du CLIC, pas a la reponse de la boite de
+  // confirmation ; l'ecran et la base gardent exactement ce qui etait affiche a ce moment-la.
   function handleEnd() {
-    if (!confirm("Fin du WOD ? Le chrono s'arrête et le classement est figé.")) return;
-    if (!queueOp({ kind: "end" })) return;
+    const clickedAt = Date.now() + clockOffset.current;
+    if (!confirm("Fin du WOD ? Le chrono s'arrête et le classement est figé tel qu'il est affiché.")) return;
+    if (!queueOp({ kind: "end" }, clickedAt)) return;
     void flush(true).then(() => { if (!queueRef.current.length) refresh(); });
   }
   function toggleCard(teamId: string, level: number, card: number, done: boolean) {
@@ -619,6 +624,9 @@ export function LevelClient({
       </header>
 
       <main className="max-w-[1800px] mx-auto p-3 sm:p-4">
+        {view === "race" && phase === "post" && combined && combined.rows.length > 0 && (
+          <button type="button" onClick={() => setView("results")} className={`${btn.accent} w-full mb-2`}>🏆 Classement combiné des {combined.rows.length} équipes des écrans{combined.pending.length ? ` (en attente : ${combined.pending.join(", ")})` : ""}</button>
+        )}
         {view === "race" && (
           <>
             {suggestionsDiff > 0 && (
@@ -767,6 +775,7 @@ export function LevelClient({
           </>
         )}
 
+        {view === "results" && combined && <CombinedTable combined={combined} sessionId={sessionId} />}
         {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} formatOf={formatOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} coinsOf={coinsOn ? coinsOf : null} pointsOf={globalRank ? pointsOf : null} />}
         {view === "results" && phase === "post" && !bundle.child && !bundle.emom && queue.length === 0 && <PaceReport sessionId={sessionId} />}
         {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={allLevels} extras={extras} phases={bundle.phases} />}
@@ -1702,6 +1711,38 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
         </tbody>
       </table>
       {hasPhases && <p className={`${ui.hint} p-2`}>Reps, travail, 💔 et 🟨 additionnent le WOD et {phases.map((ph) => `l'${PHASE_NAMES[ph.kind]}`).join(" et ").replace("l'finisher", "le finisher")} (survole une valeur pour le détail). Le classement, lui, reste celui du WOD : {pointsOf ? "points (niveau × étoiles), puis reps, puis vies perdues, pièces et rapidité" : "niveaux bouclés, puis vies perdues, puis fiches, puis rapidité"}.</p>}
+    </div>
+  );
+}
+
+// Classement combine des ecrans jumeaux (29/09 nuit) : toutes les equipes des ecrans termines, meme regle que chaque ecran.
+function CombinedTable({ combined, sessionId }: { combined: CombinedStandings; sessionId: string }) {
+  return (
+    <div className={`${ui.card} overflow-x-auto mb-3`}>
+      <div className="px-3 pt-3">
+        <h3 className="font-display font-extrabold text-ink">🏆 Classement combiné des écrans</h3>
+        <p className={ui.hint}>Points = niveau × étoiles des niveaux bouclés, puis reps, vies, pièces et rapidité.{combined.pending.length ? ` En attente de la fin du WOD : ${combined.pending.join(", ")}.` : ""}</p>
+      </div>
+      {combined.rows.length === 0 ? <p className={`p-3 ${ui.muted}`}>Aucun écran n&apos;a encore terminé son WOD.</p> : (
+        <table className="w-full text-sm mt-2">
+          <thead>
+            <tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Écran</th><th className={`${ui.th} text-right`}>Points</th><th className={`${ui.th} text-right`}>Niveaux</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>💔</th></tr>
+          </thead>
+          <tbody>
+            {combined.rows.map((r) => (
+              <tr key={r.teamId} className={cx(ui.tr, r.sessionId === sessionId && "bg-brand-soft/40")}>
+                <td className="p-2 font-display font-extrabold">{r.rank}</td>
+                <td className="p-2 font-bold">{r.teamName} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(r.stars)}</span></td>
+                <td className={`p-2 ${ui.hint}`}>{r.screen}</td>
+                <td className="p-2 text-right tabular-nums font-black">{r.points}</td>
+                <td className="p-2 text-right tabular-nums">{r.levels}</td>
+                <td className="p-2 text-right tabular-nums">{r.reps}</td>
+                <td className="p-2 text-right tabular-nums">{r.losses}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

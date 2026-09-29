@@ -36,7 +36,7 @@ export type ZombieContext = {
   session: { wodType: string; settings: unknown; raceEndedAt: unknown | null };
   rs: { id: string; startedAt: unknown | null; endedAt: unknown | null } | null;
   pauses: { id?: string; from: number; to: number | null }[];
-  teams: { id: string }[];
+  teams: { id: string; order?: number | null }[];
   ticks: { id: string; teamId: string; level: number; card: number; at: unknown }[];
   losses: { id?: string; teamId: string; level: number; at: unknown; soft?: boolean }[];
   cards: { id: string; teamId: string; at: unknown }[]; // cartes jaunes
@@ -74,7 +74,10 @@ export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boole
     ladders: readLadders(settings),
     order: readLevelOrder(settings),
     formatOf: (id) => teamFormatOf(formats, id),
-    teamIds: teams.map((t) => t.id),
+    // Ordre de l'ecran du greffier (numero puis identifiant) : le rejeu du serveur doit etre IDENTIQUE a l'ecran
+    // (egalites parfaites du classement, tirage d'une cible de fusee). Avec l'ordre de la base, 5 parties simulees sur
+    // 12 finissaient autrement que l'ecran (29/09 nuit : « les eleves ne comprennent pas »).
+    teamIds: [...teams].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id)).map((t) => t.id),
     zombies: readZombies(settings),
     fixedSpeed: readFixedZombie(settings),
     isMain,

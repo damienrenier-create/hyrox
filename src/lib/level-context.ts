@@ -149,7 +149,9 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
         .map((u) => ({ id: u.id, name: memberNames(u).firstName || u.name }))
         .sort((a, b) => a.name.localeCompare(b.name, "fr")),
     }))
-    .sort((a, b) => a.order - b.order);
+    // Meme ordre que le rejeu du serveur (zombies.ts) : numero puis identifiant. Il departage les egalites parfaites et
+    // le tirage d'une cible de fusee ; un ordre different faisait diverger l'ecran et la base (29/09 nuit).
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const endedAtMs = rs?.endedAt ? toMs(rs.endedAt) : null;

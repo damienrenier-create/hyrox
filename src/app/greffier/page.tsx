@@ -9,6 +9,7 @@ import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { LevelClient } from "./level-client";
 import { buildLevelBundle, readChild } from "@/lib/level-context";
+import { combinedTwinStandings } from "@/lib/level-combined";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { isBirthdayToday } from "@/lib/birthday";
 import { teammatePairs } from "@/lib/teammates";
@@ -135,8 +136,11 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   // ou Pyramide (tours).
   if (session.wodType === "LEVEL") {
     const levelBundle = await buildLevelBundle(session.id);
+    // Ecrans jumeaux : classement combine des ecrans deja termines (29/09 nuit).
+    const combined = group.length > 1 && levelBundle.raceEndedAtMs !== null ? await combinedTwinStandings(session.id) : null;
     return (
       <LevelClient
+        combined={combined}
         sessionId={session.id}
         showConsole={evaluator.role !== "GREFFIER"}
         sessionLabel={session.label ?? wodLabel(session.wodType)}

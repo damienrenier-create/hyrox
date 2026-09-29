@@ -51,9 +51,11 @@ type Props = {
   review?: { answers: Record<string, string> | null; comment: string | null; reviewerName: string } | null;
   // Records de ce WOD : tous les eleves, et ceux de ma classe (null = pas de records pour ce WOD).
   records?: { all: string; mine: string | null; className: string | null } | null;
+  // Ecrans jumeaux : classement combine des ecrans termines (toutes les equipes du creneau).
+  combined?: { pending: string[]; rows: { rank: number; teamName: string; screen: string; points: number; levels: number; mine: boolean }[] } | null;
 };
 
-export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null, individual = false, records = null }: Props) {
+export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null, individual = false, records = null, combined = null }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -113,6 +115,29 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
         ))}
       </div>
 
+      {tab === "results" && combined && (
+        <div className={`${ui.card} overflow-x-auto mb-3`}>
+          <p className="px-3 pt-2 font-display font-extrabold text-sm text-ink">🏆 Classement combiné des écrans</p>
+          {combined.pending.length > 0 && <p className="px-3 text-xs text-ink-3">En attente : {combined.pending.join(", ")}.</p>}
+          <table className="w-full text-sm">
+            <thead>
+              <tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Écran</th><th className={ui.th}>Points</th><th className={ui.th}>Niveaux</th></tr>
+            </thead>
+            <tbody>
+              {combined.rows.map((r) => (
+                <tr key={r.rank} className={cx("border-b border-line/70", r.mine ? "bg-brand-soft font-extrabold" : "odd:bg-paper/60")}>
+                  <td className="p-2">{r.rank}</td>
+                  <td className="p-2">{r.teamName}{r.mine ? " ★" : ""}</td>
+                  <td className="p-2 text-ink-3">{r.screen}</td>
+                  <td className="p-2 tabular-nums">{r.points}</td>
+                  <td className="p-2 tabular-nums">{r.levels}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {tab === "results" && combined && <p className="text-xs font-bold text-ink-2 mb-1 px-1">Ton écran</p>}
       {tab === "results" && (
         <div className={`${ui.card} overflow-x-auto`}>
           {!ended && <p className="text-xs text-warn-ink bg-warn-soft px-3 py-2 border-b border-warn/30">WOD en cours : classement provisoire (encodé par le greffier).</p>}

@@ -7,6 +7,7 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { toMs } from "@/lib/scheduling";
+import { combinedTwinStandings } from "@/lib/level-combined";
 import { listExercises } from "@/lib/level";
 import { criteriaComment, isLiked, readCriteria } from "@/lib/level-criteria";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
@@ -85,6 +86,9 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
   const recordsWod = session.wodType === "LEVEL" ? "level" : session.wodType === "PYRAMIDE_CLASSIQUE" ? "pyramide" : null;
   const records = recordsWod ? { all: `/eleve/records?wod=${recordsWod}`, mine: user.className ? `/eleve/records?wod=${recordsWod}&classe=1` : null, className: user.className ?? null } : null;
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  // Ecrans jumeaux (29/09 nuit) : classement combine des ecrans dont le WOD est termine.
+  const comb = session.wodType === "LEVEL" && ended ? await combinedTwinStandings(sessionId) : null;
+  const combined = comb && comb.rows.length ? { pending: comb.pending, rows: comb.rows.map((r) => ({ rank: r.rank, teamName: r.teamName, screen: r.screen, points: r.points, levels: r.levels, mine: r.teamId === myTeam.id })) } : null;
   const dateMs = rs?.startedAt ? toMs(rs.startedAt) : session.opensAt ? toMs(session.opensAt) : toMs(session.createdAt);
 
   return (
@@ -115,6 +119,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
           review={review}
           individual={session.wodType === "LEVEL"}
           records={records}
+          combined={combined}
         />
       </main>
     </div>
