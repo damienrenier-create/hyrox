@@ -4,7 +4,7 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import {
-  readBossEntry, readCoinEvents, readCoinsCarry, readEmom, readEmomPlayerScores, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPaceRef, readPenalties, readReorient, readStarSwitches, readStreaks, readTeamFormats, readTeamStars, teamFormatOf,
+  readBossEntry, readCoinEvents, readCoinsCarry, readEmom, readEmomPlayerScores, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readReorient, readStarSwitches, readStreaks, readTeamFormats, readTeamStars, teamFormatOf,
   type TeamPenalty,
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, catchUpTeam, cloneState, nowRace, type ReplayConfig, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
@@ -86,7 +86,6 @@ export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boole
     now: () => nowMs,
     newId: () => randomUUID(),
     reorient: readReorient(settings),
-    paceRef: readPaceRef(settings),
   };
   const race = (abs: number) => elapsed(startedAtMs, pauses, abs) ?? 0;
   const gifts = (settings as { gifts?: unknown } | null)?.gifts;

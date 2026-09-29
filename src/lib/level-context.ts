@@ -5,7 +5,7 @@ import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/leve
 import { memberNames } from "@/lib/staff-names";
 import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, DEFAULT_STARS, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readZombies } from "@/lib/zombies";
-import { levelPoints, rankGlobal, readBossEntry, readGifts, readPaceRef, readReorient, readStreaks, DEFAULT_CAP_MIN, type BossEntry, type PaceRef, type Streak } from "@/lib/wod-engines/templates/level-engine";
+import { levelPoints, rankGlobal, readBossEntry, readGifts, readReorient, readStreaks, DEFAULT_CAP_MIN, type BossEntry, type Streak } from "@/lib/wod-engines/templates/level-engine";
 import { readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -40,7 +40,6 @@ export type LevelBundle = {
   bossEntry: Record<string, BossEntry>; // 1re de sa categorie en entrant dans son BOSS (montee de categorie)
   // Regles du 29/09 soir (WOD principal lance depuis, ou pas encore lance) : classement commun, reorientation.
   reorient: boolean;
-  paceRef: PaceRef | null; // reference de rythme figee au coup d'envoi
   streaks: Record<string, Streak>; // series en cours vers une montee
   child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
   penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
@@ -209,7 +208,6 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     giftCount: readGifts(session.settings).length,
     bossEntry: readBossEntry(session.settings),
     reorient: readReorient(session.settings) || (!childRef && !rs?.startedAt),
-    paceRef: readPaceRef(session.settings),
     streaks: readStreaks(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
     penalties: readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),

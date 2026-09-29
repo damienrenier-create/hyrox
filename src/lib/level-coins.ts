@@ -267,12 +267,10 @@ export async function startLevelRace(sessionId: string): Promise<Res> {
     const ladders = Object.fromEntries(LADDER_KEYS.filter((k) => k !== DEFAULT_STARS && all[k].length).map((k) => [String(k), all[k]]));
     await writeSettings(sessionId, (fresh) => ({ ...fresh, levels: all[DEFAULT_STARS], ladders }));
   }
-  // WOD principal (Sartay 29/09 soir) : regles de reorientation (5 parcours, classement commun), reference de rythme
-  // figee pour la montee « trop rapide », et 60 minutes de chrono par defaut (sauf temps choisi dans les reglages).
+  // WOD principal (Sartay 29/09 soir) : regles de reorientation (5 parcours, classement commun) et 60 minutes de
+  // chrono par defaut (sauf temps choisi dans les reglages).
   if (!readChild(session.settings)) {
-    const { buildPaceRef } = await import("@/lib/level-pace"); // import differe : level-pace lit level-coins
-    const paceRef = await buildPaceRef();
-    await writeSettings(sessionId, (fresh) => ({ ...fresh, levelRules: REORIENT_RULES, paceRef, ...(fresh.levelCapMin === undefined ? { levelCapMin: DEFAULT_CAP_MIN } : {}) }));
+    await writeSettings(sessionId, (fresh) => ({ ...fresh, levelRules: REORIENT_RULES, ...(fresh.levelCapMin === undefined ? { levelCapMin: DEFAULT_CAP_MIN } : {}) }));
   }
   let rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs) rs = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: [] });

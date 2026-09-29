@@ -1,9 +1,9 @@
 import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
-  coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, paceReferenceMs, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, starsAtLevel, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_FAST_RATIO, PROMOTE_FAST_STREAK, PROMOTE_LEAD_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
-  type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type PaceRef, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
+  coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
 // Rejeu du WOD Level (Sartay 28-29/09, « la séance doit pouvoir être jouée 100 % hors ligne et envoyée à la fin »)
@@ -55,7 +55,6 @@ export type ReplayConfig = {
   // Regles du 29/09 soir (5 parcours, settings.levelRules = 2) : vies toutes douces, descente a la 2e, 4e, 7e, 11e
   // vie, trois facons de monter, classement commun a tout l'ecran (niveau x etoiles). Sinon : regles d'avant.
   reorient?: boolean;
-  paceRef?: PaceRef | null; // reference de rythme figee au coup d'envoi (montee « trop rapide »)
 };
 
 export type ReplayState = {
@@ -385,9 +384,8 @@ const leads = (r: { rank: number; size: number }) => r.rank === 1 && r.size >= 2
 // fiche du niveau d'avant) et l'est encore quand elle le BOUCLE -> +1 etoile a partir du niveau suivant, sans perdre
 // son niveau (comme la descente, a l'envers). A chaque BOSS, jusqu'a 5 etoiles. WOD principal seulement. Categorie
 // d'au moins deux equipes, a l'entree comme a la sortie.
-// Regles du 29/09 soir, en plus : 1re de son parcours en bouclant 3 niveaux de suite, ou 3 niveaux de suite en 75 %
-// (ou moins) du temps de reference (mediane des seances deja jouees, figee au coup d'envoi ; seule voie pour une
-// equipe seule dans son parcours).
+// Regles du 29/09 soir, en plus : 1re de son parcours en bouclant 3 niveaux de suite, ou 5 niveaux de suite boucles
+// avec plus de 50 % du temps restant (le % des pieces ; seule voie pour une equipe seule dans son parcours).
 export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: string, level: number, raceMs: number): void {
   if (!cfg.isMain || cfg.emom) return;
   const ladder = replayLadder(cfg, st, teamId);
@@ -409,15 +407,12 @@ export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: strin
   if (cfg.reorient) {
     const prev = st.streaks[teamId] ?? { lead: 0, fast: 0, last: -1 };
     if (prev.last !== lv.number) {
-      let fast = false;
-      if (cfg.paceRef) {
-        const run = coinsEarned(ladder, teamId, st.ticks, st.losses, st.penalties).perLevel.find((c) => c.level === lv.number);
-        const ref = paceReferenceMs(cfg.paceRef, cfg.formatOf(teamId), starsAtLevel(st.switches[teamId], stars, lv.number), lv);
-        fast = !!run && ref > 0 && run.elapsedMs <= PROMOTE_FAST_RATIO * ref;
-      }
+      // % du temps restant du niveau boucle, celui qu'affiche l'ecran avec les pieces gagnees.
+      const run = coinsEarned(ladder, teamId, st.ticks, st.losses, st.penalties).perLevel.find((c) => c.level === lv.number);
+      const fast = !!run && run.pct > PROMOTE_QUICK_PCT;
       const s: Streak = { lead: leadsNow() ? prev.lead + 1 : 0, fast: fast ? prev.fast + 1 : 0, last: lv.number };
       st.streaks[teamId] = s;
-      if (s.lead >= PROMOTE_LEAD_STREAK || s.fast >= PROMOTE_FAST_STREAK) promote = true;
+      if (s.lead >= PROMOTE_LEAD_STREAK || s.fast >= PROMOTE_QUICK_STREAK) promote = true;
     }
   }
   if (promote && stars < MAX_STARS && next) changeStars(st, teamId, (stars + 1) as Stars, next.number);

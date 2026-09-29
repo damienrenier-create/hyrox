@@ -136,8 +136,7 @@ export function LevelClient({
     now: () => Date.now() + clockOffset.current,
     newId: (key) => key, // cles stables d'un rendu a l'autre (le serveur tire de vrais identifiants)
     reorient: bundle.reorient && !bundle.child,
-    paceRef: bundle.paceRef,
-  }), [levels, bundle.ladders, bundle.levelOrder, formatOf, teams, bundle.zombies, bundle.zombieSpeed, bundle.child, bundle.emom, capMs, bundle.coinsCarry, startedAtMs, bundle.reorient, bundle.paceRef]);
+  }), [levels, bundle.ladders, bundle.levelOrder, formatOf, teams, bundle.zombies, bundle.zombieSpeed, bundle.child, bundle.emom, capMs, bundle.coinsCarry, startedAtMs, bundle.reorient]);
   const baseState = useMemo<ReplayState>(() => ({
     ticks: live.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs })),
     losses: live.losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: l.atMs, soft: l.soft })),

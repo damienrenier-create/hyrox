@@ -166,9 +166,10 @@ export function starsAtLevel(sw: StarSwitch | null | undefined, current: Stars, 
 // - descente d'un parcours a la 2e vie perdue, puis a la 4e, la 7e, la 11e, la 16e... (2 coeurs, puis 2 de plus,
 //   puis 3, puis 4 ; decale d'une vie le 29/09 soir : « commence la descente apres la 2e vie perdue ») ; jamais sous 1 etoile ;
 // - montee d'un parcours (jamais au-dessus de 5) quand l'equipe est 1re de son parcours (au moins deux equipes) en
-//   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle 3 niveaux
-//   de suite nettement plus vite que la reference (mediane des seances deja jouees, figee au coup d'envoi) : c'est la
-//   seule voie pour une equipe seule dans son parcours. Toujours a partir du niveau suivant, sans perdre son niveau.
+//   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle 5 niveaux
+//   de suite avec plus de 50 % du temps restant (le % affiche avec les pieces ; Sartay 29/09 nuit, a la place de
+//   « 3 niveaux nettement plus vite que la moyenne ») : seule voie pour une equipe seule dans son parcours. Toujours
+//   a partir du niveau suivant, sans perdre son niveau.
 export const REORIENT_RULES = 2;
 export const DEFAULT_CAP_MIN = 60; // « le WOD se joue en 60 minutes » : temps impose au coup d envoi, sauf choix contraire
 export function readReorient(settings: unknown): boolean {
@@ -176,8 +177,9 @@ export function readReorient(settings: unknown): boolean {
   return typeof v === "number" && v >= REORIENT_RULES;
 }
 export const PROMOTE_LEAD_STREAK = 3;
-export const PROMOTE_FAST_STREAK = 3;
-export const PROMOTE_FAST_RATIO = 0.75; // niveau boucle en 75 % (ou moins) du temps de reference
+// Sur les 35 equipes deja jouees : plus de 50 % restant 5 fois de suite -> 11 equipes montent (plus de 20 % : 31).
+export const PROMOTE_QUICK_STREAK = 5;
+export const PROMOTE_QUICK_PCT = 50; // % du temps restant (coinsEarned.perLevel.pct) strictement au-dessus
 // Descente a la n-ieme vie perdue quand n - 1 est triangulaire : 2, 4, 7, 11, 16... (1, 3, 6, 10, 15 decales d'une vie).
 export const DEMOTE_OFFSET = 1;
 export function demotesAtLoss(n: number): boolean {
@@ -185,8 +187,8 @@ export function demotesAtLoss(n: number): boolean {
   for (let k = 1, t = 1; t <= m; k++, t += k) if (t === m) return true;
   return false;
 }
-// Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours, et nettement plus vite que la
-// reference. Remises a zero a chaque changement de parcours. settings.streaks[teamId].
+// Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours (lead), et avec plus de 50 % du
+// temps restant (fast). Remises a zero a chaque changement de parcours. settings.streaks[teamId].
 export type Streak = { lead: number; fast: number; last: number }; // last = dernier niveau compte (jamais deux fois)
 export function readStreaks(settings: unknown): Record<string, Streak> {
   const raw = (settings as { streaks?: unknown } | null)?.streaks;
@@ -197,22 +199,6 @@ export function readStreaks(settings: unknown): Record<string, Streak> {
     if (o && typeof o.lead === "number" && typeof o.fast === "number") out[k] = { lead: o.lead, fast: o.fast, last: typeof o.last === "number" ? o.last : -1 };
   }
   return out;
-}
-// Reference de rythme figee au coup d'envoi (settings.paceRef) : mediane des passages deja joues par cle
-// `format-etoiles-niveau` (au moins 3), sinon temps theorique x facteur observe (BOSS / niveau ordinaire).
-export type PaceRef = { median: Record<string, number>; factor: { boss: number; level: number } };
-export function readPaceRef(settings: unknown): PaceRef | null {
-  const raw = (settings as { paceRef?: unknown } | null)?.paceRef as { median?: unknown; factor?: { boss?: unknown; level?: unknown } } | undefined;
-  if (!raw || typeof raw !== "object" || !raw.factor || typeof raw.factor.boss !== "number" || typeof raw.factor.level !== "number") return null;
-  const median: Record<string, number> = {};
-  if (raw.median && typeof raw.median === "object") for (const [k, v] of Object.entries(raw.median as Record<string, unknown>)) if (typeof v === "number" && v > 0) median[k] = v;
-  return { median, factor: { boss: raw.factor.boss, level: raw.factor.level } };
-}
-export function paceReferenceMs(ref: PaceRef, format: Format, stars: Stars, level: FrozenLevel): number {
-  const m = ref.median[`${format}-${stars}-${level.number}`];
-  if (m) return m;
-  const est = estimateSeconds(activeCards(level).map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, teamSizeOf(format)) * 1000;
-  return est * (level.boss ? ref.factor.boss : ref.factor.level);
 }
 
 // Montee de categorie : equipe 1re de sa categorie en entrant dans un BOSS (`first`), relevee a l'entree.
