@@ -32,7 +32,7 @@ export type LevelBundle = {
   evaluations: LevelEval[]; // demineur : une par case jouee (eleve x exercice)
   capMin: number | null; // temps impose (minutes de chrono), null = libre
   refereeMode: boolean; // activite des dispenses (demineur)
-  zombies: boolean; // mode zombies (vies, retour au niveau precedent)
+  zombies: boolean; // mode zombies (vies perdues, pieces ; jamais de fiche effacee)
   losses: (Loss & { id: string })[];
   levelOrder: LevelOrder | null; // echauffement en differe : ordre des niveaux par equipe
   zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale

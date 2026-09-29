@@ -14,7 +14,7 @@ export { absoluteFromRace };
 // Mode zombies du WOD Level (regle de Sartay) : sur chaque niveau, un zombie part de la gauche et avance au
 // rythme « duree estimee du niveau + 3 min » vers le coeur de l'equipe ; chaque fiche cochee eloigne le
 // coeur (la ligne se retrecit vers la droite). S'il l'atteint, l'equipe perd une vie (douce les 5 premieres fois au
-// WOD principal, sinon retour au niveau precedent), la moitie de ses pieces, et descend d'une categorie a la 3e.
+// WOD principal ; depuis le 29/09 soir : TOUJOURS douce, aucune fiche jamais effacee), des pieces, et peut descendre de parcours.
 // Depuis le 28/09 (soir), le calcul vit dans `level-replay.ts` (module pur) : l'ecran du greffier l'execute en
 // direct sur ses operations locales, le serveur le rejoue a la sauvegarde (fin du WOD, ou plus tot si le greffier
 // envoie). Le serveur ne constate PLUS rien a la lecture pendant la course : il ne connait pas les coches du PC.

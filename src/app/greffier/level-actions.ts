@@ -315,7 +315,7 @@ export async function startChildAction(sessionId: string, kind: ChildKind): Prom
   return createChildSession(sessionId, kind, user.name);
 }
 
-// Mode zombies (vies, retour au niveau precedent) pour cette seance.
+// Mode zombies (vies perdues, pieces ; jamais de fiche effacee) pour cette seance.
 export async function setZombiesAction(sessionId: string, on: boolean): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
   const prev = (session.settings as Record<string, unknown> | null) ?? {};

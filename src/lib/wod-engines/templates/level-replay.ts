@@ -2,7 +2,7 @@ import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
   coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_HOT_PCT, PROMOTE_HOT_STREAK, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_FROM, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_COOLDOWN_MS, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_HOT_PCT, PROMOTE_HOT_STREAK, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_FROM, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_COOLDOWN_MS, ROCKET_PRICE, ZOMBIE_COIN_LOSS,
   type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
@@ -150,25 +150,12 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     const sim = zombieSim(level, ev.initialTotalSec, ev.events, untilMs - p.attemptStartMs, cfg.fixedSpeed ?? zombieSpeedLevel(level.number, p.losses), cards.length, teamSizeOf(format), carry);
     if (sim.catchAtMs === null) break;
     const deadline = p.attemptStartMs + sim.catchAtMs;
-    // Au WOD principal, les 5 premieres vies perdues sont « douces » (pas de descente, fiches gardees, le zombie
-    // repart du debut avec un coeur neuf) ; ensuite, retour au niveau precedent. Depuis le 29/09 soir (reorient) :
-    // toutes les vies sont douces, « on ne perd jamais de niveau ».
-    const soft = cfg.isMain && (!!cfg.reorient || st.losses.filter((x) => x.teamId === teamId).length < SOFT_LOSSES);
+    // REGLE D'OR (Sartay 29/09 nuit : « quand on perd une vie ou qu'on descend, l'app doit en prendre note mais surtout
+    // ne rien supprimer !!! valable pour tous les WOD, a venir ou passes ») : une vie perdue est NOTEE, les fiches
+    // cochees restent toujours (WOD, echauffement, seances d'avant ce soir comprises), le zombie repart du debut avec
+    // un coeur neuf. Plus aucun « retour au niveau precedent » ni fiche recue annulee.
+    const soft = true;
     const lossId = cfg.newId(`loss:${teamId}:${p.currentLevel}:${Math.round(deadline)}`);
-    if (!soft) {
-      // Retour au niveau precedent DANS L'ORDRE DE L'EQUIPE : fiches du niveau en cours et du precedent effacees.
-      const seq = mine.map((l) => l.number);
-      const at = seq.indexOf(p.currentLevel);
-      const doomedLevels = new Set(at > 0 ? [seq[at - 1], p.currentLevel] : [p.currentLevel]);
-      st.ticks = st.ticks.filter((x) => !(x.teamId === teamId && doomedLevels.has(x.level)));
-      // Les fiches recues d'une fusee hors des niveaux encore boucles apres la chute sont annulees.
-      const kept = new Set(seq.slice(0, Math.max(0, at - 1)));
-      const doomedGifts = st.penalties.filter((g) => g.kind === "gift" && g.teamId === teamId && g.id && !kept.has(g.level));
-      if (doomedGifts.length) {
-        st.voided.push(...doomedGifts.map((g) => g.id!));
-        st.penalties = st.penalties.filter((g) => !doomedGifts.includes(g));
-      }
-    }
     st.losses.push({ id: lossId, teamId, level: p.currentLevel, atMs: deadline, soft });
     applied++;
     // Chaque vie perdue au WOD principal coute la moitie des pieces en banque (arrondi vers le bas). Regles du 29/09

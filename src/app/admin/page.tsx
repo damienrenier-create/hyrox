@@ -210,7 +210,10 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         {/* ===== Raccourci : les 3 dernieres seances ecoulees ===== */}
         {past.length > 0 && (
           <section className={card}>
-            <h2 className={`${ui.h2} mb-1`}>3 dernières séances</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+              <h2 className={ui.h2}>3 dernières séances</h2>
+              <Link href="/admin/seances" className={btn.smGhost} title="Toutes les séances avec leur statut (brouillon, lancée, terminée…)">Voir plus ›</Link>
+            </div>
             <p className={`${ui.hint} mb-3`}>Relecture rapide : résultats du greffier, auto-évaluations, carte du Touché-Coulé.</p>
             <ul className="space-y-2">
               {past.map((s) => {

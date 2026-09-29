@@ -4,7 +4,7 @@ import { softDeleteSessionAction } from "./cycles-actions";
 
 // Tete de mort en haut a gauche d'une fiche de seance (DAMZER) : suppression DOUCE apres confirmation. La
 // seance disparait de partout mais reste en base : « Annuler » juste apres, ou Nettoyage > Corbeille.
-export function SessionDeleteButton({ id, label, detail }: { id: string; label: string; detail: string }) {
+export function SessionDeleteButton({ id, label, detail, back }: { id: string; label: string; detail: string; back?: string }) {
   return (
     <form
       action={softDeleteSessionAction}
@@ -17,6 +17,7 @@ export function SessionDeleteButton({ id, label, detail }: { id: string; label: 
       className="flex-shrink-0"
     >
       <input type="hidden" name="id" value={id} />
+      {back && <input type="hidden" name="back" value={back} />}
       <button
         type="submit"
         title="Supprimer cette séance (restaurable depuis Nettoyage > Corbeille)"
