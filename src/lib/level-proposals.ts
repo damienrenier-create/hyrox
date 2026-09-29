@@ -110,7 +110,7 @@ export const IDENTITY_OF: Record<string, Identity[]> = {
   CORDE: ["cardio"], "ALLER-RETOUR": ["cardio"], "BOX JUMP": ["cardio", "jambes"], BURPEES: ["cardio", "full"],
   "SQUATS JUMP": ["jambes"], "FENTES DISK": ["jambes"], "MONKEY SLIDE": ["jambes"], "TIRE TAPIS": ["jambes"],
   POMPES: ["bras"], TRACTIONS: ["bras"], "COMMANDO BRAS": ["bras", "tronc"],
-  "PLANK SLIDE": ["tronc"], "KB TOUR": ["tronc"],
+  "PLANK SLIDE": ["tronc"], "KB TOUR": ["tronc"], HELICO: ["tronc"],
   "KB SWING": ["full"], "KB SNATCH": ["full"], "SMASH DOWN": ["full"], "WALL BALL SHOT": ["full"],
   "FLIP TAPIS": ["full"], "BREAK DANCE": ["full"], "ONE REP": ["full"], "TOUR DE POUTRE": ["full"],
 };
@@ -119,7 +119,7 @@ export const SKILL = new Set(["SMASH DOWN", "WALL BALL SHOT"]);
 export const EQUIPMENT: Record<string, string> = {
   TRACTIONS: "barres", "KB SWING": "kettlebells", "KB SNATCH": "kettlebells", "KB TOUR": "kettlebells",
   "TIRE TAPIS": "tapis", "FLIP TAPIS": "tapis", "BOX JUMP": "box", "WALL BALL SHOT": "medecine balls",
-  "SMASH DOWN": "slam balls", "FENTES DISK": "disques", CORDE: "cordes", "TOUR DE POUTRE": "poutre", "PLANK SLIDE": "sliders", "MONKEY SLIDE": "sliders",
+  "SMASH DOWN": "slam balls", "FENTES DISK": "disques", CORDE: "cordes", "TOUR DE POUTRE": "poutre", "PLANK SLIDE": "sliders", "MONKEY SLIDE": "sliders", HELICO: "poids 1 kg",
 };
 
 const W = new Map(DEFAULT_EXERCISES.map((e) => [e.label, e.weight]));

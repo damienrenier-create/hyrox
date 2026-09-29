@@ -24,4 +24,7 @@ export const DEFAULT_EXERCISES: { label: string; weight: number }[] = [
   // genou G, genou D, cheville G, cheville D, puis se relever sans bouger les pieds. ~15 s la rep.
   { label: "ONE REP", weight: 10 },
   { label: "TIRE TAPIS", weight: 30 },
+  // HELICO (Sartay 30/09) : couche sur le ventre, un poids de 1 kg passe dans le dos de la main droite a la main
+  // gauche, puis revient devant, bras tendus, a la main droite. 2 s la rep. Surtout pour les parcours 1 et 2 etoiles.
+  { label: "HELICO", weight: 2 },
 ];

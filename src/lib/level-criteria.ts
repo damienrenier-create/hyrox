@@ -169,6 +169,13 @@ export const CRITERIA: Record<string, string[]> = {
     "Le retour au sol est contrôlé pour éviter les blessures (saut amorti ou descente un pied après l'autre).",
     "L'élève maintient un rythme continu sans pauses excessives.",
   ],
+  // HELICO (30/09) : criteres ecrits pour l'exercice ajoute par Sartay (3 techniques + intensite), a faire valider.
+  HELICO: [
+    "L'élève reste allongé sur le ventre, jambes au sol, le corps aligné (il ne se redresse pas en appui).",
+    "Le poids passe bien dans le dos, de la main droite à la main gauche, sans tomber.",
+    "Les bras sont tendus quand le poids repasse devant, sans que les mains se posent au sol.",
+    "L'élève enchaîne les tours à un rythme régulier, sans pause.",
+  ],
   "TOUR DE POUTRE": [
     "Les passages s'effectuent de façon contrôlée, sans heurter la poutre violemment.",
     "Lors du passage « au-dessus », l'élève s'élève suffisamment pour ne pas risquer de rester accroché.",
@@ -217,6 +224,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "FENTES DISK": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Retour debout complet", "Buste droit, gainé", "Disque tenu ferme", "Équilibre géré"],
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
+  HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {

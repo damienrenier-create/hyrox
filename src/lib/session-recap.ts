@@ -1,15 +1,15 @@
 import { db } from "@/lib/db";
 import { buildLevelBundle, levelStandings, levelsForTeam } from "@/lib/level-context";
-import { PACE_FAST, PACE_SLOW, paceReport, type PaceRun } from "@/lib/level-pace";
+import { PACE_FAST, paceReport, type PaceRun } from "@/lib/level-pace";
 import { codeOf, dissonances, gradeOf, isBad, isExcellent, levelIndex, refereeRanking } from "@/lib/eval-insights";
-import { readSessionClasses } from "@/lib/session-roles";
+import { GRADED_CRITERIA, gradeOfAnswers } from "@/lib/carnet";
 import { displayName } from "@/lib/staff-names";
 import { exoLabel } from "@/lib/level-criteria";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { activeCards, starsLabel, switchChain, teamFormatOf, teamStarsOf, type Format, type Stars, type StarSwitch } from "@/lib/wod-engines/templates/level-engine";
 
-// Recap d'une seance Level pour les admins (Sartay 28/09), classe par classe : les faits a retenir.
+// Recap d'une seance Level pour les admins (Sartay 28/09 ; par NUMERO D'EQUIPE depuis le 30/09) : les faits a retenir.
 // - Fiche de chaque equipe : noms complets, parcours et rang, temps niveau par niveau compares a la mediane des
 //   autres equipes (meme niveau, meme parcours, meme format), vies perdues, cartes jaunes, echauffement, finisher.
 // - Louche : niveaux boucles anormalement vite, cartes jaunes (avec les noms de l'equipe).
@@ -17,10 +17,13 @@ import { activeCards, starsLabel, switchChain, teamFormatOf, teamStarsOf, type F
 //   plus larges que leurs co-arbitres, moyennes extremes.
 // - Equipes trop fortes / trop faibles : rythme moyen, descente de categorie, vies perdues.
 // - Evaluations tres basses / tres hautes, regroupees par eleve.
-// Une equipe melangeant plusieurs classes apparait dans chacune ; un arbitre prof ou coach est range a part.
+// - Auto-evaluation de chaque eleve (note /5 comme au carnet, grille, forme du jour) et avis du prof s'il existe ;
+//   ecart marque entre l'auto-evaluation et les arbitres.
+// Les arbitres (eleves dispenses, profs) ont leur propre bloc : ils ne sont dans aucune equipe.
 
 export type RecapFact = { tone: "bad" | "good" | "warn" | "info"; text: string };
-export type RecapMember = { id: string; name: string; className: string; evals: number; avgGrade: number | null; avgCode: string | null };
+export type RecapSelfEval = { grade: number | null; codes: Record<string, string>; forme: string | null; review: number | null };
+export type RecapMember = { id: string; name: string; className: string; evals: number; avgGrade: number | null; avgCode: string | null; selfEval: RecapSelfEval | null };
 export type RecapLevel = PaceRun & { lost: number }; // lost = vies perdues sur ce niveau
 export type RecapPhase = { levels: number; total: number; finishMs: number | null; losses: number; cards: number; score: number | null };
 export type TeamSheet = {
@@ -45,8 +48,20 @@ export type TeamSheet = {
   finisher: RecapPhase | null;
   suspicious: string[]; // raisons, vide = rien de louche
 };
-export type ClassRecap = { className: string; teams: number; students: number; teamSheets: TeamSheet[]; suspects: RecapFact[]; refereeing: RecapFact[]; teamsLevel: RecapFact[]; evals: RecapFact[] };
-export type SessionRecap = { sessionId: string; label: string; ended: boolean; evaluations: number; startedAtMs: number | null; durationMs: number | null; classes: ClassRecap[] };
+export type TeamRecap = { number: number; sheet: TeamSheet; facts: RecapFact[]; alerts: number };
+export type SessionRecap = {
+  sessionId: string;
+  label: string;
+  ended: boolean;
+  evaluations: number;
+  startedAtMs: number | null;
+  durationMs: number | null;
+  classes: string[];
+  teams: TeamRecap[]; // par numero d'equipe
+  referees: RecapFact[]; // arbitrages bizarres (arbitres trop severes, trop larges, en desaccord)
+  selfEvals: { submitted: number; expected: number };
+};
+export const SELF_EVAL_LABELS = GRADED_CRITERIA.map((c) => ({ id: c.id, label: c.label }));
 
 const STAFF_CLASS = "Profs & coachs";
 export const fmtDuration = (ms: number) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, "0")}`; };
@@ -73,10 +88,18 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
   const classOf = new Map(users.map((u) => [u.id, u.role === "STUDENT" ? u.className ?? "?" : STAFF_CLASS]));
   const fullName = new Map(users.map((u) => [u.id, displayName(u)]));
   const nameOf = (id: string, fallback = "?") => fullName.get(id) ?? fallback;
-  const teamClasses = new Map(bundle.teams.map((t) => [t.id, [...new Set(t.members.map((m) => classOf.get(m.id) ?? "?"))]]));
-  const classes = [...new Set([...readSessionClasses(session.settings), ...[...teamClasses.values()].flat(), ...evals.map((e) => classOf.get(e.refereeId) ?? "?")])]
-    .filter((c) => c && c !== "?")
-    .sort((a, b) => (a === STAFF_CLASS ? 1 : b === STAFF_CLASS ? -1 : a.localeCompare(b, "fr", { numeric: true })));
+  // Auto-evaluations des eleves et avis du prof sur cette seance.
+  const [selfRows, reviewRows] = await Promise.all([db.orm.public.SelfEvaluation.where({ sessionId }).all(), db.orm.public.SelfEvalReview.where({ sessionId }).all()]);
+  const reviewOf = new Map(reviewRows.map((r) => [r.studentId, r.answers as Record<string, unknown> | null]));
+  const selfOf = new Map<string, RecapSelfEval>();
+  for (const r of selfRows) {
+    const a = (r.answers as Record<string, unknown> | null) ?? {};
+    const codes: Record<string, string> = {};
+    for (const c of GRADED_CRITERIA) if (typeof a[c.id] === "string") codes[c.id] = a[c.id] as string;
+    selfOf.set(r.studentId, { grade: gradeOfAnswers(a), codes, forme: typeof a.forme === "string" ? a.forme : null, review: gradeOfAnswers(reviewOf.get(r.studentId)) });
+  }
+  // Avis du prof sans auto-evaluation rendue.
+  for (const [id, a] of reviewOf) if (!selfOf.has(id)) selfOf.set(id, { grade: null, codes: {}, forme: null, review: gradeOfAnswers(a) });
 
   // --- Fiche de chaque equipe.
   const progressOf = new Map(ranked.map((p) => [p.teamId, p]));
@@ -117,7 +140,7 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
       members: t.members.map((m) => {
         const es = evalsOf.get(m.id) ?? [];
         const avg = es.length ? es.reduce((s, e) => s + gradeOf(e.note), 0) / es.length : null;
-        return { id: m.id, name: nameOf(m.id, m.name), className: classOf.get(m.id) === STAFF_CLASS ? "prof" : classOf.get(m.id) ?? "?", evals: es.length, avgGrade: avg, avgCode: avg === null ? null : nearestCode(avg) };
+        return { id: m.id, name: nameOf(m.id, m.name), className: classOf.get(m.id) === STAFF_CLASS ? "prof" : classOf.get(m.id) ?? "?", evals: es.length, avgGrade: avg, avgCode: avg === null ? null : nearestCode(avg), selfEval: selfOf.get(m.id) ?? null };
       }),
       rank: r.rank,
       rankOf: r.of,
@@ -135,8 +158,6 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
       suspicious,
     });
   }
-  // « Équipe 3 (Noah Petit, Rayane Bouzid, Oscar Dupont) »
-  const who = (teamId: string) => { const s = sheets.get(teamId); return s ? `${s.name} (${s.members.map((m) => m.name).join(", ")})` : "?"; };
 
   // --- Arbitres : desaccords regroupes par eleve et exercice, et sens de chaque desaccord pour chaque arbitre.
   const dis = dissonances(evals);
@@ -153,81 +174,82 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
     if (!disGroups.has(k)) disGroups.set(k, evals.filter((e) => e.targetUserId === d.a.targetUserId && e.exerciseId === d.a.exerciseId).sort((a, b) => levelIndex(a.note) - levelIndex(b.note)));
   }
 
-  const out: ClassRecap[] = classes.map((cls) => {
-    const teams = bundle.teams.filter((t) => sheets.has(t.id) && (teamClasses.get(t.id) ?? []).includes(cls));
-    const teamIds = new Set(teams.map((t) => t.id));
-    const students = new Set(teams.flatMap((t) => t.members.filter((m) => classOf.get(m.id) === cls).map((m) => m.id)));
-    const refereeing: RecapFact[] = [];
-    const teamsLevel: RecapFact[] = [];
-    const suspects: RecapFact[] = [];
-    const evalFacts: RecapFact[] = [];
+  // --- Arbitres (bloc a part : ils ne sont dans aucune equipe).
+  const referees: RecapFact[] = [];
+  for (const r of ranking) {
+    const sd = side.get(r.refereeId);
+    const n = sd ? sd.lower + sd.higher : 0;
+    const ref = `${nameOf(r.refereeId, r.name)}${classOf.get(r.refereeId) && classOf.get(r.refereeId) !== STAFF_CLASS ? ` (${classOf.get(r.refereeId)})` : ""}`;
+    if (sd && n >= 3 && sd.lower / n >= 0.75) referees.push({ tone: "bad", text: `${ref} note plus sévèrement que les autres arbitres : plus bas dans ${sd.lower} désaccords sur ${n} (${r.count} évaluations, moyenne ${num(r.avgGrade)}/5 ≈ ${r.avgCode}).` });
+    else if (sd && n >= 3 && sd.higher / n >= 0.75) referees.push({ tone: "bad", text: `${ref} note plus largement que les autres arbitres : plus haut dans ${sd.higher} désaccords sur ${n} (${r.count} évaluations, moyenne ${num(r.avgGrade)}/5 ≈ ${r.avgCode}).` });
+    else if (r.dissonant >= 2 && r.rate >= 0.3) referees.push({ tone: "warn", text: `${ref} : ${r.dissonant} évaluations en désaccord sur ${r.count} (${Math.round(r.rate * 100)} %), sans sens net.` });
+    if (r.count >= 3 && r.avgGrade >= 4.7) referees.push({ tone: "warn", text: `${ref} note très large : moyenne ${num(r.avgGrade)}/5 (≈ ${r.avgCode}) sur ${r.count} évaluations.` });
+    if (r.count >= 3 && r.avgGrade <= 1.2) referees.push({ tone: "warn", text: `${ref} note très sévère : moyenne ${num(r.avgGrade)}/5 (≈ ${r.avgCode}) sur ${r.count} évaluations.` });
+  }
 
-    // --- Louche : chaque equipe avec ses raisons, noms compris.
-    for (const t of teams) {
-      const s = sheets.get(t.id)!;
-      if (s.suspicious.length) suspects.push({ tone: s.suspicious.length >= 2 || s.cards.length >= 2 ? "bad" : "warn", text: `${who(t.id)} : ${s.suspicious.join(" · ")}.` });
+  // --- Chaque equipe, par numero : ses faits (louche, niveau, evaluations et auto-evaluations de ses eleves).
+  const list = (es: typeof evals) => {
+    const by = new Map<string, { n: number; refs: Set<string> }>();
+    for (const e of es) { const k = cap(e.exerciseLabel); const g = by.get(k) ?? { n: 0, refs: new Set<string>() }; g.n++; g.refs.add(nameOf(e.refereeId, e.refereeName)); by.set(k, g); }
+    return [...by.entries()].map(([k, g]) => `${k}${g.n > 1 ? ` ×${g.n}` : ""} (${[...g.refs].join(", ")})`).join(", ");
+  };
+  const teams: TeamRecap[] = bundle.teams.filter((t) => sheets.has(t.id)).map((t) => {
+    const sh = sheets.get(t.id)!;
+    const members = new Set(t.members.map((m) => m.id));
+    const facts: RecapFact[] = [];
+    if (sh.suspicious.length) facts.push({ tone: sh.suspicious.length >= 2 || sh.cards.length >= 2 ? "bad" : "warn", text: `🕵️ Louche : ${sh.suspicious.join(" · ")}.` });
+    const pt = pace.teams.find((x) => x.teamId === t.id);
+    if (pt && pt.levels >= 3 && pt.ratio < 0.7) facts.push({ tone: "warn", text: `Va ${Math.round((1 - pt.ratio) * 100)} % plus vite que les autres équipes sur ${pt.levels} niveaux : parcours ${starsLabel(pt.stars)} sans doute trop facile.` });
+    if (pt && pt.levels >= 3 && pt.ratio > 1.5) facts.push({ tone: "bad", text: `Va ${Math.round((pt.ratio - 1) * 100)} % plus lentement que les autres équipes sur ${pt.levels} niveaux : équipe en difficulté.` });
+    for (const sw of sh.switches) {
+      if (sw.to < sw.from) facts.push({ tone: "bad", text: `Descendue de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (3 vies perdues).` });
+      else facts.push({ tone: "good", text: `Montée de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (1re de sa catégorie sur tout un BOSS).` });
     }
-
-    // --- Arbitrages bizarres : arbitres de la classe, puis desaccords sur des eleves de la classe.
-    for (const r of ranking.filter((r) => classOf.get(r.refereeId) === cls)) {
-      const sd = side.get(r.refereeId);
-      const n = sd ? sd.lower + sd.higher : 0;
-      const ref = nameOf(r.refereeId, r.name);
-      if (sd && n >= 3 && sd.lower / n >= 0.75) refereeing.push({ tone: "bad", text: `${ref} note plus sévèrement que les autres arbitres : plus bas dans ${sd.lower} désaccords sur ${n} (${r.count} évaluations, moyenne ${num(r.avgGrade)}/5 ≈ ${r.avgCode}).` });
-      else if (sd && n >= 3 && sd.higher / n >= 0.75) refereeing.push({ tone: "bad", text: `${ref} note plus largement que les autres arbitres : plus haut dans ${sd.higher} désaccords sur ${n} (${r.count} évaluations, moyenne ${num(r.avgGrade)}/5 ≈ ${r.avgCode}).` });
-      else if (r.dissonant >= 2 && r.rate >= 0.3) refereeing.push({ tone: "warn", text: `${ref} : ${r.dissonant} évaluations en désaccord sur ${r.count} (${Math.round(r.rate * 100)} %), sans sens net.` });
-      if (r.count >= 3 && r.avgGrade >= 4.7) refereeing.push({ tone: "warn", text: `${ref} note très large : moyenne ${num(r.avgGrade)}/5 (≈ ${r.avgCode}) sur ${r.count} évaluations.` });
-      if (r.count >= 3 && r.avgGrade <= 1.2) refereeing.push({ tone: "warn", text: `${ref} note très sévère : moyenne ${num(r.avgGrade)}/5 (≈ ${r.avgCode}) sur ${r.count} évaluations.` });
+    if (sh.losses.length >= 5) facts.push({ tone: "bad", text: `${lives(sh.losses.length)} (${sh.completedLevels} niveaux bouclés).` });
+    if (sh.rank === 1 && sh.rankOf > 1) facts.push({ tone: "good", text: `1re du parcours ${starsLabel(sh.stars)} (${sh.completedLevels} niveaux, ${lives(sh.losses.length)}).` });
+    for (const m of sh.members) {
+      const es = evalsOf.get(m.id) ?? [];
+      const avg = es.length ? es.reduce((x, e) => x + gradeOf(e.note), 0) / es.length : null;
+      if (es.length) {
+        const ti = es.filter((e) => codeOf(e.note) === "TI");
+        const bad = es.filter((e) => isBad(e.note));
+        const top = es.filter((e) => isExcellent(e.note));
+        if (es.length >= 2 && avg! <= 1.5) facts.push({ tone: "bad", text: `${m.name} : moyenne ${num(avg!)}/5 sur ${es.length} évaluations${bad.length ? ` — TI/I en ${list(bad)}` : ""}.` });
+        else if (ti.length) facts.push({ tone: "bad", text: `${m.name} : TI en ${list(ti)}.` });
+        if (es.length >= 2 && avg! >= 4.5) facts.push({ tone: "good", text: `${m.name} : moyenne ${num(avg!)}/5 sur ${es.length} évaluations${top.length ? `, dont ${top.length} E` : ""}.` });
+        else if (top.length) facts.push({ tone: "good", text: `${m.name} : ${top.length} E — ${list(top)}.` });
+      }
+      // Auto-evaluation tres loin de ce que les arbitres ont vu (au moins 2 evaluations).
+      const self = m.selfEval?.grade ?? null;
+      if (self !== null && avg !== null && es.length >= 2 && self - avg >= 2) facts.push({ tone: "warn", text: `${m.name} s'auto-évalue à ${num(self)}/5, les arbitres à ${num(avg)}/5 : se surestime.` });
+      if (self !== null && avg !== null && es.length >= 2 && avg - self >= 2) facts.push({ tone: "info", text: `${m.name} s'auto-évalue à ${num(self)}/5, les arbitres à ${num(avg)}/5 : se sous-estime.` });
     }
     for (const es of disGroups.values()) {
-      if (!students.has(es[0].targetUserId)) continue;
+      if (!members.has(es[0].targetUserId)) continue;
       const seen = new Map<string, number>(); // meme arbitre, meme appreciation : « S ×2 par Martin »
       for (const e of es) { const k = `${codeOf(e.note)} par ${nameOf(e.refereeId, e.refereeName)}`; seen.set(k, (seen.get(k) ?? 0) + 1); }
-      refereeing.push({ tone: "warn", text: `${nameOf(es[0].targetUserId, es[0].targetName)} en ${cap(es[0].exerciseLabel)} : ${[...seen.entries()].map(([k, n]) => (n > 1 ? k.replace(" par ", ` ×${n} par `) : k)).join(", ")}.` });
+      facts.push({ tone: "warn", text: `⚖️ ${nameOf(es[0].targetUserId, es[0].targetName)} en ${cap(es[0].exerciseLabel)} : ${[...seen.entries()].map(([k, n]) => (n > 1 ? k.replace(" par ", ` ×${n} par `) : k)).join(", ")}.` });
     }
+    const unseen = sh.members.filter((m) => !m.evals);
+    if (unseen.length && evals.length) facts.push({ tone: "info", text: `Jamais évalué${unseen.length > 1 ? "s" : ""} par les arbitres : ${unseen.map((m) => m.name).join(", ")}.` });
+    const sorted = facts.sort(byTone);
+    return { number: t.order, sheet: sh, facts: sorted, alerts: sorted.filter((x) => x.tone === "bad" || x.tone === "warn").length };
+  }).sort((a, b) => a.number - b.number);
 
-    // --- Equipes trop fortes / trop faibles.
-    for (const t of pace.teams.filter((x) => teamIds.has(x.teamId))) {
-      if (t.levels >= 3 && t.ratio < 0.7) teamsLevel.push({ tone: "warn", text: `${who(t.teamId)} ${starsLabel(t.stars)} va ${Math.round((1 - t.ratio) * 100)} % plus vite que les autres équipes sur ${t.levels} niveaux : parcours sans doute trop facile.` });
-      if (t.levels >= 3 && t.ratio > 1.5) teamsLevel.push({ tone: "bad", text: `${who(t.teamId)} ${starsLabel(t.stars)} va ${Math.round((t.ratio - 1) * 100)} % plus lentement que les autres équipes sur ${t.levels} niveaux : équipe en difficulté.` });
-    }
-    for (const t of teams) {
-      const s = sheets.get(t.id)!;
-      for (const sw of s.switches) {
-        if (sw.to < sw.from) teamsLevel.push({ tone: "bad", text: `${who(t.id)} est descendue de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (3 vies perdues).` });
-        else teamsLevel.push({ tone: "good", text: `${who(t.id)} est montée de ${starsLabel(sw.from)} à ${starsLabel(sw.to)} au niveau ${sw.fromLevel} (1re de sa catégorie sur tout un BOSS).` });
-      }
-      if (s.losses.length >= 5) teamsLevel.push({ tone: "bad", text: `${who(t.id)} a perdu ${s.losses.length} vies (${s.completedLevels} niveaux bouclés).` });
-      if (s.rank === 1 && s.rankOf > 1) teamsLevel.push({ tone: "good", text: `${who(t.id)} termine 1re du parcours ${starsLabel(s.stars)} (${s.completedLevels} niveaux, ${lives(s.losses.length)}).` });
-    }
-
-    // --- Evaluations tres basses / tres hautes, regroupees par eleve.
-    const list = (es: typeof evals) => {
-      const by = new Map<string, { n: number; refs: Set<string> }>();
-      for (const e of es) { const k = cap(e.exerciseLabel); const g = by.get(k) ?? { n: 0, refs: new Set<string>() }; g.n++; g.refs.add(nameOf(e.refereeId, e.refereeName)); by.set(k, g); }
-      return [...by.entries()].map(([k, g]) => `${k}${g.n > 1 ? ` ×${g.n}` : ""} (${[...g.refs].join(", ")})`).join(", ");
-    };
-    for (const id of students) {
-      const es = evalsOf.get(id) ?? [];
-      if (!es.length) continue;
-      const name = nameOf(id, es[0].targetName);
-      const avg = es.reduce((s, e) => s + gradeOf(e.note), 0) / es.length;
-      const ti = es.filter((e) => codeOf(e.note) === "TI");
-      const bad = es.filter((e) => isBad(e.note));
-      const top = es.filter((e) => isExcellent(e.note));
-      if (es.length >= 2 && avg <= 1.5) evalFacts.push({ tone: "bad", text: `${name} : moyenne ${num(avg)}/5 sur ${es.length} évaluations${bad.length ? ` — TI/I en ${list(bad)}` : ""}.` });
-      else if (ti.length) evalFacts.push({ tone: "bad", text: `${name} : TI en ${list(ti)}.` });
-      if (es.length >= 2 && avg >= 4.5) evalFacts.push({ tone: "good", text: `${name} : moyenne ${num(avg)}/5 sur ${es.length} évaluations${top.length ? `, dont ${top.length} E` : ""}.` });
-      else if (top.length) evalFacts.push({ tone: "good", text: `${name} : ${top.length} E — ${list(top)}.` });
-    }
-    const unseen = [...students].filter((id) => !evalsOf.has(id)).length;
-    if (unseen && evals.length) evalFacts.push({ tone: "info", text: `${plural(unseen, "élève")} de la classe jamais évalué${unseen > 1 ? "s" : ""}.` });
-
-    const teamSheets = teams.map((t) => sheets.get(t.id)!).sort((a, b) => b.stars - a.stars || a.rank - b.rank);
-    return { className: cls, teams: teams.length, students: students.size, teamSheets, suspects: suspects.sort(byTone), refereeing: refereeing.sort(byTone), teamsLevel: teamsLevel.sort(byTone), evals: evalFacts.sort(byTone) };
-  }).filter((c) => c.teams || c.refereeing.length);
-
+  const players = teams.flatMap((x) => x.sheet.members).filter((m) => m.className !== "prof");
+  const classes = [...new Set(players.map((m) => m.className).filter((c) => c && c !== "?"))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
   const endAbs = bundle.raceEndedAtMs ?? bundle.endedAtMs;
   const durationMs = bundle.startedAtMs !== null && endAbs !== null ? elapsed(bundle.startedAtMs, bundle.pauses, endAbs) : null;
-  return { sessionId, label: session.label ?? "WOD Level", ended: !!session.raceEndedAt, evaluations: evals.length, startedAtMs: bundle.startedAtMs, durationMs, classes: out };
+  return {
+    sessionId,
+    label: session.label ?? "WOD Level",
+    ended: !!session.raceEndedAt,
+    evaluations: evals.length,
+    startedAtMs: bundle.startedAtMs,
+    durationMs,
+    classes,
+    teams,
+    referees: referees.sort(byTone),
+    selfEvals: { submitted: players.filter((m) => m.selfEval?.grade != null).length, expected: players.length },
+  };
 }

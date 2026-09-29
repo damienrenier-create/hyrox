@@ -9,7 +9,7 @@ const item = (x: string, i: number, n: number) => (n === 4 && i === 3 ? `<li cla
 export function renderCriteriaOneSlide(labels: string[], subtitle: string): string {
   const known = Object.keys(CRITERIA);
   const ordered = [...labels.filter((l) => known.includes(l.toUpperCase())).sort((a, b) => known.indexOf(a.toUpperCase()) - known.indexOf(b.toUpperCase())), ...labels.filter((l) => !known.includes(l.toUpperCase()))];
-  const cols = ordered.length > 18 ? 7 : ordered.length > 12 ? 6 : ordered.length > 8 ? 4 : 3;
+  const cols = ordered.length > 21 ? 8 : ordered.length > 18 ? 7 : ordered.length > 12 ? 6 : ordered.length > 8 ? 4 : 3;
   const cells = ordered.map((l) => `<div class="c"><h3>${esc(exoLabel(l))}</h3><ol>${shortCriteriaFor(l).map((x, i, a) => item(x, i, a.length)).join("")}</ol></div>`).join("");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Critères des arbitres</title><style>
 @page { size: 1920px 1080px; margin: 0; }
