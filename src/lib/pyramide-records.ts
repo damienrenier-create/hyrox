@@ -41,7 +41,7 @@ export type RecordBoard = { id: string; title: string; hint: string; rows: Recor
 export type RecordPeriod = "session" | "day" | "week" | "all";
 // « phase » (Level seulement) : le WOD principal, ou ses seances enfant echauffement / finisher.
 export type RecordPhase = "wod" | "warmup" | "finisher";
-export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase; stars?: 1 | 2 | 3 | 4 | 5 | null; format?: "big" | "mid" | "small" | null };
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; className?: string | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase; stars?: 1 | 2 | 3 | 4 | 5 | null; format?: "big" | "mid" | "small" | null };
 // `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
 // visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
 export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };
@@ -229,6 +229,8 @@ export async function buildPyramideRecords(f: RecordFilters = {}): Promise<Recor
   const grades = [...new Set(rows.map((r) => r.grade).filter((g): g is number => g !== null))].sort((a, b) => a - b);
   let pool = f.sex ? rows.filter((r) => r.base.sex === f.sex) : rows;
   if (f.grade) pool = pool.filter((r) => r.grade === f.grade);
+  // Records d'une classe (espace eleve, 29/09 nuit) : equipes comptant au moins un eleve de cette classe.
+  if (f.className) pool = pool.filter((r) => r.base.classes.split(", ").includes(f.className!));
   const apexReps = pool[0]?.apexReps ?? rows[0]?.apexReps ?? 0;
 
   const top = (

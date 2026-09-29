@@ -178,6 +178,8 @@ export async function buildLevelRecords(f: RecordFilters = {}): Promise<RecordsR
   const grades = [...new Set(rows.map((r) => r.grade).filter((g): g is number => g !== null))].sort((a, b) => a - b);
   let pool = f.sex ? rows.filter((r) => r.base.sex === f.sex) : rows;
   if (f.grade) pool = pool.filter((r) => r.grade === f.grade);
+  // Records d'une classe (espace eleve, 29/09 nuit) : equipes comptant au moins un eleve de cette classe.
+  if (f.className) pool = pool.filter((r) => r.base.classes.split(", ").includes(f.className!));
   if (f.stars) pool = pool.filter((r) => r.stars === f.stars);
   if (f.format) pool = pool.filter((r) => r.base.format === f.format);
 

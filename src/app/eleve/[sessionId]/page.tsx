@@ -6,6 +6,7 @@ import { exercisesFor } from "@/lib/session-exercises";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
+import { toMs } from "@/lib/scheduling";
 import { listExercises } from "@/lib/level";
 import { criteriaComment, isLiked, readCriteria } from "@/lib/level-criteria";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
@@ -80,13 +81,19 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
         }
       : null;
 
+  // Records de CE WOD (Sartay 29/09 nuit) : tous les eleves, ou seulement ceux de ma classe.
+  const recordsWod = session.wodType === "LEVEL" ? "level" : session.wodType === "PYRAMIDE_CLASSIQUE" ? "pyramide" : null;
+  const records = recordsWod ? { all: `/eleve/records?wod=${recordsWod}`, mine: user.className ? `/eleve/records?wod=${recordsWod}&classe=1` : null, className: user.className ?? null } : null;
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  const dateMs = rs?.startedAt ? toMs(rs.startedAt) : session.opensAt ? toMs(session.opensAt) : toMs(session.createdAt);
+
   return (
     <div className={ui.page}>
       <TopBar
         brand={false}
         back={{ href: "/eleve", label: "Retour" }}
-        title={session.label ?? wodLabel(session.wodType)}
-        subtitle={<>{fmtDate(session.createdAt)} · {myTeam.name}{teammates.length > 0 && <> · avec {teammates.join(", ")}</>}</>}
+        title={wodLabel(session.wodType)}
+        subtitle={<>{fmtDate(new Date(dateMs).toISOString())} · {myTeam.name}{teammates.length > 0 && <> · avec {teammates.join(", ")}</>}</>}
       />
 
       <main className="max-w-2xl mx-auto p-4">
@@ -107,6 +114,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
           }}
           review={review}
           individual={session.wodType === "LEVEL"}
+          records={records}
         />
       </main>
     </div>

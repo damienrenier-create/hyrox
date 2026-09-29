@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { sessionsForStudent, wodLabel, fmtDate } from "@/lib/student-sessions";
+import { sessionsForStudent, wodLabel, fmtDate, type StudentSessionRow } from "@/lib/student-sessions";
 import { openSessionsForStudent, toMs } from "@/lib/scheduling";
 import { refereeAccess } from "@/lib/referee-access";
 import { LogoutButton } from "../_components/LogoutButton";
@@ -22,7 +22,10 @@ export default async function ElevePage() {
   const openSessions = await openSessionsForStudent(user.id, user.className ?? null);
   const mine = await sessionsForStudent(user.id);
   const openIds = new Set(openSessions.map((s) => s.id));
-  const history = mine.filter((r) => !openIds.has(r.sessionId));
+  // Sartay 29/09 nuit : l'eleve ne voit que les WOD qu'il a vraiment faits (equipe avec au moins un resultat),
+  // ranges par cycle puis par type de WOD ; rien d'autre.
+  const history = mine.filter((r) => !openIds.has(r.sessionId) && r.recorded);
+  const byCycle = groupHistory(history);
 
   const cards = [];
   for (const s of openSessions) {
@@ -37,17 +40,6 @@ export default async function ElevePage() {
       <TopBar title={birthday ? `${user.name} 🎂` : user.name} subtitle={birthday ? `${user.className ?? ""} · joyeux anniversaire !` : (user.className ?? "")} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
-        {/* Le palmares est ouvert aux eleves : c'est ce qui donne envie de battre le record. */}
-        <Link href="/eleve/records" className={`block ${ui.card} border-accent/60 bg-accent-soft/40 hover:border-accent p-3 transition`}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="font-display font-extrabold text-ink">🏆 Records du WOD Pyramide</div>
-              <div className="text-xs text-ink-2">Toutes classes confondues · par équipe et par année</div>
-            </div>
-            <span className="text-ink-3 text-xl">›</span>
-          </div>
-        </Link>
-
         <section>
           <h2 className={`${ui.eyebrow} mb-2`}>WOD en cours</h2>
           {cards.length === 0 ? (
@@ -60,7 +52,7 @@ export default async function ElevePage() {
                 <div key={s.id} className={`${ui.card} border-brand/40 p-4`}>
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div>
-                      <div className="font-display font-extrabold text-lg">{s.label ?? wodLabel(s.wodType)}</div>
+                      <div className="font-display font-extrabold text-lg">{wodLabel(s.wodType)}</div>
                       <div className="text-xs text-ink-2">
                         {fmtDate(s.createdAt)}
                         {s.raceEndedAt ? " · terminé" : " · ouvert"}
@@ -117,31 +109,55 @@ export default async function ElevePage() {
           )}
         </section>
 
-        <section>
-          <h2 className={`${ui.eyebrow} mb-2`}>Mes WOD</h2>
-          {history.length === 0 ? (
-            <p className={`${ui.cardPad} ${ui.muted}`}>
-              Ton nom n&apos;est encore apparu dans aucun WOD précédent.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {history.map((r) => (
-                <li key={r.sessionId}>
-                  <Link href={`/eleve/${r.sessionId}`} className={`block ${ui.card} hover:border-brand p-4 transition`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="font-display font-bold">{r.label}</div>
-                        <div className="text-xs text-ink-2">{fmtDate(r.createdAt)} · {r.teamName}</div>
-                      </div>
-                      <span className="text-ink-3 font-black">›</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {byCycle.map((c) => (
+          <section key={c.key} className="space-y-3">
+            <h2 className={`${ui.eyebrow}`}>{c.name ? `Cycle ${c.name}` : "Mes WOD"} · {c.count} WOD fait{c.count > 1 ? "s" : ""}</h2>
+            {c.types.map((t) => (
+              <div key={t.wodType} className={`${ui.card} p-3 space-y-2`}>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-display font-extrabold text-ink">{t.name} <span className="text-ink-3 font-sans text-sm font-semibold">· {t.rows.length} séance{t.rows.length > 1 ? "s" : ""}</span></h3>
+                  {RECORDS_WOD[t.wodType] && <Link href={`/eleve/records?wod=${RECORDS_WOD[t.wodType]}`} className="text-xs font-bold text-accent-ink hover:underline whitespace-nowrap">🏆 Records</Link>}
+                </div>
+                <ul className="space-y-1.5">
+                  {t.rows.map((r) => (
+                    <li key={r.sessionId}>
+                      <Link href={`/eleve/${r.sessionId}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper hover:border-brand px-3 py-2 transition">
+                        <span>
+                          <span className="block font-bold text-sm capitalize">{fmtDate(new Date(r.dateMs).toISOString())}</span>
+                          <span className="block text-xs text-ink-2">{r.teamName} · résultats, arbitrages, auto-éval</span>
+                        </span>
+                        <span className="text-ink-3 font-black">›</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        ))}
       </main>
     </div>
   );
+}
+
+// Records existants par type de WOD (lien depuis un WOD fait par l'eleve).
+const RECORDS_WOD: Record<string, string> = { PYRAMIDE_CLASSIQUE: "pyramide", LEVEL: "level" };
+const WOD_ORDER = ["LEVEL", "PYRAMIDE_CLASSIQUE", "FETE_FORAINE"];
+
+// Historique de l'eleve : un bloc par cycle (le plus recent d'abord), puis un par type de WOD.
+function groupHistory(rows: StudentSessionRow[]) {
+  const cycles: { key: string; name: string | null; count: number; last: number; types: { wodType: string; name: string; rows: StudentSessionRow[] }[] }[] = [];
+  for (const r of rows) {
+    const key = r.cycleId ?? "none";
+    let c = cycles.find((x) => x.key === key);
+    if (!c) { c = { key, name: r.cycleName, count: 0, last: r.dateMs, types: [] }; cycles.push(c); }
+    c.count++;
+    c.last = Math.max(c.last, r.dateMs);
+    let t = c.types.find((x) => x.wodType === r.wodType);
+    if (!t) { t = { wodType: r.wodType, name: r.wodName, rows: [] }; c.types.push(t); }
+    t.rows.push(r);
+  }
+  const rank = (w: string) => { const i = WOD_ORDER.indexOf(w); return i < 0 ? WOD_ORDER.length : i; };
+  for (const c of cycles) c.types.sort((a, b) => rank(a.wodType) - rank(b.wodType) || a.name.localeCompare(b.name, "fr"));
+  return cycles.sort((a, b) => b.last - a.last);
 }

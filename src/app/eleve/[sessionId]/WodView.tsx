@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { QUALITY_LEVELS, type QualityCode } from "@/lib/wod-engines/core/quality";
 import type { SelfEvalCriterion } from "@/lib/wod-engines/core/self-eval";
 import { SelfEvalGrid } from "../SelfEvalGrid";
@@ -48,9 +49,11 @@ type Props = {
   selfEval: { initial: Record<string, string> | null; state: "open" | "notYet" | "expired"; closesAt: number | null; submittedAt: number | null };
   // Avis du prof, deja filtre par le serveur : grille absente si non visible, commentaire absent si non visible.
   review?: { answers: Record<string, string> | null; comment: string | null; reviewerName: string } | null;
+  // Records de ce WOD : tous les eleves, et ceux de ma classe (null = pas de records pour ce WOD).
+  records?: { all: string; mine: string | null; className: string | null } | null;
 };
 
-export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null, individual = false }: Props) {
+export function WodView({ sessionId, ended, myTeamName, columns, results, refereeEvals, criteria, instruction, selfEval, review = null, individual = false, records = null }: Props) {
   const [tab, setTab] = useState<Tab>(selfEval.state === "open" && !selfEval.initial ? "self" : "results");
   const mine = results.find((r) => r.mine);
   const todo = selfEval.state === "open" && !selfEval.initial;
@@ -79,6 +82,21 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
             <div className={ui.eyebrow}>{mine.time ? columns.time : columns.reps}</div>
             <div className={stat}>{mine.time ?? mine.reps}</div>
           </div>
+        </div>
+      )}
+
+      {records && (
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <Link href={records.all} className={`${ui.card} border-accent/60 bg-accent-soft/40 hover:border-accent px-3 py-2 text-center transition`}>
+            <span className="block font-display font-extrabold text-sm text-ink">🏆 Records du WOD</span>
+            <span className="block text-[11px] text-ink-2">tous les élèves</span>
+          </Link>
+          {records.mine && (
+            <Link href={records.mine} className={`${ui.card} border-brand/40 hover:border-brand px-3 py-2 text-center transition`}>
+              <span className="block font-display font-extrabold text-sm text-ink">🏫 Records de ma classe</span>
+              <span className="block text-[11px] text-ink-2">{records.className}</span>
+            </Link>
+          )}
         </div>
       )}
 

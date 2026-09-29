@@ -5,6 +5,7 @@ import { buildPyramideRecords, type RecordPeriod, type RecordPhase, type TeamSex
 import { buildLevelRecords } from "@/lib/level-records";
 import { FORMATS, STARS, formatLabel, formatName, starsLabel, starsName, type Format, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { TopBar } from "../../_components/TopBar";
+import { recordedWodTypes, sessionsForStudent } from "@/lib/student-sessions";
 import { cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -30,24 +31,41 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-d
 
 // Records du WOD Pyramide vus par les eleves : le meme palmares que le greffier, en lecture seule,
 // avec les memes filtres (composition de l'equipe, degre). Tout passe par l'URL, donc partageable.
-export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }> }) {
+export default async function EleveRecordsPage({ searchParams }: { searchParams: Promise<{ sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string; classe?: string }> }) {
   const user = await getSession();
   if (!user) redirect("/");
   const sp = await searchParams;
+  // Sartay 29/09 nuit : un eleve ne voit que les records des WOD qu'il a vraiment faits.
+  const student = user.role === "STUDENT";
+  const done = student ? recordedWodTypes(await sessionsForStudent(user.id)) : ["PYRAMIDE_CLASSIQUE", "LEVEL"];
+  const allowed = (["level", "pyramide"] as const).filter((w) => done.includes(w === "level" ? "LEVEL" : "PYRAMIDE_CLASSIQUE"));
+  // Records de sa classe : « classe=1 » pour un eleve (sa classe), un nom de classe pour le staff.
+  const className = sp.classe ? (student ? user.className ?? null : sp.classe) : null;
   const sex = (["F", "M", "OPEN"].includes(sp.sexe ?? "") ? sp.sexe : "") as TeamSex | "";
   const grade = sp.degre && /^\d$/.test(sp.degre) ? Number(sp.degre) : null;
   const periodQ = PERIODS.find((p) => p.q && p.q === sp.periode)?.q ?? "";
   const period = PERIODS.find((p) => p.q === periodQ)?.v ?? "all";
-  const wod = sp.wod === "level" ? "level" : "pyramide";
+  const wod = allowed.includes(sp.wod === "level" ? "level" : "pyramide") ? (sp.wod === "level" ? "level" : "pyramide") : allowed[0] ?? null;
   const phaseQ = PHASES.find((p) => p.q && p.q === sp.phase)?.q ?? "";
   const phase = PHASES.find((p) => p.q === phaseQ)?.v ?? "wod";
   const stars = (["1", "2", "3", "4", "5"].includes(sp.etoiles ?? "") ? Number(sp.etoiles) : null) as Stars | null;
   const format = (sp.format === "small" || sp.format === "mid" || sp.format === "big" ? sp.format : null) as Format | null;
-  const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase, stars, format }) : await buildPyramideRecords({ sex, grade, period });
-  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }) => {
+  if (!wod) {
+    return (
+      <div className={ui.page}>
+        <TopBar brand={false} back={{ href: "/eleve", label: "Retour" }} title="🏆 Records" />
+        <main className="max-w-2xl mx-auto p-4">
+          <p className={`${ui.cardPad} ${ui.muted}`}>Les records apparaîtront ici dès que tu auras fait ton premier WOD.</p>
+        </main>
+      </div>
+    );
+  }
+  const data = wod === "level" ? await buildLevelRecords({ sex, grade, className, period, phase, stars, format }) : await buildPyramideRecords({ sex, grade, className, period });
+  const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string; classe?: string }) => {
     const p = new URLSearchParams();
-    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "", phase: wod === "level" ? phaseQ : "", etoiles: wod === "level" && stars ? String(stars) : "", format: wod === "level" && format ? format : "", ...patch };
+    const v = { sexe: sex, degre: grade ? String(grade) : "", periode: periodQ, wod: wod === "level" ? "level" : "pyramide", phase: wod === "level" ? phaseQ : "", etoiles: wod === "level" && stars ? String(stars) : "", format: wod === "level" && format ? format : "", classe: sp.classe && className ? sp.classe : "", ...patch };
     if (v.wod) p.set("wod", v.wod);
+    if (v.classe) p.set("classe", v.classe);
     if (v.wod === "level" && v.phase) p.set("phase", v.phase);
     if (v.wod === "level" && v.etoiles) p.set("etoiles", v.etoiles);
     if (v.wod === "level" && v.format) p.set("format", v.format);
@@ -60,15 +78,25 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
 
   return (
     <div className={ui.page}>
-      <TopBar brand={false} back={{ href: user.role === "STUDENT" ? "/eleve" : "/admin", label: "Retour" }} title="🏆 Records" subtitle={`WOD ${wod === "level" ? "Level" : "Pyramide"} · toutes classes confondues`} />
+      <TopBar brand={false} back={{ href: student ? "/eleve" : "/admin", label: "Retour" }} title="🏆 Records" subtitle={`WOD ${wod === "level" ? "Level" : "Pyramide"} · ${className ? `classe ${className}` : "toutes classes confondues"}`} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         <div className={`${ui.cardPad} space-y-2`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={ui.eyebrow}>WOD</span>
-            <Link href={href({ wod: "" })} className={cx(ui.pill, wod === "pyramide" ? ui.pillOn : ui.pillOff)}>Pyramide</Link>
-            <Link href={href({ wod: "level" })} className={cx(ui.pill, wod === "level" ? ui.pillOn : ui.pillOff)}>Level</Link>
-          </div>
+          {allowed.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={ui.eyebrow}>WOD</span>
+              {allowed.map((w) => (
+                <Link key={w} href={href({ wod: w, phase: "", etoiles: "", format: "" })} className={cx(ui.pill, wod === w ? ui.pillOn : ui.pillOff)}>{w === "level" ? "Level" : "Pyramide"}</Link>
+              ))}
+            </div>
+          )}
+          {student && user.className && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={ui.eyebrow}>Élèves</span>
+              <Link href={href({ classe: "" })} className={cx(ui.pill, !className ? ui.pillOn : ui.pillOff)}>Toutes les classes</Link>
+              <Link href={href({ classe: "1" })} className={cx(ui.pill, className ? ui.pillOn : ui.pillOff)}>Ma classe ({user.className})</Link>
+            </div>
+          )}
           {wod === "level" && (
             <div className="flex flex-wrap items-center gap-2">
               <span className={ui.eyebrow}>Phase</span>
