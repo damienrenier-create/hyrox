@@ -9,7 +9,7 @@ import {
   type CoinEvent, type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayOp, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
-import { levelPoints, rankGlobal } from "@/lib/wod-engines/templates/level-engine";
+import { levelPoints, rankGlobal, DEFAULT_STARS } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
 import { createTwinSessionAction } from "./settings-actions";
 import { createStarTeamAction, numberTeamsAction, getEmomPlayerScoresAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive } from "./level-actions";
@@ -666,7 +666,7 @@ export function LevelClient({
                     </table>
                     <div className="p-2 flex flex-wrap items-center gap-2 border-t border-line">
                       <span className={`${ui.hint} flex-1 min-w-[240px]`}>
-                        Règle : échauffement bouclé en 80 % du temps prévu ou moins → ★★★ ; jusqu&apos;à 120 % → ★★☆ ; au-delà → ★☆☆. Pas bouclé : ★★☆ s&apos;il a fait au moins les trois quarts des séries, sinon ★☆☆. Tu peux aussi tout régler à la main dans ⚙️ Réglages › Parcours des équipes.
+                        Règle : échauffement bouclé en 75 % du temps prévu ou moins → 5★ ; jusqu&apos;à 90 % → 4★ ; jusqu&apos;à 110 % → 3★ ; jusqu&apos;à 130 % → 2★ ; au-delà → 1★. Pas bouclé : 2★ s&apos;il a fait au moins les trois quarts des séries, sinon 1★. Tu peux aussi tout régler à la main dans ⚙️ Réglages › Parcours des équipes.
                       </span>
                       <button type="button" disabled={pending} onClick={() => applySuggestions(suggestionRows)} className={btn.smPrimary}>
                         Tout appliquer ({suggestionsDiff})
@@ -1741,10 +1741,10 @@ function RecapTable({ ranked, teamById, levels, extras, phases }: { ranked: Team
 }
 
 function LadderPreview({ levels, ladders }: { levels: FrozenLevel[]; ladders: LevelBundle["ladders"] }) {
-  const [stars, setStars] = useState<Stars>(2);
+  const [stars, setStars] = useState<Stars>(DEFAULT_STARS);
   const [format, setFormat] = useState<Format>("big");
   const shown = ladderFor(levels, ladders, stars, format);
-  const available = STARS.filter((st) => st === 2 || (ladders[st]?.length ?? 0) > 0);
+  const available = STARS.filter((st) => st === DEFAULT_STARS || (ladders[st]?.length ?? 0) > 0);
   const smallMissing = format !== "big" && !ladders[ladderKey(stars, format)]?.length;
   return (
     <div className="space-y-2">
@@ -1754,7 +1754,7 @@ function LadderPreview({ levels, ladders }: { levels: FrozenLevel[]; ladders: Le
       <div className={`${ui.segmented} inline-flex`}>
         {STARS.map((st) => (
           <button key={st} type="button" onClick={() => setStars(st)} className={cx("px-3 py-1.5 rounded-lg text-sm font-bold", stars === st ? ui.segOn : ui.segOff)} title={available.includes(st) ? starsName(st) : `${starsName(st)} : pas d'échelle, ses équipes jouent le 2 étoiles`}>
-            {starsLabel(st)} {starsName(st)}{!available.includes(st) && " (= 2★)"}
+            {starsLabel(st)} {starsName(st)}{!available.includes(st) && " (= 3★)"}
           </button>
         ))}
       </div>

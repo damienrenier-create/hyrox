@@ -11,6 +11,7 @@ import {
   autoRocketPool, pickRocketTarget, parcoursKey, readStarSwitches, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
   DEFAULT_CAP_MIN, DEFAULT_STARS, DISCOUNT_STEPS, LADDER_KEYS, REORIENT_RULES, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
+import { isStars } from "@/lib/wod-engines/templates/level-engine";
 
 // Pieces, fusees et equipes par parcours du WOD Level, cote serveur et SANS authentification (les actions du
 // greffier verifient l'acces puis appellent ces fonctions ; les scripts de test aussi). Tout vit dans
@@ -207,10 +208,10 @@ export async function sendRocket(sessionId: string, teamId: string, exerciseId: 
 }
 
 // ===== Equipes par parcours : la categorie d'abord, les numeros a la fin =====
-// Une equipe se cree dans un parcours avec un nom provisoire (« ★★☆ A ») et un numero hors plage ; la
+// Une equipe se cree dans un parcours avec un nom provisoire (« ★★★☆☆ A ») et un numero hors plage ; la
 // numerotation range tout : 3 etoiles d'abord, puis 2, puis 1, dans l'ordre de creation, noms « Équipe n ».
 export async function createStarTeam(sessionId: string, stars: Stars): Promise<Res & { id?: string }> {
-  if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
+  if (!isStars(stars)) return { error: "Parcours inconnu." };
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (rs?.startedAt) return { error: "La course est lancée : plus de nouvelle équipe." };
   const settings = await freshSettings(sessionId);

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listExercises, listLevels, seedDefaultExercises } from "@/lib/level";
 import { deriveLevel, materialize, proposalByKey } from "@/lib/level-proposals";
-import { isBoss, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
+import { isBoss, isStars, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 
 // Charge une proposition de 25 niveaux (A a F) dans une echelle VIDE. Avec `replace`, DAMZER (seul)
 // remplace l'echelle existante : les seances deja lancees gardent leur copie figee dans
@@ -16,7 +16,7 @@ export async function loadProposalAction(key: string, replace = false, stars: St
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) return { error: "Accès refusé." };
   const proposal = proposalByKey(key);
   if (!proposal) return { error: "Proposition inconnue." };
-  if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
+  if (!isStars(stars)) return { error: "Parcours inconnu." };
   if (format !== "big" && format !== "mid" && format !== "small") return { error: "Format inconnu." };
   const existing = await listLevels(stars, format);
   if (existing.length > 0) {

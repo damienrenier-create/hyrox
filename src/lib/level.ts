@@ -97,7 +97,7 @@ function freezeRows(levels: LevelRow[], byId: Map<string, ExerciseRow>): FrozenL
   }));
 }
 
-// Echelle figee d'une seance : le parcours 2 etoiles (settings.levels), ou celui demande s'il est fige.
+// Echelle figee d'une seance : le parcours 3 etoiles (settings.levels), ou celui demande s'il est fige.
 export function readFrozenFromSettings(settings: unknown, stars: Stars = DEFAULT_STARS, format: Format = DEFAULT_FORMAT): FrozenLevel[] {
   const s = settings as { levels?: unknown } | null;
   const levels = readFrozenLevels(s?.levels);

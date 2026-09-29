@@ -11,7 +11,7 @@ import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
-import { readBossEntry, readGifts, readStreaks, type BossEntry, type Streak } from "@/lib/wod-engines/templates/level-engine";
+import { isStars, readBossEntry, readGifts, readStreaks, type BossEntry, type Streak } from "@/lib/wod-engines/templates/level-engine";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { hash32 } from "@/lib/mine-core";
@@ -491,7 +491,7 @@ export async function setTeamFormatAction(sessionId: string, teamId: string, for
 // referencent des numeros de niveau et des index de fiche propres a une echelle.
 export async function setTeamStarsAction(sessionId: string, teamId: string, stars: Stars): Promise<Res> {
   const { session } = await requireLevelStaff(sessionId);
-  if (stars !== 1 && stars !== 2 && stars !== 3) return { error: "Parcours inconnu." };
+  if (!isStars(stars)) return { error: "Parcours inconnu." };
   const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
   if (!team) return { error: "Équipe introuvable." };
   const ticked = await db.orm.public.LevelTick.where({ sessionId, teamId }).first();
