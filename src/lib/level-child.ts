@@ -64,7 +64,7 @@ export async function createChildSession(parentId: string, kind: ChildKind, by: 
       ...(order ? { levelOrder: order } : {}),
       ...(kind === "warmup" ? { zombieSpeed: 1 } : {}),
       // Zombies partout (Sartay 25/09) : palier 1 a l'echauffement, palier 10 au finisher (un par vague).
-      ...(kind === "finisher" ? { emom: { waveMinutes: FINISHER_EMOM.map((w) => w.minutes) }, zombies: true, zombieSpeed: EMOM_ZOMBIE_SPEED } : { zombies: true }),
+      ...(kind === "finisher" ? { emom: { waveMinutes: FINISHER_EMOM.map((w) => w.seconds / 60) }, zombies: true, zombieSpeed: EMOM_ZOMBIE_SPEED } : { zombies: true }),
       child: { kind, parentId },
     })),
   });

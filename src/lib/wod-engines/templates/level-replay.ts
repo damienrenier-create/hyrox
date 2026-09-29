@@ -271,30 +271,71 @@ export function applyRocket(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     const p = progress.find((pp) => pp.teamId === x)!;
     const lv = replayLadder(cfg, st, x);
     const at = lv.findIndex((l) => l.number === p.currentLevel);
-    const next = at >= 0 ? lv[at + 1] ?? null : null;
-    return { teamId: x, group: g, rankInGroup: ranked.filter((pp) => groupOf(pp.teamId) === g).findIndex((pp) => pp.teamId === x) + 1, groupSize: 0, finished: p.currentLevel === null, hasNext: !!next, next };
+    // Niveau qui recevra la fiche (Sartay 29/09) : le premier niveau ORDINAIRE apres le niveau en cours — jamais un BOSS
+    // (un seul exercice pour toute l'equipe ; une fiche en plus y restait cachee sous le coeur et bloquait l'equipe) —,
+    // a defaut le niveau en cours s'il est ordinaire.
+    const cur = at >= 0 ? lv[at] : null;
+    const next = at >= 0 ? lv.slice(at + 1).find((l) => !l.boss) ?? (cur && !cur.boss ? cur : null) : null;
+    return { teamId: x, group: g, rankInGroup: ranked.filter((pp) => groupOf(pp.teamId) === g).findIndex((pp) => pp.teamId === x) + 1, groupSize: 0, finished: p.currentLevel === null, hasNext: !!next, next, cur };
   });
   for (const r of rows) r.groupSize = rows.filter((x) => x.group === r.group).length;
   const sendTargets = st.coinEvents.filter((e) => e.kind === "send").sort((a, b) => a.at - b.at).map((e) => e.toTeamId ?? "");
-  const pick = pickRocketTarget(teamId, rows, sendTargets, () => Math.min(0.999999, Math.max(0, draw)));
-  const payload = rocketPayload(masteredExercises(replayLadder(cfg, st, teamId), teamId, st.ticks, st.penalties), mine.score);
-  if (!payload) return "Aucun exercice maîtrisé pour l'instant (3 fiches du même exercice).";
-  if (!pick) return "Aucune cible possible pour l'instant.";
-  // Sartay 29/09 : la fusee se construit toute seule a 100 pieces, puis CHAQUE envoi coute la charge (reps x ponderation,
-  // 1 piece par seconde de travail, comme l'allegement). Banque trop courte : la charge est reduite a ce qu'elle
-  // peut payer (par 5), jamais sous 5 reps.
-  const w = Math.max(0.1, payload.weight);
-  const affordable = Math.floor(mine.bank / w);
-  const reps = Math.min(payload.reps, affordable >= 5 ? Math.floor(affordable / 5) * 5 : affordable);
-  if (reps < 5) return `Il faut ${5 * payload.weight} pièces pour envoyer 5 ${payload.label} ; l'équipe en a ${mine.bank}.`;
-  const cost = reps * payload.weight;
-  const target = pick.target;
+  // Sartay 29/09 : « il faut TOUJOURS une cible et un cout ». D'abord la regle (concurrent direct, top 4, hasard) ;
+  // si elle ne trouve personne (petite categorie, derniere equipe, cible precedente, dernier niveau), l'equipe en jeu
+  // la plus proche au classement, sa categorie d'abord, en evitant si possible la cible precedente.
+  let target = pickRocketTarget(teamId, rows, sendTargets, () => Math.min(0.999999, Math.max(0, draw)))?.target ?? null;
+  if (!target) {
+    const me = rows.find((r) => r.teamId === teamId)!;
+    const last = sendTargets[sendTargets.length - 1] ?? null;
+    target = rows
+      .filter((r) => r.teamId !== teamId && !r.finished && r.next)
+      .sort((a, b) => Number(a.group !== me.group) - Number(b.group !== me.group) || Number(a.teamId === last) - Number(b.teamId === last) || Number(!a.hasNext) - Number(!b.hasNext) || Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0] ?? null;
+  }
+  if (!target || !target.next) return "Toutes les autres équipes ont bouclé leur échelle (ou n'ont plus que des BOSS) : plus personne à viser.";
+  // Charge : un exercice maitrise (3 fiches), a defaut un exercice deja fait ; choisi d'apres la richesse
+  // (`rocketPayload`). CHAQUE envoi coute la charge (reps x ponderation, 1 piece par seconde de travail, comme
+  // l'allegement) : banque trop courte -> moins de reps (par 5), puis un exercice plus leger, jamais sous 5 reps.
+  const ladder = replayLadder(cfg, st, teamId);
+  const mastered = masteredExercises(ladder, teamId, st.ticks, st.penalties);
+  const pool = mastered.length ? mastered : doneExercises(ladder, teamId, st.ticks, st.penalties);
+  const first = rocketPayload(pool, mine.score);
+  if (!first) return "Aucun exercice fait pour l'instant : rien à envoyer.";
+  const byWeight = [...pool].sort((a, b) => a.weight - b.weight || a.label.localeCompare(b.label, "fr"));
+  let payload: (typeof byWeight)[number] & { reps: number } | null = null;
+  for (let i = byWeight.findIndex((m) => m.label === first.label); i >= 0; i--) {
+    const m = byWeight[i];
+    const planned = m.label === first.label ? first.reps : rocketPayload([m], mine.score)!.reps;
+    const affordable = Math.floor(mine.bank / Math.max(0.1, m.weight));
+    const reps = Math.min(planned, affordable >= 5 ? Math.floor(affordable / 5) * 5 : affordable);
+    if (reps >= 5) { payload = { ...m, reps }; break; }
+  }
+  // Banque presque vide (juste apres la construction) : la fusee part quand meme avec 5 reps de l'exercice le plus
+  // leger, et l'equipe paie tout ce qui lui reste.
+  if (!payload) payload = { ...byWeight[0], reps: 5 };
+  const reps = payload.reps;
+  const cost = Math.min(reps * payload.weight, mine.bank);
+  // Fiche recue au prochain niveau ordinaire de la cible (jamais un BOSS).
+  const giftLevel = target.next.number;
   const giftId = cfg.newId(`gift:${teamId}:${Math.round(absMs)}`);
   const at = Math.round(absMs);
-  st.penalties.push({ id: giftId, teamId: target.teamId, fromTeamId: teamId, level: target.next!.number, index: 200 + st.giftCount, reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at, atMs: raceMs, kind: "gift" });
+  st.penalties.push({ id: giftId, teamId: target.teamId, fromTeamId: teamId, level: giftLevel, index: 200 + st.giftCount, reps, label: payload.label, weight: payload.weight, exerciseId: payload.exerciseId, at, atMs: raceMs, kind: "gift" });
   st.giftCount++;
-  st.coinEvents.push({ id: giftId, teamId, kind: "send", coins: cost, at, toTeamId: target.teamId, label: payload.label, reps, giftId, level: target.next!.number });
+  st.coinEvents.push({ id: giftId, teamId, kind: "send", coins: cost, at, toTeamId: target.teamId, label: payload.label, reps, giftId, level: giftLevel });
   return null;
+}
+
+// Exercices deja faits par l'equipe (au moins une fiche cochee, penalites exclues) : charge de secours d'une fusee
+// tant qu'aucun exercice n'est maitrise.
+function doneExercises(levels: FrozenLevel[], teamId: string, ticks: Tick[], extras: TeamPenalty[]): { exerciseId: string; label: string; weight: number; count: number }[] {
+  const mine = new Set(ticks.filter((t) => t.teamId === teamId).map((t) => `${t.level}_${t.card}`));
+  const m = new Map<string, { exerciseId: string; label: string; weight: number; count: number }>();
+  for (const l of levels) for (const { card, index, kind } of cardsForTeam(l, teamId, extras)) {
+    if (kind === "penalty" || !mine.has(`${l.number}_${index}`)) continue;
+    const cur = m.get(card.label) ?? { exerciseId: card.exerciseId, label: card.label, weight: card.weight, count: 0 };
+    cur.count++;
+    m.set(card.label, cur);
+  }
+  return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, "fr"));
 }
 
 // Rang d'une equipe dans sa categorie (parcours x format) a l'instant `raceMs`, et taille de la categorie : toutes

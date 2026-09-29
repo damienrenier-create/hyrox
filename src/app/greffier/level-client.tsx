@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { elapsed, fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, ladderKey, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
+  activeCards, fmtWaveMin, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, suggestStars, ladderKey, formatLabel, formatName, parcoursKey, teamFormatOf, teamSizeOf, FORMATS, type Format, emomNextCard, emomProgress, emomRank, emomSchedule, emomTotalMs, emomWaveAt, emomWaveEvents, emomZombieSim, estimateSeconds, fmtTheoretical, heartCarryBites, ladderFor, levelLabel, masteredExercises, orderedLevels, progressOf, rankTeams, rightmostCard, rocketTargets, sendOptions, starsLabel, starsName, teamStarsOf, warmupCoinsInPlay, zombieSim, zombieSpeedLevel, zombieTier, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, HEART_BITES, PENALTY_STEPS, ROCKET_PRICE, STARS, ZOMBIE_ZONE,
   type CoinEvent, type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayOp, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
@@ -83,6 +83,11 @@ export function LevelClient({
   const [now, setNow] = useState(() => Date.now());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (!error) return;
+    const h = setTimeout(() => setError(""), 8000);
+    return () => clearTimeout(h);
+  }, [error]);
   // Greffier hors ligne (Sartay 28-29/09 : « la seance doit pouvoir etre jouee 100 % hors ligne et envoyee a la fin ») :
   // une fois le WOD lance, TOUT est une operation gardee sur le PC (et dans le navigateur, pour survivre a un
   // rechargement) avec l'heure exacte du clic, appliquee ici avec le code du serveur (level-replay.ts) : coches,
@@ -558,8 +563,8 @@ export function LevelClient({
           </div>
           <div className="text-right">
             {phase !== "pre" && (
-              <button type="button" onClick={() => void flush(true)} className={cx("text-[11px] font-bold tabular-nums", sync.failed ? "text-danger-ink" : queue.length ? "text-warn-ink" : "text-ink-3")} title="Pendant le WOD, tout reste sur ce PC (rien n'attend le réseau) et part sur le serveur à la Fin du WOD — essai aussi à la Pause. Clique pour envoyer maintenant.">
-                {sync.failed ? (phase === "post" ? `📴 fin du WOD pas encore envoyée · ${queue.length} opération${queue.length > 1 ? "s" : ""} · nouvel essai dans 30 s` : `📴 hors ligne · ${queue.length} opération${queue.length > 1 ? "s" : ""} sur ce PC`) : queue.length ? (syncMode === "live" ? `⏳ ${queue.length} à sauver` : phase === "post" ? "📤 envoi de la séance…" : `📍 ${queue.length} opération${queue.length > 1 ? "s" : ""} sur ce PC · envoi à la fin du WOD`) : "💾 tout est sauvé"}
+              <button type="button" onClick={() => void flush(true)} className={cx("text-[11px] font-bold tabular-nums whitespace-nowrap", sync.failed ? "text-danger-ink" : queue.length ? "text-warn-ink" : "text-ink-3")} title="Pendant le WOD, tout reste sur ce PC (rien n'attend le réseau) et part sur le serveur à la Fin du WOD — essai aussi à la Pause. Clique pour envoyer maintenant.">
+                {sync.failed ? (phase === "post" ? `📴 pas encore envoyé · ${queue.length}` : `📴 hors ligne · ${queue.length}`) : queue.length ? (syncMode === "live" ? `⏳ ${queue.length} à sauver` : phase === "post" ? "📤 envoi…" : `📍 ${queue.length} sur ce PC`) : "💾 tout est sauvé"}
               </button>
             )}
             <p className="text-xs text-ink-2">{phase === "pre" ? "Chrono à l'arrêt" : phase === "post" ? "WOD terminé" : isPaused ? "EN PAUSE — coches bloquées" : timeUp ? "Temps écoulé — déclare la fin du WOD" : "WOD en cours"}</p>
@@ -595,7 +600,13 @@ export function LevelClient({
             )}
           </p>
         )}
-        {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
+        {/* Erreur en bulle flottante (Sartay 29/09) : un bandeau dans la page poussait la course et la 8e equipe
+            sortait de l'ecran. Elle s'efface seule apres 8 s, ou au clic. */}
+        {error && (
+          <button type="button" onClick={() => setError("")} className={`${ui.alertErr} fixed left-1/2 -translate-x-1/2 top-3 z-50 max-w-[90vw] shadow-pop text-left`} title="Fermer">
+            {error} <span className="ml-2 font-bold">✕</span>
+          </button>
+        )}
       </header>
 
       <main className="max-w-[1800px] mx-auto p-3 sm:p-4">
@@ -659,6 +670,7 @@ export function LevelClient({
             {teams.length === 0 ? (
               <p className={`${ui.cardPad} ${ui.muted}`}>Aucune équipe : compose-les dans l&apos;onglet « Équipes &amp; arbitres ».</p>
             ) : bundle.emom ? (
+              <FitToScreen active={phase !== "pre"}>
               <EmomBoard
                 waveMinutes={bundle.emom.waveMinutes}
                 levels={levels}
@@ -677,8 +689,10 @@ export function LevelClient({
                 sessionId={sessionId}
                 onScore={(teamId, scores) => { queueOp({ kind: "scores", teamId, scores }); }}
               />
+              </FitToScreen>
             ) : (
               <>
+              <FitToScreen active={phase !== "pre"}>
               <div className="flex flex-col gap-1">
                 {FORMATS.flatMap((fm) => ([3, 2, 1] as Stars[]).map((st) => ({ fm, st, key: parcoursKey(st, fm) }))).filter(({ key }) => teams.some((t) => groupOf(t.id) === key)).map(({ fm, st, key }) => {
                   const group = ranked.filter((p) => groupOf(p.teamId) === key).sort((a, b) => bossOrder.cmp(a.teamId, b.teamId));
@@ -720,6 +734,7 @@ export function LevelClient({
                   );
                 })}
               </div>
+              </FitToScreen>
               <AnimatePresence>
                 {flight && (
                   <motion.span
@@ -864,6 +879,37 @@ function catchUpNow(replayed: ReplayState, cfg: ReplayConfig, untilMs: number): 
   return out;
 }
 
+// Sartay 29/09 : les 8 equipes toujours visibles sur l'ecran projete. Si la course depasse la hauteur disponible
+// (categorie de plus, bandeau d'echauffement, petit ecran), elle est reduite a l'echelle pour tenir, jamais agrandie.
+function FitToScreen({ children, active }: { children: ReactNode; active: boolean }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ s: 1, h: 0 });
+  useEffect(() => {
+    const compute = () => {
+      const o = outer.current, i = inner.current;
+      if (!o || !i) return;
+      const natural = i.offsetHeight; // hauteur de mise en page, avant l'echelle
+      const footer = document.querySelector("footer")?.getBoundingClientRect().height ?? 0;
+      const avail = window.innerHeight - o.getBoundingClientRect().top - footer - 8;
+      const s = active && natural > 0 && avail > 0 ? Math.max(0.5, Math.min(1, avail / natural)) : 1;
+      setFit((f) => (Math.abs(f.s - s) < 0.005 && Math.abs(f.h - natural) < 1 ? f : { s, h: natural }));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    if (inner.current) ro.observe(inner.current);
+    ro.observe(document.body);
+    window.addEventListener("resize", compute);
+    return () => { ro.disconnect(); window.removeEventListener("resize", compute); };
+  }, [active]);
+  const scaled = active && fit.s < 1;
+  return (
+    <div ref={outer} style={scaled ? { height: fit.h * fit.s } : undefined}>
+      <div ref={inner} style={scaled ? { transform: `scale(${fit.s})`, transformOrigin: "top left", width: `${100 / fit.s}%` } : undefined}>{children}</div>
+    </div>
+  );
+}
+
 function liveFromBundle(b: LevelBundle): LevelLive {
   return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0, giftCount: b.giftCount, bossEntry: b.bossEntry };
 }
@@ -901,7 +947,7 @@ function EmomBoard({ sessionId, waveMinutes, levels, teams, ticks, losses, score
       <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>
         <div className="flex gap-1">
           {schedule.map((w) => (
-            <span key={w.wave} className={cx(ui.chip, wave?.wave === w.wave ? ui.chipBrand : raceMs >= w.endMs ? ui.chipOk : ui.chipMuted)}>V{w.wave} · {waveMinutes[w.wave - 1]}&apos;</span>
+            <span key={w.wave} className={cx(ui.chip, wave?.wave === w.wave ? ui.chipBrand : raceMs >= w.endMs ? ui.chipOk : ui.chipMuted)}>V{w.wave} · {fmtWaveMin(waveMinutes[w.wave - 1])}</span>
           ))}
         </div>
         {wave ? (
@@ -1251,11 +1297,16 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   const ev = level ? attemptEvents(level, team.id, ticks, p.attemptStartMs, penalties) : null;
   const geo = level && zombies && ev ? zombieSim(level, ev.initialTotalSec, ev.events, Math.max(0, raceMs - p.attemptStartMs), speedLevel, all.length, teamSizeOf(format), carryBites) : null;
   const danger = !!geo && (geo.contact || geo.remainingMs <= 20_000);
-  const kind: ZombieKind = boss ? "boss" : zombieTier(speedLevel);
+  // Skin du zombie (Sartay 29/09) : lie au NIVEAU seulement ; une vie perdue le ralentit (speedLevel) mais ne change pas son apparence.
+  const kind: ZombieKind = boss ? "boss" : zombieTier(fixedSpeed ?? level?.number ?? 1);
   // Pieces : fiche allegeable (la plus longue restante de l'echelle) et menu d'allegement.
   const [coinOpen, setCoinOpen] = useState(false);
   const target = level && !finished ? rightmostCard(level, team.id, penalties, p.doneCards) : null;
-  const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? zombieSpeedLevel(level.number - 4 + i, p.losses))).sort((a, b) => a - b) : [];
+  const horde = boss && level ? Array.from({ length: 4 }, (_, i) => zombieTier(fixedSpeed ?? Math.max(1, level.number - 4 + i))).sort((a, b) => a - b) : [];
+  // Fiches restantes toujours visibles et cliquables (Sartay 29/09 : une fiche recue de 50 cordes restait cachee sous
+  // le coeur une fois les 100 burpees du BOSS coches) : largeur minimale de la zone des fiches, coeur et zombie
+  // toujours a sa gauche.
+  const cardsMinRem = remaining.length * 5.75;
 
   // Jalons : premiere place, podium, plus derniere, centaine de reps, niveau gagne, coeur devore.
   const prev = useRef<{ rank: number; reps: number; losses: number; level: number | null } | null>(null);
@@ -1465,15 +1516,15 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
           <>
             {geo && (
               <>
-                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `calc(${zx * 100}% - ${zombieShift}px)`, transition: "left 1s linear" }}>
+                <div key={level.number} className="absolute top-1/2 -translate-y-1/2 z-10" style={{ left: `min(calc(${zx * 100}% - ${zombieShift}px), calc(100% - ${cardsMinRem}rem - 80px))`, transition: "left 1s linear" }}>
                   {boss ? <Horde tiers={horde} moving={running && !geo.contact && !lostFlash} /> : <Zombie kind={kind} moving={running && !geo.contact && !lostFlash} />}
                 </div>
-                <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300", biteShake && "bite")} style={{ left: `${geo.heart * 100}%` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
+                <div className={cx("absolute top-1/2 -translate-y-1/2 -translate-x-full z-10 transition-[left] duration-300", biteShake && "bite")} style={{ left: `min(${geo.heart * 100}%, calc(100% - ${cardsMinRem}rem))` }} title={lostFlash ? "Niveau perdu" : geo.contact ? `Cœur dévoré dans ${fmt(Math.max(0, geo.eatMs - geo.eatenMs))}` : `Chute dans ${fmt(Math.max(0, geo.remainingMs))} si personne ne coche`}>
                   <Heart state={lostFlash ? HEART_STATES - 1 : geo.bites} beating={geo.contact || lostFlash} />
                 </div>
               </>
             )}
-            <div className="absolute right-0 top-1 bottom-1 flex gap-1" style={{ width: `${Math.min(1, remainingSec / totalSec) * ZOMBIE_ZONE * 100}%` }}>
+            <div className="absolute right-0 top-1 bottom-1 z-20 flex gap-1" style={{ width: `${Math.min(1, remainingSec / totalSec) * ZOMBIE_ZONE * 100}%`, minWidth: `${cardsMinRem}rem` }}>
               {remaining.map(({ card, index, penalty, kind: cardKind }) => {
                 const busy = pendingKeys.has(`${team.id}_${level.number}_${index}`);
                 const gift = cardKind === "gift";

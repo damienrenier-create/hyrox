@@ -626,11 +626,18 @@ export function readEmomScores(settings: unknown): Record<string, number> {
   return out;
 }
 export type EmomWave = { wave: number; startMs: number; endMs: number };
+// Durees arrondies a la milliseconde : les vagues de 40 s sont stockees en fractions de minute (2/3, 4/3...).
 export function emomSchedule(waveMinutes: number[]): EmomWave[] {
   let t = 0;
-  return waveMinutes.map((m, i) => { const w = { wave: i + 1, startMs: t, endMs: t + m * 60_000 }; t += m * 60_000; return w; });
+  return waveMinutes.map((m, i) => { const d = Math.round(m * 60_000); const w = { wave: i + 1, startMs: t, endMs: t + d }; t += d; return w; });
 }
-export const emomTotalMs = (waveMinutes: number[]) => waveMinutes.reduce((s, m) => s + m * 60_000, 0);
+export const emomTotalMs = (waveMinutes: number[]) => waveMinutes.reduce((s, m) => s + Math.round(m * 60_000), 0);
+// Duree d'une vague pour l'ecran : « 40 s », « 1'20 », « 2' ».
+export function fmtWaveMin(minutes: number): string {
+  const s = Math.round(minutes * 60);
+  if (s < 60) return `${s} s`;
+  return s % 60 ? `${Math.floor(s / 60)}'${String(s % 60).padStart(2, "0")}` : `${s / 60}'`;
+}
 // Vague en cours a un instant du chrono ; null = EMOM termine.
 export function emomWaveAt(waveMinutes: number[], raceMs: number): EmomWave | null {
   return emomSchedule(waveMinutes).find((w) => raceMs >= w.startMs && raceMs < w.endMs) ?? null;

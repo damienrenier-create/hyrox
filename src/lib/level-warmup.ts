@@ -1,3 +1,4 @@
+import { fmtWaveMin } from "@/lib/wod-engines/templates/level-engine";
 // Echauffement et finisher du WOD Level (Sartay, 24/09) : deux mini-WOD lances depuis le greffier, joues sur
 // une seance ENFANT (memes equipes, chrono et zombies a part), pour ne rien melanger au WOD principal.
 //
@@ -24,18 +25,21 @@ export const WARMUP_SERIES: SeriesDef[] = [
 ];
 
 // Finisher (Sartay) : EMOM en cinq vagues cadencees par le chrono. Dans une vague les fiches se decouvrent
-// une a une ; la 5e vague est un maximum de cordes en 5 min, qui fait le score final.
-export type EmomWaveDef = { minutes: number; cards: [label: string, reps: number][]; max?: string };
+// une a une ; la 5e vague finit par un maximum de cordes, qui fait le score final.
+// Duree : la vague n dure n x FINISHER_WAVE_S (Sartay 29/09 : 40 s au lieu d'une minute -> 40 s, 1'20, 2', 2'40,
+// 3'20, soit 10 min au lieu de 15). Les finishers deja crees gardent leurs vagues (figees dans la seance).
+export const FINISHER_WAVE_S = 40;
+export type EmomWaveDef = { seconds: number; cards: [label: string, reps: number][]; max?: string };
 export const FINISHER_EMOM: EmomWaveDef[] = [
-  { minutes: 1, cards: [["TIRE TAPIS AR", 1]] },
-  { minutes: 2, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40]] },
-  { minutes: 3, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
-  { minutes: 4, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
+  { seconds: 1 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1]] },
+  { seconds: 2 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40]] },
+  { seconds: 3 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
+  { seconds: 4 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
   // Vague 5 (Sartay 28/09) : les fiches de la vague 4, puis maximum de cordes, tout le monde en meme temps
   // (saisie par joueur, le score de l'equipe est la somme).
-  { minutes: 5, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]], max: "CORDE" },
+  { seconds: 5 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]], max: "CORDE" },
 ];
-export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · ${w.cards.length ? "fiches puis " : ""}MAX de ${w.max.toLowerCase()} (${w.minutes} min)` : `Vague ${i + 1} (${w.minutes} min)`, cards: w.cards }));
+export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · ${w.cards.length ? "fiches puis " : ""}MAX de ${w.max.toLowerCase()} (${fmtWaveMin(w.seconds / 60)})` : `Vague ${i + 1} (${fmtWaveMin(w.seconds / 60)})`, cards: w.cards }));
 
 // Ordre des niveaux par equipe : depart decale d'une serie par equipe, boucle sur les series ordinaires,
 // BOSS en dernier pour tout le monde. Les numeros de niveau sont ceux de l'echelle figee (1..n).
