@@ -571,6 +571,9 @@ export type Tick = { teamId: string; level: number; card: number; atMs: number }
 export type Loss = { teamId: string; level: number; atMs: number; soft?: boolean };
 export const SOFT_LOSSES = 5;
 export const ZOMBIE_COIN_LOSS = 0.5; // part des pieces en banque perdue a chaque vie perdue (WOD principal)
+// Regles du 29/09 soir (Sartay : « qu on ne perde plus de pieces avant la 3e vie perdue ») : les 2 premieres vies
+// perdues ne coutent aucune piece ; a partir de la 3e, la moitie de la banque a chaque fois.
+export const FREE_COIN_LOSSES = 2;
 export type TeamProgress = {
   teamId: string;
   completedLevels: number; // niveaux entierement valides, dans l'ordre

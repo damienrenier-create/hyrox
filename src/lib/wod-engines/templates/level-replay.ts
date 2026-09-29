@@ -2,7 +2,7 @@ import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
   coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, paceReferenceMs, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, starsAtLevel, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_FAST_RATIO, PROMOTE_FAST_STREAK, PROMOTE_LEAD_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_FAST_RATIO, PROMOTE_FAST_STREAK, PROMOTE_LEAD_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
   type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type PaceRef, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
@@ -172,8 +172,10 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     }
     st.losses.push({ id: lossId, teamId, level: p.currentLevel, atMs: deadline, soft });
     applied++;
-    // Chaque vie perdue au WOD principal coute la moitie des pieces en banque (arrondi vers le bas).
-    if (cfg.isMain) {
+    // Chaque vie perdue au WOD principal coute la moitie des pieces en banque (arrondi vers le bas). Regles du 29/09
+    // soir : les 2 premieres vies de l equipe ne coutent rien, la moitie a partir de la 3e.
+    const paid = !cfg.reorient || st.losses.filter((x) => x.teamId === teamId).length > FREE_COIN_LOSSES;
+    if (cfg.isMain && paid) {
       const bank = coinsState(mine, teamId, st.ticks, st.losses, st.penalties, st.coinEvents, cfg.coinsCarry, coinsInPlay).bank;
       const lost = Math.floor(bank * ZOMBIE_COIN_LOSS);
       if (lost > 0) st.coinEvents.push({ id: lossId, teamId, kind: "zombie", coins: lost, at: Math.round(absOf(cfg, st, deadline)), level: p.currentLevel });
