@@ -122,7 +122,8 @@ export const CRITERIA: Record<string, string[]> = {
     "L'élève met de l'intensité et fait passer le poids à une vitesse soutenue.",
   ],
   "ALLER-RETOUR": [
-    "L'élève freine en abaissant son centre de gravité pour protéger ses appuis avant le demi-tour.",
+    // Sartay 29/09 nuit : « l'élève freine en abaissant son centre de gravité ??? je dirais plutôt : court sur toute la longueur ».
+    "L'élève court sur toute la longueur.",
     "Le sol ou la ligne sont clairement touchés/franchis à chaque extrémité.",
     "La relance après le changement de direction est immédiate et explosive.",
     "L'élève ne ralentit pas avant d'avoir complètement passé la ligne d'arrivée finale.",
@@ -226,7 +227,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "KB SNATCH": ["Bras verrouillé en haut", "Poussée des hanches", "La KB roule, ne tape pas", "Corps droit, gainé", "Descente contrôlée", "Rythme soutenu"],
   "KB SWING": ["Explosion du bassin", "Dos droit, gainé", "Bras souples", "Hauteur atteinte", "Fessiers et abdos serrés", "Expire en montant"],
   "KB TOUR": ["Dos droit", "Bassin immobile, gainé", "Passage de main sûr", "KB près du corps", "Poids adapté, vrai défi", "Vitesse soutenue"],
-  "ALLER-RETOUR": ["Freine en s'abaissant", "Ligne touchée", "Relance explosive", "Ne ralentit pas avant la ligne", "Vrai sprint", "Intensité maximale"],
+  "ALLER-RETOUR": ["Court sur toute la longueur", "Ligne touchée", "Relance explosive", "Ne ralentit pas avant la ligne", "Vrai sprint", "Intensité maximale"],
   "MONKEY SLIDE": ["Réception amortie", "Appui franc des mains", "Squat avant et après", "Pieds ensemble", "Gauche/droite fluide", "Rythme soutenu"],
   "PLANK SLIDE": ["Planche alignée", "Bassin ne vrille pas", "Main croisée", "Disque loin de chaque côté", "Mains stables entre deux", "Rythme, sans pause"],
   "FENTES DISK": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Retour debout complet", "Buste droit, gainé", "Disque tenu ferme", "Équilibre géré"],
@@ -255,6 +256,45 @@ const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS" };
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
+
+// Emoji-resume de chaque critere de l'arbitre (Sartay 29/09 nuit : « pour que l'arbitre trouve plus vite ce qu'il doit
+// observer ; l'emoji est une sorte de resume du critere »), dans l'ordre de REFEREE_CRITERIA (3 techniques + intensite).
+// Reperes communs : 📏 corps aligne, 🧱 bassin stable, 🧍 dos droit / debout, ⬇️ amplitude basse, 🙆 extension, 💪 bras
+// tendus, 🪶 reception amortie, 🚀 poussee explosive, ⏱️ rythme, 🔥 intensite.
+export const CRITERIA_EMOJI: Record<string, string[]> = {
+  POMPES: ["📏", "⬇️", "💪", "⏱️"],
+  "SQUATS JUMP": ["⬇️", "🙆", "🦘", "🔁"],
+  BURPEES: ["⬇️", "🙆", "🙌", "🔥"],
+  "COMMANDO BRAS": ["📏", "🧱", "💪", "⏱️"],
+  "BREAK DANCE": ["🦵", "🚫", "🌀", "↔️"],
+  "ONE REP": ["📏", "🧱", "✋", "⏱️"],
+  CORDE: ["🪶", "🧍", "🔄", "🔥"],
+  "SMASH DOWN": ["🙌", "🙆", "💥", "⚡"],
+  "WALL BALL SHOT": ["⬇️", "🎯", "🤲", "⏱️"],
+  "TIRE TAPIS": ["🧍", "🦵", "✊", "🔥"],
+  "FLIP TAPIS": ["🧍", "🦵", "👀", "🔥"],
+  "KB SNATCH": ["🔒", "🚀", "🌀", "⏱️"],
+  "KB SWING": ["🚀", "🧍", "〰️", "⏱️"],
+  "KB TOUR": ["🧍", "🧱", "🤝", "⏱️"],
+  "ALLER-RETOUR": ["🏃", "👆", "⚡", "🔥"],
+  "MONKEY SLIDE": ["🪶", "✋", "⬇️", "⏱️"],
+  "PLANK SLIDE": ["📏", "🧱", "🔀", "⏱️"],
+  "FENTES DISK": ["🦵", "🎯", "🧍", "⏱️"],
+  TRACTIONS: ["🔝", "💪", "🚫", "🔥"],
+  "BOX JUMP": ["👣", "📦", "🧍", "⏱️"],
+  SQUATS: ["⬇️", "🦶", "🧍", "⏱️"],
+  HELICO: ["📏", "🔄", "💪", "⏱️"],
+  "TOUR DE POUTRE": ["🛡️", "⬆️", "⬇️", "🔥"],
+};
+const GENERIC_EMOJI = ["🧍", "📐", "🎛️", "🔥"];
+export const criteriaEmojisFor = (label: string): string[] => CRITERIA_EMOJI[keyOf(label)] ?? GENERIC_EMOJI;
+// Emoji d'une phrase de critere (liste de l'arbitre, evaluations deja rendues) ; null pour une phrase d'avant.
+const EMOJI_BY_SENTENCE = new Map<string, string>([
+  ...Object.entries(REFEREE_CRITERIA).flatMap(([k, list]) => list.map((sentence, i) => [sentence, (CRITERIA_EMOJI[k] ?? GENERIC_EMOJI)[i]] as [string, string])),
+  ...GENERIC_CRITERIA.map((sentence, i) => [sentence, GENERIC_EMOJI[i]] as [string, string]),
+]);
+export const criterionEmoji = (sentence: string): string | null => EMOJI_BY_SENTENCE.get(sentence) ?? null;
+
 
 export type CriterionCheck = { label: string; met: boolean };
 export function readCriteria(raw: unknown): CriterionCheck[] | null {

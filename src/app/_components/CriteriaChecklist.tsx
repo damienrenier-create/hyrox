@@ -1,6 +1,7 @@
 "use client";
 
 import { cx } from "@/lib/ui";
+import { criterionEmoji } from "@/lib/level-criteria";
 
 // Criteres de realisation a cocher (arbitre du demineur, corrections) : gros boutons tactiles, dans l'ordre
 // d'importance. L'appreciation n'est jamais choisie : elle se deduit du nombre de criteres coches.
@@ -24,7 +25,7 @@ export function CriteriaChecklist({ labels, met, onToggle, compact = false, like
           )}
         >
           <span className={cx("mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 font-black text-xs", met[i] ? "bg-success border-success text-white" : "border-line-2 text-transparent")}>✓</span>
-          <span><span className="text-ink-3 font-bold mr-1">{i === intensity ? "⚡" : `${i + 1}.`}</span>{label}</span>
+          <span className="flex items-start gap-1.5"><span className={cx("leading-none flex-shrink-0 w-6 text-center", compact ? "text-base" : "text-xl")} aria-hidden>{criterionEmoji(label) ?? (i === intensity ? "⚡" : `${i + 1}.`)}</span><span>{label}</span></span>
         </button>
       ))}
       {onLike && (
