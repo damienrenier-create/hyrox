@@ -233,7 +233,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
-  SQUATS: ["Cuisses parallèles au sol", "Talons au sol, genoux dans l'axe", "Dos droit, debout complet", "Rythme régulier"],
+  SQUATS: ["Cuisses parallèles", "Talons au sol", "Dos droit, debout", "Rythme régulier"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
