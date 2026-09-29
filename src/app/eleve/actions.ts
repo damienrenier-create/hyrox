@@ -1,5 +1,6 @@
 "use server";
 
+import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { buildSessionStandings } from "@/lib/session-standings";
@@ -10,6 +11,7 @@ export async function submitSelfEvaluationAction(
   sessionId: string,
   answers: Record<string, string>
 ): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const user = await getSession();
   if (!user || user.role !== "STUDENT") return { error: "Réservé aux élèves connectés." };
 

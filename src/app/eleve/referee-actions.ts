@@ -1,5 +1,6 @@
 "use server";
 
+import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { isSessionOpen } from "@/lib/scheduling";
@@ -8,6 +9,7 @@ import { REFEREE_REASONS } from "@/lib/session-roles";
 // L'eleve demande l'autorisation d'arbitrer (motif obligatoire). La demande apparait en popup chez le greffier
 // et dans la console admin ; tant qu'elle n'est pas acceptee, pas d'acces au Touche-Coule.
 export async function requestRefereeAction(sessionId: string, reason: string): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const user = await getSession();
   if (!user || user.role !== "STUDENT") return { error: "Réservé aux élèves connectés." };
   if (!(REFEREE_REASONS as readonly string[]).includes(reason)) return { error: "Indique pourquoi tu ne joues pas." };
@@ -27,6 +29,7 @@ export async function requestRefereeAction(sessionId: string, reason: string): P
 }
 
 export async function cancelRefereeRequestAction(sessionId: string): Promise<{ ok: true }> {
+  if (await inPreview()) return { ok: true };
   const user = await getSession();
   if (!user || user.role !== "STUDENT") return { ok: true };
   const rows = await db.orm.public.SessionReferee.where({ sessionId, userId: user.id }).all();

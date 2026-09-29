@@ -1,5 +1,6 @@
 "use server";
 
+import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { refereeAccess } from "@/lib/referee-access";
@@ -26,6 +27,7 @@ export async function fireAction(
   col: number,
   liked = false // ❤️ de l'arbitre (Sartay 29/09) : les 4 criteres coches et vraiment tres bien faits = E
 ): Promise<{ error: string } | FireResult> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const user = await getSession();
   if (!user) return { error: "Non authentifié." };
   const session = await db.orm.public.Session.where({ id: sessionId, wodType: "LEVEL" }).first();

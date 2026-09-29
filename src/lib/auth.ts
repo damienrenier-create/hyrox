@@ -9,6 +9,8 @@ export type SessionPayload = {
   role: "MASTER_ADMIN" | "ADMIN" | "STUDENT" | "GREFFIER";
   name: string;
   className?: string;
+  // « Se connecter en tant que » : l'admin qui regarde ce compte d'eleve (lecture seule, bandeau de retour).
+  impersonatedBy?: { id: string; name: string; role: "MASTER_ADMIN" | "ADMIN" };
 };
 
 const SHORT_SESSION = "24h";

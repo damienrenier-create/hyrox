@@ -40,7 +40,7 @@ export default async function EleveFichePage({ params, searchParams }: { params:
         title={`${s.firstName ?? ""} ${s.lastName ?? ""}`.trim()}
         subtitle={s.className ?? "sans classe"}
         back={{ href: "/admin/eleves", label: "Élèves" }}
-        right={<Link href={`/admin/resultats?eleve=${encodeURIComponent(s.lastName ?? "")}`} className={btn.smGhost}>Ses résultats</Link>}
+        right={<span className="flex gap-2"><Link href={`/admin/voir-eleve?eleve=${s.id}`} className={btn.smGhost}>👁 Voir son compte</Link><Link href={`/admin/resultats?eleve=${encodeURIComponent(s.lastName ?? "")}`} className={btn.smGhost}>Ses résultats</Link></span>}
       />
       <main className={`${ui.container} py-6 space-y-5`}>
         {ok && <p className={ui.alertOk}>✅ {ok}</p>}

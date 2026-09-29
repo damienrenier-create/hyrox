@@ -1,5 +1,6 @@
 "use server";
 
+import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { exercisesFor } from "@/lib/session-exercises";
@@ -76,6 +77,7 @@ export async function placeShipAction(
   toTeamId: string,
   toExerciseId: string
 ): Promise<PlaceShipResult> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const { evaluator, teams, exercises } = await loadContext(sessionId);
 
   const existingFleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -160,6 +162,7 @@ export async function placeShipAction(
 
 // Supprime n'importe quel navire de SA flotte tant qu'elle n'est pas verrouillee (la taille revient dans l'inventaire).
 export async function deleteShipAction(sessionId: string, shipId: string): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
 
@@ -175,6 +178,7 @@ export async function deleteShipAction(sessionId: string, shipId: string): Promi
 }
 
 export async function lockFleetAction(sessionId: string): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const { evaluator, teams, exercises } = await loadContext(sessionId);
 
   const fleet = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -197,6 +201,7 @@ export async function lockFleetAction(sessionId: string): Promise<{ error: strin
 
 // Tire une flotte complete au hasard (eleves : un tap au lieu de huit placements).
 export async function randomFleetAction(sessionId: string): Promise<BulkFleetResult> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const { evaluator, teams, exercises } = await loadContext(sessionId);
 
   const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -243,6 +248,7 @@ export async function randomFleetAction(sessionId: string): Promise<BulkFleetRes
 // Deverrouille sa flotte pour deplacer des navires. Interdit des qu'une de ses cases a ete visee :
 // sinon on pourrait esquiver les tirs deja recus. Tant que personne ne t'a tire dessus, tu reorganises.
 export async function unlockFleetAction(sessionId: string): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
 
@@ -300,6 +306,7 @@ export async function lastFleetAction(sessionId: string): Promise<ReusableFleet 
 
 // Rejoue cette flotte sur la seance en cours : memes positions (par index), un seul geste au lieu de huit.
 export async function reuseLastFleetAction(sessionId: string): Promise<BulkFleetResult> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const { evaluator, session, teams, exercises } = await loadContext(sessionId);
 
   const current = await db.orm.public.RefereeFleet.where({ sessionId, refereeId: evaluator.id, slot: 0 }).first();
@@ -376,6 +383,7 @@ export async function submitEvaluationAction(
   reps: number,
   note: number
 ): Promise<EvaluationResult> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const { evaluator, session, teams, exercises, access } = await loadContext(sessionId);
 
   if (!teams.some((t) => t.id === targetTeamId)) return { error: "Équipe invalide pour cette séance." };
@@ -568,6 +576,7 @@ export async function generateGhostFleetsAction(
 export type MyEvalEdit = { id: string; reps: number; note: number };
 // Correction par l'arbitre d'une evaluation a criteres (demineur) : il re-coche les criteres, l'appreciation suit.
 export async function updateMyEvaluationCriteriaAction(sessionId: string, evaluationId: string, reps: number, met: number[], liked = false): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
@@ -583,6 +592,7 @@ export async function updateMyEvaluationCriteriaAction(sessionId: string, evalua
 }
 
 export async function updateMyEvaluationAction(sessionId: string, evaluationId: string, reps: number, note: number): Promise<{ error: string } | { ok: true }> {
+  if (await inPreview()) return { error: PREVIEW_READ_ONLY };
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };

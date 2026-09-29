@@ -1,11 +1,21 @@
 "use server";
 
-import { login, SessionPayload } from "@/lib/auth";
+import { getSession as readSessionCookie, login, SessionPayload } from "@/lib/auth";
+import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import crypto from "crypto";
 
 export type LoginState = { error: string } | undefined;
+
+// Mot de passe d'un compte pseudo : connexion, et confirmation de « se connecter en tant que » (29/09 nuit).
+const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER"];
+function expectedPassword(pseudo: string): string | null {
+  if (pseudo === "DAMZER") return "boss";
+  if (COACHES.includes(pseudo)) return "coach";
+  if (pseudo === "GREFFIER") return "greffe";
+  return null;
+}
 
 // Le prof importe depuis la liste des eleves (ligne PROF) : c'est cette ligne qui porte les flottes fantomes.
 const PROF_USER_NAME = "Damien Renier";
@@ -36,13 +46,13 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   // Auto-détection du rôle en fonction du Pseudo
   if (name === "DAMZER") {
     role = "MASTER_ADMIN";
-    if (password !== "boss") return { error: "Mot de passe incorrect pour DAMZER." };
+    if (password !== expectedPassword(name)) return { error: "Mot de passe incorrect pour DAMZER." };
   } else if (["AXEZER", "GUIZER", "SIMZER", "RACZER"].includes(name)) {
     role = "ADMIN";
-    if (password !== "coach") return { error: "Mot de passe incorrect." };
+    if (password !== expectedPassword(name)) return { error: "Mot de passe incorrect." };
   } else if (name === "GREFFIER") {
     role = "GREFFIER";
-    if (password !== "greffe") return { error: "Mot de passe incorrect." };
+    if (password !== expectedPassword(name)) return { error: "Mot de passe incorrect." };
   } else {
     // Ce formulaire est reserve aux comptes pseudo + mot de passe. Un eleve passe par
     // classe -> recherche -> PIN (studentLoginAction), seul chemin qui donne son vrai identifiant.
@@ -159,4 +169,28 @@ export async function studentLoginAction(
     remember
   );
   redirect("/eleve");
+}
+
+// ===== « Se connecter en tant que » (Sartay 29/09 nuit) =====
+// Un admin (DAMZER ou coach), apres avoir retape SON mot de passe, ouvre l'espace d'un eleve exactement comme l'eleve
+// le voit. Le cookie porte l'eleve ET l'admin d'origine (impersonatedBy, jeton signe) : un bandeau permet de revenir,
+// et toutes les actions d'ecriture de l'eleve sont refusees (lecture seule, voir lib/preview.ts).
+export async function impersonateStudentAction(studentId: string, password: string): Promise<{ error: string } | void> {
+  const me = await getSession();
+  if (!me || (me.role !== "MASTER_ADMIN" && me.role !== "ADMIN")) return { error: "Réservé aux admins." };
+  if (me.impersonatedBy) return { error: "Tu regardes déjà le compte d'un élève : reviens d'abord à ton compte." };
+  const expected = expectedPassword(me.name);
+  if (!expected || password.trim() !== expected) return { error: "Mot de passe incorrect." };
+  const student = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  if (!student) return { error: "Élève introuvable." };
+  await login({ id: student.id, role: "STUDENT", name: student.name, className: student.className ?? undefined, impersonatedBy: { id: me.id, name: me.name, role: me.role } }, false);
+  redirect("/eleve");
+}
+
+export async function stopImpersonatingAction(): Promise<void> {
+  const s = await readSessionCookie();
+  if (!s?.impersonatedBy) redirect("/");
+  const back = s.impersonatedBy;
+  await login({ id: back.id, role: back.role, name: back.name }, false);
+  redirect(`/admin/voir-eleve?classe=${encodeURIComponent(s.className ?? "")}`);
 }
