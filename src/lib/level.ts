@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { DEFAULT_EXERCISES } from "@/lib/level-catalog";
 import {
-  isBoss, readCards, readFrozenLevels, readLadders, ladderFor, statsOf, MAX_CARDS, STARS, DEFAULT_STARS, DEFAULT_FORMAT,
+  isBoss, readCards, readFrozenLevels, readLadders, ladderFor, statsOf, LADDER_KEYS, MAX_CARDS, STARS, DEFAULT_STARS, DEFAULT_FORMAT,
   type Format, type FrozenLevel, type LadderKey, type LevelCard, type Stars,
 } from "@/lib/wod-engines/templates/level-engine";
 import { deriveLevel, type CatalogByLabel } from "@/lib/level-proposals";
@@ -10,7 +10,7 @@ import { deriveLevel, type CatalogByLabel } from "@/lib/level-proposals";
 
 export type ExerciseRow = { id: string; label: string; weight: number; active: boolean; order: number };
 export type LevelRow = { id: string; format: Format; stars: Stars; number: number; name: string | null; cards: LevelCard[] };
-export const asStars = (v: unknown): Stars => (v === 1 || v === 3 ? v : DEFAULT_STARS);
+export const asStars = (v: unknown): Stars => (v === 1 || v === 2 || v === 3 || v === 4 || v === 5 ? v : DEFAULT_STARS);
 export const asFormat = (v: unknown): Format => (v === "small" ? "small" : v === "mid" ? "mid" : DEFAULT_FORMAT);
 export const catalogByLabel = (exercises: ExerciseRow[]): CatalogByLabel => new Map(exercises.map((e) => [e.label.trim().toUpperCase(), { id: e.id, weight: e.weight, label: e.label }]));
 export const LEVEL_STAFF = ["MASTER_ADMIN", "ADMIN", "GREFFIER"] as const;
@@ -65,14 +65,14 @@ export async function freezeLevels(stars: Stars = DEFAULT_STARS, format: Format 
   const byId = new Map(exercises.map((e) => [e.id, e]));
   return freezeRows(levels, byId);
 }
-// Les six echelles d'un coup (coup d'envoi) : trois parcours big, et pour le petit format l'echelle composee
-// dans l'atelier ou, a defaut, celle derivee du big du meme parcours (÷ 1,7). Un parcours vide retombe sur le
-// 2 etoiles au moment de jouer.
+// Toutes les echelles d'un coup (coup d'envoi) : cinq parcours big, et pour les formats 4 et 1-3 l'echelle composee
+// dans l'atelier ou, a defaut, celle derivee du big du meme parcours. Un parcours vide retombe sur le 3 etoiles au
+// moment de jouer.
 export async function freezeLadders(): Promise<Record<LadderKey, FrozenLevel[]>> {
   const [levels, exercises] = await Promise.all([listLevels(), listExercises()]);
   const byId = new Map(exercises.map((e) => [e.id, e]));
   const big = (st: Stars) => freezeRows(levels.filter((l) => l.stars === st && l.format === "big"), byId);
-  const out: Record<LadderKey, FrozenLevel[]> = { 1: big(1), 2: big(2), 3: big(3), m1: [], m2: [], m3: [], s1: [], s2: [], s3: [] };
+  const out = Object.fromEntries(LADDER_KEYS.map((k) => [k, typeof k === "number" ? big(k as Stars) : []])) as Record<LadderKey, FrozenLevel[]>;
   const cat = catalogByLabel(exercises);
   for (const st of STARS) {
     for (const fm of ["mid", "small"] as const) {

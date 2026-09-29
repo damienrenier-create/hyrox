@@ -11,7 +11,7 @@ import type { ChildKind } from "@/lib/level-warmup";
 import { readLevelCap } from "@/lib/level-context";
 import { resetRace } from "@/lib/cleanup";
 import { applyZombieCatches, loadZombieContext } from "@/lib/zombies";
-import { readBossEntry, readGifts, type BossEntry } from "@/lib/wod-engines/templates/level-engine";
+import { readBossEntry, readGifts, readStreaks, type BossEntry, type Streak } from "@/lib/wod-engines/templates/level-engine";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { hash32 } from "@/lib/mine-core";
@@ -42,6 +42,7 @@ export type LevelLive = {
   coinEvents: CoinEvent[];
   giftCount: number; // fiches recues jamais creees (annulees comprises)
   bossEntry: Record<string, BossEntry>;
+  streaks: Record<string, Streak>; // series en cours vers une montee de parcours (regles du 29/09 soir)
 };
 export type TeamLive = { teamId: string; ticks: LiveTick[]; losses: LiveLoss[]; yellowCards: LiveCard[]; penalties: TeamPenalty[]; score: number | null; at: number; coinEvents: CoinEvent[] };
 type TeamRes = { error: string } | { ok: true; caught: boolean; team: TeamLive };
@@ -124,6 +125,7 @@ export async function levelLiveAction(sessionId: string, opts: { catchTeams?: st
     coinEvents: readCoinEvents(settled),
     giftCount: readGifts(settled).length,
     bossEntry: readBossEntry(settled),
+    streaks: readStreaks(settled),
   };
 }
 
@@ -334,7 +336,7 @@ export async function setLevelCapAction(sessionId: string, minutes: number | nul
   if (minutes !== null && (!Number.isFinite(minutes) || minutes < 1 || minutes > 180)) return { error: "Entre 1 et 180 minutes, ou vide pour un temps libre." };
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
   const settings = { ...prev };
-  if (minutes === null) delete settings.levelCapMin;
+  if (minutes === null) settings.levelCapMin = 0; // temps libre choisi : le coup d'envoi n'impose pas les 60 min par defaut
   else settings.levelCapMin = Math.round(minutes);
   await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(settings)) });
   return { ok: true };

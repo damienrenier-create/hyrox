@@ -26,7 +26,7 @@ function TeamCard({ t }: { t: TeamRecap }) {
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h2 className={ui.h2}>{s.name}</h2>
         <span className="text-warn-ink font-bold">{starsLabel(s.stars)}</span>
-        {s.rankOf > 0 && <span className={cx(ui.chip, s.rank === 1 ? ui.chipOk : ui.chipMuted)}>{s.rank}{s.rank === 1 ? "re" : "e"}/{s.rankOf} du parcours</span>}
+        {s.rankOf > 0 && <span className={cx(ui.chip, s.rank === 1 ? ui.chipOk : ui.chipMuted)}>{s.rank}{s.rank === 1 ? "re" : "e"}/{s.rankOf} {s.rankScope === "global" ? "du classement" : "du parcours"}{s.points !== null ? ` · ${s.points} pts` : ""}</span>}
         <span className={ui.hint}>équipe de {FORMAT_LABEL[s.format]}</span>
         <span className={cx(ui.chip, t.alerts ? ui.chipWarn : ui.chipOk, "ml-auto")}>{t.alerts ? `${t.alerts} point${t.alerts > 1 ? "s" : ""} à regarder` : "RAS"}</span>
       </div>

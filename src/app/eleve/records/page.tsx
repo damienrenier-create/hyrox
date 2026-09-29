@@ -41,7 +41,7 @@ export default async function EleveRecordsPage({ searchParams }: { searchParams:
   const wod = sp.wod === "level" ? "level" : "pyramide";
   const phaseQ = PHASES.find((p) => p.q && p.q === sp.phase)?.q ?? "";
   const phase = PHASES.find((p) => p.q === phaseQ)?.v ?? "wod";
-  const stars = (["1", "2", "3"].includes(sp.etoiles ?? "") ? Number(sp.etoiles) : null) as Stars | null;
+  const stars = (["1", "2", "3", "4", "5"].includes(sp.etoiles ?? "") ? Number(sp.etoiles) : null) as Stars | null;
   const format = (sp.format === "small" || sp.format === "mid" || sp.format === "big" ? sp.format : null) as Format | null;
   const data = wod === "level" ? await buildLevelRecords({ sex, grade, period, phase, stars, format }) : await buildPyramideRecords({ sex, grade, period });
   const href = (patch: { sexe?: string; degre?: string; periode?: string; wod?: string; phase?: string; etoiles?: string; format?: string }) => {

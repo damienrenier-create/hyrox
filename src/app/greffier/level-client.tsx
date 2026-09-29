@@ -9,6 +9,7 @@ import {
   type CoinEvent, type CoinsState, type EmomTeam, type EmomWave, type FrozenLevel, type Stars, type TeamPenalty, type TeamProgress, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayOp, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
+import { levelPoints, rankGlobal } from "@/lib/wod-engines/templates/level-engine";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
 import { createTwinSessionAction } from "./settings-actions";
 import { createStarTeamAction, numberTeamsAction, getEmomPlayerScoresAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive } from "./level-actions";
@@ -134,7 +135,9 @@ export function LevelClient({
     startedAtMs: startedAtMs ?? 0,
     now: () => Date.now() + clockOffset.current,
     newId: (key) => key, // cles stables d'un rendu a l'autre (le serveur tire de vrais identifiants)
-  }), [levels, bundle.ladders, bundle.levelOrder, formatOf, teams, bundle.zombies, bundle.zombieSpeed, bundle.child, bundle.emom, capMs, bundle.coinsCarry, startedAtMs]);
+    reorient: bundle.reorient && !bundle.child,
+    paceRef: bundle.paceRef,
+  }), [levels, bundle.ladders, bundle.levelOrder, formatOf, teams, bundle.zombies, bundle.zombieSpeed, bundle.child, bundle.emom, capMs, bundle.coinsCarry, startedAtMs, bundle.reorient, bundle.paceRef]);
   const baseState = useMemo<ReplayState>(() => ({
     ticks: live.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: t.atMs })),
     losses: live.losses.map((l) => ({ id: l.id, teamId: l.teamId, level: l.level, atMs: l.atMs, soft: l.soft })),
@@ -153,6 +156,7 @@ export function LevelClient({
     removedPenalties: [],
     scoredTeams: [],
     bossEntry: live.bossEntry,
+    streaks: live.streaks ?? {},
   }), [live, bundle.teamStars, bundle.starSwitches]);
   // Une operation ajoutee au bout de la file ne rejoue que celle-la (un WOD sans pause peut en compter 1 000).
   const replayed = useMemo(() => replayQueue(baseState, replayCfg, queue), [baseState, replayCfg, queue]);
@@ -314,15 +318,18 @@ export function LevelClient({
   // Echelle de chaque equipe : son parcours (1, 2 ou 3 etoiles), dans son ordre.
   const ladderOf = useCallback((teamId: string) => orderedLevels(ladderFor(levels, bundle.ladders, teamStarsOf(starState.teamStars, teamId), formatOf(teamId), starState.switches[teamId]), bundle.levelOrder?.[teamId]), [levels, bundle.ladders, starState, bundle.levelOrder, formatOf]);
   const starsOf = useCallback((teamId: string): Stars => teamStarsOf(starState.teamStars, teamId), [starState]);
-  // Groupe de classement = parcours + format : une equipe de 3 ne se compare pas a une equipe de 5.
-  const groupOf = useCallback((teamId: string) => parcoursKey(starsOf(teamId), formatOf(teamId)), [starsOf, formatOf]);
+  // Classement commun (Sartay 29/09 soir) : toutes les equipes de l'ecran dans un seul classement, points = niveau x
+  // etoiles. Avant (et a l'echauffement / au finisher) : groupe = parcours + format.
+  const globalRank = bundle.reorient && !bundle.child && !bundle.emom;
+  const groupOf = useCallback((teamId: string) => (globalRank ? "all" : parcoursKey(starsOf(teamId), formatOf(teamId))), [globalRank, starsOf, formatOf]);
   const mixedFormats = useMemo(() => new Set(teams.map((t) => formatOf(t.id))).size > 1, [teams, formatOf]);
   const levelOf = useCallback((teamId: string, number: number | null) => (number === null ? null : ladderOf(teamId).find((l) => l.number === number) ?? null), [ladderOf]);
   const allLevels = useMemo(() => [levels, ...Object.values(bundle.ladders)].flat(), [levels, bundle.ladders]);
   const progress = useMemo(() => new Map(teams.map((t) => [t.id, progressOf(ladderOf(t.id), t.id, ticks, losses, penalties)])), [teams, ladderOf, ticks, losses, penalties]);
   // Classement : niveaux, vies, pieces gagnees (echauffement compris), fiches, rapidite.
   const coinsForRank = useMemo(() => { const m = new Map<string, number>(); if (!bundle.emom) for (const t of teams) { const st = coinsState(ladderOf(t.id), t.id, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay); m.set(t.id, st.score); } return m; }, [teams, ladderOf, ticks, losses, penalties, local.coinEvents, bundle.coinsCarry, bundle.child, bundle.emom]);
-  const ranked = useMemo(() => rankTeams([...progress.values()], (id) => coinsForRank.get(id) ?? 0), [progress, coinsForRank]);
+  const pointsOf = useMemo(() => new Map(teams.map((t) => [t.id, levelPoints(ladderOf(t.id), progress.get(t.id)!, starsOf(t.id), starState.switches[t.id])])), [teams, ladderOf, progress, starsOf, starState]);
+  const ranked = useMemo(() => (globalRank ? rankGlobal([...progress.values()], (id) => pointsOf.get(id) ?? 0, (id) => coinsForRank.get(id) ?? 0) : rankTeams([...progress.values()], (id) => coinsForRank.get(id) ?? 0)), [globalRank, progress, pointsOf, coinsForRank]);
   // Rang DANS SON PARCOURS : un niveau 12 du 1 etoile ne se compare pas a un niveau 10 du 3 etoiles.
   const rankOf = useMemo(() => {
     const m = new Map<string, number>();
@@ -377,7 +384,8 @@ export function LevelClient({
     const changed = teams.find((t) => prev[t.id] !== undefined && prev[t.id] !== now[t.id]);
     if (!changed) return;
     const up = now[changed.id] > prev[changed.id];
-    setImpact({ id: Date.now(), teamId: changed.id, text: up ? `⬆️ Monte en ${starsLabel(now[changed.id])} : 1re de sa catégorie sur tout le BOSS !` : `⬇️ Descend en ${starsLabel(now[changed.id])} (3e vie perdue)`, good: up });
+    const lost = losses.filter((l) => l.teamId === changed.id).length;
+    setImpact({ id: Date.now(), teamId: changed.id, text: up ? `⬆️ Monte en ${starsLabel(now[changed.id])} : bravo !` : `⬇️ Descend en ${starsLabel(now[changed.id])} (${lost} vie${lost > 1 ? "s" : ""} perdue${lost > 1 ? "s" : ""})`, good: up });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [starState]);
   // Fusee : le greffier clique, la regle choisit cible et charge ici meme (le seul tirage au sort est garde dans
@@ -696,22 +704,27 @@ export function LevelClient({
               <>
               <FitToScreen active={phase !== "pre"}>
               <div className="flex flex-col gap-1">
-                {FORMATS.flatMap((fm) => ([3, 2, 1] as Stars[]).map((st) => ({ fm, st, key: parcoursKey(st, fm) }))).filter(({ key }) => teams.some((t) => groupOf(t.id) === key)).map(({ fm, st, key }) => {
-                  const group = ranked.filter((p) => groupOf(p.teamId) === key).sort((a, b) => bossOrder.cmp(a.teamId, b.teamId));
+                {(globalRank
+                  // Sartay 29/09 soir : « les equipes ne se deplacent plus sur le leaderboard, on change seulement le
+                  // petit chiffre qui donne le classement » — lignes fixes dans l'ordre des numeros, couleur du parcours.
+                  ? [{ fm: null as Format | null, st: null as Stars | null, key: "all", rows: [...teams].sort((a, b) => a.order - b.order).map((t) => progress.get(t.id)!) }]
+                  : FORMATS.flatMap((fm) => ([...STARS].reverse()).map((st) => ({ fm: fm as Format | null, st: st as Stars | null, key: parcoursKey(st, fm) }))).filter(({ key }) => teams.some((t) => groupOf(t.id) === key)).map((g) => ({ ...g, rows: ranked.filter((p) => groupOf(p.teamId) === g.key).sort((a, b) => bossOrder.cmp(a.teamId, b.teamId)) }))
+                ).map(({ fm, st, key, rows: group }) => {
                   return (
-                    <section key={key} className="rounded-xl p-1 flex flex-col gap-1" style={{ background: STAR_BG[st] }}>
+                    <section key={key} className={cx("rounded-xl flex flex-col gap-1", st !== null && "p-1")} style={st !== null ? { background: STAR_BG[st] } : undefined}>
                       {group.map((p) => {
                         const t = teamById.get(p.teamId)!;
                         return (
-                          <motion.div key={t.id} layout transition={{ type: "spring", stiffness: 260, damping: 28 }} id={`team-row-${t.id}`}>
+                          <motion.div key={t.id} layout={!globalRank} transition={{ type: "spring", stiffness: 260, damping: 28 }} id={`team-row-${t.id}`}>
                             <TeamRow
                               team={t}
                               carryBites={carryOf.get(t.id) ?? 0}
                               progress={p}
                               level={levelOf(t.id, p.currentLevel)}
-                              stars={st}
-                              format={fm}
-                              rank={bossOrder.rank.get(t.id) ?? 0}
+                              stars={st ?? starsOf(t.id)}
+                              format={fm ?? formatOf(t.id)}
+                              rank={globalRank ? (phase === "pre" ? 0 : rankOf.get(t.id) ?? 0) : bossOrder.rank.get(t.id) ?? 0}
+                              points={globalRank ? pointsOf.get(t.id) ?? 0 : null}
                               teamsCount={group.length}
                               yellow={cardsOf.get(t.id) ?? 0}
                               canTick={canTick}
@@ -755,7 +768,7 @@ export function LevelClient({
           </>
         )}
 
-        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} formatOf={formatOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} coinsOf={coinsOn ? coinsOf : null} />}
+        {view === "results" && <ResultsTable ranked={ranked} teamById={teamById} levelOf={levelOf} rankOf={rankOf} starsOf={starsOf} formatOf={formatOf} cardsOf={cardsOf} extras={extras} phases={bundle.phases} coinsOf={coinsOn ? coinsOf : null} pointsOf={globalRank ? pointsOf : null} />}
         {view === "results" && phase === "post" && !bundle.child && !bundle.emom && queue.length === 0 && <PaceReport sessionId={sessionId} />}
         {view === "recap" && <RecapTable ranked={ranked} teamById={teamById} levels={allLevels} extras={extras} phases={bundle.phases} />}
         {view === "ladder" && (bundle.frozen ? (
@@ -961,7 +974,7 @@ function TwinScreens({ sessionId, screens, canCreate }: { sessionId: string; scr
 }
 
 function liveFromBundle(b: LevelBundle): LevelLive {
-  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0, giftCount: b.giftCount, bossEntry: b.bossEntry };
+  return { ticks: b.ticks, losses: b.losses, yellowCards: b.yellowCards, penalties: b.penalties, emomScores: b.emomScores, coinEvents: b.coinEvents, pauses: b.pauses, startedAtMs: b.startedAtMs, endedAtMs: b.endedAtMs, raceEndedAtMs: b.raceEndedAtMs, structure: "", at: 0, giftCount: b.giftCount, bossEntry: b.bossEntry, streaks: b.streaks };
 }
 
 // ===== Finisher EMOM : vague en cours pour tout le monde, fiches decouvertes une a une, score max =====
@@ -1300,15 +1313,16 @@ const REP_MILESTONES = [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000, 7500,
 const rankStyle = (rank: number) =>
   rank === 1 ? "bg-accent text-ink ring-2 ring-accent/60" : rank === 2 ? "bg-line-2 text-ink" : rank === 3 ? "bg-warn-soft text-warn-ink" : "bg-paper text-ink-2 border border-line";
 
-const STAR_BG: Record<Stars, string> = { 3: "#e59aa3", 2: "#94b9e3", 1: "#95d0a8" };
+// Cinq parcours (29/09 soir) : 1 vert, 2 violet, 3 bleu (l'ancien 2 etoiles), 4 orange, 5 rouge (l'ancien 3 etoiles).
+const STAR_BG: Record<Stars, string> = { 5: "#e59aa3", 4: "#f0b27a", 3: "#94b9e3", 2: "#c3a6e0", 1: "#95d0a8" };
 // Fond de chaque ligne d'equipe (28/09 : couleurs encore plus marquees) ; BOSS et echelle bouclee gardent leur teinte.
-const STAR_ROW: Record<Stars, string> = { 3: "#fbdadd", 2: "#d7e6f7", 1: "#d6f0de" };
+const STAR_ROW: Record<Stars, string> = { 5: "#fbdadd", 4: "#fde5cf", 3: "#d7e6f7", 2: "#ece1f7", 1: "#d6f0de" };
 // Bord gauche de chaque ligne : la couleur franche du parcours (28/09, « augmenter le contraste »).
-const STAR_STRONG: Record<Stars, string> = { 3: "#c0392b", 2: "#2471a3", 1: "#1e8449" };
+const STAR_STRONG: Record<Stars, string> = { 5: "#c0392b", 4: "#d35400", 3: "#2471a3", 2: "#7d3c98", 1: "#1e8449" };
 // Filigrane « ÉQUIPE n » colore selon le parcours (Sartay 28/09 : la couleur remplace les etoiles a l'ecran).
-const STAR_INK: Record<Stars, string> = { 3: "rgba(150, 30, 20, 0.7)", 2: "rgba(20, 75, 125, 0.7)", 1: "rgba(15, 95, 45, 0.7)" };
+const STAR_INK: Record<Stars, string> = { 5: "rgba(150, 30, 20, 0.7)", 4: "rgba(150, 70, 10, 0.7)", 3: "rgba(20, 75, 125, 0.7)", 2: "rgba(90, 40, 120, 0.7)", 1: "rgba(15, 95, 45, 0.7)" };
 
-function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
+function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "big", rank, points = null, teamsCount, yellow, canTick, pendingKeys, zombies, fixedSpeed = null, penalties, ticks, raceMs, running, coins = null, impact = null, onDiscount, onRocket, onToggle, onYellow }: {
   onRocket?: () => void;
   team: LevelTeam;
   progress: TeamProgress;
@@ -1317,6 +1331,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
   format?: Format; // 1-3 : zombie regle sur une equipe de 3
   carryBites?: number; // morceaux de coeur deja manges au niveau precedent
   rank: number;
+  points?: number | null; // classement commun (29/09 soir) : points = niveau x etoiles
   coins?: CoinsState | null;
   impact?: { id: number; text: string; good?: boolean } | null;
   onDiscount?: (reps: number) => void;
@@ -1487,11 +1502,12 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
       )}
       {/* Colonne gauche : rang, equipe, niveau, compteurs. */}
       <div className="flex items-center gap-2 w-[230px] flex-shrink-0 min-w-0">
-        <span className={cx("relative w-12 h-12 rounded-xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title="Classement">
+        <span className={cx("relative w-12 h-12 rounded-xl flex flex-col items-center justify-center font-display font-black leading-none flex-shrink-0 shadow-sm", rankStyle(rank))} title={points !== null ? `Classement commun : ${points} points (niveau × étoiles des niveaux bouclés)` : "Classement"}>
           {rank > 0 ? (
             <>
               <span className="text-[9px] font-bold tracking-widest opacity-70">{rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "RANG"}</span>
               <span className="text-xl">#<Odometer value={rank} /></span>
+              {points !== null && <span className="text-[9px] font-bold opacity-70 tabular-nums">{points} pts</span>}
             </>
           ) : "—"}
           <AnimatePresence>
@@ -1557,7 +1573,7 @@ function TeamRow({ team, carryBites = 0, progress: p, level, stars, format = "bi
             <motion.span key={`cf${i}`} initial={{ left: `${4 + ((i * 29) % 92)}%`, top: -16, opacity: 1, rotate: 0 }} animate={{ top: 90, opacity: [1, 1, 0], rotate: (i % 2 ? 1 : -1) * 260 }} exit={{ opacity: 0 }} transition={{ duration: 2.4 + (i % 4) * 0.3, delay: (i % 6) * 0.1, ease: "easeIn" }} className="absolute z-20 text-xl pointer-events-none">{["🎉", "✨", "🏁", "⭐"][i % 4]}</motion.span>
           ))}
         </AnimatePresence>
-        <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-0 flex items-baseline gap-1 select-none pointer-events-none">
+        <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 z-[15] flex items-baseline gap-1 select-none pointer-events-none">
           <span className="font-display font-black text-[0.9rem] tracking-[0.2em] uppercase" style={{ color: STAR_INK[stars] }}>Équipe</span>
           <span className="font-display font-black text-[3rem] leading-none" style={{ color: STAR_INK[stars] }}>{team.order}</span>
           <span className="font-display font-black text-2xl leading-none ml-1" style={{ color: STAR_INK[stars] }}>{"★".repeat(stars)}</span>
@@ -1642,23 +1658,25 @@ function phaseBreakdown(phases: LevelBundle["phases"], order: number, main: numb
   return [`WOD ${main}`, ...phases.map((ph) => `${PHASE_NAMES[ph.kind]} ${ph.byOrder[order] ? pick(ph.byOrder[order]) : 0}`)].join(" + ");
 }
 
-function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, cardsOf, extras, phases, coinsOf }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelOf: (teamId: string, number: number | null) => FrozenLevel | null; rankOf: Map<string, number>; starsOf: (teamId: string) => Stars; formatOf: (teamId: string) => Format; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"]; coinsOf: Map<string, CoinsState> | null }) {
+function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, cardsOf, extras, phases, coinsOf, pointsOf = null }: { ranked: TeamProgress[]; teamById: Map<string, LevelTeam>; levelOf: (teamId: string, number: number | null) => FrozenLevel | null; rankOf: Map<string, number>; starsOf: (teamId: string) => Stars; formatOf: (teamId: string) => Format; cardsOf: Map<string, number>; extras: Map<string, PhaseTeamTotals>; phases: LevelBundle["phases"]; coinsOf: Map<string, CoinsState> | null; pointsOf?: Map<string, number> | null }) {
   const hasFinisher = phases.some((ph) => ph.kind === "finisher");
   const hasPhases = phases.length > 0;
-  // Un classement par parcours : les etoiles ne se comparent pas entre elles.
-  const groups = FORMATS.flatMap((fm) => STARS.map((st) => ({ fm, st, rows: ranked.filter((p) => starsOf(p.teamId) === st && formatOf(p.teamId) === fm) }))).filter((g) => g.rows.length > 0);
+  // Classement commun (29/09 soir) : un seul tableau, points = niveau x etoiles. Avant : un classement par parcours.
+  const groups = pointsOf
+    ? [{ fm: null as Format | null, st: null as Stars | null, rows: ranked }]
+    : FORMATS.flatMap((fm) => STARS.map((st) => ({ fm: fm as Format | null, st: st as Stars | null, rows: ranked.filter((p) => starsOf(p.teamId) === st && formatOf(p.teamId) === fm) }))).filter((g) => g.rows.length > 0);
   const mixed = new Set(groups.map((g) => g.fm)).size > 1;
   return (
     <div className={`${ui.card} overflow-x-auto`}>
       <table className="w-full text-sm">
         <thead>
           <tr>
-            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th><th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{coinsOf && <th className={`${ui.th} text-right`} title="Pièces gagnées (échauffement compris) · en banque">🪙</th>}{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
+            <th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Membres</th>{pointsOf && <th className={`${ui.th} text-right`} title="Somme, sur les niveaux bouclés, de (numéro du niveau × étoiles du parcours où il a été bouclé)">Points</th>}<th className={`${ui.th} text-right`}>Bouclés</th><th className={ui.th}>En cours</th><th className={`${ui.th} text-right`}>Dernière coche</th><th className={`${ui.th} text-right`}>Reps</th><th className={`${ui.th} text-right`}>💔</th><th className={`${ui.th} text-right`}>🟨</th>{coinsOf && <th className={`${ui.th} text-right`} title="Pièces gagnées (échauffement compris) · en banque">🪙</th>}{hasFinisher && <th className={`${ui.th} text-right`}>🪢 Finisher</th>}
           </tr>
         </thead>
         <tbody>
           {groups.flatMap(({ fm, st, rows }) => [
-            ...(groups.length > 1 ? [<tr key={`h${fm}${st}`}><td colSpan={11} className="p-2 bg-paper font-display font-extrabold text-sm">{starsLabel(st)} Parcours {starsName(st)}{mixed ? ` · ${formatName(fm)}` : ""} · {rows.length} équipe{rows.length > 1 ? "s" : ""}</td></tr>] : []),
+            ...(groups.length > 1 && st !== null && fm !== null ? [<tr key={`h${fm}${st}`}><td colSpan={11} className="p-2 bg-paper font-display font-extrabold text-sm">{starsLabel(st)} Parcours {starsName(st)}{mixed ? ` · ${formatName(fm)}` : ""} · {rows.length} équipe{rows.length > 1 ? "s" : ""}</td></tr>] : []),
             ...rows.map((p) => {
             const t = teamById.get(p.teamId)!;
             const l = levelOf(p.teamId, p.currentLevel);
@@ -1666,8 +1684,9 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
             return (
               <tr key={p.teamId} className={ui.tr}>
                 <td className="p-2 font-display font-extrabold">{rankOf.get(p.teamId) ?? "—"}</td>
-                <td className="p-2 font-bold">{t.name} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(st)}{fm !== "big" ? ` · ${formatLabel(fm)}` : ""}</span></td>
+                <td className="p-2 font-bold">{t.name} <span className="text-[10px] text-accent-ink font-sans">{starsLabel(st ?? starsOf(p.teamId))}{(fm ?? formatOf(p.teamId)) !== "big" ? ` · ${formatLabel(fm ?? formatOf(p.teamId))}` : ""}</span></td>
                 <td className={`p-2 ${ui.hint}`}>{t.members.map((m) => m.name).join(", ")}</td>
+                {pointsOf && <td className="p-2 text-right tabular-nums font-black">{pointsOf.get(p.teamId) ?? 0}</td>}
                 <td className="p-2 text-right tabular-nums font-bold">{p.completedLevels}</td>
                 <td className="p-2">{p.currentLevel ? <span className={cx(l?.boss && "text-danger-ink font-bold")}>{levelLabel(l)} · {p.currentDone}/{p.currentTotal}</span> : <span className="text-success-ink font-bold">🏁 {p.finishedMs !== null ? fmt(p.finishedMs) : ""}</span>}</td>
                 <td className="p-2 text-right tabular-nums">{p.lastTickMs !== null ? fmt(p.lastTickMs) : "—"}</td>
@@ -1683,7 +1702,7 @@ function ResultsTable({ ranked, teamById, levelOf, rankOf, starsOf, formatOf, ca
           {ranked.length === 0 && <tr><td colSpan={11} className={`p-3 ${ui.muted}`}>Pas encore d&apos;équipe.</td></tr>}
         </tbody>
       </table>
-      {hasPhases && <p className={`${ui.hint} p-2`}>Reps, travail, 💔 et 🟨 additionnent le WOD et {phases.map((ph) => `l'${PHASE_NAMES[ph.kind]}`).join(" et ").replace("l'finisher", "le finisher")} (survole une valeur pour le détail). Le classement, lui, reste celui du WOD : niveaux bouclés, puis vies perdues, puis fiches, puis rapidité.</p>}
+      {hasPhases && <p className={`${ui.hint} p-2`}>Reps, travail, 💔 et 🟨 additionnent le WOD et {phases.map((ph) => `l'${PHASE_NAMES[ph.kind]}`).join(" et ").replace("l'finisher", "le finisher")} (survole une valeur pour le détail). Le classement, lui, reste celui du WOD : {pointsOf ? "points (niveau × étoiles), puis reps, puis vies perdues, pièces et rapidité" : "niveaux bouclés, puis vies perdues, puis fiches, puis rapidité"}.</p>}
     </div>
   );
 }

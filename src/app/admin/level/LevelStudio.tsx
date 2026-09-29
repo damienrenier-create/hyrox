@@ -21,12 +21,12 @@ const fmtW = (w: number) => String(w).replace(".", ",");
 // les 5 niveaux, un seul exercice). Chaque niveau se modifie en local puis s'enregistre d'un coup.
 export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exercises: ExerciseRow[]; levels: LevelRow[]; isMaster: boolean }) {
   const [tab, setTab] = useState<"levels" | "catalog">(allLevels.length || exercises.length ? "levels" : "catalog");
-  // Un parcours (1, 2 ou 3 etoiles) a la fois ; la proposition conseillee suit le parcours.
-  const [star, setStar] = useState<Stars>(2);
+  // Un parcours (1 a 5 etoiles) a la fois ; la proposition conseillee suit le parcours.
+  const [star, setStar] = useState<Stars>(3);
   // Format (Sartay 27/09) : « big » = equipes de 4-5+ (reference), « small » = equipes de 1 a 3 (÷ 1,7, 5 fiches max).
   const [format, setFormat] = useState<Format>("big");
   const levels = useMemo(() => allLevels.filter((l) => l.stars === star && l.format === format), [allLevels, star, format]);
-  const [proposal, setProposal] = useState<string>(STAR_PROPOSAL[2]);
+  const [proposal, setProposal] = useState<string>(STAR_PROPOSAL[3]);
   useEffect(() => { setProposal(STAR_PROPOSAL[star]); }, [star]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -84,7 +84,7 @@ export function LevelStudio({ exercises, levels: allLevels, isMaster }: { exerci
                 </button>
               ))}
             </div>
-            <span className={ui.hint}>Trois parcours joués en même temps : ★☆☆ peu de force et de technique, ★★☆ équilibré, ★★★ force et cardio ; chacun en trois formats : équipes de 5 et plus (référence), équipes de 4 (reps ÷ 1,25) et équipes de 1 à 3 (reps ÷ 1,7, 2 à 5 fiches, un exercice remplacé par niveau pour désengorger les ateliers ; même travail par personne). Chaque équipe choisit son parcours dans les réglages du greffier, son format suit son effectif ; un parcours vide renvoie ses équipes sur le 2 étoiles.</span>
+            <span className={ui.hint}>Cinq parcours joués en même temps, de ★☆☆☆☆ (peu de force et de technique) à ★★★★★ (force et cardio), ★★★☆☆ au milieu ; chacun en trois formats : équipes de 5 et plus (référence), équipes de 4 (reps ÷ 1,25) et équipes de 1 à 3 (reps ÷ 1,7, 2 à 5 fiches, un exercice remplacé par niveau pour désengorger les ateliers ; même travail par personne). Chaque équipe choisit son parcours dans les réglages du greffier, son format suit son effectif ; un parcours vide renvoie ses équipes sur le 3 étoiles.</span>
           </div>
           {levels.length === 0 && format !== "big" && (
             <div className={`${ui.cardPad} flex flex-wrap items-center gap-3`}>

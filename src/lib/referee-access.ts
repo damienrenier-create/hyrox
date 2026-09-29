@@ -27,9 +27,9 @@ export async function refereeAccess(sessionId: string, user: SessionPayload): Pr
   const base = { note: row?.note ?? null, teamId: myTeam?.id ?? null, teamName: myTeam?.name ?? null };
 
   if (status === "APPROVED") return { allowed: true, reason: null, status, ...base };
-  if (status === "PENDING") {
-    return { allowed: false, status, reason: "Ta demande d'arbitrage est en attente : le greffier (ou un prof) doit l'accepter.", ...base };
-  }
+  // Sartay 29/09 soir : « plus besoin de demander l'autorisation ; si un eleve veut arbitrer, il peut ». Seule regle
+  // restante : jamais sa propre equipe (verifiee au tir).
+  if (status !== "REFUSED") return { allowed: true, reason: null, status: "APPROVED", ...base };
   if (status === "REFUSED") {
     return { allowed: false, status, reason: "Ta demande d'arbitrage a été refusée. Tu peux en refaire une si la situation change.", ...base };
   }

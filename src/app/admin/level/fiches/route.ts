@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, freezeLadders, readFrozenFromSettings } from "@/lib/level";
-import { activeCards, estimateSeconds, fmtTheoretical, formatLabel, formatName, formatOfLadderKey, readLadders, starsLabel, starsName, starsOfLadderKey, teamSizeOf, LADDER_KEYS, type Ladders } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, estimateSeconds, fmtTheoretical, formatLabel, formatName, formatOfLadderKey, readLadders, starsLabel, starsName, starsOfLadderKey, teamSizeOf, DEFAULT_STARS, LADDER_KEYS, type Ladders } from "@/lib/wod-engines/templates/level-engine";
 import { wodLabel } from "@/lib/student-sessions";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +23,11 @@ export async function GET(req: Request) {
   if (sessionId) {
     const s = await db.orm.public.Session.where({ id: sessionId }).first();
     if (s && readFrozenFromSettings(s.settings).length) {
-      ladders = { 2: readFrozenFromSettings(s.settings), ...readLadders(s.settings) };
+      ladders = { [DEFAULT_STARS]: readFrozenFromSettings(s.settings), ...readLadders(s.settings) };
       title = `${s.label ?? wodLabel(s.wodType)} · échelle de la séance`;
     }
   }
-  if (!ladders[2]?.length) {
+  if (!ladders[DEFAULT_STARS]?.length) {
     const all = await freezeLadders();
     ladders = Object.fromEntries(LADDER_KEYS.filter((k) => all[k].length).map((k) => [k, all[k]])) as Ladders;
     title = "Échelle commune";

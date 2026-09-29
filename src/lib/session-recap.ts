@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { buildLevelBundle, levelStandings, levelsForTeam } from "@/lib/level-context";
+import { buildLevelBundle, levelPointsOf, levelStandings, levelsForTeam } from "@/lib/level-context";
 import { PACE_FAST, paceReport, type PaceRun } from "@/lib/level-pace";
 import { codeOf, dissonances, gradeOf, isBad, isExcellent, levelIndex, refereeRanking } from "@/lib/eval-insights";
 import { GRADED_CRITERIA, gradeOfAnswers } from "@/lib/carnet";
@@ -7,7 +7,7 @@ import { displayName } from "@/lib/staff-names";
 import { exoLabel } from "@/lib/level-criteria";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
-import { activeCards, starsLabel, switchChain, teamFormatOf, teamStarsOf, type Format, type Stars, type StarSwitch } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, starsLabel, switchChain, STARS, teamFormatOf, teamStarsOf, type Format, type Stars, type StarSwitch } from "@/lib/wod-engines/templates/level-engine";
 
 // Recap d'une seance Level pour les admins (Sartay 28/09 ; par NUMERO D'EQUIPE depuis le 30/09) : les faits a retenir.
 // - Fiche de chaque equipe : noms complets, parcours et rang, temps niveau par niveau compares a la mediane des
@@ -33,8 +33,10 @@ export type TeamSheet = {
   switches: StarSwitch[]; // changements de categorie, du plus ancien au plus recent (descente a la 3e vie, montee sur un BOSS)
   format: Format;
   members: RecapMember[];
-  rank: number; // rang dans son parcours
+  rank: number; // rang dans son parcours, ou dans le classement commun (regles du 29/09 soir)
   rankOf: number;
+  rankScope: "parcours" | "global";
+  points: number | null; // classement commun : niveau x etoiles
   completedLevels: number;
   totalLevels: number;
   finishedMs: number | null; // chrono de course : echelle bouclee
@@ -105,7 +107,9 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
   const progressOf = new Map(ranked.map((p) => [p.teamId, p]));
   const finalStars = (teamId: string): Stars => bundle.starSwitches[teamId]?.to ?? teamStarsOf(bundle.teamStars, teamId);
   const rankIn = new Map<string, { rank: number; of: number }>();
-  for (const st of [1, 2, 3] as const) {
+  const globalRank = bundle.reorient && !bundle.child && !bundle.emom;
+  if (globalRank) ranked.forEach((p, i) => rankIn.set(p.teamId, { rank: i + 1, of: ranked.length }));
+  else for (const st of STARS) {
     const inCat = ranked.filter((p) => finalStars(p.teamId) === st);
     inCat.forEach((p, i) => rankIn.set(p.teamId, { rank: i + 1, of: inCat.length }));
   }
@@ -144,6 +148,8 @@ export async function buildSessionRecap(sessionId: string): Promise<SessionRecap
       }),
       rank: r.rank,
       rankOf: r.of,
+      rankScope: globalRank ? "global" : "parcours",
+      points: globalRank && p ? levelPointsOf(bundle, p) : null,
       completedLevels: p?.completedLevels ?? 0,
       totalLevels: levelsForTeam(bundle, t.id).filter((l) => activeCards(l).length > 0).length,
       finishedMs: p?.finishedMs ?? null,

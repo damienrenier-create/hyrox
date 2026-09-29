@@ -169,6 +169,14 @@ export const CRITERIA: Record<string, string[]> = {
     "Le retour au sol est contrôlé pour éviter les blessures (saut amorti ou descente un pied après l'autre).",
     "L'élève maintient un rythme continu sans pauses excessives.",
   ],
+  // SQUATS (29/09 soir) : squat sans saut des parcours 1 et 2 etoiles, criteres ecrits dans l'esprit du squat jump
+  // (3 techniques + intensite), a faire valider.
+  SQUATS: [
+    "Le bassin descend au moins au niveau des genoux (cuisses parallèles au sol).",
+    "Les talons restent au sol et les genoux suivent l'axe des pieds.",
+    "Le dos reste droit, poitrine haute, et l'élève se relève en extension complète des hanches.",
+    "L'élève enchaîne les squats à un rythme régulier, sans pause.",
+  ],
   // HELICO (30/09) : criteres ecrits pour l'exercice ajoute par Sartay (3 techniques + intensite), a faire valider.
   HELICO: [
     "L'élève reste allongé sur le ventre, jambes au sol, le corps aligné (il ne se redresse pas en appui).",
@@ -225,6 +233,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
+  SQUATS: ["Cuisses parallèles au sol", "Talons au sol, genoux dans l'axe", "Dos droit, debout complet", "Rythme régulier"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {

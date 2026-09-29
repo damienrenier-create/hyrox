@@ -1,9 +1,9 @@
 import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
-  hasDemotion, heartCarryBites, ladderFor, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, PENALTY_INDEX0, PENALTY_STEPS, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
-  type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type TeamPenalty, type Tick,
+  coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, paceReferenceMs, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, starsAtLevel, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_FAST_RATIO, PROMOTE_FAST_STREAK, PROMOTE_LEAD_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type PaceRef, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
 // Rejeu du WOD Level (Sartay 28-29/09, « la séance doit pouvoir être jouée 100 % hors ligne et envoyée à la fin »)
@@ -52,6 +52,10 @@ export type ReplayConfig = {
   now: () => number; // « maintenant » absolu (ecran : horloge recalee ; serveur : heure de la lecture)
   newId: (key: string) => string; // ecran : la cle elle-meme (stable d'un rendu a l'autre) ; serveur : un uuid
   demote?: boolean; // descente de categorie a la 3e vie (defaut : oui ; non pour rejouer une seance d'avant le 28/09 17 h 49)
+  // Regles du 29/09 soir (5 parcours, settings.levelRules = 2) : vies toutes douces, descente a la 1re, 3e, 6e, 10e
+  // vie, trois facons de monter, classement commun a tout l'ecran (niveau x etoiles). Sinon : regles d'avant.
+  reorient?: boolean;
+  paceRef?: PaceRef | null; // reference de rythme figee au coup d'envoi (montee « trop rapide »)
 };
 
 export type ReplayState = {
@@ -72,6 +76,7 @@ export type ReplayState = {
   removedPenalties: { teamId: string; index: number }[]; // cartes jaunes retirees (les penalites n'ont pas d'identifiant en base)
   scoredTeams: string[]; // equipes dont les cordes ont ete saisies
   bossEntry: Record<string, BossEntry>; // 1re de sa categorie en entrant dans son BOSS en cours ? (montee de categorie)
+  streaks: Record<string, Streak>; // series en cours (1re de son parcours, plus rapide que la reference) : montee
 };
 
 export function cloneState(s: ReplayState): ReplayState {
@@ -79,6 +84,7 @@ export function cloneState(s: ReplayState): ReplayState {
     ticks: [...s.ticks], losses: [...s.losses], penalties: [...s.penalties], coinEvents: [...s.coinEvents], teamStars: { ...s.teamStars }, switches: { ...s.switches },
     voided: [...s.voided], newSwitches: { ...s.newSwitches }, pauses: s.pauses.map((p) => ({ ...p })), yellowCards: [...s.yellowCards], endedAtMs: s.endedAtMs,
     emomScores: { ...s.emomScores }, emomPlayerScores: { ...s.emomPlayerScores }, giftCount: s.giftCount, removedPenalties: [...s.removedPenalties], scoredTeams: [...s.scoredTeams], bossEntry: { ...s.bossEntry },
+    streaks: Object.fromEntries(Object.entries(s.streaks).map(([k, v]) => [k, { ...v }])),
   };
 }
 
@@ -146,8 +152,9 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     if (sim.catchAtMs === null) break;
     const deadline = p.attemptStartMs + sim.catchAtMs;
     // Au WOD principal, les 5 premieres vies perdues sont « douces » (pas de descente, fiches gardees, le zombie
-    // repart du debut avec un coeur neuf) ; ensuite, retour au niveau precedent.
-    const soft = cfg.isMain && st.losses.filter((x) => x.teamId === teamId).length < SOFT_LOSSES;
+    // repart du debut avec un coeur neuf) ; ensuite, retour au niveau precedent. Depuis le 29/09 soir (reorient) :
+    // toutes les vies sont douces, « on ne perd jamais de niveau ».
+    const soft = cfg.isMain && (!!cfg.reorient || st.losses.filter((x) => x.teamId === teamId).length < SOFT_LOSSES);
     const lossId = cfg.newId(`loss:${teamId}:${p.currentLevel}:${Math.round(deadline)}`);
     if (!soft) {
       // Retour au niveau precedent DANS L'ORDRE DE L'EQUIPE : fiches du niveau en cours et du precedent effacees.
@@ -171,23 +178,43 @@ export function catchUpTeam(cfg: ReplayConfig, st: ReplayState, teamId: string, 
       const lost = Math.floor(bank * ZOMBIE_COIN_LOSS);
       if (lost > 0) st.coinEvents.push({ id: lossId, teamId, kind: "zombie", coins: lost, at: Math.round(absOf(cfg, st, deadline)), level: p.currentLevel });
     }
-    // 3e vie perdue au WOD principal : l'equipe descend d'une categorie (une seule fois), sans perdre son niveau ;
-    // la nouvelle echelle commence au niveau suivant.
+    // Descente d'un parcours, sans perdre son niveau ; la nouvelle echelle commence au niveau suivant. Regles du
+    // 29/09 soir : a la 1re vie perdue, puis a la 3e, la 6e, la 10e... ; avant : a la 3e, une seule fois.
     const stars = teamStarsOf(st.teamStars, teamId);
-    if (cfg.isMain && cfg.demote !== false && !hasDemotion(st.switches[teamId]) && stars > 1 && st.losses.filter((x) => x.teamId === teamId).length === DEMOTE_AT_LOSSES) {
+    const count = st.losses.filter((x) => x.teamId === teamId).length;
+    const demote = cfg.reorient ? demotesAtLoss(count) : !hasDemotion(st.switches[teamId]) && count === DEMOTE_AT_LOSSES;
+    if (cfg.isMain && cfg.demote !== false && stars > 1 && demote) {
       const cur = progressOf(mine, teamId, st.ticks, st.losses, st.penalties).currentLevel;
       const at = mine.findIndex((l) => l.number === cur);
       const next = at >= 0 ? mine[at + 1] : undefined;
       if (next) {
-        const sw: StarSwitch = { from: stars, to: (stars - 1) as Stars, fromLevel: next.number, ...(st.switches[teamId] ? { prev: st.switches[teamId] } : {}) };
-        st.switches[teamId] = sw;
-        st.newSwitches[teamId] = sw;
-        st.teamStars[teamId] = sw.to;
+        changeStars(st, teamId, (stars - 1) as Stars, next.number);
         mine = replayLadder(cfg, st, teamId);
       }
     }
   }
   return applied;
+}
+
+// Changement de parcours a partir du niveau `fromLevel` (descente ou montee) : chaine des changements, series remises a zero.
+function changeStars(st: ReplayState, teamId: string, to: Stars, fromLevel: number): void {
+  const from = teamStarsOf(st.teamStars, teamId);
+  const sw: StarSwitch = { from, to, fromLevel, ...(st.switches[teamId] ? { prev: st.switches[teamId] } : {}) };
+  st.switches[teamId] = sw;
+  st.newSwitches[teamId] = sw;
+  st.teamStars[teamId] = to;
+  st.streaks[teamId] = { lead: 0, fast: 0, last: st.streaks[teamId]?.last ?? -1 };
+}
+
+// Classement de toutes les equipes a l'instant (deja rattrapees par l'appelant) : commun (niveau x etoiles) avec
+// les regles du 29/09 soir, sinon l'ancien (niveaux, vies, pieces).
+export function rankedNow(cfg: ReplayConfig, st: ReplayState): TeamProgress[] {
+  const ladders = new Map(cfg.teamIds.map((x) => [x, replayLadder(cfg, st, x)]));
+  const progress = cfg.teamIds.map((x) => progressOf(ladders.get(x)!, x, st.ticks, st.losses, st.penalties));
+  const score = (x: string) => coinsState(ladders.get(x)!, x, st.ticks, st.losses, st.penalties, st.coinEvents, cfg.coinsCarry).score;
+  if (!cfg.reorient || !cfg.isMain) return rankTeams(progress, score);
+  const byId = new Map(progress.map((p) => [p.teamId, p]));
+  return rankGlobal(progress, (x) => levelPoints(ladders.get(x)!, byId.get(x)!, teamStarsOf(st.teamStars, x), st.switches[x]), score);
 }
 
 export function catchUpAll(cfg: ReplayConfig, st: ReplayState, untilRaceMs: number): number {
@@ -263,9 +290,10 @@ export function applyRocket(cfg: ReplayConfig, st: ReplayState, teamId: string, 
   const stateOf = (id: string) => coinsState(replayLadder(cfg, st, id), id, st.ticks, st.losses, st.penalties, st.coinEvents, cfg.coinsCarry);
   const mine = stateOf(teamId);
   if (mine.stock < 1) return "Pas de fusée construite (100 pièces).";
-  const groupOf = (id: string) => parcoursKey(teamStarsOf(st.teamStars, id), cfg.formatOf(id));
+  // Regles du 29/09 soir : un seul classement pour tout l'ecran, la fusee vise dans ce classement.
+  const groupOf = (id: string) => (cfg.reorient ? "all" : parcoursKey(teamStarsOf(st.teamStars, id), cfg.formatOf(id)));
   const progress = cfg.teamIds.map((x) => progressOf(replayLadder(cfg, st, x), x, st.ticks, st.losses, st.penalties));
-  const ranked = rankTeams(progress, (x) => stateOf(x).score);
+  const ranked = rankedNow(cfg, st);
   const rows = cfg.teamIds.map((x) => {
     const g = groupOf(x);
     const p = progress.find((pp) => pp.teamId === x)!;
@@ -338,24 +366,26 @@ function doneExercises(levels: FrozenLevel[], teamId: string, ticks: Tick[], ext
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, "fr"));
 }
 
-// Rang d'une equipe dans sa categorie (parcours x format) a l'instant `raceMs`, et taille de la categorie : toutes
-// les equipes d'abord rattrapees jusque-la (le classement depend des vies et des pieces de chacune).
+// Rang d'une equipe dans sa categorie a l'instant `raceMs`, et taille de la categorie : toutes les equipes d'abord
+// rattrapees jusque-la (le classement depend des vies et des pieces de chacune). Categorie = parcours x format ;
+// avec les regles du 29/09 soir, le parcours seul (« 1er de son parcours »), dans l'ordre du classement commun.
 export function groupRank(cfg: ReplayConfig, st: ReplayState, teamId: string, raceMs: number): { rank: number; size: number } {
   catchUpAll(cfg, st, raceMs);
-  const groupOf = (id: string) => parcoursKey(teamStarsOf(st.teamStars, id), cfg.formatOf(id));
+  const groupOf = (id: string) => (cfg.reorient ? String(teamStarsOf(st.teamStars, id)) : parcoursKey(teamStarsOf(st.teamStars, id), cfg.formatOf(id)));
   const g = groupOf(teamId);
-  const ids = cfg.teamIds.filter((x) => groupOf(x) === g);
-  const progress = ids.map((x) => progressOf(replayLadder(cfg, st, x), x, st.ticks, st.losses, st.penalties));
-  const score = (x: string) => coinsState(replayLadder(cfg, st, x), x, st.ticks, st.losses, st.penalties, st.coinEvents, cfg.coinsCarry).score;
-  return { rank: rankTeams(progress, score).findIndex((p) => p.teamId === teamId) + 1, size: ids.length };
+  const inGroup = rankedNow(cfg, st).filter((p) => groupOf(p.teamId) === g);
+  return { rank: inGroup.findIndex((p) => p.teamId === teamId) + 1, size: inGroup.length };
 }
 // 1re d'une categorie d'au moins deux equipes (seule dans sa categorie, une equipe n'est « premiere » de personne).
 const leads = (r: { rank: number; size: number }) => r.rank === 1 && r.size >= 2;
 
 // Montee de categorie (Sartay 29/09) : l'equipe est 1re de sa categorie quand elle ENTRE dans un BOSS (derniere
 // fiche du niveau d'avant) et l'est encore quand elle le BOUCLE -> +1 etoile a partir du niveau suivant, sans perdre
-// son niveau (comme la descente, a l'envers). A chaque BOSS, jusqu'a 3 etoiles. WOD principal seulement. Categorie
+// son niveau (comme la descente, a l'envers). A chaque BOSS, jusqu'a 5 etoiles. WOD principal seulement. Categorie
 // d'au moins deux equipes, a l'entree comme a la sortie.
+// Regles du 29/09 soir, en plus : 1re de son parcours en bouclant 3 niveaux de suite, ou 3 niveaux de suite en 75 %
+// (ou moins) du temps de reference (mediane des seances deja jouees, figee au coup d'envoi ; seule voie pour une
+// equipe seule dans son parcours).
 export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: string, level: number, raceMs: number): void {
   if (!cfg.isMain || cfg.emom) return;
   const ladder = replayLadder(cfg, st, teamId);
@@ -365,16 +395,30 @@ export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: strin
   const p = progressOf(ladder, teamId, st.ticks, st.losses, st.penalties);
   if (p.currentLevel === level) return; // niveau pas encore boucle
   const next = ladder[idx + 1];
-  if (next?.boss) st.bossEntry[teamId] = { level: next.number, first: leads(groupRank(cfg, st, teamId, raceMs)) };
-  if (!lv.boss) return;
-  const entry = st.bossEntry[teamId];
+  let lead: boolean | null = null;
+  const leadsNow = () => (lead ??= leads(groupRank(cfg, st, teamId, raceMs)));
+  if (next?.boss) st.bossEntry[teamId] = { level: next.number, first: leadsNow() };
   const stars = teamStarsOf(st.teamStars, teamId);
-  if (!entry || entry.level !== lv.number || !entry.first || stars >= 3 || !next) return;
-  if (!leads(groupRank(cfg, st, teamId, raceMs))) return;
-  const sw: StarSwitch = { from: stars, to: (stars + 1) as Stars, fromLevel: next.number, ...(st.switches[teamId] ? { prev: st.switches[teamId] } : {}) };
-  st.switches[teamId] = sw;
-  st.newSwitches[teamId] = sw;
-  st.teamStars[teamId] = sw.to;
+  let promote = false;
+  if (lv.boss) {
+    const entry = st.bossEntry[teamId];
+    if (entry && entry.level === lv.number && entry.first && leadsNow()) promote = true;
+  }
+  if (cfg.reorient) {
+    const prev = st.streaks[teamId] ?? { lead: 0, fast: 0, last: -1 };
+    if (prev.last !== lv.number) {
+      let fast = false;
+      if (cfg.paceRef) {
+        const run = coinsEarned(ladder, teamId, st.ticks, st.losses, st.penalties).perLevel.find((c) => c.level === lv.number);
+        const ref = paceReferenceMs(cfg.paceRef, cfg.formatOf(teamId), starsAtLevel(st.switches[teamId], stars, lv.number), lv);
+        fast = !!run && ref > 0 && run.elapsedMs <= PROMOTE_FAST_RATIO * ref;
+      }
+      const s: Streak = { lead: leadsNow() ? prev.lead + 1 : 0, fast: fast ? prev.fast + 1 : 0, last: lv.number };
+      st.streaks[teamId] = s;
+      if (s.lead >= PROMOTE_LEAD_STREAK || s.fast >= PROMOTE_FAST_STREAK) promote = true;
+    }
+  }
+  if (promote && stars < MAX_STARS && next) changeStars(st, teamId, (stars + 1) as Stars, next.number);
 }
 
 // Finisher : cordes de la derniere vague, joueur par joueur ; le score de l'equipe = la somme.

@@ -9,7 +9,7 @@ import { numbersTakenElsewhere } from "@/lib/session-twins";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
   autoRocketPool, pickRocketTarget, parcoursKey, readStarSwitches, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
-  DISCOUNT_STEPS, LADDER_KEYS, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
+  DEFAULT_CAP_MIN, DEFAULT_STARS, DISCOUNT_STEPS, LADDER_KEYS, REORIENT_RULES, ROCKET_PRICE, type CoinEvent, type Format, type FrozenLevel, type Loss, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
 // Pieces, fusees et equipes par parcours du WOD Level, cote serveur et SANS authentification (les actions du
@@ -263,9 +263,16 @@ export async function startLevelRace(sessionId: string): Promise<Res> {
   if (!session) return { error: "Séance introuvable." };
   if (!readFrozenFromSettings(session.settings).length) {
     const all = await freezeLadders();
-    if (!all[2].some((l) => activeCards(l).length > 0)) return { error: "L'échelle 2 étoiles est vide : compose les niveaux dans l'atelier Level avant de lancer." };
-    const ladders = Object.fromEntries(LADDER_KEYS.filter((k) => k !== 2 && all[k].length).map((k) => [String(k), all[k]]));
-    await writeSettings(sessionId, (fresh) => ({ ...fresh, levels: all[2], ladders }));
+    if (!all[DEFAULT_STARS].some((l) => activeCards(l).length > 0)) return { error: "L'échelle 3 étoiles est vide : compose les niveaux dans l'atelier Level avant de lancer." };
+    const ladders = Object.fromEntries(LADDER_KEYS.filter((k) => k !== DEFAULT_STARS && all[k].length).map((k) => [String(k), all[k]]));
+    await writeSettings(sessionId, (fresh) => ({ ...fresh, levels: all[DEFAULT_STARS], ladders }));
+  }
+  // WOD principal (Sartay 29/09 soir) : regles de reorientation (5 parcours, classement commun), reference de rythme
+  // figee pour la montee « trop rapide », et 60 minutes de chrono par defaut (sauf temps choisi dans les reglages).
+  if (!readChild(session.settings)) {
+    const { buildPaceRef } = await import("@/lib/level-pace"); // import differe : level-pace lit level-coins
+    const paceRef = await buildPaceRef();
+    await writeSettings(sessionId, (fresh) => ({ ...fresh, levelRules: REORIENT_RULES, paceRef, ...(fresh.levelCapMin === undefined ? { levelCapMin: DEFAULT_CAP_MIN } : {}) }));
   }
   let rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs) rs = await db.orm.public.RaceState.create({ sessionId, noStartExerciseIds: [] });

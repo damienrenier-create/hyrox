@@ -204,11 +204,11 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
         {onCreateStar && (
           <div className={`${ui.cardPad} mb-2 flex flex-wrap items-center gap-2`}>
             <span className={ui.eyebrow}>Nouvelle équipe</span>
-            {[3, 2, 1].map((st) => (
+            {[5, 4, 3, 2, 1].map((st) => (
               <button key={st} type="button" disabled={pending} onClick={() => onCreateStar(st as Stars)} className={btn.primary} title={`Créer une équipe dans le parcours ${starsName(st as Stars)}`}>+ {starsLabel(st as Stars)} {starsName(st as Stars)}</button>
             ))}
             {onNumber && teams.some((t) => t.order >= 1000) && (
-              <button type="button" disabled={pending} onClick={onNumber} className={`${btn.accent} ml-auto`} title="Numérote toutes les équipes : 3 étoiles d'abord, puis 2, puis 1 (fait aussi automatiquement au coup d'envoi)">🔢 Attribuer les numéros</button>
+              <button type="button" disabled={pending} onClick={onNumber} className={`${btn.accent} ml-auto`} title="Numérote toutes les équipes : 5 étoiles d'abord, puis 4, 3, 2, 1 (fait aussi automatiquement au coup d'envoi)">🔢 Attribuer les numéros</button>
             )}
           </div>
         )}

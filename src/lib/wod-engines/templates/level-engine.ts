@@ -49,20 +49,25 @@ export function readFrozenLevels(raw: unknown): FrozenLevel[] {
   return out.sort((a, b) => a.number - b.number);
 }
 
-// ===== Parcours 1, 2 ou 3 etoiles (Sartay 25/09) =====
-// Trois echelles vivent cote a cote : 1 etoile (peu de force et de technique), 2 etoiles (equilibree), 3 etoiles
-// (force et cardio). Une seance fige les trois (settings.levels = 2 etoiles, settings.ladders = { "1": [...],
-// "3": [...] }) et chaque equipe joue sur le parcours de settings.teamStars[teamId] (2 par defaut).
-export type Stars = 1 | 2 | 3;
-export const STARS: Stars[] = [1, 2, 3];
-export const DEFAULT_STARS: Stars = 2;
-export const starsLabel = (s: Stars) => "★".repeat(s) + "☆".repeat(3 - s);
+// ===== Parcours 1 a 5 etoiles (Sartay 25/09 ; CINQ parcours depuis le 29/09 soir) =====
+// Cinq echelles vivent cote a cote, de 1 etoile (peu de force et de technique) a 5 etoiles (force et cardio) ; le 3
+// etoiles (ancien 2 etoiles) est l'echelle centrale. Une seance les fige toutes (settings.levels = 3 etoiles,
+// settings.ladders = { "1", "2", "4", "5", et les formats m1..m5, s1..s5 }) et chaque equipe joue sur le parcours de
+// settings.teamStars[teamId] (3 par defaut). Les parcours servent a rendre le jeu equitable : le classement est
+// commun a tout l'ecran (niveau x etoiles), et une equipe est reorientee selon ses performances.
+// Les seances d'avant le 29/09 (3 parcours) ont ete migrees : 1 -> 1, 2 -> 3, 3 -> 5.
+export type Stars = 1 | 2 | 3 | 4 | 5;
+export const STARS: Stars[] = [1, 2, 3, 4, 5];
+export const MAX_STARS = 5;
+export const DEFAULT_STARS: Stars = 3;
+export const isStars = (v: unknown): v is Stars => v === 1 || v === 2 || v === 3 || v === 4 || v === 5;
+export const starsLabel = (s: Stars) => "★".repeat(s) + "☆".repeat(MAX_STARS - s);
 export const starsName = (s: Stars) => (s === 1 ? "1 étoile" : `${s} étoiles`);
 export function readTeamStars(settings: unknown): Record<string, Stars> {
   const raw = (settings as { teamStars?: unknown } | null)?.teamStars;
   const out: Record<string, Stars> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === 1 || v === 2 || v === 3) out[k] = v;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (isStars(v)) out[k] = v;
   return out;
 }
 export const teamStarsOf = (teamStars: Record<string, Stars>, teamId: string): Stars => teamStars[teamId] ?? DEFAULT_STARS;
@@ -86,7 +91,7 @@ export const formatLabel = (f: Format) => (f === "small" ? "1-3" : f === "mid" ?
 export const formatName = (f: Format) => (f === "small" ? "équipes de 1 à 3" : f === "mid" ? "équipes de 4" : "équipes de 5 et plus");
 export const teamSizeOf = (f: Format) => (f === "small" ? SMALL_TEAM : f === "mid" ? MID_TEAM : DEFAULT_TEAM);
 export type LadderKey = Stars | `s${Stars}` | `m${Stars}`;
-export const LADDER_KEYS: LadderKey[] = [1, 2, 3, "m1", "m2", "m3", "s1", "s2", "s3"];
+export const LADDER_KEYS: LadderKey[] = [1, 2, 3, 4, 5, "m1", "m2", "m3", "m4", "m5", "s1", "s2", "s3", "s4", "s5"];
 export const ladderKey = (stars: Stars, format: Format = DEFAULT_FORMAT): LadderKey => (format === "small" ? `s${stars}` : format === "mid" ? `m${stars}` : stars);
 export const formatOfLadderKey = (k: LadderKey): Format => (typeof k === "number" ? "big" : k.startsWith("s") ? "small" : "mid");
 export const starsOfLadderKey = (k: LadderKey): Stars => (typeof k === "number" ? k : (Number(k.slice(1)) as Stars));
@@ -111,7 +116,7 @@ export function readLadders(settings: unknown): Ladders {
   const out: Ladders = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const k of LADDER_KEYS) {
-    if (k === DEFAULT_STARS) continue; // le 2 etoiles big vit dans settings.levels
+    if (k === DEFAULT_STARS) continue; // le 3 etoiles big vit dans settings.levels
     const l = readFrozenLevels((raw as Record<string, unknown>)[String(k)]);
     if (l.length) out[k] = l;
   }
@@ -129,7 +134,7 @@ export const DEMOTE_AT_LOSSES = 3;
 export type StarSwitch = { from: Stars; to: Stars; fromLevel: number; prev?: StarSwitch };
 function readSwitch(v: unknown, depth = 0): StarSwitch | null {
   const o = v as { from?: unknown; to?: unknown; fromLevel?: unknown; prev?: unknown } | null;
-  if (!o || depth > 10 || ![1, 2, 3].includes(o.from as number) || ![1, 2, 3].includes(o.to as number) || typeof o.fromLevel !== "number") return null;
+  if (!o || depth > 60 || !isStars(o.from) || !isStars(o.to) || typeof o.fromLevel !== "number") return null;
   const prev = o.prev ? readSwitch(o.prev, depth + 1) : null;
   return { from: o.from as Stars, to: o.to as Stars, fromLevel: o.fromLevel, ...(prev ? { prev } : {}) };
 }
@@ -155,6 +160,59 @@ export function starsAtLevel(sw: StarSwitch | null | undefined, current: Stars, 
   if (!sw) return current;
   return level >= sw.fromLevel ? sw.to : starsAtLevel(sw.prev, sw.from, level);
 }
+// ===== Reorientation (Sartay 29/09 soir : « on ne perd jamais de niveau !! on descend seulement de parcours si on
+// perd trop de vies ») — seances lancees depuis (settings.levelRules = 2) =====
+// - toutes les vies du WOD principal sont douces (fiches gardees, coeur neuf) ;
+// - descente d'un parcours a la 1re vie perdue, puis a la 3e, la 6e, la 10e, la 15e... (1 coeur, puis 2 de plus,
+//   puis 3, puis 4) ; jamais sous 1 etoile ;
+// - montee d'un parcours (jamais au-dessus de 5) quand l'equipe est 1re de son parcours (au moins deux equipes) en
+//   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle 3 niveaux
+//   de suite nettement plus vite que la reference (mediane des seances deja jouees, figee au coup d'envoi) : c'est la
+//   seule voie pour une equipe seule dans son parcours. Toujours a partir du niveau suivant, sans perdre son niveau.
+export const REORIENT_RULES = 2;
+export const DEFAULT_CAP_MIN = 60; // « le WOD se joue en 60 minutes » : temps impose au coup d envoi, sauf choix contraire
+export function readReorient(settings: unknown): boolean {
+  const v = (settings as { levelRules?: unknown } | null)?.levelRules;
+  return typeof v === "number" && v >= REORIENT_RULES;
+}
+export const PROMOTE_LEAD_STREAK = 3;
+export const PROMOTE_FAST_STREAK = 3;
+export const PROMOTE_FAST_RATIO = 0.75; // niveau boucle en 75 % (ou moins) du temps de reference
+// Descente a la n-ieme vie perdue quand n est triangulaire : 1, 3, 6, 10, 15...
+export function demotesAtLoss(n: number): boolean {
+  for (let k = 1, t = 1; t <= n; k++, t += k) if (t === n) return true;
+  return false;
+}
+// Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours, et nettement plus vite que la
+// reference. Remises a zero a chaque changement de parcours. settings.streaks[teamId].
+export type Streak = { lead: number; fast: number; last: number }; // last = dernier niveau compte (jamais deux fois)
+export function readStreaks(settings: unknown): Record<string, Streak> {
+  const raw = (settings as { streaks?: unknown } | null)?.streaks;
+  const out: Record<string, Streak> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const o = v as { lead?: unknown; fast?: unknown; last?: unknown } | null;
+    if (o && typeof o.lead === "number" && typeof o.fast === "number") out[k] = { lead: o.lead, fast: o.fast, last: typeof o.last === "number" ? o.last : -1 };
+  }
+  return out;
+}
+// Reference de rythme figee au coup d'envoi (settings.paceRef) : mediane des passages deja joues par cle
+// `format-etoiles-niveau` (au moins 3), sinon temps theorique x facteur observe (BOSS / niveau ordinaire).
+export type PaceRef = { median: Record<string, number>; factor: { boss: number; level: number } };
+export function readPaceRef(settings: unknown): PaceRef | null {
+  const raw = (settings as { paceRef?: unknown } | null)?.paceRef as { median?: unknown; factor?: { boss?: unknown; level?: unknown } } | undefined;
+  if (!raw || typeof raw !== "object" || !raw.factor || typeof raw.factor.boss !== "number" || typeof raw.factor.level !== "number") return null;
+  const median: Record<string, number> = {};
+  if (raw.median && typeof raw.median === "object") for (const [k, v] of Object.entries(raw.median as Record<string, unknown>)) if (typeof v === "number" && v > 0) median[k] = v;
+  return { median, factor: { boss: raw.factor.boss, level: raw.factor.level } };
+}
+export function paceReferenceMs(ref: PaceRef, format: Format, stars: Stars, level: FrozenLevel): number {
+  const m = ref.median[`${format}-${stars}-${level.number}`];
+  if (m) return m;
+  const est = estimateSeconds(activeCards(level).map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, teamSizeOf(format)) * 1000;
+  return est * (level.boss ? ref.factor.boss : ref.factor.level);
+}
+
 // Montee de categorie : equipe 1re de sa categorie en entrant dans un BOSS (`first`), relevee a l'entree.
 export type BossEntry = { level: number; first: boolean };
 export function readBossEntry(settings: unknown): Record<string, BossEntry> {
@@ -174,11 +232,11 @@ export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars,
     return [...before, ...after];
   }
   if (format === "small") {
-    const s = ladders[`s${stars}`] ?? ladders.s2;
+    const s = ladders[`s${stars}`] ?? ladders[`s${DEFAULT_STARS}`];
     if (s?.length) return s;
   }
   if (format === "mid") {
-    const m = ladders[`m${stars}`] ?? ladders.m2;
+    const m = ladders[`m${stars}`] ?? ladders[`m${DEFAULT_STARS}`];
     if (m?.length) return m;
   }
   return (stars === DEFAULT_STARS ? levels : ladders[stars]) ?? levels;
@@ -187,10 +245,11 @@ export function ladderFor(levels: FrozenLevel[], ladders: Ladders, stars: Stars,
 // Suggestion de parcours d'apres l'echauffement (Sartay 27/09) : boucle en 80 % de l'estimation ou moins -> 3
 // etoiles ; dans les 120 % -> 2 ; au-dela -> 1. Echauffement pas boucle : 2 etoiles si au moins trois quarts
 // des series, sinon 1.
+// Cinq parcours (29/09 soir) : <= 75 % -> 5, <= 90 % -> 4, <= 110 % -> 3, <= 130 % -> 2, au-dela -> 1.
 export function suggestStars(finishMs: number | null, levelsDone: number, levelsTotal: number, estimateMs: number): Stars {
   if (finishMs !== null && estimateMs > 0) {
     const r = finishMs / estimateMs;
-    return r <= 0.8 ? 3 : r <= 1.2 ? 2 : 1;
+    return r <= 0.75 ? 5 : r <= 0.9 ? 4 : r <= 1.1 ? 3 : r <= 1.3 ? 2 : 1;
   }
   return levelsTotal > 0 && levelsDone / levelsTotal >= 0.75 ? 2 : 1;
 }
@@ -312,6 +371,9 @@ const MIN_ZONE_S = 15;
 export const ZOMBIE_BONUS_S = 60;
 export const ZOMBIE_EARLY_BONUS_S: Record<number, number> = { 1: 120, 2: 90, 3: 60 };
 export const zombieBonusS = (levelNumber: number) => ZOMBIE_BONUS_S + (ZOMBIE_EARLY_BONUS_S[levelNumber] ?? 0);
+export const ZOMBIE_REAL_FACTOR = 2.5;
+export const ZOMBIE_CARD_S = 25;
+export const ZOMBIE_BOSS_FACTOR = 1.9;
 
 export const zombieSpeedLevel = (levelNumber: number, losses: number) => Math.max(1, levelNumber - ZOMBIE_LOSS_PENALTY * losses);
 // La marge fond de +3 min (niveau 1) a -2 min (niveau 20) et CONTINUE de fondre jusqu'au niveau 25
@@ -331,7 +393,14 @@ export function zombieTimeline(level: FrozenLevel, speedLevel: number, team = DE
   const n = Math.max(1, cards);
   const est = estimateSeconds(level.zombieRef?.length ? level.zombieRef : act.map(({ card }) => ({ reps: card.reps, weight: card.weight })), level.boss, team);
   const bonus = zombieBonusS(level.number) * 1000;
-  const band = Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000 + bonus;
+  // Recalage du 29/09 (Sartay : « trop de gens meurent ») sur le rythme REEL de 8 seances : 85 % des equipes bouclent un
+  // niveau en ~2,4 x le temps theorique, plus ~20-25 s par fiche au-dela de 4 (relais, deplacements). Le zombie ne passe
+  // jamais sous 2,5 x le theorique + 25 s par fiche au-dela de 4 (BOSS : 1,9 x) : au plus ~10 % des equipes rattrapees
+  // sur un niveau d apres les temps reels (au lieu de 25 a 65 %), tendu mais jouable jusqu au niveau 15 et plus. Une
+  // vie perdue le ralentit encore (+10 % par vie, via le palier).
+  const lossesBack = Math.max(0, level.number - speedLevel) / ZOMBIE_LOSS_PENALTY;
+  const realistic = (level.boss || n <= 1 ? ZOMBIE_BOSS_FACTOR * est : ZOMBIE_REAL_FACTOR * est + ZOMBIE_CARD_S * Math.max(0, n - 4)) * (1 + 0.1 * lossesBack);
+  const band = Math.max(Math.max(est + zombieMarginS(speedLevel), ZOMBIE_APPROACH_S + MIN_ZONE_S) * 1000 + bonus, realistic * 1000);
   return { approachMs: n > 1 ? ZOMBIE_APPROACH_S * 1000 + bonus : 0, bandMs: band, n };
 }
 // Le coeur a trois morceaux : arrive dessus, le zombie se colle et le mange en ZOMBIE_EAT (30 s au palier 1,
@@ -511,6 +580,7 @@ export type TeamProgress = {
   lastTickMs: number | null; // instant (chrono de course) de la derniere fiche cochee
   finishedMs: number | null; // instant ou l'echelle entiere a ete bouclee
   reps: number; // reps validees (fiches entieres), toutes fiches confondues
+  workReps: number; // reps validees hors penalites (cordes des cartes jaunes) : departage du classement commun
   weighted: number; // travail cumule (reps x ponderation) des fiches validees
   repsByExercise: Record<string, number>; // par libelle d'exercice
   doneCards: Set<string>; // `${level}_${card}`
@@ -551,13 +621,15 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
   }
   const finished = !current && levels.length > 0;
   let reps = 0;
+  let workReps = 0;
   let weighted = 0;
   const repsByExercise: Record<string, number> = {};
   const counted: number[] = [];
   for (const l of levels) {
-    for (const { card, index } of cardsForTeam(l, teamId, penalties)) {
+    for (const { card, index, kind } of cardsForTeam(l, teamId, penalties)) {
       if (!done.has(`${l.number}_${index}`)) continue;
       reps += card.reps;
+      if (kind !== "penalty") workReps += card.reps;
       weighted += card.reps * card.weight;
       repsByExercise[card.label] = (repsByExercise[card.label] ?? 0) + card.reps;
       const t = mine.find((x) => x.level === l.number && x.card === index);
@@ -580,6 +652,7 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
     lastTickMs: counted.length ? Math.max(...counted) : null,
     finishedMs: finished && counted.length ? Math.max(...counted) : null,
     reps,
+    workReps,
     weighted,
     repsByExercise,
     doneCards: done,
@@ -589,6 +662,26 @@ export function progressOf(levels: FrozenLevel[], teamId: string, ticks: Tick[],
     currentTotalSec,
     currentFrac: currentTotalSec > 0 ? currentDoneSec / currentTotalSec : 0,
   };
+}
+
+// Classement commun du WOD principal (Sartay 29/09 soir : « le classement se fait dorenavant non plus par parcours
+// mais sur l'ensemble des equipes du greffier ») : points = somme, sur les niveaux boucles, de (numero du niveau x
+// etoiles du parcours ou il a ete boucle) ; puis les reps faites (penalites exclues) ; puis le moins de vies perdues,
+// les pieces gagnees, et la derniere coche la plus tot.
+export function levelPoints(levels: FrozenLevel[], p: Pick<TeamProgress, "completedLevels">, current: Stars, sw?: StarSwitch | null): number {
+  return levels.slice(0, p.completedLevels).reduce((s, l) => s + l.number * starsAtLevel(sw, current, l.number), 0);
+}
+export function rankGlobal(progress: TeamProgress[], pointsOf: (teamId: string) => number, coinsOf?: (teamId: string) => number): TeamProgress[] {
+  const c = (p: TeamProgress) => coinsOf?.(p.teamId) ?? 0;
+  const pts = new Map(progress.map((p) => [p.teamId, pointsOf(p.teamId)]));
+  return [...progress].sort(
+    (a, b) =>
+      pts.get(b.teamId)! - pts.get(a.teamId)! ||
+      b.workReps - a.workReps ||
+      a.losses - b.losses ||
+      c(b) - c(a) ||
+      (a.lastTickMs ?? Number.POSITIVE_INFINITY) - (b.lastTickMs ?? Number.POSITIVE_INFINITY)
+  );
 }
 
 // Classement : niveaux boucles, puis le moins de vies perdues, puis le plus de pieces gagnees (Sartay 26/09,

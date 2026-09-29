@@ -41,7 +41,7 @@ export type RecordBoard = { id: string; title: string; hint: string; rows: Recor
 export type RecordPeriod = "session" | "day" | "week" | "all";
 // « phase » (Level seulement) : le WOD principal, ou ses seances enfant echauffement / finisher.
 export type RecordPhase = "wod" | "warmup" | "finisher";
-export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase; stars?: 1 | 2 | 3 | null; format?: "big" | "mid" | "small" | null };
+export type RecordFilters = { sex?: TeamSex | ""; grade?: number | null; period?: RecordPeriod; sessionId?: string | null; phase?: RecordPhase; stars?: 1 | 2 | 3 | 4 | 5 | null; format?: "big" | "mid" | "small" | null };
 // `excluded` : equipes ecartees du palmares par DAMZER (chrono fausse par le greffier), toujours
 // visibles pour pouvoir les retablir. Leurs tours et resultats, eux, sont intacts.
 export type RecordsResult = { boards: RecordBoard[]; excluded: RecordEntry[]; grades: number[]; teamsScanned: number; sessionsScanned: number };

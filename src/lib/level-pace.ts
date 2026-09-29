@@ -6,7 +6,7 @@ import { teamLadder } from "@/lib/level-coins";
 import { readChild } from "@/lib/level-context";
 import {
   activeCards, coinsEarned, estimateSeconds, readPenalties, readStarSwitches, starsAtLevel, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf,
-  type Format, type Loss, type Stars, type Tick,
+  type Format, type Loss, type PaceRef, type Stars, type Tick,
 } from "@/lib/wod-engines/templates/level-engine";
 
 // Rythme des equipes (Sartay 28/09) : temps reellement passe sur chaque niveau boucle, compare a la moyenne des
@@ -107,6 +107,16 @@ export function observedFactor(runs: LevelRun[], boss: boolean): number {
   const r = runs.filter((x) => x.boss === boss && x.estimateMs > 0).map((x) => x.durationMs / x.estimateMs).sort((a, b) => a - b);
   return r.length ? r[Math.floor(r.length / 2)] : 1;
 }
+// Reference figee au coup d'envoi d'un WOD (montee « trop rapide », regles du 29/09 soir) : mediane par cle des
+// seances deja jouees (au moins 3 passages), facteur observe pour le reste.
+export async function buildPaceRef(): Promise<PaceRef> {
+  const all = await levelRuns();
+  const median: Record<string, number> = {};
+  for (const s of paceStats(all)) if (s.n >= 3) median[s.key] = Math.round(s.medianMs);
+  const f = (boss: boolean) => { const v = observedFactor(all, boss); return v > 0.2 && v < 10 ? Math.round(v * 100) / 100 : 2; };
+  return { median, factor: { boss: f(true), level: f(false) } };
+}
+
 export async function paceReport(sessionId: string): Promise<{ flags: PaceFlag[]; teams: PaceTeam[]; runs: PaceRun[] }> {
   const all = await levelRuns();
   const mine = all.filter((r) => r.sessionId === sessionId);

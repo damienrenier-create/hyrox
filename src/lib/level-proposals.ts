@@ -96,7 +96,7 @@ type Spec =
   | { fixed: true; identity: Identity; name: string; cards: [label: string, reps: number][] }; // fiches ecrites a la main (F)
 export type Proposal = {
   key: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
-  stars?: 1 | 2 | 3; // parcours auquel la proposition est destinee (G = 1 etoile, F = 2, H = 3)
+  stars?: 1 | 2 | 3 | 4 | 5; // parcours auquel la proposition est destinee (G = 1 etoile, F = 3, H = 5 depuis les 5 parcours)
   title: string;
   philosophy: string;
   strengths: string[];
@@ -108,7 +108,7 @@ export type Proposal = {
 export const IDENTITY_LABEL: Record<Identity, string> = { cardio: "Cardio", jambes: "Jambes", bras: "Bras", tronc: "Tronc", full: "Full body" };
 export const IDENTITY_OF: Record<string, Identity[]> = {
   CORDE: ["cardio"], "ALLER-RETOUR": ["cardio"], "BOX JUMP": ["cardio", "jambes"], BURPEES: ["cardio", "full"],
-  "SQUATS JUMP": ["jambes"], "FENTES DISK": ["jambes"], "MONKEY SLIDE": ["jambes"], "TIRE TAPIS": ["jambes"],
+  "SQUATS JUMP": ["jambes"], SQUATS: ["jambes"], "FENTES DISK": ["jambes"], "MONKEY SLIDE": ["jambes"], "TIRE TAPIS": ["jambes"],
   POMPES: ["bras"], TRACTIONS: ["bras"], "COMMANDO BRAS": ["bras", "tronc"],
   "PLANK SLIDE": ["tronc"], "KB TOUR": ["tronc"], HELICO: ["tronc"],
   "KB SWING": ["full"], "KB SNATCH": ["full"], "SMASH DOWN": ["full"], "WALL BALL SHOT": ["full"],
@@ -568,6 +568,6 @@ PROPOSALS.push({
   ],
 });
 // Proposition conseillee pour chaque parcours.
-export const STAR_PROPOSAL: Record<1 | 2 | 3, "G" | "F" | "H"> = { 1: "G", 2: "F", 3: "H" };
+export const STAR_PROPOSAL: Record<1 | 2 | 3 | 4 | 5, "G" | "F" | "H"> = { 1: "G", 2: "G", 3: "F", 4: "H", 5: "H" };
 
 export const proposalByKey = (key: string) => PROPOSALS.find((p) => p.key === key) ?? null;

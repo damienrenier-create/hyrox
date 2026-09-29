@@ -17,10 +17,13 @@ import { readStarSwitches, activeCards, ladderFor, orderedLevels, progressOf, re
 
 export * from "@/lib/mine-core";
 import { criteriaFor, readCriteria, type CriterionCheck } from "@/lib/level-criteria";
+import { listOpenSessions } from "@/lib/scheduling";
+import { readChild } from "@/lib/level-context";
 import { MINE_COLS, MINE_COUNT, MINE_ROWS, ROUND_STRIDE, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf, type Reveal } from "@/lib/mine-core";
 
 // `evals` (Sartay 28/09) : nombre d'evaluations de CET arbitre sur cet eleve dans la seance.
-export type MineStudent = { userId: string; name: string; teamId: string; teamName: string; evals: number };
+// `sessionId` (29/09 soir) : seance de l'eleve — l'arbitre evalue tous les eleves actifs, toutes seances Level ouvertes.
+export type MineStudent = { userId: string; name: string; teamId: string; teamName: string; evals: number; sessionId: string };
 // `criteria` (Sartay 28/09) : criteres de realisation a cocher par l'arbitre, du plus important au moins important.
 export type MineExercise = { exerciseId: string; label: string; suggested: boolean; criteria: string[] };
 export type MineCell = null | { mine: boolean; n: number };
@@ -49,8 +52,17 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   const levels = readFrozenFromSettings(session.settings);
   if (!levels.length) return null;
 
-  const teams = (await db.orm.public.Team.where({ sessionId }).all()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Sartay 29/09 soir : l'arbitre evalue TOUS les eleves actifs, quelle que soit leur seance (ecrans jumeaux, autres
+  // classes en meme temps) : equipes de cette seance, puis celles des autres WOD Level ouverts (hors echauffement/finisher).
+  const others = (await listOpenSessions()).filter((s) => s.id !== sessionId && s.wodType === "LEVEL" && !readChild(s.settings));
+  const sessionsAll = [session, ...others];
+  const sessionLabel = new Map(sessionsAll.map((s) => [s.id, (s.label ?? "WOD").replace(/^Lvls · /, "")]));
+  const teams = (await db.orm.public.Team.where((t) => t.sessionId.in(sessionsAll.map((s) => s.id))).all())
+    .sort((a, b) => Number(a.sessionId !== sessionId) - Number(b.sessionId !== sessionId) || (a.order ?? 0) - (b.order ?? 0));
   const teamIds = teams.map((t) => t.id);
+  // Une equipe d'une autre seance porte le nom de sa seance si deux equipes risquent de s'appeler pareil.
+  const names = teams.map((t) => t.name);
+  const displayTeam = (t: (typeof teams)[number]) => (t.sessionId !== sessionId && names.filter((n) => n === t.name).length > 1 ? `${t.name} · ${sessionLabel.get(t.sessionId)}` : t.name);
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
   const userIds = [...new Set(members.map((m) => m.userId))];
   const users = userIds.length ? await db.orm.public.User.where((u) => u.id.in(userIds)).all() : [];
@@ -62,13 +74,13 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
         .filter((m) => m.teamId === t.id)
         .map((m) => userById.get(m.userId))
         .filter((u): u is NonNullable<typeof u> => !!u)
-        .map((u) => { const n = memberNames(u); return { userId: u.id, name: `${n.firstName} ${n.lastName.charAt(0)}.`.trim(), teamId: t.id, teamName: t.name, evals: 0 }; })
+        .map((u) => { const n = memberNames(u); return { userId: u.id, name: `${n.firstName} ${n.lastName.charAt(0)}.`.trim(), teamId: t.id, teamName: displayTeam(t), evals: 0, sessionId: t.sessionId }; })
         .sort((a, b) => a.name.localeCompare(b.name, "fr"))
     );
   }
 
   // Mes evaluations par eleve : l'arbitre voit qui il a deja evalue, combien de fois, et qui il n'a pas encore vu.
-  const myEvals = await db.orm.public.Evaluation.where({ sessionId, evaluatorId: refereeId }).all();
+  const myEvals = (await db.orm.public.Evaluation.where({ evaluatorId: refereeId }).all()).filter((e) => sessionsAll.some((s) => s.id === e.sessionId));
   for (const e of myEvals) { const s = e.targetUserId ? students.find((x) => x.userId === e.targetUserId) : null; if (s) s.evals++; }
 
   // Exercices : ceux des niveaux en cours des equipes et du niveau suivant sont « suggeres » ; les autres de
@@ -85,7 +97,9 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   const suggestedIds = new Set<string>();
   const all = new Map<string, string>();
   for (const l of [levels, ...Object.values(ladders)].flat()) for (const { card } of activeCards(l)) all.set(card.exerciseId, card.label);
-  for (const t of teams) {
+  // Exercices des autres seances actives (leurs echelles peuvent differer).
+  for (const o of others) for (const l of [readFrozenFromSettings(o.settings), ...Object.values(readLadders(o.settings))].flat()) for (const { card } of activeCards(l)) all.set(card.exerciseId, card.label);
+  for (const t of teams.filter((x) => x.sessionId === sessionId)) {
     const mine = orderedLevels(ladderFor(levels, ladders, teamStarsOf(teamStars, t.id), teamFormatOf(teamFormats, t.id), readStarSwitches(session.settings)[t.id]), order?.[t.id]);
     const p = progressOf(mine, t.id, ticks, [], penalties);
     if (p.currentLevel === null) continue;
@@ -121,7 +135,7 @@ export async function mineViewFor(sessionId: string, refereeId: string): Promise
   // Mes evaluations (via les cases tirees) : derniere equipe arbitree + 5 dernieres, corrigeables.
   const evalIds = mine.filter((r) => r.evaluationId).map((r) => r.evaluationId as string);
   const evals = evalIds.length ? await db.orm.public.Evaluation.where((e) => e.id.in(evalIds)).all() : [];
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const teamName = new Map(teams.map((t) => [t.id, displayTeam(t)]));
   const studentName = new Map(students.map((s) => [s.userId, s.name]));
   const sorted = evals.map((e) => ({ e, at: toMs(e.createdAt) })).sort((a, b) => b.at - a.at);
   const lastTeamId = sorted[0]?.e.teamId ?? null;

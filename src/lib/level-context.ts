@@ -3,9 +3,9 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, listExercises, readFrozenFromSettings } from "@/lib/level";
 import { memberNames } from "@/lib/staff-names";
-import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
+import { activeCards, coinsEarned, coinsInPlay, coinsState, estimateSeconds, ladderFor, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf, teamSizeOf, teamStarsOf, warmupCoinsInPlay, DEFAULT_STARS, LADDER_KEYS, type StarSwitch, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type TeamPenalty, type TeamProgress, type Tick } from "@/lib/wod-engines/templates/level-engine";
 import { readZombies } from "@/lib/zombies";
-import { readBossEntry, readGifts, type BossEntry } from "@/lib/wod-engines/templates/level-engine";
+import { levelPoints, rankGlobal, readBossEntry, readGifts, readPaceRef, readReorient, readStreaks, DEFAULT_CAP_MIN, type BossEntry, type PaceRef, type Streak } from "@/lib/wod-engines/templates/level-engine";
 import { readCriteria, type CriterionCheck } from "@/lib/level-criteria";
 
 // Etat complet d'une seance Level a partir de Postgres, pour l'ecran greffier, l'espace eleve et les
@@ -15,9 +15,9 @@ export type LevelTeam = { id: string; name: string; order: number; members: { id
 export type LevelTickRow = { id: string; teamId: string; level: number; card: number; atMs: number; absMs: number; by: string };
 export type LevelEval = { id: string; targetUserId: string; targetName: string; teamId: string; teamName: string; exerciseId: string; exerciseLabel: string; reps: number; note: number; refereeName: string; refereeId: string; criteria: CriterionCheck[] | null; atMs: number };
 export type LevelBundle = {
-  levels: FrozenLevel[]; // parcours 2 etoiles (echelle par defaut)
-  ladders: Ladders; // parcours 1 et 3 etoiles s'ils existent, et les trois du petit format (s1, s2, s3)
-  teamStars: Record<string, Stars>; // parcours choisi par equipe (2 par defaut)
+  levels: FrozenLevel[]; // parcours 3 etoiles (echelle par defaut)
+  ladders: Ladders; // parcours 1, 2, 4 et 5 etoiles s'ils existent, et ceux des formats 4 (m1..m5) et 1-3 (s1..s5)
+  teamStars: Record<string, Stars>; // parcours choisi par equipe (3 par defaut)
   teamFormats: Record<string, Format>; // format fixe par equipe (sinon : d'apres l'effectif, 1 a 3 -> small)
   starSwitches: Record<string, StarSwitch>; // descentes de categorie (3 vies perdues) : echelle composee
   frozen: boolean; // true = echelle figee dans la seance (course lancee) ; false = echelle vive de l'atelier
@@ -38,6 +38,10 @@ export type LevelBundle = {
   zombieSpeed: number | null; // palier de zombie impose (echauffement : 1), null = regle normale
   giftCount: number; // fiches recues (fusees) jamais creees, annulees comprises : index de la prochaine = 200 + giftCount
   bossEntry: Record<string, BossEntry>; // 1re de sa categorie en entrant dans son BOSS (montee de categorie)
+  // Regles du 29/09 soir (WOD principal lance depuis, ou pas encore lance) : classement commun, reorientation.
+  reorient: boolean;
+  paceRef: PaceRef | null; // reference de rythme figee au coup d'envoi
+  streaks: Record<string, Streak>; // series en cours vers une montee
   child: { kind: "warmup" | "finisher"; parentId: string; parentLabel: string } | null; // seance enfant d'un WOD
   penalties: TeamPenalty[]; // fiches de penalite (cartes jaunes), par equipe et niveau
   emom: EmomSettings | null; // finisher : vagues cadencees
@@ -126,8 +130,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     db.orm.public.Team.where({ sessionId }).all(),
     db.orm.public.RaceState.where({ sessionId }).first(),
   ]);
-  const levels = frozen ? frozenLevels : live![2];
-  const ladders: Ladders = frozen ? readLadders(session.settings) : (Object.fromEntries(LADDER_KEYS.filter((k) => k !== 2 && live![k].length).map((k) => [k, live![k]])) as Ladders);
+  const levels = frozen ? frozenLevels : live![DEFAULT_STARS];
+  const ladders: Ladders = frozen ? readLadders(session.settings) : (Object.fromEntries(LADDER_KEYS.filter((k) => k !== DEFAULT_STARS && live![k].length).map((k) => [k, live![k]])) as Ladders);
 
   const teamIds = rawTeams.map((t) => t.id);
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
@@ -195,7 +199,8 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     pauses,
     catalog: catalog.map((e) => ({ id: e.id, label: e.label, weight: e.weight, active: e.active })),
     evaluations,
-    capMin: readLevelCap(session.settings),
+    // 60 min par defaut (imposees au coup d'envoi) tant que le prof n'a rien choisi.
+    capMin: readLevelCap(session.settings) ?? (!childRef && !rs?.startedAt && (session.settings as { levelCapMin?: unknown } | null)?.levelCapMin === undefined ? DEFAULT_CAP_MIN : null),
     refereeMode: session.refereeMode,
     zombies: readZombies(session.settings),
     losses,
@@ -203,6 +208,9 @@ export async function buildLevelBundle(sessionId: string): Promise<LevelBundle> 
     zombieSpeed: readFixedZombie(session.settings),
     giftCount: readGifts(session.settings).length,
     bossEntry: readBossEntry(session.settings),
+    reorient: readReorient(session.settings) || (!childRef && !rs?.startedAt),
+    paceRef: readPaceRef(session.settings),
+    streaks: readStreaks(session.settings),
     child: childRef ? { ...childRef, parentLabel: parent?.label ?? "WOD" } : null,
     penalties: readPenalties(session.settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
     emom: readEmom(session.settings),
@@ -237,7 +245,17 @@ export function levelsForTeam(bundle: Pick<LevelBundle, "levels" | "ladders" | "
 export function levelStandings(bundle: LevelBundle): TeamProgress[] {
   const inPlay = bundle.child?.kind === "warmup" ? warmupCoinsInPlay : coinsInPlay;
   const coins = (teamId: string) => bundle.emom ? 0 : coinsState(levelsForTeam(bundle, teamId), teamId, bundle.ticks, bundle.losses, bundle.penalties, bundle.coinEvents, bundle.coinsCarry, inPlay).score;
-  return rankTeams(bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties)), coins);
+  const progress = bundle.teams.map((t) => progressOf(levelsForTeam(bundle, t.id), t.id, bundle.ticks, bundle.losses, bundle.penalties));
+  // Classement commun du WOD principal (29/09 soir) : points = niveau x etoiles, puis reps, vies, pieces, rapidite.
+  if (bundle.reorient && !bundle.child && !bundle.emom) {
+    const byId = new Map(progress.map((p) => [p.teamId, p]));
+    return rankGlobal(progress, (id) => levelPoints(levelsForTeam(bundle, id), byId.get(id)!, teamStarsOf(bundle.teamStars, id), bundle.starSwitches[id]), coins);
+  }
+  return rankTeams(progress, coins);
+}
+// Points du classement commun d'une equipe (0 hors regles du 29/09 soir).
+export function levelPointsOf(bundle: LevelBundle, p: TeamProgress): number {
+  return levelPoints(levelsForTeam(bundle, p.teamId), p, teamStarsOf(bundle.teamStars, p.teamId), bundle.starSwitches[p.teamId]);
 }
 
 // Heure absolue a laquelle une equipe a boucle l'echelle (fenetre d'auto-evaluation), sinon null.

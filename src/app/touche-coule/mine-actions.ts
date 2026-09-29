@@ -8,7 +8,8 @@ import { activeCards, readLadders } from "@/lib/wod-engines/templates/level-engi
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
 import { criteriaFor, qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
 import { MINE_COLS, MINE_ROWS, ROUND_STRIDE, floodFrom, layoutForRound, mineCountOf, mineDense, numbersOf, roundsOf } from "@/lib/mine-core";
-import { toMs } from "@/lib/scheduling";
+import { listOpenSessions, toMs } from "@/lib/scheduling";
+import { readChild } from "@/lib/level-context";
 
 export type FireResult = { ok: true; mine: boolean; n: number; opened: [number, number, number][]; found: number; foundInRound: number; roundMines: number; roundDone: boolean };
 
@@ -39,19 +40,25 @@ export async function fireAction(
 
   const levels = readFrozenFromSettings(session.settings);
   if (!levels.length) return { error: "Le WOD n'est pas lancé." };
-  const exoCard = [levels, ...Object.values(readLadders(session.settings))].flat().flatMap((l) => activeCards(l)).find(({ card }) => card.exerciseId === exerciseId)?.card;
+  // Eleve evalue : dans cette seance ou dans un autre WOD Level ouvert (Sartay 29/09 soir : tous les eleves actifs).
+  const others = (await listOpenSessions()).filter((s) => s.id !== sessionId && s.wodType === "LEVEL" && !readChild(s.settings));
+  const pool = [session, ...others];
+  const poolTeams = await db.orm.public.Team.where((t) => t.sessionId.in(pool.map((s) => s.id))).all();
+  const membership = (await db.orm.public.TeamMember.where({ userId: targetUserId }).all()).find((m) => poolTeams.some((t) => t.id === m.teamId));
+  if (!membership) return { error: "Cet élève ne joue dans aucun WOD en cours." };
+  const targetTeam = poolTeams.find((t) => t.id === membership.teamId)!;
+  const targetSession = pool.find((s) => s.id === targetTeam.sessionId)!;
+  const exoCard = pool.flatMap((s) => [readFrozenFromSettings(s.settings), ...Object.values(readLadders(s.settings))]).flat().flatMap((l) => activeCards(l)).find(({ card }) => card.exerciseId === exerciseId)?.card;
   if (!exoCard) return { error: "Exercice hors échelle." };
   // Appreciation deduite des criteres coches ; la grille est figee avec l'evaluation (commentaire de l'eleve).
   const checks: CriterionCheck[] = criteriaFor(exoCard.label).map((label, i) => ({ label, met: met.includes(i) }));
   const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length, liked === true);
 
-  const teams = await db.orm.public.Team.where({ sessionId }).all();
-  const membership = (await db.orm.public.TeamMember.where({ userId: targetUserId }).all()).find((m) => teams.some((t) => t.id === m.teamId));
-  if (!membership) return { error: "Cet élève ne joue pas dans cette séance." };
   const teamId = membership.teamId;
   if (access.teamId && teamId === access.teamId) return { error: "Pas ta propre équipe." };
-  if (teams.length > 1) {
-    const last = await db.orm.public.Evaluation.where({ sessionId, evaluatorId: user.id }).orderBy((e) => e.createdAt.desc()).first();
+  if (await db.orm.public.TeamMember.where({ teamId, userId: user.id }).first()) return { error: "Pas ta propre équipe." };
+  if (poolTeams.length > 1) {
+    const last = await db.orm.public.Evaluation.where({ evaluatorId: user.id }).orderBy((e) => e.createdAt.desc()).first();
     if (last && last.teamId === teamId) return { error: "Pas deux fois d'affilée la même équipe : arbitre une autre équipe d'abord." };
   }
 
@@ -67,7 +74,8 @@ export async function fireAction(
   const encodedRow = round * ROUND_STRIDE + row;
   if (mine.some((r) => r.row === encodedRow && r.col === col)) return { error: "Case déjà jouée." };
 
-  const evaluation = await db.orm.public.Evaluation.create({ sessionId, teamId, evaluatorId: user.id, exerciseId, repsObserved: reps, note, targetUserId, criteria: JSON.parse(JSON.stringify(checks)) });
+  // L'evaluation est rangee dans la seance de l'eleve evalue (son ecran, son recap) ; la case jouee reste sur la carte de l'arbitre.
+  const evaluation = await db.orm.public.Evaluation.create({ sessionId: targetSession.id, teamId, evaluatorId: user.id, exerciseId, repsObserved: reps, note, targetUserId, criteria: JSON.parse(JSON.stringify(checks)) });
   try {
     await db.orm.public.MineReveal.create({ sessionId, refereeId: user.id, row: encodedRow, col, evaluationId: evaluation.id });
   } catch {

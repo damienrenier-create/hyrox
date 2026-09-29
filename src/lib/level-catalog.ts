@@ -27,4 +27,7 @@ export const DEFAULT_EXERCISES: { label: string; weight: number }[] = [
   // HELICO (Sartay 30/09) : couche sur le ventre, un poids de 1 kg passe dans le dos de la main droite a la main
   // gauche, puis revient devant, bras tendus, a la main droite. 2 s la rep. Surtout pour les parcours 1 et 2 etoiles.
   { label: "HELICO", weight: 2 },
+  // SQUATS (Sartay 29/09 soir) : squats sans saut, a la place des squats jump dans les parcours 1 et 2 etoiles
+  // seulement. 2 s la rep, comme le squat jump.
+  { label: "SQUATS", weight: 2 },
 ];
