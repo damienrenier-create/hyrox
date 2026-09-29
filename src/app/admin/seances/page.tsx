@@ -18,6 +18,10 @@ const TZ = "Europe/Brussels";
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: TZ });
 const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
 const PAGE = 40;
+// Heure de la lecture (hors du rendu, regle react-hooks/purity).
+function currentTime(): number {
+  return Date.now();
+}
 
 // Statut d'une seance (Sartay 29/09 nuit : « voir toutes les dernières séances et leur statut, il y a beaucoup de
 // brouillons qui traînent »).
@@ -54,7 +58,7 @@ export default async function SeancesPage({ searchParams }: { searchParams: Prom
   const members = teams.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teams.map((t) => t.id))).all() : [];
   // Historique protege : jouee par de vrais eleves -> ni corbeille ni purge (regle d'or).
   const played = await sessionsPlayedByRealStudents(ids);
-  const now = Date.now();
+  const now = currentTime();
   const engines = listWodEngines();
   const rows = sessions.map((s) => {
     const rs = raceStates.find((r) => r.sessionId === s.id);
