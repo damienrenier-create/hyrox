@@ -4,9 +4,10 @@ import { toMs } from "@/lib/scheduling";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { readFrozenFromSettings } from "@/lib/level";
 import {
-  readCoinEvents, readCoinsCarry, readEmom, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf,
+  readCoinEvents, readCoinsCarry, readEmom, readEmomPlayerScores, readEmomScores, readFixedZombie, readLadders, readLevelOrder, readPenalties, readStarSwitches, readTeamFormats, readTeamStars, teamFormatOf,
+  type TeamPenalty,
 } from "@/lib/wod-engines/templates/level-engine";
-import { absoluteFromRace, catchUpAll, catchUpTeam, cloneState, type ReplayConfig, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
+import { absoluteFromRace, catchUpAll, catchUpTeam, cloneState, nowRace, type ReplayConfig, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
 
 export { absoluteFromRace };
 
@@ -15,38 +16,47 @@ export { absoluteFromRace };
 // coeur (la ligne se retrecit vers la droite). S'il l'atteint, l'equipe perd une vie (douce les 5 premieres fois au
 // WOD principal, sinon retour au niveau precedent), la moitie de ses pieces, et descend d'une categorie a la 3e.
 // Depuis le 28/09 (soir), le calcul vit dans `level-replay.ts` (module pur) : l'ecran du greffier l'execute en
-// direct sur ses coches locales, le serveur le rejoue a la sauvegarde (Pause, Fin du WOD, bouton serveur). Le
-// serveur ne constate PLUS rien a la lecture pendant la course : il ne connait pas les coches restees sur le PC.
+// direct sur ses operations locales, le serveur le rejoue a la sauvegarde (fin du WOD, ou plus tot si le greffier
+// envoie). Le serveur ne constate PLUS rien a la lecture pendant la course : il ne connait pas les coches du PC.
 
 export function readZombies(settings: unknown): boolean {
   const v = (settings as { zombies?: unknown } | null)?.zombies;
   return v !== false; // active par defaut
+}
+// Operations deja appliquees (identifiants, les 5 000 dernieres) : un lot renvoye parce que la reponse s'est perdue
+// ne rejoue pas une carte jaune, une fusee ou une pause deja enregistrees.
+export const APPLIED_OPS_KEPT = 5000;
+export function readAppliedOps(settings: unknown): string[] {
+  const raw = (settings as { appliedOps?: unknown } | null)?.appliedOps;
+  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
 }
 
 // Donnees deja chargees par l'appelant (pouls, coche) : aucune relecture, seules les ecritures touchent la base.
 export type ZombieContext = {
   session: { wodType: string; settings: unknown; raceEndedAt: unknown | null };
   rs: { id: string; startedAt: unknown | null; endedAt: unknown | null } | null;
-  pauses: { from: number; to: number | null }[];
+  pauses: { id?: string; from: number; to: number | null }[];
   teams: { id: string }[];
   ticks: { id: string; teamId: string; level: number; card: number; at: unknown }[];
   losses: { id?: string; teamId: string; level: number; at: unknown; soft?: boolean }[];
+  cards: { id: string; teamId: string; at: unknown }[]; // cartes jaunes
 };
 
 export async function loadZombieContext(sessionId: string, onlyTeamId?: string): Promise<ZombieContext | null> {
   const [session, rs] = await Promise.all([db.orm.public.Session.where({ id: sessionId }).first(), db.orm.public.RaceState.where({ sessionId }).first()]);
   if (!session) return null;
-  const [pausesRaw, teams, ticks, losses] = await Promise.all([
+  const [pausesRaw, teams, ticks, losses, cards] = await Promise.all([
     rs ? db.orm.public.RacePause.where({ raceStateId: rs.id }).all() : Promise.resolve([]),
     onlyTeamId ? Promise.resolve([{ id: onlyTeamId }]) : db.orm.public.Team.where({ sessionId }).all(),
     onlyTeamId ? db.orm.public.LevelTick.where({ sessionId, teamId: onlyTeamId }).all() : db.orm.public.LevelTick.where({ sessionId }).all(),
     onlyTeamId ? db.orm.public.LevelLoss.where({ sessionId, teamId: onlyTeamId }).all() : db.orm.public.LevelLoss.where({ sessionId }).all(),
+    rs ? (onlyTeamId ? db.orm.public.YellowCard.where({ raceStateId: rs.id, teamId: onlyTeamId }).all() : db.orm.public.YellowCard.where({ raceStateId: rs.id }).all()) : Promise.resolve([]),
   ]);
-  return { session, rs, pauses: pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null })), teams, ticks, losses };
+  return { session, rs, pauses: pausesRaw.map((p) => ({ id: p.id, from: toMs(p.from), to: p.to ? toMs(p.to) : null })), teams, ticks, losses, cards };
 }
 
 // Etat de rejeu d'une seance a partir de la base. null = pas de course en cours (pas lancee, ou terminee).
-export type ServerReplay = { cfg: ReplayConfig; st: ReplayState; initial: ReplayState; startedAtMs: number; pauses: { from: number; to: number | null }[]; nowMs: number; nowRaceMs: number };
+export type ServerReplay = { cfg: ReplayConfig; st: ReplayState; initial: ReplayState; rsId: string; startedAtMs: number; nowMs: number; nowRaceMs: number };
 export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boolean } = {}): ServerReplay | null {
   const { session, rs, pauses, teams } = ctx;
   if (session.wodType !== "LEVEL" || !rs?.startedAt) return null;
@@ -54,7 +64,6 @@ export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boole
   const settings = session.settings;
   const startedAtMs = toMs(rs.startedAt);
   const nowMs = Date.now();
-  const endAbs = rs.endedAt ? toMs(rs.endedAt) : nowMs;
   const capMin = (settings as { levelCapMin?: unknown } | null)?.levelCapMin;
   const capMs = typeof capMin === "number" && Number.isFinite(capMin) && capMin > 0 ? Math.round(capMin) * 60_000 : null;
   const formats = readTeamFormats(settings);
@@ -73,63 +82,123 @@ export function replayFromContext(ctx: ZombieContext, opts: { allowEnded?: boole
     emom,
     capMs,
     coinsCarry: readCoinsCarry(settings),
-    absOf: (raceMs) => absoluteFromRace(startedAtMs, pauses, raceMs, nowMs),
+    startedAtMs,
+    now: () => nowMs,
     newId: () => randomUUID(),
   };
+  const race = (abs: number) => elapsed(startedAtMs, pauses, abs) ?? 0;
+  const gifts = (settings as { gifts?: unknown } | null)?.gifts;
   const st: ReplayState = {
-    ticks: ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: elapsed(startedAtMs, pauses, toMs(t.at)) ?? 0 })),
-    losses: ctx.losses.map((l, i) => ({ id: l.id ?? `db-${i}`, teamId: l.teamId, level: l.level, soft: !!l.soft, atMs: elapsed(startedAtMs, pauses, toMs(l.at)) ?? 0 })),
-    penalties: readPenalties(settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? elapsed(startedAtMs, pauses, p.at) ?? undefined : undefined })),
+    ticks: ctx.ticks.map((t) => ({ id: t.id, teamId: t.teamId, level: t.level, card: t.card, atMs: race(toMs(t.at)) })),
+    losses: ctx.losses.map((l, i) => ({ id: l.id ?? `db-${i}`, teamId: l.teamId, level: l.level, soft: !!l.soft, atMs: race(toMs(l.at)) })),
+    penalties: readPenalties(settings).map((p) => ({ ...p, atMs: typeof p.at === "number" ? race(p.at) : undefined })),
     coinEvents: readCoinEvents(settings),
     teamStars: readTeamStars(settings),
     switches: readStarSwitches(settings),
     voided: [],
     newSwitches: {},
+    pauses: pauses.map((p, i) => ({ id: p.id ?? `db-pause-${i}`, from: p.from, to: p.to })),
+    yellowCards: ctx.cards.map((c) => ({ id: c.id, teamId: c.teamId, absMs: toMs(c.at), atMs: race(toMs(c.at)) })),
+    endedAtMs: rs.endedAt ? toMs(rs.endedAt) : null,
+    emomScores: readEmomScores(settings),
+    emomPlayerScores: readEmomPlayerScores(settings),
+    giftCount: Array.isArray(gifts) ? gifts.length : 0,
+    removedPenalties: [],
+    scoredTeams: [],
   };
-  const nowRaceMs = elapsed(startedAtMs, pauses, endAbs) ?? 0; // en pause : fige au debut de la pause
-  return { cfg, st, initial: cloneState(st), startedAtMs, pauses, nowMs, nowRaceMs };
+  return { cfg, st, initial: cloneState(st), rsId: rs.id, startedAtMs, nowMs, nowRaceMs: nowRace(cfg, st) };
 }
 
-// Ecrit en une transaction ce que le rejeu a change : coches ajoutees et effacees, vies perdues, puis dans les
-// reglages (relus juste avant) les pieces (zombie, fusees construites), fiches recues annulees et descentes.
-export async function persistReplay(sessionId: string, r: ServerReplay, by: string): Promise<{ ticksAdded: number; ticksRemoved: number; losses: number }> {
-  const { st, initial, startedAtMs, pauses, nowMs } = r;
+// Ecrit ce que le rejeu a change : coches ajoutees et effacees, vies perdues, cartes jaunes, pauses, fin du WOD
+// (une transaction ; repli ligne par ligne si l'unicite d'une coche saute = doublon multi-appareils), puis dans les
+// reglages (relus juste avant) les pieces (zombie, fusees, allegements), fiches recues (nouvelles, annulees),
+// penalites, descentes de categorie et cordes du finisher.
+export async function persistReplay(sessionId: string, r: ServerReplay, by: string, appliedOpIds: string[] = []): Promise<{ ticksAdded: number; ticksRemoved: number; losses: number }> {
+  const { st, initial, rsId, startedAtMs, nowMs } = r;
+  const inst = (absMs: number) => Temporal.Instant.fromEpochMilliseconds(Math.round(absMs));
+  const abs = (raceMs: number) => inst(absoluteFromRace(startedAtMs, st.pauses, raceMs, nowMs));
   const before = new Set(initial.ticks.map((t) => t.id));
   const after = new Set(st.ticks.map((t) => t.id));
   const added = st.ticks.filter((t) => !before.has(t.id));
   const removed = initial.ticks.filter((t) => !after.has(t.id)).map((t) => t.id);
   const lossIds = new Set(initial.losses.map((l) => l.id));
   const newLosses = st.losses.filter((l) => !lossIds.has(l.id));
+  const cardIds = new Set(initial.yellowCards.map((c) => c.id));
+  const cardsAfter = new Set(st.yellowCards.map((c) => c.id));
+  const newCards = st.yellowCards.filter((c) => !cardIds.has(c.id));
+  const removedCards = initial.yellowCards.filter((c) => !cardsAfter.has(c.id)).map((c) => c.id);
+  const pauseIds = new Set(initial.pauses.map((p) => p.id));
+  const newPauses = st.pauses.filter((p) => !pauseIds.has(p.id));
+  const closedPauses = st.pauses.filter((p) => pauseIds.has(p.id) && p.to !== null && initial.pauses.find((x) => x.id === p.id)?.to === null);
+  const ended = st.endedAtMs !== null && initial.endedAtMs === null ? st.endedAtMs : null;
   const eventIds = new Set(initial.coinEvents.map((e) => e.id));
   const newEvents = st.coinEvents.filter((e) => !eventIds.has(e.id));
   const voided = new Set(st.voided);
   const switches = st.newSwitches;
-  const abs = (raceMs: number) => Temporal.Instant.fromEpochMilliseconds(Math.round(absoluteFromRace(startedAtMs, pauses, raceMs, nowMs)));
-  if (!added.length && !removed.length && !newLosses.length && !newEvents.length && !voided.size && !Object.keys(switches).length) return { ticksAdded: 0, ticksRemoved: 0, losses: 0 };
+  const giftIds = new Set(initial.penalties.filter((p) => p.kind === "gift").map((p) => p.id));
+  const newGifts = st.penalties.filter((p) => p.kind === "gift" && !giftIds.has(p.id));
+  const penKey = (p: { teamId: string; index: number }) => `${p.teamId}_${p.index}`;
+  const penKeys = new Set(initial.penalties.filter((p) => p.kind === "penalty").map(penKey));
+  const newPens = st.penalties.filter((p) => p.kind === "penalty" && !penKeys.has(penKey(p)));
+  const discIds = new Set(initial.penalties.filter((p) => p.kind === "discount").map((p) => p.id));
+  const newDiscs = st.penalties.filter((p) => p.kind === "discount" && !discIds.has(p.id));
+  const raw = (p: TeamPenalty) => { const { kind, atMs, ...rest } = p; void kind; void atMs; return rest; };
+  const rowsChanged = added.length || removed.length || newLosses.length || newCards.length || removedCards.length || newPauses.length || closedPauses.length || ended !== null;
+  const settingsChanged = newEvents.length || voided.size || Object.keys(switches).length || newGifts.length || newPens.length || st.removedPenalties.length || newDiscs.length || st.scoredTeams.length || appliedOpIds.length;
+  if (!rowsChanged && !settingsChanged) return { ticksAdded: 0, ticksRemoved: 0, losses: 0 };
+
   const tickRow = (t: ReplayState["ticks"][number]) => ({ id: t.id, sessionId, teamId: t.teamId, level: t.level, card: t.card, by, at: abs(t.atMs) });
   const lossRow = (l: ReplayState["losses"][number]) => ({ id: l.id, sessionId, teamId: l.teamId, level: l.level, soft: !!l.soft, at: abs(l.atMs) });
-  try {
-    await db.transaction(async (tx) => {
-      if (removed.length) await tx.orm.public.LevelTick.where((t) => t.id.in(removed)).deleteAndCount();
-      if (added.length) await tx.orm.public.LevelTick.createAndCount(added.map(tickRow));
-      if (newLosses.length) await tx.orm.public.LevelLoss.createAndCount(newLosses.map(lossRow));
-    });
-  } catch {
-    // Une coche identique vient d'etre ecrite par un autre appareil (unicite seance/equipe/niveau/fiche) : on reprend
-    // ligne par ligne en ignorant les doublons, comme avant le 28/09.
-    for (const id of removed) { try { await db.orm.public.LevelTick.where({ id }).delete(); } catch { /* deja effacee */ } }
-    for (const t of added) { try { await db.orm.public.LevelTick.create(tickRow(t)); } catch { /* deja cochee par un autre appareil */ } }
-    for (const l of newLosses) { try { await db.orm.public.LevelLoss.create(lossRow(l)); } catch { /* deja constatee */ } }
+  const cardRow = (c: ReplayState["yellowCards"][number]) => ({ id: c.id, raceStateId: rsId, teamId: c.teamId, at: inst(c.absMs) });
+  const pauseRow = (p: ReplayState["pauses"][number]) => (p.to === null ? { id: p.id, raceStateId: rsId, from: inst(p.from) } : { id: p.id, raceStateId: rsId, from: inst(p.from), to: inst(p.to) });
+  if (rowsChanged) {
+    try {
+      await db.transaction(async (tx) => {
+        if (removed.length) await tx.orm.public.LevelTick.where((t) => t.id.in(removed)).deleteAndCount();
+        if (added.length) await tx.orm.public.LevelTick.createAndCount(added.map(tickRow));
+        if (newLosses.length) await tx.orm.public.LevelLoss.createAndCount(newLosses.map(lossRow));
+        if (removedCards.length) await tx.orm.public.YellowCard.where((c) => c.id.in(removedCards)).deleteAndCount();
+        if (newCards.length) await tx.orm.public.YellowCard.createAndCount(newCards.map(cardRow));
+        for (const p of newPauses) await tx.orm.public.RacePause.create(pauseRow(p));
+        for (const p of closedPauses) await tx.orm.public.RacePause.where({ id: p.id }).update({ to: inst(p.to!) });
+        if (ended !== null) {
+          await tx.orm.public.RaceState.where({ id: rsId }).update({ endedAt: inst(ended) });
+          await tx.orm.public.Session.where({ id: sessionId }).update({ raceEndedAt: inst(ended) });
+        }
+      });
+    } catch {
+      // Une coche identique vient d'etre ecrite par un autre appareil (unicite seance/equipe/niveau/fiche) : on reprend
+      // ligne par ligne en ignorant les doublons, comme avant le 28/09.
+      for (const id of removed) { try { await db.orm.public.LevelTick.where({ id }).delete(); } catch { /* deja effacee */ } }
+      for (const t of added) { try { await db.orm.public.LevelTick.create(tickRow(t)); } catch { /* deja cochee par un autre appareil */ } }
+      for (const l of newLosses) { try { await db.orm.public.LevelLoss.create(lossRow(l)); } catch { /* deja constatee */ } }
+      for (const id of removedCards) { try { await db.orm.public.YellowCard.where({ id }).delete(); } catch { /* deja retiree */ } }
+      for (const c of newCards) { try { await db.orm.public.YellowCard.create(cardRow(c)); } catch { /* deja posee */ } }
+      for (const p of newPauses) { try { await db.orm.public.RacePause.create(pauseRow(p)); } catch { /* deja creee */ } }
+      for (const p of closedPauses) { try { await db.orm.public.RacePause.where({ id: p.id }).update({ to: inst(p.to!) }); } catch { /* deja fermee */ } }
+      if (ended !== null) {
+        try { await db.orm.public.RaceState.where({ id: rsId }).update({ endedAt: inst(ended) }); } catch { /* deja terminee */ }
+        try { await db.orm.public.Session.where({ id: sessionId }).update({ raceEndedAt: inst(ended) }); } catch { /* idem */ }
+      }
+    }
   }
-  if (newEvents.length || voided.size || Object.keys(switches).length) {
+  if (settingsChanged) {
     // Reglages relus juste avant d'ecrire : un autre appareil a pu depenser des pieces ou lancer une fusee entre-temps.
     const fresh = ((await db.orm.public.Session.where({ id: sessionId }).first())?.settings as Record<string, unknown> | null) ?? {};
-    const gifts = (Array.isArray(fresh.gifts) ? (fresh.gifts as Record<string, unknown>[]) : []).map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g));
-    const existing = Array.isArray(fresh.coinEvents) ? (fresh.coinEvents as { id?: unknown }[]) : [];
-    const coinEvents = [...existing, ...newEvents.filter((z) => !existing.some((e) => e.id === z.id))];
+    const list = (k: string) => (Array.isArray(fresh[k]) ? (fresh[k] as Record<string, unknown>[]) : []);
+    const has = (arr: Record<string, unknown>[], id: unknown) => arr.some((x) => x.id === id);
+    const gifts = [...list("gifts").map((g) => (typeof g.id === "string" && voided.has(g.id) ? { ...g, void: true } : g)), ...newGifts.filter((g) => !has(list("gifts"), g.id)).map(raw)];
+    const removedKeys = new Set(st.removedPenalties.map(penKey));
+    const freshPens = list("penalties").filter((p) => !(typeof p.teamId === "string" && typeof p.index === "number" && removedKeys.has(penKey(p as { teamId: string; index: number }))));
+    const penalties = [...freshPens, ...newPens.filter((p) => !freshPens.some((x) => x.teamId === p.teamId && x.index === p.index)).map(raw)];
+    const discounts = [...list("discounts"), ...newDiscs.filter((d) => !has(list("discounts"), d.id)).map(raw)];
+    const coinEvents = [...list("coinEvents"), ...newEvents.filter((z) => !has(list("coinEvents"), z.id))];
     const teamStars = { ...readTeamStars(fresh), ...Object.fromEntries(Object.entries(switches).map(([id, sw]) => [id, sw.to])) };
     const starSwitch = { ...readStarSwitches(fresh), ...switches };
-    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, coinEvents, teamStars, starSwitch })) });
+    const emomScores = { ...readEmomScores(fresh), ...Object.fromEntries(st.scoredTeams.map((id) => [id, st.emomScores[id] ?? 0])) };
+    const emomPlayerScores = { ...readEmomPlayerScores(fresh), ...Object.fromEntries(st.scoredTeams.map((id) => [id, st.emomPlayerScores[id] ?? {}])) };
+    const appliedOps = [...readAppliedOps(fresh), ...appliedOpIds].slice(-APPLIED_OPS_KEPT);
+    await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...fresh, gifts, penalties, discounts, coinEvents, teamStars, starSwitch, emomScores, emomPlayerScores, appliedOps })) });
   }
   return { ticksAdded: added.length, ticksRemoved: removed.length, losses: newLosses.length };
 }
