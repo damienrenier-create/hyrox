@@ -7,7 +7,7 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { listExercises } from "@/lib/level";
-import { criteriaComment, readCriteria } from "@/lib/level-criteria";
+import { criteriaComment, isLiked, readCriteria } from "@/lib/level-criteria";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
 import { TopBar } from "../../_components/TopBar";
 import { ui } from "@/lib/ui";
@@ -59,7 +59,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
       exerciseLabel: exerciseLabels[e.exerciseId] ?? e.exerciseId,
       reps: e.repsObserved,
       quality: qualityCodeFromValue(e.note),
-      comment: (() => { const c = readCriteria((e as { criteria?: unknown }).criteria); return c ? criteriaComment(exerciseLabels[e.exerciseId] ?? "", c) : null; })(),
+      comment: (() => { const c = readCriteria((e as { criteria?: unknown }).criteria); return c ? criteriaComment(exerciseLabels[e.exerciseId] ?? "", c, isLiked(e.note, c)) : null; })(),
       at: new Date(String(e.createdAt)).getTime(),
     }))
     .sort((a, b) => a.exerciseNumber - b.exerciseNumber || a.at - b.at);

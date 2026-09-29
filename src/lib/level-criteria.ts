@@ -1,7 +1,10 @@
 // Criteres de realisation (CR) des 21 exercices du WOD Level, fournis par Sartay le 28/09/2026, du plus
 // important (securite, posture) au moins important (intensite, rythme). Module pur : arbitres (demineur),
 // espace eleve (commentaire), recap du prof, dia des criteres.
-// Bareme : 1 critere coche = TI, 2 = I, 3 = S, 4 = B, 5 = TB, 6 = E (aucun critere = TI).
+// Depuis le 29/09 (Sartay), l'arbitre coche 4 CRITERES par exercice : les 3 criteres techniques les plus importants
+// (les 3 premiers de la liste) + 1 critere d'intensite. Bareme : 0 critere = TI, 1 = I, 2 = S, 3 = B, 4 = TB ; avec
+// les 4 coches, l'arbitre peut ajouter un ❤️ (« les 4 sont vraiment tres bien faits ») = E. Les evaluations d'avant
+// (grille de 6) gardent leur ancien bareme (1 = TI ... 6 = E).
 
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 
@@ -176,8 +179,23 @@ export const CRITERIA: Record<string, string[]> = {
   ],
 };
 
+// Critere d'intensite (4e) : le 6e critere de Sartay quand il parle de rythme ou d'intensite ; pour les 4 exercices
+// dont le 6e critere est technique, une phrase ecrite le 29/09 dans le meme esprit (a faire valider par Sartay).
+const INTENSITY: Record<string, string> = {
+  "COMMANDO BRAS": "L'élève enchaîne les montées et descentes à un rythme soutenu, sans pause.",
+  "WALL BALL SHOT": "L'élève enchaîne les lancers à un rythme soutenu, sans pause entre les répétitions.",
+  "KB SWING": "Le rythme est soutenu : l'élève enchaîne les swings sans s'arrêter.",
+  "FENTES DISK": "L'élève avance à un rythme soutenu, sans s'arrêter entre les pas.",
+};
+const INTENSITY_SHORT: Record<string, string> = { "COMMANDO BRAS": "Rythme soutenu", "WALL BALL SHOT": "Rythme soutenu", "KB SWING": "Rythme soutenu", "FENTES DISK": "Rythme soutenu" };
+export const TECH_CRITERIA = 3;
+// Grille de l'arbitre (4 criteres) pour chaque exercice connu.
+export const REFEREE_CRITERIA: Record<string, string[]> = Object.fromEntries(
+  Object.entries(CRITERIA).map(([k, list]) => [k, [...list.slice(0, TECH_CRITERIA), INTENSITY[k] ?? list[list.length - 1]]])
+);
+
 // Version courte (2 a 5 mots, meme ordre) pour la dia unique a projeter aux arbitres ; l'arbitre coche toujours
-// les phrases completes ci-dessus.
+// les phrases completes (REFEREE_CRITERIA).
 export const SHORT_CRITERIA: Record<string, string[]> = {
   POMPES: ["Corps aligné", "Poitrine au sol", "Bras tendus en haut", "Bassin fixe", "Descente contrôlée", "Rythme régulier"],
   "SQUATS JUMP": ["Squat profond", "Extension complète", "Pieds décollent", "Réception amortie", "Dos droit, regard devant", "Enchaînement fluide"],
@@ -201,19 +219,22 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
-export const shortCriteriaFor = (label: string): string[] => SHORT_CRITERIA[label.trim().toUpperCase()] ?? criteriaFor(label);
+export const shortCriteriaFor = (label: string): string[] => {
+  const k = label.trim().toUpperCase();
+  const list = SHORT_CRITERIA[k];
+  return list ? [...list.slice(0, TECH_CRITERIA), INTENSITY_SHORT[k] ?? list[list.length - 1]] : criteriaFor(label);
+};
 
-// Exercice ajoute plus tard sans criteres : grille generique (meme ordre d'importance).
+// Exercice ajoute plus tard sans criteres : grille generique (3 techniques + intensite).
 export const GENERIC_CRITERIA = [
   "Le dos reste droit et la posture est sécurisée pendant tout le mouvement.",
   "L'amplitude du mouvement est complète à chaque répétition.",
   "Le mouvement est contrôlé, sans élan ni à-coup dangereux.",
-  "La consigne de l'exercice est respectée (appuis, touches, zone).",
-  "L'enchaînement est fluide, sans pause excessive.",
   "L'intensité est maintenue du début à la fin.",
 ];
 
-export const criteriaFor = (label: string): string[] => CRITERIA[label.trim().toUpperCase()] ?? GENERIC_CRITERIA;
+// Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
+export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[label.trim().toUpperCase()] ?? GENERIC_CRITERIA;
 
 export type CriterionCheck = { label: string; met: boolean };
 export function readCriteria(raw: unknown): CriterionCheck[] | null {
@@ -222,13 +243,22 @@ export function readCriteria(raw: unknown): CriterionCheck[] | null {
   return out.length ? out : null;
 }
 
-// Appreciation (valeur de l'echelle) d'apres les criteres coches : 6 criteres -> 1 = TI ... 6 = E ; une grille
-// d'une autre taille est ramenee a 6.
-export function qualityFromCriteria(met: number, total: number): number {
-  const scaled = total > 0 ? Math.round((met / total) * 6) : 0;
-  const idx = Math.max(0, Math.min(QUALITY_LEVELS.length - 1, scaled - 1)); // 0 ou 1 -> TI, 6 -> E
-  return QUALITY_LEVELS[idx].value;
+// Appreciation « coup de coeur » (E) : les 4 criteres coches ET le ❤️ de l'arbitre.
+export const LIKE_VALUE = QUALITY_LEVELS[QUALITY_LEVELS.length - 1].value;
+// Appreciation (valeur de l'echelle) d'apres les criteres coches.
+// Grille de 4 (depuis le 29/09) : 0 = TI, 1 = I, 2 = S, 3 = B, 4 = TB ; 4 + ❤️ = E. Une grille d'une autre taille
+// est ramenee a 4, sauf l'ancienne grille de 6 (evaluations d'avant le 29/09) : 1 = TI ... 6 = E.
+export function qualityFromCriteria(met: number, total: number, liked = false): number {
+  if (total === 6) {
+    const scaled = Math.round((met / total) * 6);
+    return QUALITY_LEVELS[Math.max(0, Math.min(QUALITY_LEVELS.length - 1, scaled - 1))].value;
+  }
+  if (total > 0 && met >= total && liked) return LIKE_VALUE;
+  const idx = total > 0 ? Math.round((met / total) * 4) : 0; // 0..4 -> TI, I, S, B, TB
+  return QUALITY_LEVELS[Math.max(0, Math.min(4, idx))].value;
 }
+// Evaluation « aimee » : tous les criteres coches et appreciation E.
+export const isLiked = (note: number, checks: CriterionCheck[] | null | undefined) => !!checks?.length && checks.every((c) => c.met) && note === LIKE_VALUE;
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, "");
 // « KB SNATCH » -> « KB snatch », « TIRE TAPIS AR » -> « Tire tapis AR » : sigles gardes en capitales.
@@ -237,11 +267,12 @@ const exoName = exoLabel;
 
 // Commentaire constructif pour l'eleve : ce qui est acquis, puis les criteres non realises dans l'ordre
 // d'importance (securite et posture d'abord), formules comme des objectifs.
-export function criteriaComment(exerciseLabel: string, checks: CriterionCheck[]): string {
+export function criteriaComment(exerciseLabel: string, checks: CriterionCheck[], liked = false): string {
   const met = checks.filter((c) => c.met);
   const todo = checks.filter((c) => !c.met);
   const exo = exoName(exerciseLabel);
-  if (!todo.length) return `Excellent en ${exo} : les ${checks.length} critères sont réalisés. Continue comme ça, tu peux servir d'exemple !`;
+  if (!todo.length && liked) return `Excellent en ${exo} : les ${checks.length} critères sont réalisés, et l'arbitre a eu un coup de cœur ❤️. Tu peux servir d'exemple !`;
+  if (!todo.length) return `Très bien en ${exo} : les ${checks.length} critères sont réalisés. Continue comme ça !`;
   const parts: string[] = [];
   parts.push(met.length ? `${exo} : ${met.length} critère${met.length > 1 ? "s" : ""} sur ${checks.length} déjà réalisé${met.length > 1 ? "s" : ""}, c'est une bonne base.` : `${exo} : c'est le moment de reprendre les bases, pas à pas.`);
   parts.push(`Ton prochain objectif : ${lowerFirst(todo[0].label)}.`);

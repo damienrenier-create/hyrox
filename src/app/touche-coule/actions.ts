@@ -567,7 +567,7 @@ export async function generateGhostFleetsAction(
 // ne depend pas des reps, seuls les reps et l'appreciation sont corriges.
 export type MyEvalEdit = { id: string; reps: number; note: number };
 // Correction par l'arbitre d'une evaluation a criteres (demineur) : il re-coche les criteres, l'appreciation suit.
-export async function updateMyEvaluationCriteriaAction(sessionId: string, evaluationId: string, reps: number, met: number[]): Promise<{ error: string } | { ok: true }> {
+export async function updateMyEvaluationCriteriaAction(sessionId: string, evaluationId: string, reps: number, met: number[], liked = false): Promise<{ error: string } | { ok: true }> {
   const evaluator = await getSession();
   if (!evaluator) throw new Error("Non authentifié.");
   if (!Number.isInteger(reps) || reps < 0 || reps > 999) return { error: "Répétitions invalides." };
@@ -577,7 +577,7 @@ export async function updateMyEvaluationCriteriaAction(sessionId: string, evalua
   const old = readCriteria((ev as { criteria?: unknown }).criteria);
   if (!old) return { error: "Cette évaluation n'a pas de critères." };
   const checks = old.map((c, i) => ({ label: c.label, met: met.includes(i) }));
-  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
+  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length, liked === true);
   await db.orm.public.Evaluation.where({ id: ev.id }).update({ repsObserved: reps, note, criteria: JSON.parse(JSON.stringify(checks)) });
   return { ok: true };
 }

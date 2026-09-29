@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { QUALITY_LEVELS, qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { updateMyEvaluationAction, updateMyEvaluationCriteriaAction } from "./actions";
 import { CriteriaChecklist } from "../_components/CriteriaChecklist";
-import type { CriterionCheck } from "@/lib/level-criteria";
+import { isLiked, type CriterionCheck } from "@/lib/level-criteria";
 import { btn, cx, ui } from "@/lib/ui";
 
 export type RecentEval = { id: string; teamName: string; exerciseLabel: string; reps: number; note: number; atMs: number; criteria?: CriterionCheck[] | null };
@@ -18,6 +18,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
   const [reps, setReps] = useState("");
   const [note, setNote] = useState<number | null>(null);
   const [met, setMet] = useState<boolean[]>([]);
+  const [liked, setLiked] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   if (!items.length) return null;
@@ -27,6 +28,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
     setReps(String(e.reps));
     setNote(e.note);
     setMet((e.criteria ?? []).map((c) => c.met));
+    setLiked(isLiked(e.note, e.criteria));
     setError("");
   }
   function save(e: RecentEval) {
@@ -35,7 +37,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
     setError("");
     startTransition(async () => {
       const res = e.criteria
-        ? await updateMyEvaluationCriteriaAction(sessionId, e.id, r, met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0))
+        ? await updateMyEvaluationCriteriaAction(sessionId, e.id, r, met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0), liked && met.every(Boolean))
         : await updateMyEvaluationAction(sessionId, e.id, r, note as number);
       if ("error" in res) { setError(res.error); return; }
       setEditing(null);
@@ -61,7 +63,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
                 {editing === e.id ? null : (
                   <span className="flex items-center gap-2 whitespace-nowrap">
                     <b className="text-ink tabular-nums">{e.reps} reps</b>
-                    {e.criteria ? <b className="text-ink-2">{e.criteria.filter((c) => c.met).length}/{e.criteria.length} critères</b> : <b className={colorOf(e.note)}>{qualityCodeFromValue(e.note) ?? "?"}</b>}
+                    {e.criteria ? <b className="text-ink-2">{e.criteria.filter((c) => c.met).length}/{e.criteria.length} critères{isLiked(e.note, e.criteria) ? " ❤️" : ""}</b> : <b className={colorOf(e.note)}>{qualityCodeFromValue(e.note) ?? "?"}</b>}
                     <button type="button" onClick={() => start(e)} className={btn.smSoft}>Corriger</button>
                   </span>
                 )}
@@ -79,7 +81,7 @@ export function RecentEvals({ sessionId, items }: { sessionId: string; items: Re
                     />
                   </div>
                   {e.criteria ? (
-                    <CriteriaChecklist compact labels={e.criteria.map((c) => c.label)} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
+                    <CriteriaChecklist compact labels={e.criteria.map((c) => c.label)} met={met} onToggle={(i) => { setMet((m) => m.map((x, k) => (k === i ? !x : x))); setLiked(false); }} liked={liked} onLike={e.criteria.length === 4 ? () => setLiked((v) => !v) : undefined} />
                   ) : (
                   <div className="flex flex-wrap gap-1">
                     {QUALITY_LEVELS.map((l) => (

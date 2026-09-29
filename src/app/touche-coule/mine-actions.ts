@@ -22,7 +22,8 @@ export async function fireAction(
   reps: number,
   met: number[], // index des criteres observes (Sartay 28/09 : l'arbitre ne choisit plus d'appreciation)
   row: number,
-  col: number
+  col: number,
+  liked = false // ❤️ de l'arbitre (Sartay 29/09) : les 4 criteres coches et vraiment tres bien faits = E
 ): Promise<{ error: string } | FireResult> {
   const user = await getSession();
   if (!user) return { error: "Non authentifié." };
@@ -42,7 +43,7 @@ export async function fireAction(
   if (!exoCard) return { error: "Exercice hors échelle." };
   // Appreciation deduite des criteres coches ; la grille est figee avec l'evaluation (commentaire de l'eleve).
   const checks: CriterionCheck[] = criteriaFor(exoCard.label).map((label, i) => ({ label, met: met.includes(i) }));
-  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
+  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length, liked === true);
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const membership = (await db.orm.public.TeamMember.where({ userId: targetUserId }).all()).find((m) => teams.some((t) => t.id === m.teamId));

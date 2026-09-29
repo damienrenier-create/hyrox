@@ -35,6 +35,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
   const [allExos, setAllExos] = useState(false);
   const [reps, setReps] = useState("");
   const [met, setMet] = useState<boolean[]>([]); // criteres observes
+  const [liked, setLiked] = useState(false); // ❤️ : les 4 criteres vraiment tres bien faits
   const [error, setError] = useState("");
   const [result, setResult] = useState<(FireResult & { row: number; col: number; id: number }) | null>(null);
   const [showBoard, setShowBoard] = useState(false);
@@ -81,6 +82,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
     if (!student || !exerciseId) return;
     setReps("");
     setMet(new Array(view.exercises.find((e) => e.exerciseId === exerciseId)?.criteria.length ?? 0).fill(false));
+    setLiked(false);
     setError("");
     setStep("eval");
   }
@@ -95,7 +97,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
     const n = parseInt(reps, 10);
     const checked = met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0);
     startTransition(async () => {
-      const res = await fireAction(sessionId, student.userId, exerciseId, n, checked, row, col);
+      const res = await fireAction(sessionId, student.userId, exerciseId, n, checked, row, col, liked && met.length > 0 && met.every(Boolean));
       if ("error" in res) { setError(res.error); setStep("student"); setStudent(null); setExerciseId(null); router.refresh(); return; }
       setResult({ ...res, row, col, id: Date.now() });
     });
@@ -200,7 +202,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
             <input type="number" inputMode="numeric" min={0} max={999} value={reps} onChange={(e) => setReps(e.target.value)} autoFocus className={`${ui.input} text-2xl font-display font-extrabold tabular-nums mb-3`} placeholder="0" />
             <p className={ui.label}>Coche ce que tu as vraiment observé</p>
             <div className="mb-3">
-              <CriteriaChecklist labels={exercise.criteria} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
+              <CriteriaChecklist labels={exercise.criteria} met={met} onToggle={(i) => { setMet((m) => m.map((x, k) => (k === i ? !x : x))); setLiked(false); }} liked={liked} onLike={() => setLiked((v) => !v)} />
               <p className={`${ui.hint} mt-1`}>{met.filter(Boolean).length} critère{met.filter(Boolean).length > 1 ? "s" : ""} sur {exercise.criteria.length}. Coche seulement ce que tu as vraiment vu.</p>
             </div>
             <div className="flex gap-2">

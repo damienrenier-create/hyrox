@@ -5,7 +5,7 @@ import type { LevelEval } from "@/lib/level-context";
 import { QUALITY_LEVELS, qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { updateEvaluationAction, updateEvaluationCriteriaAction } from "./eval-actions";
 import { dissonances, isBad, isExcellent, refereeRanking } from "@/lib/eval-insights";
-import { criteriaComment, exoLabel } from "@/lib/level-criteria";
+import { criteriaComment, exoLabel, isLiked } from "@/lib/level-criteria";
 import { CriteriaChecklist } from "../_components/CriteriaChecklist";
 import { fmt } from "@/lib/wod-engines/templates/pyramide-engine";
 import { btn, cx, ui } from "@/lib/ui";
@@ -20,6 +20,7 @@ export function LevelArbitrage({ evaluations, onChanged }: { evaluations: LevelE
   const [reps, setReps] = useState("");
   const [note, setNote] = useState<number | null>(null);
   const [met, setMet] = useState<boolean[]>([]);
+  const [liked, setLiked] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"student" | "referee">("student");
   const [pending, startTransition] = useTransition();
@@ -46,6 +47,7 @@ export function LevelArbitrage({ evaluations, onChanged }: { evaluations: LevelE
     setReps(String(e.reps));
     setNote(e.note);
     setMet((e.criteria ?? []).map((c) => c.met));
+    setLiked(isLiked(e.note, e.criteria));
     setError("");
   }
   function save(e: LevelEval) {
@@ -54,7 +56,7 @@ export function LevelArbitrage({ evaluations, onChanged }: { evaluations: LevelE
     setError("");
     startTransition(async () => {
       const res = e.criteria
-        ? await updateEvaluationCriteriaAction(e.id, r, met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0))
+        ? await updateEvaluationCriteriaAction(e.id, r, met.map((m, i) => (m ? i : -1)).filter((i) => i >= 0), liked && met.every(Boolean))
         : await updateEvaluationAction(e.id, r, note as number);
       if ("error" in res) setError(res.error);
       else { setEditing(null); onChanged(); }
@@ -151,12 +153,12 @@ export function LevelArbitrage({ evaluations, onChanged }: { evaluations: LevelE
                       </>
                     )}
                   </div>
-                  {editing !== e.id && e.criteria && <p className="text-[11px] text-ink-2 mt-0.5 leading-snug">💬 {criteriaComment(e.exerciseLabel, e.criteria)}</p>}
+                  {editing !== e.id && e.criteria && <p className="text-[11px] text-ink-2 mt-0.5 leading-snug">💬 {criteriaComment(e.exerciseLabel, e.criteria, isLiked(e.note, e.criteria))}</p>}
                   {editing === e.id && (
                     <div className="mt-2 space-y-2">
                       <label className="text-xs text-ink-2 flex items-center gap-2">Reps <input type="number" min={0} max={999} value={reps} onChange={(x) => setReps(x.target.value)} className={`${ui.input} w-20 tabular-nums`} /></label>
                       {e.criteria ? (
-                        <CriteriaChecklist compact labels={e.criteria.map((c) => c.label)} met={met} onToggle={(i) => setMet((m) => m.map((x, k) => (k === i ? !x : x)))} />
+                        <CriteriaChecklist compact labels={e.criteria.map((c) => c.label)} met={met} onToggle={(i) => { setMet((m) => m.map((x, k) => (k === i ? !x : x))); setLiked(false); }} liked={liked} onLike={e.criteria.length === 4 ? () => setLiked((v) => !v) : undefined} />
                       ) : (
                         <select value={note ?? ""} onChange={(x) => setNote(Number(x.target.value))} className={`${ui.input} w-24`}>
                           {QUALITY_LEVELS.map((q) => <option key={q.code} value={q.value}>{q.code}</option>)}
