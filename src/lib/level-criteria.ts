@@ -259,17 +259,17 @@ export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(l
 
 // Emoji-resume de chaque critere de l'arbitre (Sartay 29/09 nuit : « pour que l'arbitre trouve plus vite ce qu'il doit
 // observer ; l'emoji est une sorte de resume du critere »), dans l'ordre de REFEREE_CRITERIA (3 techniques + intensite).
-// Reperes communs : 📏 corps aligne, 🧱 bassin stable, 🧍 dos droit / debout, ⬇️ amplitude basse, 🙆 extension, 💪 bras
+// Reperes communs : 📏 corps aligne, 🧱 bassin stable, 🧍 dos droit / debout, ⬇️ amplitude basse, ↕️ extension, 💪 bras
 // tendus, 🪶 reception amortie, 🚀 poussee explosive, ⏱️ rythme, 🔥 intensite.
 export const CRITERIA_EMOJI: Record<string, string[]> = {
   POMPES: ["📏", "⬇️", "💪", "⏱️"],
-  "SQUATS JUMP": ["⬇️", "🙆", "🦘", "🔁"],
-  BURPEES: ["⬇️", "🙆", "🙌", "🔥"],
+  "SQUATS JUMP": ["⬇️", "↕️", "🦘", "🔁"],
+  BURPEES: ["⬇️", "↕️", "🙌", "🔥"],
   "COMMANDO BRAS": ["📏", "🧱", "💪", "⏱️"],
   "BREAK DANCE": ["🦵", "🚫", "🌀", "↔️"],
   "ONE REP": ["📏", "🧱", "✋", "⏱️"],
   CORDE: ["🪶", "🧍", "🔄", "🔥"],
-  "SMASH DOWN": ["🙌", "🙆", "💥", "⚡"],
+  "SMASH DOWN": ["🙌", "↕️", "💥", "⚡"],
   "WALL BALL SHOT": ["⬇️", "🎯", "🤲", "⏱️"],
   "TIRE TAPIS": ["🧍", "🦵", "✊", "🔥"],
   "FLIP TAPIS": ["🧍", "🦵", "👀", "🔥"],
