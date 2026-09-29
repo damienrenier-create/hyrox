@@ -166,10 +166,10 @@ export function starsAtLevel(sw: StarSwitch | null | undefined, current: Stars, 
 // - descente d'un parcours a la 2e vie perdue, puis a la 4e, la 7e, la 11e, la 16e... (2 coeurs, puis 2 de plus,
 //   puis 3, puis 4 ; decale d'une vie le 29/09 soir : « commence la descente apres la 2e vie perdue ») ; jamais sous 1 etoile ;
 // - montee d'un parcours (jamais au-dessus de 5) quand l'equipe est 1re de son parcours (au moins deux equipes) en
-//   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle 5 niveaux
-//   de suite avec plus de 50 % du temps restant (le % affiche avec les pieces ; Sartay 29/09 nuit, a la place de
-//   « 3 niveaux nettement plus vite que la moyenne ») : seule voie pour une equipe seule dans son parcours. Toujours
-//   a partir du niveau suivant, sans perdre son niveau.
+//   bouclant 3 niveaux de suite, quand elle l'est sur tout un BOSS (entree et sortie), ou quand elle boucle, a partir
+//   du niveau 3, 5 niveaux de suite avec plus de 40 % du temps restant OU 3 niveaux de suite avec plus de 60 % (le %
+//   affiche avec les pieces ; Sartay 29/09 nuit, a la place de « 3 niveaux nettement plus vite que la moyenne ») :
+//   seule voie pour une equipe seule dans son parcours. Toujours a partir du niveau suivant, sans perdre son niveau.
 export const REORIENT_RULES = 2;
 export const DEFAULT_CAP_MIN = 60; // « le WOD se joue en 60 minutes » : temps impose au coup d envoi, sauf choix contraire
 export function readReorient(settings: unknown): boolean {
@@ -177,9 +177,13 @@ export function readReorient(settings: unknown): boolean {
   return typeof v === "number" && v >= REORIENT_RULES;
 }
 export const PROMOTE_LEAD_STREAK = 3;
-// Sur les 35 equipes deja jouees : plus de 50 % restant 5 fois de suite -> 11 equipes montent (plus de 20 % : 31).
+// % du temps restant (coinsEarned.perLevel.pct) strictement au-dessus du seuil, niveaux de suite a partir du niveau 3.
+// Sur les 35 equipes deja jouees : 18 seraient montees au moins une fois (5 x > 20 % ou 3 x > 50 % : 31).
+export const PROMOTE_QUICK_FROM = 3;
 export const PROMOTE_QUICK_STREAK = 5;
-export const PROMOTE_QUICK_PCT = 50; // % du temps restant (coinsEarned.perLevel.pct) strictement au-dessus
+export const PROMOTE_QUICK_PCT = 40;
+export const PROMOTE_HOT_STREAK = 3;
+export const PROMOTE_HOT_PCT = 60;
 // Descente a la n-ieme vie perdue quand n - 1 est triangulaire : 2, 4, 7, 11, 16... (1, 3, 6, 10, 15 decales d'une vie).
 export const DEMOTE_OFFSET = 1;
 export function demotesAtLoss(n: number): boolean {
@@ -187,16 +191,16 @@ export function demotesAtLoss(n: number): boolean {
   for (let k = 1, t = 1; t <= m; k++, t += k) if (t === m) return true;
   return false;
 }
-// Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours (lead), et avec plus de 50 % du
-// temps restant (fast). Remises a zero a chaque changement de parcours. settings.streaks[teamId].
-export type Streak = { lead: number; fast: number; last: number }; // last = dernier niveau compte (jamais deux fois)
+// Series en cours d'une equipe : niveaux boucles de suite en tete de son parcours (lead), avec plus de 40 % (fast)
+// et plus de 60 % (hot) du temps restant. Remises a zero a chaque changement de parcours. settings.streaks[teamId].
+export type Streak = { lead: number; fast: number; hot: number; last: number }; // last = dernier niveau compte (jamais deux fois)
 export function readStreaks(settings: unknown): Record<string, Streak> {
   const raw = (settings as { streaks?: unknown } | null)?.streaks;
   const out: Record<string, Streak> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const o = v as { lead?: unknown; fast?: unknown; last?: unknown } | null;
-    if (o && typeof o.lead === "number" && typeof o.fast === "number") out[k] = { lead: o.lead, fast: o.fast, last: typeof o.last === "number" ? o.last : -1 };
+    const o = v as { lead?: unknown; fast?: unknown; hot?: unknown; last?: unknown } | null;
+    if (o && typeof o.lead === "number" && typeof o.fast === "number") out[k] = { lead: o.lead, fast: o.fast, hot: typeof o.hot === "number" ? o.hot : 0, last: typeof o.last === "number" ? o.last : -1 };
   }
   return out;
 }

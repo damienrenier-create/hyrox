@@ -2,7 +2,7 @@ import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
   coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_HOT_PCT, PROMOTE_HOT_STREAK, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_FROM, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
   type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
@@ -204,7 +204,7 @@ function changeStars(st: ReplayState, teamId: string, to: Stars, fromLevel: numb
   st.switches[teamId] = sw;
   st.newSwitches[teamId] = sw;
   st.teamStars[teamId] = to;
-  st.streaks[teamId] = { lead: 0, fast: 0, last: st.streaks[teamId]?.last ?? -1 };
+  st.streaks[teamId] = { lead: 0, fast: 0, hot: 0, last: st.streaks[teamId]?.last ?? -1 };
 }
 
 // Classement de toutes les equipes a l'instant (deja rattrapees par l'appelant) : commun (niveau x etoiles) avec
@@ -384,8 +384,9 @@ const leads = (r: { rank: number; size: number }) => r.rank === 1 && r.size >= 2
 // fiche du niveau d'avant) et l'est encore quand elle le BOUCLE -> +1 etoile a partir du niveau suivant, sans perdre
 // son niveau (comme la descente, a l'envers). A chaque BOSS, jusqu'a 5 etoiles. WOD principal seulement. Categorie
 // d'au moins deux equipes, a l'entree comme a la sortie.
-// Regles du 29/09 soir, en plus : 1re de son parcours en bouclant 3 niveaux de suite, ou 5 niveaux de suite boucles
-// avec plus de 50 % du temps restant (le % des pieces ; seule voie pour une equipe seule dans son parcours).
+// Regles du 29/09 soir, en plus : 1re de son parcours en bouclant 3 niveaux de suite, ou, a partir du niveau 3,
+// 5 niveaux de suite avec plus de 40 % du temps restant ou 3 avec plus de 60 % (le % des pieces ; seule voie pour
+// une equipe seule dans son parcours).
 export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: string, level: number, raceMs: number): void {
   if (!cfg.isMain || cfg.emom) return;
   const ladder = replayLadder(cfg, st, teamId);
@@ -405,14 +406,15 @@ export function checkPromotion(cfg: ReplayConfig, st: ReplayState, teamId: strin
     if (entry && entry.level === lv.number && entry.first && leadsNow()) promote = true;
   }
   if (cfg.reorient) {
-    const prev = st.streaks[teamId] ?? { lead: 0, fast: 0, last: -1 };
+    const prev = st.streaks[teamId] ?? { lead: 0, fast: 0, hot: 0, last: -1 };
     if (prev.last !== lv.number) {
-      // % du temps restant du niveau boucle, celui qu'affiche l'ecran avec les pieces gagnees.
+      // % du temps restant du niveau boucle, celui qu'affiche l'ecran avec les pieces gagnees (les niveaux 1 et 2 ne
+      // comptent pas : mise en route).
       const run = coinsEarned(ladder, teamId, st.ticks, st.losses, st.penalties).perLevel.find((c) => c.level === lv.number);
-      const fast = !!run && run.pct > PROMOTE_QUICK_PCT;
-      const s: Streak = { lead: leadsNow() ? prev.lead + 1 : 0, fast: fast ? prev.fast + 1 : 0, last: lv.number };
+      const pct = run && lv.number >= PROMOTE_QUICK_FROM ? run.pct : 0;
+      const s: Streak = { lead: leadsNow() ? prev.lead + 1 : 0, fast: pct > PROMOTE_QUICK_PCT ? prev.fast + 1 : 0, hot: pct > PROMOTE_HOT_PCT ? prev.hot + 1 : 0, last: lv.number };
       st.streaks[teamId] = s;
-      if (s.lead >= PROMOTE_LEAD_STREAK || s.fast >= PROMOTE_QUICK_STREAK) promote = true;
+      if (s.lead >= PROMOTE_LEAD_STREAK || s.fast >= PROMOTE_QUICK_STREAK || s.hot >= PROMOTE_HOT_STREAK) promote = true;
     }
   }
   if (promote && stars < MAX_STARS && next) changeStars(st, teamId, (stars + 1) as Stars, next.number);
