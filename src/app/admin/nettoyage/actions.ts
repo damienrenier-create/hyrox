@@ -63,6 +63,7 @@ export async function purgeAction(fd: FormData) {
   const res = await purge({ sessionIds, resetPins, resetReliability, resetProgramme });
   const bits = [
     res.sessions ? `${res.sessions} séance${res.sessions > 1 ? "s" : ""} supprimée${res.sessions > 1 ? "s" : ""} (${res.rows} lignes)` : "",
+    res.protectedKept ? `${res.protectedKept} séance${res.protectedKept > 1 ? "s" : ""} gardée${res.protectedKept > 1 ? "s" : ""} : jouée${res.protectedKept > 1 ? "s" : ""} par de vrais élèves (règle d'or)` : "",
     res.pins ? `${res.pins} code${res.pins > 1 ? "s" : ""} PIN remis à zéro` : "",
     res.reliability ? `fiabilité remise à zéro pour ${res.reliability} élève${res.reliability > 1 ? "s" : ""}` : "",
     res.cycles || res.plans || res.slots

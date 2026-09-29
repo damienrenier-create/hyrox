@@ -8,6 +8,7 @@ import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fm
 import { readSessionClasses, readCycleClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { SlotDeleteButton } from "./SlotDeleteButton";
 import { SessionDeleteButton } from "./SessionDeleteButton";
+import { sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { notDeleted } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
@@ -66,6 +67,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const recapCandidates = allSessions.filter((s) => s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && s.raceEndedAt && Date.now() - toMs(s.raceEndedAt) < 24 * 3600_000).slice(0, 10);
   const played = await Promise.all(recapCandidates.map((s) => db.orm.public.LevelTick.where({ sessionId: s.id }).first()));
   const recentRecaps = recapCandidates.filter((_, i) => played[i]).slice(0, 6);
+  // Historique protege (regle d'or) : pas de tete de mort sur une seance jouee par de vrais eleves.
+  const pastPlayed = await sessionsPlayedByRealStudents(past.map((s) => s.id));
   // Pour la confirmation de la tete de mort : nombre d'equipes et WOD lance ou non.
   const pastInfo = new Map(
     await Promise.all(
@@ -221,7 +224,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                 return (
                   <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
                     <div className="min-w-0 flex items-start gap-2">
-                      {canDelete && <SessionDeleteButton id={s.id} label={`${s.label ?? wodLabel(s.wodType)} · ${fmtDay(s.createdAt)} ${fmtTime(s.createdAt)}`} detail={`${classes.length ? classes.join(", ") : "toutes classes"} · ${pastInfo.get(s.id) ?? ""}`} />}
+                      {pastPlayed.has(s.id) ? <span className="w-7 h-7 flex items-center justify-center flex-shrink-0" title="Jouée par de vrais élèves : gardée dans l'historique (règle d'or)">🔒</span> : canDelete && <SessionDeleteButton id={s.id} label={`${s.label ?? wodLabel(s.wodType)} · ${fmtDay(s.createdAt)} ${fmtTime(s.createdAt)}`} detail={`${classes.length ? classes.join(", ") : "toutes classes"} · ${pastInfo.get(s.id) ?? ""}`} />}
                       <div className="min-w-0">
                       <div className="font-bold">
                         {s.label ?? wodLabel(s.wodType)}

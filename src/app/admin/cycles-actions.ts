@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen, toMs } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
+import { PROTECTED_MESSAGE, sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { getWodEngine } from "@/lib/wod-engines";
 
 // Les coachs (ADMIN) tiennent la console comme DAMZER : ouvrir, preparer, fermer une seance, gerer
@@ -295,6 +296,7 @@ export async function softDeleteSessionAction(formData: FormData) {
   if (!s) fail("Séance introuvable.");
   if (s.deletedAt) done("Cette séance est déjà supprimée.");
   if (isSessionOpen(s)) fail("Cette séance est ouverte aux élèves : ferme-la d'abord.");
+  if ((await sessionsPlayedByRealStudents([s.id, ...childIdsOf(s.settings)])).size) fail(PROTECTED_MESSAGE);
   const at = Temporal.Now.instant();
   for (const id of [s.id, ...childIdsOf(s.settings)]) await db.orm.public.Session.where({ id }).update({ deletedAt: at, deletedBy: user.name, isActive: false });
   revalidatePath("/admin");
@@ -316,6 +318,7 @@ export async function softDeleteDraftsAction(formData: FormData) {
     if (!s || s.deletedAt || isSessionOpen(s) || (s.isActive && s.opensAt && toMs(s.opensAt) > Date.now())) continue;
     const rs = await db.orm.public.RaceState.where({ sessionId: s.id }).first();
     if (rs?.startedAt) continue; // lancee : ce n'est pas un brouillon
+    if ((await sessionsPlayedByRealStudents([s.id, ...childIdsOf(s.settings)])).size) continue; // historique protege
     for (const x of [s.id, ...childIdsOf(s.settings)]) await db.orm.public.Session.where({ id: x }).update({ deletedAt: at, deletedBy: user.name, isActive: false });
     n++;
   }

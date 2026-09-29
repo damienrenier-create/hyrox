@@ -50,7 +50,8 @@ export const CRITERIA: Record<string, string[]> = {
     "L'enchaînement gauche/droite est rythmé et fluide.",
   ],
   "ONE REP": [
-    "Lors du gainage au sol, le dos est parfaitement plat et le corps aligné avant d'entamer les touches.",
+    // Sartay 29/09 nuit : remplace « planche, dos plat ».
+    "L'élève démarre debout et ses pieds ne bougent pas pendant l'exercice.",
     "Le bassin reste le plus stable possible et ne vrille pas de gauche à droite lors des touches croisées.",
     "Toutes les touches sont exécutées franchement et de manière croisée (main/épaule, main/genou, main/pied).",
     "La descente et la remontée (crawling) sont contrôlées et sécurisées sur les appuis.",
@@ -219,7 +220,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   BURPEES: ["Poitrine et cuisses au sol", "Extension au saut", "Décolle, mains en haut", "Pieds ramenés groupés", "Ne s'écrase pas", "Intensité maintenue"],
   "COMMANDO BRAS": ["Planche alignée", "Bassin stable", "Bras tendus en haut", "Coudes à la place des mains", "Bras alternés", "Sans élan des hanches"],
   "BREAK DANCE": ["Jambe tendue sous le corps", "Bassin ne touche pas le sol", "Tronc tourne, en équilibre", "Bras libre dynamique", "Retour stable à 4 pattes", "Gauche/droite rythmé"],
-  "ONE REP": ["Planche, dos plat", "Bassin ne vrille pas", "Touches franches et croisées", "Crawling contrôlé", "Debout complet à la fin", "Rythme, sans pause"],
+  "ONE REP": ["Debout, pieds fixes", "Bassin ne vrille pas", "Touches franches et croisées", "Crawling contrôlé", "Debout complet à la fin", "Rythme, sans pause"],
   CORDE: ["Sauts souples, amortis", "Dos droit, épaules relâchées", "Rotation des poignets", "Corde fluide", "Rythme régulier", "Intensité maximale"],
   "SMASH DOWN": ["Balle au-dessus de la tête", "Extension complète", "Lancer explosif", "Dos droit au ramassage", "Accompagne la balle", "Ramassage immédiat"],
   "WALL BALL SHOT": ["Squat profond", "Cible à la bonne hauteur", "Réception en squat", "Dos droit, regard cible", "Un seul flux continu", "Bras tendus vers la cible"],
@@ -268,7 +269,7 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   BURPEES: ["⬇️", "↕️", "🙌", "🔥"],
   "COMMANDO BRAS": ["📏", "🧱", "💪", "⏱️"],
   "BREAK DANCE": ["🦵", "🚫", "🌀", "↔️"],
-  "ONE REP": ["📏", "🧱", "✋", "⏱️"],
+  "ONE REP": ["🦶", "🧱", "✋", "⏱️"],
   CORDE: ["🪶", "🧍", "🔄", "🔥"],
   "SMASH DOWN": ["🙌", "↕️", "💥", "⚡"],
   "WALL BALL SHOT": ["⬇️", "🎯", "🤲", "⏱️"],

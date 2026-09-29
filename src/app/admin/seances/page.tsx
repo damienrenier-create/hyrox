@@ -8,6 +8,7 @@ import { wodLabel } from "@/lib/student-sessions";
 import { listWodEngines } from "@/lib/wod-engines";
 import { TopBar } from "../../_components/TopBar";
 import { SessionDeleteButton } from "../SessionDeleteButton";
+import { sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { restoreSessionAction, softDeleteDraftsAction } from "../cycles-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -51,6 +52,8 @@ export default async function SeancesPage({ searchParams }: { searchParams: Prom
     ids.length ? db.orm.public.Team.where((t) => t.sessionId.in(ids)).all() : Promise.resolve([]),
   ]);
   const members = teams.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teams.map((t) => t.id))).all() : [];
+  // Historique protege : jouee par de vrais eleves -> ni corbeille ni purge (regle d'or).
+  const played = await sessionsPlayedByRealStudents(ids);
   const now = Date.now();
   const engines = listWodEngines();
   const rows = sessions.map((s) => {
@@ -101,7 +104,7 @@ export default async function SeancesPage({ searchParams }: { searchParams: Prom
             ))}
           </div>
           <p className={ui.hint}>
-            {Object.values(STATUS).map((x) => `${x.label} = ${x.hint}`).join(" · ")}. Supprimer (💀) ne détruit rien : la séance va dans Nettoyage › Corbeille.
+            {Object.values(STATUS).map((x) => `${x.label} = ${x.hint}`).join(" · ")}. 🔒 = jouée par de vrais élèves : elle reste toujours dans l&apos;historique. Supprimer (💀) ne détruit rien : la séance va dans Nettoyage › Corbeille.
           </p>
           {canDelete && drafts.length > 0 && (
             <form action={softDeleteDraftsAction} className="flex flex-wrap items-center gap-2">
@@ -119,7 +122,9 @@ export default async function SeancesPage({ searchParams }: { searchParams: Prom
             return (
               <li key={s.id} className={`${ui.inset} p-3 flex flex-wrap items-center justify-between gap-3`}>
                 <div className="min-w-0 flex items-start gap-2">
-                  {canDelete && status !== "open" && (
+                  {played.has(s.id) ? (
+                    <span className="w-7 h-7 flex items-center justify-center flex-shrink-0" title="Jouée par de vrais élèves : gardée dans l'historique (règle d'or)">🔒</span>
+                  ) : canDelete && status !== "open" && (
                     <SessionDeleteButton id={s.id} back={back} label={`${name} · ${fmtDay(dateMs)} ${fmtTime(dateMs)}`} detail={`${classes.length ? classes.join(", ") : "toutes classes"} · ${nTeams} équipe${nTeams > 1 ? "s" : ""} · ${st.label}`} />
                   )}
                   <div className="min-w-0">

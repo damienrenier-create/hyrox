@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { isScheduled, toMs } from "@/lib/scheduling";
+import { sessionsPlayedByRealStudents } from "@/lib/session-protect";
 
 // Remise a zero et nettoyage des donnees de test.
 // Regle absolue : on ne touche JAMAIS a la liste des eleves. La programmation (cycles, seances-types,
@@ -207,11 +208,14 @@ export type PurgeOptions = {
   resetReliability?: boolean;
   resetProgramme?: boolean; // remise a blanc AVANT un lancement : cycles, seances-types et creneaux partent aussi
 };
-export type PurgeResult = { sessions: number; rows: number; pins: number; reliability: number; cycles: number; plans: number; slots: number };
+export type PurgeResult = { sessions: number; rows: number; pins: number; reliability: number; cycles: number; plans: number; slots: number; protectedKept: number };
 
 export async function purge(opts: PurgeOptions): Promise<PurgeResult> {
-  const res: PurgeResult = { sessions: 0, rows: 0, pins: 0, reliability: 0, cycles: 0, plans: 0, slots: 0 };
-  for (const id of opts.sessionIds) {
+  const res: PurgeResult = { sessions: 0, rows: 0, pins: 0, reliability: 0, cycles: 0, plans: 0, slots: 0, protectedKept: 0 };
+  // Regle d'or (29/09 nuit) : une seance jouee par de vrais eleves n'est jamais effacee, meme cochee ici.
+  const keep = await sessionsPlayedByRealStudents(opts.sessionIds);
+  res.protectedKept = keep.size;
+  for (const id of opts.sessionIds.filter((x) => !keep.has(x))) {
     res.rows += await deleteSession(id);
     res.sessions++;
   }
