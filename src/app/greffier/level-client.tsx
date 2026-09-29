@@ -10,6 +10,7 @@ import {
 } from "@/lib/wod-engines/templates/level-engine";
 import { absoluteFromRace, catchUpAll, cloneState, replayOps, type ReplayConfig, type ReplayOp, type ReplayState } from "@/lib/wod-engines/templates/level-replay";
 import type { LevelBundle, LevelTeam, PhaseTeamTotals } from "@/lib/level-context";
+import { createTwinSessionAction } from "./settings-actions";
 import { createStarTeamAction, numberTeamsAction, getEmomPlayerScoresAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
@@ -54,8 +55,9 @@ type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | 
 // temps : chaque coche est une ligne unique en base. Depuis le 28/09 (soir), UN seul greffier pendant la course : ses
 // coches restent sur le PC jusqu'a la Pause ou la Fin du WOD (voir plus bas).
 export function LevelClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false, screens = [],
 }: {
+  screens?: { id: string; label: string }[]; // seances jumelles du meme creneau (un greffier par ecran), celle-ci comprise
   sessionId: string;
   isMaster?: boolean;
   showConsole?: boolean; // profs et coachs : lien vers la console (nouvel onglet, le WOD reste ouvert)
@@ -777,6 +779,7 @@ export function LevelClient({
             </p>
           </div>
         )}
+        {view === "settings" && !bundle.child && <TwinScreens sessionId={sessionId} screens={screens} canCreate={showConsole} />}
         {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} teamFormats={bundle.teamFormats} formatOf={formatOf} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} suggestions={suggestions} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} onSetStars={bundle.child ? undefined : (teamId, st) => run(() => setTeamStarsAction(sessionId, teamId, st))} />}
       </main>
@@ -906,6 +909,53 @@ function FitToScreen({ children, active }: { children: ReactNode; active: boolea
   return (
     <div ref={outer} style={scaled ? { height: fit.h * fit.s } : undefined}>
       <div ref={inner} style={scaled ? { transform: `scale(${fit.s})`, transformOrigin: "top left", width: `${100 / fit.s}%` } : undefined}>{children}</div>
+    </div>
+  );
+}
+
+// Seances jumelles (Sartay 30/09) : deux greffiers, deux ecrans, meme creneau. Chaque ecran est une seance a part
+// (equipes, classement, fusees, echauffement, finisher) ; les numeros d'equipe se suivent, un eleve n'est que d'un cote.
+function TwinScreens({ sessionId, screens, canCreate }: { sessionId: string; screens: { id: string; label: string }[]; canCreate: boolean }) {
+  const [teams, setTeams] = useState("6");
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState<{ id: string; label: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const others = screens.filter((s) => s.id !== sessionId);
+  function create() {
+    setError("");
+    startTransition(async () => {
+      const res = await createTwinSessionAction(sessionId, parseInt(teams, 10));
+      if ("error" in res) { setError(res.error); return; }
+      setCreated({ id: res.id, label: res.label });
+      router.refresh();
+    });
+  }
+  return (
+    <div className={`${ui.cardPad} mb-3`}>
+      <p className="font-bold">📺 Écrans de ce créneau <span className={`${ui.hint} font-normal`}>· un greffier par écran, deux séances à part</span></p>
+      {others.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {screens.map((s) => (
+            <li key={s.id} className="text-sm flex items-center gap-2">
+              {s.id === sessionId ? <b>{s.label} (cet écran)</b> : <><span>{s.label}</span><a href={`/greffier?session=${s.id}`} target="_blank" rel="noopener" className={btn.smGhost}>Ouvrir ↗</a></>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canCreate && (
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <label className={`${ui.hint} flex items-center gap-1`}>Équipes <input type="number" min={1} max={20} value={teams} onChange={(e) => setTeams(e.target.value)} className={`${ui.input} w-16 py-1`} /></label>
+          <button type="button" onClick={create} disabled={pending} className={btn.smPrimary}>➕ Ouvrir un {others.length + 2}e écran</button>
+        </div>
+      )}
+      {created && <p className={`${ui.alertInfo} mt-2`}>« {created.label} » est ouvert. Sur l&apos;autre PC : greffier → choisir « {created.label} » dans la liste, ou <a href={`/greffier?session=${created.id}`} target="_blank" rel="noopener" className="underline font-bold">l&apos;ouvrir ici ↗</a>.</p>}
+      {error && <p className={`${ui.alertErr} mt-2`}>{error}</p>}
+      <p className={`${ui.hint} mt-2`}>
+        Même créneau, mêmes classes, mêmes horaires, mais chaque écran a ses équipes, son classement, ses fusées, son échauffement et son finisher.
+        Les numéros d&apos;équipe se suivent d&apos;un écran à l&apos;autre (1-6, puis 7-12) et un élève placé d&apos;un côté n&apos;est pas proposé de l&apos;autre.
+        Règle d&apos;abord le nombre d&apos;équipes de cet écran, puis ouvre le suivant.
+      </p>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { freezeLadders, readFrozenFromSettings } from "@/lib/level";
 import { phaseTotals, readChild, readChildren } from "@/lib/level-context";
 import { loadZombieContext } from "@/lib/zombies";
+import { numbersTakenElsewhere } from "@/lib/session-twins";
 import {
   activeCards, coinsState, ladderFor, masteredExercises, orderedLevels, progressOf, rankTeams, readCoinEvents, readCoinsCarry, readEmom, readLadders,
   autoRocketPool, pickRocketTarget, parcoursKey, readStarSwitches, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, rightmostCard, rocketPayload, rocketTargets, sendOptions, starsLabel, teamFormatOf, teamStarsOf,
@@ -232,6 +233,7 @@ export async function numberTeams(sessionId: string): Promise<number> {
   const PROVISIONAL = 1000;
   const isNumbered = (o: number | null) => (o ?? 0) >= 1 && (o ?? 0) < PROVISIONAL;
   const used = new Set(teams.filter((t) => isNumbered(t.order)).map((t) => t.order as number));
+  for (const x of await numbersTakenElsewhere(sessionId)) used.add(x); // seances jumelles : jamais deux « Équipe 3 »
   let n = 0;
   let changed = 0;
   for (const t of teams) {

@@ -172,6 +172,8 @@ export type OpenSessionInput = {
   closesAt?: Instant | null;
   slotKey?: string | null;
   autoOpened?: boolean;
+  teamNumbers?: number[]; // seance jumelle (30/09) : numeros d'equipe qui suivent ceux de l'autre ecran
+  settings?: Record<string, unknown>; // reglages en plus (seance jumelle : twinOf, temps impose, zombies)
 };
 
 // Creation d'une seance + ses equipes vides. Ne ferme PAS les autres seances ouvertes (deux profs peuvent
@@ -184,7 +186,7 @@ export async function openSession(input: OpenSessionInput) {
       wodType: input.wodType as "PYRAMIDE_CLASSIQUE",
       isActive: true,
       refereeMode: input.refereeMode,
-      settings: { numTeams, classes: input.classes },
+      settings: { numTeams, classes: input.classes, ...(input.settings ?? {}) },
       cycleId: input.cycleId ?? null,
       planId: input.planId ?? null,
       teacherId: input.teacherId ?? null,
@@ -194,8 +196,9 @@ export async function openSession(input: OpenSessionInput) {
       closesAt: input.closesAt ?? null,
       autoOpened: input.autoOpened ?? false,
     });
-    for (let i = 1; i <= numTeams; i++) {
-      await tx.orm.public.Team.create({ name: `Équipe ${i}`, order: i, sessionId: session.id });
+    const numbers = input.teamNumbers?.length ? input.teamNumbers : Array.from({ length: numTeams }, (_, i) => i + 1);
+    for (const n of numbers) {
+      await tx.orm.public.Team.create({ name: `Équipe ${n}`, order: n, sessionId: session.id });
     }
     return session;
   });

@@ -1,3 +1,4 @@
+import { freeNumbers, numbersTakenElsewhere } from "@/lib/session-twins";
 import { db } from "@/lib/db";
 import { reconcileFleets } from "@/lib/fleet-autopilot";
 
@@ -14,8 +15,11 @@ export async function setTeamCount(sessionId: string, n: number): Promise<{ erro
   let removedTeams = 0;
 
   if (n > teams.length) {
-    for (let i = teams.length + 1; i <= n; i++) {
-      await db.orm.public.Team.create({ name: `Équipe ${i}`, order: i, sessionId });
+    // Numeros libres, en sautant ceux de cet ecran et ceux des autres ecrans du meme creneau (seances jumelles).
+    const taken = await numbersTakenElsewhere(sessionId);
+    for (const t of teams) if ((t.order ?? 0) >= 1) taken.add(t.order as number);
+    for (const num of freeNumbers(n - teams.length, taken)) {
+      await db.orm.public.Team.create({ name: `Équipe ${num}`, order: num, sessionId });
     }
   } else if (n < teams.length) {
     const removed = teams.slice(n);

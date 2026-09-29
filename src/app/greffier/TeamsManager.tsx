@@ -22,7 +22,7 @@ import type { PairHit } from "@/lib/teammates";
 import { STARS, starsLabel, starsName, type Stars } from "@/lib/wod-engines/templates/level-engine";
 
 // Tout ce dont le selecteur a besoin, precharge par la page : plus aucune requete pendant la frappe.
-export type PickerData = { roster: StudentHit[]; pairs: Record<string, PairHit[]> };
+export type PickerData = { roster: StudentHit[]; pairs: Record<string, PairHit[]>; elsewhere?: Record<string, string> }; // elsewhere : eleves deja sur un autre ecran (seances jumelles)
 
 export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null; birthday?: boolean };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
@@ -327,6 +327,8 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
             const t = assigned.get(h.id);
             if (t === active.name) return { disabled: true, label: "déjà ici" };
             if (t) return { disabled: true, label: `déjà dans ${t}` };
+            const other = picker.elsewhere?.[h.id];
+            if (other) return { disabled: true, label: `📺 ${other}` };
             return { disabled: false, label: null };
           }}
           onPick={async (h) => {

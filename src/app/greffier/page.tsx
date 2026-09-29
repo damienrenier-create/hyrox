@@ -1,3 +1,4 @@
+import { membersElsewhere, readTwinOf, twinGroup } from "@/lib/session-twins";
 import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -37,7 +38,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   if (session?.deletedAt) session = null; // seance supprimee (corbeille) : on retombe sur la seance par defaut
   // Sans ?session= : la seance ouverte la plus recente qui n'est pas un echauffement ou un finisher (ceux-ci
   // se rejoignent depuis le greffier de leur WOD), sinon la plus recente tout court.
-  if (!session) session = open.find((s) => !readChild(s.settings)) ?? open[0] ?? null;
+  // Seances jumelles : par defaut l'ecran 1 (chaque greffier choisit ensuite le sien dans le selecteur).
+  if (!session) session = open.find((s) => !readChild(s.settings) && !readTwinOf(s.settings)) ?? open.find((s) => !readChild(s.settings)) ?? open[0] ?? null;
   if (!session) session = (await db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all()).find(notDeleted) ?? null;
 
   if (!session) {
@@ -125,7 +127,9 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const roster = [...inScope, ...users.filter((u) => STAFF_ROLES.includes(u.role as string))]
     .map(view)
     .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
-  const picker: PickerData = { roster, pairs: await teammatePairs(inScope.map((u) => u.id)) };
+  const [pairs, elsewhere, group] = await Promise.all([teammatePairs(inScope.map((u) => u.id)), membersElsewhere(session.id), twinGroup(session)]);
+  const picker: PickerData = { roster, pairs, elsewhere };
+  const screens = group.length > 1 || session.wodType === "LEVEL" ? group.map((g) => ({ id: g.id, label: g.label ?? wodLabel(session!.wodType) })) : [];
 
   // Chaque seance-type a son greffier : Level (niveaux de fiches), Fete Foraine (ateliers + corde + Finisher)
   // ou Pyramide (tours).
@@ -147,6 +151,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         referees={referees}
         pendingRequests={pendingRequests}
         picker={picker}
+        screens={screens}
       />
     );
   }

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { getWodEngine } from "@/lib/wod-engines";
 import { setTeamCount } from "@/lib/team-count";
+import { createTwinSession } from "@/lib/session-twins";
 import { exercisesFor } from "@/lib/session-exercises";
 
 type Result = { error: string } | { ok: true };
@@ -82,6 +83,15 @@ export async function updateExercisesAction(sessionId: string, list: ExerciseInp
 }
 
 // Nombre d'equipes (crop de la carte + flottes hors carte) : logique dans src/lib/team-count.ts (testable).
+// Seance jumelle (Sartay 30/09) : un 2e ecran pour le meme creneau, avec son propre greffier, ses equipes (numeros
+// qui suivent), son classement et ses fusees. Profs et coachs seulement.
+export async function createTwinSessionAction(sessionId: string, teams: number): Promise<{ error: string } | { ok: true; id: string; label: string }> {
+  const user = await getSession();
+  if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) return { error: "Réservé aux profs et aux coachs." };
+  if (!Number.isInteger(teams) || teams < 1 || teams > 20) return { error: "Nombre d'équipes : entre 1 et 20." };
+  return createTwinSession(sessionId, teams);
+}
+
 export async function setTeamCountAction(sessionId: string, n: number): Promise<Result> {
   const { locked } = await requirePreStart(sessionId);
   if (locked) return { error: "La course est lancée : le nombre d'équipes est verrouillé." };

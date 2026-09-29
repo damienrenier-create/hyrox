@@ -1,5 +1,6 @@
 "use server";
 
+import { membersElsewhere } from "@/lib/session-twins";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
@@ -80,6 +81,10 @@ export async function addTeamMemberAction(teamId: string, userId: string): Promi
     const other = sessionTeams.find((t) => t.id === existing.teamId);
     return { error: `${names.firstName} ${names.lastName} est déjà dans ${other?.name ?? "une autre équipe"}.` };
   }
+
+  // Seances jumelles (30/09) : un eleve deja dans une equipe d'un autre ecran du meme creneau n'est pas ajoute ici.
+  const elsewhere = (await membersElsewhere(team.sessionId))[userId];
+  if (elsewhere) return { error: `${names.firstName} ${names.lastName} est déjà sur l'autre écran : ${elsewhere}.` };
 
   await db.orm.public.TeamMember.create({ teamId, userId });
   return { ok: true, member };
