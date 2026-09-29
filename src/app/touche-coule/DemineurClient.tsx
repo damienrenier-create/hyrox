@@ -177,7 +177,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
         {step === "exercise" && student && (
           <div className="space-y-2">
             <button type="button" onClick={() => { setStudent(null); setExerciseId(null); setStep("student"); }} className={`${btn.ghost} w-full justify-center`}>← Retour : ce n&apos;est pas le bon élève</button>
-            <p className={ui.hint}>Exercice observé chez <b className="text-ink">{student.name}</b> ({student.teamName}).</p>
+            <p className={ui.hint}>Exercice observé chez <b className="text-ink">{student.name}</b> ({student.teamName}). <b className="text-ink">Sois sûr à 100 % que c&apos;est bien cet élève</b> : au besoin, demande-lui son prénom.</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {exercises.map((e) => (
                 <button key={e.exerciseId} type="button" onClick={() => { setExerciseId(e.exerciseId); }} className={cx(ui.btn, "justify-start text-left", exerciseId === e.exerciseId ? "bg-ink text-white" : "bg-paper border border-line-2 hover:border-brand")}>
@@ -199,6 +199,7 @@ export function DemineurClient({ sessionId, sessionLabel, evaluator, view, ended
             <h2 className={ui.h2}>{student.name}</h2>
             <p className="text-sm text-ink-2 font-bold mb-3">{cap(exercise.label)}</p>
             <label className={ui.label}>Répétitions observées</label>
+            <p className={`${ui.hint} -mt-1 mb-1`}>Pas besoin de regarder toute la fiche : 5 à 10 reps suffisent en général. Le but : voir si les critères sont respectés.</p>
             <input type="number" inputMode="numeric" min={0} max={999} value={reps} onChange={(e) => setReps(e.target.value)} autoFocus className={`${ui.input} text-2xl font-display font-extrabold tabular-nums mb-3`} placeholder="0" />
             <p className={ui.label}>Coche ce que tu as vraiment observé</p>
             <div className="mb-3">
