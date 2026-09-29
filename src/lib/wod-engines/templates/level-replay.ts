@@ -2,7 +2,7 @@ import { elapsed } from "./pyramide-engine";
 import {
   activeCards, attemptEvents, cardSeconds, cardsForTeam, coinsInPlay, coinsState, emomNextCard, emomSchedule, emomWaveAt, emomWaveEvents, emomZombieSim,
   coinsEarned, demotesAtLoss, hasDemotion, heartCarryBites, ladderFor, levelPoints, masteredExercises, orderedLevels, parcoursKey, pickRocketTarget, progressOf, rankGlobal, rankTeams, rightmostCard, rocketPayload, teamSizeOf, teamStarsOf, zombieSim, zombieSpeedLevel,
-  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_HOT_PCT, PROMOTE_HOT_STREAK, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_FROM, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
+  DEMOTE_AT_LOSSES, DISCOUNT_STEPS, EMOM_ZOMBIE_SPEED, FREE_COIN_LOSSES, MAX_STARS, PENALTY_INDEX0, PENALTY_STEPS, PROMOTE_HOT_PCT, PROMOTE_HOT_STREAK, PROMOTE_LEAD_STREAK, PROMOTE_QUICK_FROM, PROMOTE_QUICK_PCT, PROMOTE_QUICK_STREAK, ROCKET_COOLDOWN_MS, ROCKET_PRICE, SOFT_LOSSES, ZOMBIE_COIN_LOSS,
   type BossEntry, type CoinEvent, type EmomSettings, type Format, type FrozenLevel, type Ladders, type LevelOrder, type Loss, type Stars, type StarSwitch, type Streak, type TeamPenalty, type TeamProgress, type Tick,
 } from "./level-engine";
 
@@ -308,17 +308,21 @@ export function applyRocket(cfg: ReplayConfig, st: ReplayState, teamId: string, 
     return { teamId: x, group: g, rankInGroup: ranked.filter((pp) => groupOf(pp.teamId) === g).findIndex((pp) => pp.teamId === x) + 1, groupSize: 0, finished: p.currentLevel === null, hasNext: !!next, next, cur };
   });
   for (const r of rows) r.groupSize = rows.filter((x) => x.group === r.group).length;
-  const sendTargets = st.coinEvents.filter((e) => e.kind === "send").sort((a, b) => a.at - b.at).map((e) => e.toTeamId ?? "");
+  const sends = st.coinEvents.filter((e) => e.kind === "send").sort((a, b) => a.at - b.at);
+  const sendTargets = sends.map((e) => e.toTeamId ?? "");
+  // Regles du 29/09 soir : seules les equipes touchees il y a moins de 3 min sont epargnees.
+  const shielded = cfg.reorient ? new Set(sends.filter((e) => absMs - e.at < ROCKET_COOLDOWN_MS).map((e) => e.toTeamId ?? "")) : undefined;
   // Sartay 29/09 : « il faut TOUJOURS une cible et un cout ». D'abord la regle (concurrent direct, top 4, hasard) ;
   // si elle ne trouve personne (petite categorie, derniere equipe, cible precedente, dernier niveau), l'equipe en jeu
   // la plus proche au classement, sa categorie d'abord, en evitant si possible la cible precedente.
-  let target = pickRocketTarget(teamId, rows, sendTargets, () => Math.min(0.999999, Math.max(0, draw)))?.target ?? null;
+  let target = pickRocketTarget(teamId, rows, sendTargets, () => Math.min(0.999999, Math.max(0, draw)), shielded)?.target ?? null;
   if (!target) {
     const me = rows.find((r) => r.teamId === teamId)!;
     const last = sendTargets[sendTargets.length - 1] ?? null;
+    const spared = (id: string) => (shielded ? shielded.has(id) : id === last);
     target = rows
       .filter((r) => r.teamId !== teamId && !r.finished && r.next)
-      .sort((a, b) => Number(a.group !== me.group) - Number(b.group !== me.group) || Number(a.teamId === last) - Number(b.teamId === last) || Number(!a.hasNext) - Number(!b.hasNext) || Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0] ?? null;
+      .sort((a, b) => Number(a.group !== me.group) - Number(b.group !== me.group) || Number(spared(a.teamId)) - Number(spared(b.teamId)) || Number(!a.hasNext) - Number(!b.hasNext) || Math.abs(a.rankInGroup - me.rankInGroup) - Math.abs(b.rankInGroup - me.rankInGroup) || a.rankInGroup - b.rankInGroup)[0] ?? null;
   }
   if (!target || !target.next) return "Toutes les autres équipes ont bouclé leur échelle (ou n'ont plus que des BOSS) : plus personne à viser.";
   // Charge : un exercice maitrise (3 fiches), a defaut un exercice deja fait ; choisi d'apres la richesse

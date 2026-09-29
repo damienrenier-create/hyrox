@@ -822,14 +822,19 @@ export function rocketPayload(mastered: Mastered[], score: number): (Mastered & 
 // premier ; 3) sinon au hasard (jamais la derniere). Toujours : ni soi, ni l'equipe touchee par la fusee
 // precedente du parcours, ni une equipe arrivee au bout ou sur son dernier niveau. Parcours avec moins de deux
 // adversaires : toutes les equipes.
-export function pickRocketTarget<T extends { teamId: string; group: string; rankInGroup: number; groupSize: number; finished: boolean; hasNext: boolean }>(fromTeamId: string, teams: T[], sendTargets: string[], random: () => number = Math.random): { target: T; why: "rival" | "top" | "random" } | null {
+// `shielded` (regles du 29/09 soir) : equipes epargnees a la place de « la cible precedente » = celles touchees il y a
+// moins de ROCKET_COOLDOWN_MS (Sartay : « le premier l'envoie sur l'equipe juste derriere lui, sauf si elle vient de
+// se faire torpiller ») ; avant, la derniere equipe touchee restait epargnee tant que personne d'autre ne l'etait.
+export const ROCKET_COOLDOWN_MS = 3 * 60_000;
+export function pickRocketTarget<T extends { teamId: string; group: string; rankInGroup: number; groupSize: number; finished: boolean; hasNext: boolean }>(fromTeamId: string, teams: T[], sendTargets: string[], random: () => number = Math.random, shielded?: Set<string>): { target: T; why: "rival" | "top" | "random" } | null {
   const me = teams.find((t) => t.teamId === fromTeamId);
   if (!me) return null;
   const same = teams.filter((t) => t.group === me.group && t.teamId !== fromTeamId);
   const base = same.length >= 2 ? same : teams.filter((t) => t.teamId !== fromTeamId);
   const ids = new Set(base.map((t) => t.teamId));
   const last = [...sendTargets].reverse().find((id) => ids.has(id)) ?? null;
-  const ok = (t: T) => !t.finished && t.hasNext && t.teamId !== last;
+  const spared = shielded ?? new Set(last ? [last] : []);
+  const ok = (t: T) => !t.finished && t.hasNext && !spared.has(t.teamId);
   const isLast = (t: T) => t.groupSize > 1 && t.rankInGroup === t.groupSize;
   // Concurrent direct. Top 4 (Sartay 28/09) : l equipe juste devant (4 sur 3, 3 sur 2, 2 sur 1), le premier sur le
   // deuxieme. Au-dela du top 4 : l equipe la plus proche hors top 4, jamais la derniere (a egalite, celle de devant).
