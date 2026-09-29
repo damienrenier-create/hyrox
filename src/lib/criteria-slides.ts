@@ -37,7 +37,7 @@ h1 { font-size: 46px; margin: 0; letter-spacing: -0.5px; white-space: nowrap; }
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-// « KB SNATCH » -> « KB snatch », « TIRE TAPIS AR » -> « Tire tapis AR » : sigles gardes en capitales.
+// « KB SNATCH » -> « KB snatch », « TIRE TAPIS » -> « Tire tapis » : sigles gardes en capitales.
 const cap = exoLabel;
 
 export function renderCriteriaSlides(labels: string[], subtitle: string): string {

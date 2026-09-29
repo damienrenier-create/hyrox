@@ -23,5 +23,5 @@ export const DEFAULT_EXERCISES: { label: string; weight: number }[] = [
   // ONE REP (full body, Sartay 24/09 ; 10 s la rep depuis le 27/09) : debout, crawling jusqu a la position de pompe, toucher epaule G, epaule D,
   // genou G, genou D, cheville G, cheville D, puis se relever sans bouger les pieds. ~15 s la rep.
   { label: "ONE REP", weight: 10 },
-  { label: "TIRE TAPIS AR", weight: 30 },
+  { label: "TIRE TAPIS", weight: 30 },
 ];

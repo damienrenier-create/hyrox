@@ -41,6 +41,13 @@ export async function seedDefaultExercises(by: string): Promise<number> {
     await db.orm.public.LevelExercise.where({ id: ar.id }).update({ label: "ALLER-RETOUR" });
     ar.label = "ALLER-RETOUR";
   }
+  // Renommage du 29/09 (Sartay) : le tire tapis n'est plus un aller-retour, « TIRE TAPIS AR » devient « TIRE TAPIS »
+  // (meme ponderation, 30 s par rep ; les fiches gardent leur exercice, rattache par identifiant).
+  const tt = rows.find((r) => r.label.trim().toUpperCase() === "TIRE TAPIS AR");
+  if (tt && !rows.some((r) => r.label.trim().toUpperCase() === "TIRE TAPIS")) {
+    await db.orm.public.LevelExercise.where({ id: tt.id }).update({ label: "TIRE TAPIS" });
+    tt.label = "TIRE TAPIS";
+  }
   const existing = new Set(rows.map((r) => r.label.trim().toUpperCase()));
   let n = 0;
   for (const [i, e] of DEFAULT_EXERCISES.entries()) {

@@ -20,7 +20,7 @@ export const WARMUP_SERIES: SeriesDef[] = [
   { name: "Série B", cards: [["WALL BALL SHOT", 10], ["FLIP TAPIS", 10], ["KB SWING", 25], ["CORDE", 5]], zombieRef: [["WALL BALL SHOT", 20], ["FLIP TAPIS", 20], ["KB SWING", 50], ["CORDE", 10]] },
   { name: "Série C", cards: [["POMPES", 10], ["WALL BALL SHOT", 10], ["TRACTIONS", 10]], zombieRef: [["POMPES", 30], ["WALL BALL SHOT", 30], ["TRACTIONS", 30]] },
   { name: "Série D", cards: [["SMASH DOWN", 10], ["BREAK DANCE", 10], ["KB SNATCH", 20]], zombieRef: [["SMASH DOWN", 30], ["BREAK DANCE", 20], ["KB SNATCH", 60]] },
-  { name: "Série E", cards: [["TIRE TAPIS AR", 1], ["ALLER-RETOUR", 5], ["CORDE", 50]], zombieRef: [["TIRE TAPIS AR", 1], ["ALLER-RETOUR", 10], ["CORDE", 100]] },
+  { name: "Série E", cards: [["TIRE TAPIS", 1], ["ALLER-RETOUR", 5], ["CORDE", 50]], zombieRef: [["TIRE TAPIS", 1], ["ALLER-RETOUR", 10], ["CORDE", 100]] },
   { name: "BOSS · Horde", boss: true, cards: [["BURPEES", 20]], zombieRef: [["BURPEES", 60]] },
 ];
 
@@ -31,13 +31,13 @@ export const WARMUP_SERIES: SeriesDef[] = [
 export const FINISHER_WAVE_S = 40;
 export type EmomWaveDef = { seconds: number; cards: [label: string, reps: number][]; max?: string };
 export const FINISHER_EMOM: EmomWaveDef[] = [
-  { seconds: 1 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1]] },
-  { seconds: 2 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40]] },
-  { seconds: 3 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
-  { seconds: 4 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
+  { seconds: 1 * FINISHER_WAVE_S, cards: [["TIRE TAPIS", 1]] },
+  { seconds: 2 * FINISHER_WAVE_S, cards: [["TIRE TAPIS", 1], ["POMPES", 40]] },
+  { seconds: 3 * FINISHER_WAVE_S, cards: [["TIRE TAPIS", 1], ["POMPES", 40], ["SQUATS JUMP", 40]] },
+  { seconds: 4 * FINISHER_WAVE_S, cards: [["TIRE TAPIS", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]] },
   // Vague 5 (Sartay 28/09) : les fiches de la vague 4, puis maximum de cordes, tout le monde en meme temps
   // (saisie par joueur, le score de l'equipe est la somme).
-  { seconds: 5 * FINISHER_WAVE_S, cards: [["TIRE TAPIS AR", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]], max: "CORDE" },
+  { seconds: 5 * FINISHER_WAVE_S, cards: [["TIRE TAPIS", 1], ["POMPES", 40], ["SQUATS JUMP", 40], ["BURPEES", 20]], max: "CORDE" },
 ];
 export const FINISHER_SERIES: SeriesDef[] = FINISHER_EMOM.map((w, i) => ({ name: w.max ? `Vague ${i + 1} · ${w.cards.length ? "fiches puis " : ""}MAX de ${w.max.toLowerCase()} (${fmtWaveMin(w.seconds / 60)})` : `Vague ${i + 1} (${fmtWaveMin(w.seconds / 60)})`, cards: w.cards }));
 

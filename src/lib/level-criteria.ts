@@ -81,7 +81,7 @@ export const CRITERIA: Record<string, string[]> = {
     "Le mouvement est un seul flux continu (les jambes propulsent la balle).",
     "Les bras terminent en extension complète vers la cible.",
   ],
-  "TIRE TAPIS AR": [
+  "TIRE TAPIS": [
     "L'élève qui tire garde le dos bien droit et le buste fier (il ne s'enroule pas vers l'avant).",
     "L'effort est réalisé en poussant sur les jambes et en reculant avec le poids du corps.",
     "La prise sur le tapis est ferme, stable et symétrique des deux côtés.",
@@ -206,7 +206,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   CORDE: ["Sauts souples, amortis", "Dos droit, épaules relâchées", "Rotation des poignets", "Corde fluide", "Rythme régulier", "Intensité maximale"],
   "SMASH DOWN": ["Balle au-dessus de la tête", "Extension complète", "Lancer explosif", "Dos droit au ramassage", "Accompagne la balle", "Ramassage immédiat"],
   "WALL BALL SHOT": ["Squat profond", "Cible à la bonne hauteur", "Réception en squat", "Dos droit, regard cible", "Un seul flux continu", "Bras tendus vers la cible"],
-  "TIRE TAPIS AR": ["Dos droit, buste fier", "Pousse avec les jambes", "Prise ferme, symétrique", "Traction continue", "Tapis toujours en mouvement", "Intensité maximale"],
+  "TIRE TAPIS": ["Dos droit, buste fier", "Pousse avec les jambes", "Prise ferme, symétrique", "Traction continue", "Tapis toujours en mouvement", "Intensité maximale"],
   "FLIP TAPIS": ["Squat, dos droit", "Poussée jambes et hanches", "Regard devant", "Tapis dans la zone", "Replacement immédiat", "Engagement total"],
   "KB SNATCH": ["Bras verrouillé en haut", "Poussée des hanches", "La KB roule, ne tape pas", "Corps droit, gainé", "Descente contrôlée", "Rythme soutenu"],
   "KB SWING": ["Explosion du bassin", "Dos droit, gainé", "Bras souples", "Hauteur atteinte", "Fessiers et abdos serrés", "Expire en montant"],
@@ -220,7 +220,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
-  const k = label.trim().toUpperCase();
+  const k = keyOf(label);
   const list = SHORT_CRITERIA[k];
   return list ? [...list.slice(0, TECH_CRITERIA), INTENSITY_SHORT[k] ?? list[list.length - 1]] : criteriaFor(label);
 };
@@ -233,8 +233,11 @@ export const GENERIC_CRITERIA = [
   "L'intensité est maintenue du début à la fin.",
 ];
 
+// Anciens libelles encore figes dans des seances passees (29/09 : le tire tapis n'est plus un aller-retour).
+const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS" };
+const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
-export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[label.trim().toUpperCase()] ?? GENERIC_CRITERIA;
+export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
 
 export type CriterionCheck = { label: string; met: boolean };
 export function readCriteria(raw: unknown): CriterionCheck[] | null {
@@ -261,7 +264,7 @@ export function qualityFromCriteria(met: number, total: number, liked = false): 
 export const isLiked = (note: number, checks: CriterionCheck[] | null | undefined) => !!checks?.length && checks.every((c) => c.met) && note === LIKE_VALUE;
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, "");
-// « KB SNATCH » -> « KB snatch », « TIRE TAPIS AR » -> « Tire tapis AR » : sigles gardes en capitales.
+// « KB SNATCH » -> « KB snatch », « TIRE TAPIS » -> « Tire tapis » : sigles gardes en capitales.
 export const exoLabel = (label: string) => label.trim().split(" ").map((w, i) => (w === "KB" || w === "AR" ? w : i === 0 ? w.charAt(0) + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ");
 const exoName = exoLabel;
 
