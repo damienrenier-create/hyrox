@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { GRADE_MAX, QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { GRADED_CRITERIA, buildCarnet, carnetCsv, fmtGrade, gradeTone, type CarnetCell } from "@/lib/carnet";
-import { groupLabel, groupSlots, type SlotRow } from "@/lib/journal";
+import { groupLabel, groupSlots, latestSlots, type SlotRow } from "@/lib/journal";
 import { listTeachers } from "@/lib/staff";
 import { TopBar } from "../../_components/TopBar";
 import { ExportCsvButton } from "../resultats/ExportCsvButton";
@@ -41,7 +41,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
   const selected = [...new Set(many(sp.classes).filter((c) => known.has(c)))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
 
   // Groupements du journal de classe : chaque creneau = un groupe ; les memes classes sur deux creneaux = un seul groupe.
-  const groups = groupSlots(slots.filter((s) => s.teacherId === viewedId));
+  const groups = groupSlots(latestSlots(slots).filter((s) => s.teacherId === viewedId)); // la version d'horaire la plus recente (01/10)
   const groupSets = new Map<string, string[]>();
   for (const g of groups) {
     const names = g.classes.map((c) => c.className);

@@ -365,6 +365,19 @@
                   "kind": "scalar"
                 }
               },
+              "sex": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "Sex",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "startMin": {
                 "nullable": false,
                 "type": {
@@ -373,6 +386,13 @@
                 }
               },
               "teacherId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "validFrom": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -402,11 +422,17 @@
                 "planId": {
                   "column": "planId"
                 },
+                "sex": {
+                  "column": "sex"
+                },
                 "startMin": {
                   "column": "startMin"
                 },
                 "teacherId": {
                   "column": "teacherId"
+                },
+                "validFrom": {
+                  "column": "validFrom"
                 },
                 "weekday": {
                   "column": "weekday"
@@ -3727,6 +3753,13 @@
               "uniques": []
             },
             "classSlot": {
+              "checks": [
+                {
+                  "expression": "\"sex\" IN ('M', 'F')",
+                  "name": "classSlot_sex_check_3b7aee9e",
+                  "prefix": "classSlot_sex_check"
+                }
+              ],
               "columns": {
                 "className": {
                   "codecId": "pg/text@1",
@@ -3748,12 +3781,28 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "sex": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "Sex",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "startMin": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": false
                 },
                 "teacherId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "validFrom": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -6310,7 +6359,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6cfc3e1b8915a792f17643ce6b4552db39555180deffccc568a74b7d7eb2b0e0"
+    "storageHash": "8a73f98ff5fecbcc47e9d0372301b587bb897daadfbca32934fa55895d8cc88e"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",

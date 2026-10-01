@@ -1,8 +1,8 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { MAX_CLASSES, notDeleted, readSessionClasses, readCycleClasses } from "@/lib/session-roles";
-import { groupSlots, type SlotGroup, type SlotRow } from "@/lib/journal";
+import { MAX_CLASSES, notDeleted, readSessionClasses, readSessionSex, readCycleClasses } from "@/lib/session-roles";
+import { groupSlots, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
 type Instant = TemporalNS.Instant;
@@ -100,6 +100,8 @@ export type UpcomingSlot = {
   numTeams: number;
   refereeMode: boolean;
   sessionId: string | null; // deja preparee ?
+  sex: string | null; // seance garcons (M) / filles (F) / mixte (null), heritee du creneau
+  editable: boolean; // creneau de la version d'horaire la plus recente du prof (un ancien horaire encore en vigueur ne se retouche pas d'ici)
 };
 
 // Les prochains creneaux (lundi-vendredi) de tous les journaux de classe — ou d'un seul prof — dans l'ordre
@@ -121,7 +123,8 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
     const weekday = day.dayOfWeek;
     if (weekday > 5) continue;
     const dateKey = day.toPlainDate().toString();
-    const rows = slots.filter((s) => s.weekday === weekday && !(d === 0 && s.endMin <= now.minutes)); // creneau deja passe aujourd'hui
+    // Version d'horaire en vigueur ce jour-la (l'ancien horaire jusqu'a la veille du nouveau), creneaux deja passes aujourd'hui exclus.
+    const rows = slotsInForceAt(slots, dateKey).filter((s) => s.weekday === weekday && !(d === 0 && s.endMin <= now.minutes));
 
     for (const g of groupSlots(rows)) {
       const p = planOf(g, planById, weekly as PlanRow | null);
@@ -145,6 +148,8 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         numTeams: p.numTeams,
         refereeMode: p.refereeMode,
         sessionId: null,
+        sex: g.sex,
+        editable: (g.validFrom ?? null) === versionStart(slots, g.teacherId),
       });
     }
   }
@@ -219,7 +224,9 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
   const { weekday, minutes, dateKey } = brusselsNow();
   if (weekday > 5) return [];
 
-  const today = (await db.orm.public.ClassSlot.where({ weekday }).all()) as SlotRow[];
+  // Tous les creneaux (la version en vigueur d'un prof se decide sur l'ensemble de ses creneaux, pas sur un seul jour).
+  const all = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
+  const today = slotsInForceAt(all, dateKey).filter((s) => s.weekday === weekday);
   const active = today.filter((s) => s.startMin <= minutes && minutes < s.endMin);
   const wanted = onlyClasses ? active.filter((s) => onlyClasses.includes(s.className)) : active;
   if (wanted.length === 0) return [];
@@ -251,6 +258,7 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
         closesAt: instantAtBrussels(dateKey, g.endMin),
         slotKey,
         autoOpened: true,
+        ...(g.sex ? { settings: { sex: g.sex } } : {}), // seance garcons / filles : heritee du creneau
       });
       created.push(session);
     } catch {
@@ -264,10 +272,13 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
 export async function openSessionsForStudent(userId: string, className: string | null) {
   if (className) await ensureAutoSessions([className]);
   const open = await listOpenSessions();
+  // Seance garcons / filles (01/10) : par sa classe, un eleve ne voit que la seance de son sexe (sexe inconnu : les deux).
+  const me = open.some((s) => readSessionSex(s.settings)) ? await db.orm.public.User.where({ id: userId }).first() : null;
   const out = [];
   for (const s of open) {
     const classes = readSessionClasses(s.settings);
-    if (className && classes.includes(className)) {
+    const sex = readSessionSex(s.settings);
+    if (className && classes.includes(className) && (!sex || !me?.sex || me.sex === sex)) {
       out.push(s);
       continue;
     }

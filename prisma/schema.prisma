@@ -113,6 +113,11 @@ model ClassSlot {
   endMin    Int
   teacherId String?
   planId    String?
+  // Versions d'horaire (01/10) : date (AAAA-MM-JJ, Bruxelles) a partir de laquelle ce creneau s'applique ;
+  // null = depuis toujours. L'ancien horaire reste en vigueur jusqu'a la veille, rien n'est efface.
+  validFrom String?
+  // Garcons (M) ou filles (F) : une classe peut etre a la meme heure chez deux profs, un par sexe. null = mixte.
+  sex       Sex?
 
   @@index([className])
   @@index([teacherId])

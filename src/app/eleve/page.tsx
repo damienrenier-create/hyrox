@@ -13,6 +13,8 @@ import { TopBar } from "../_components/TopBar";
 import { ui } from "@/lib/ui";
 import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
+import { readSessionSex } from "@/lib/session-roles";
+import { sexLabel } from "@/lib/journal";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -64,6 +66,7 @@ export default async function ElevePage() {
                         {fmtDate(s.createdAt)}
                         {s.raceEndedAt ? " · terminé" : " · ouvert"}
                         {s.closesAt ? ` jusqu'à ${new Date(toMs(s.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" })}` : ""}
+                        {readSessionSex(s.settings) ? ` · ${sexLabel(readSessionSex(s.settings))}` : ""}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">

@@ -27,6 +27,12 @@ export function readSessionClasses(settings: unknown): string[] {
   return Array.isArray(s?.classes) ? (s!.classes as unknown[]).filter((c): c is string => typeof c === "string") : [];
 }
 
+// Seance reservee aux garcons (M) ou aux filles (F) — heritee du creneau du journal (01/10). null = mixte.
+export function readSessionSex(settings: unknown): "M" | "F" | null {
+  const s = (settings as { sex?: unknown } | null)?.sex;
+  return s === "M" || s === "F" ? s : null;
+}
+
 // Classes concernees par un cycle (Cycle.classes, JSON) : null ou vide = toutes les classes.
 // Ex. : le cycle Hyrox n'a jamais de deuxiemes ; leurs creneaux ne doivent alors rien ouvrir dans ce cycle.
 export function readCycleClasses(classes: unknown): string[] | null {

@@ -5,13 +5,13 @@ import { db } from "@/lib/db";
 import { generateGhostFleetsAction } from "../touche-coule/actions";
 import { listWodEngines } from "@/lib/wod-engines";
 import { ensureAutoSessions, listOpenSessions, upcomingSessions, isScheduled, fmtMin, WEEKDAYS, toMs, brusselsNow, TZ } from "@/lib/scheduling";
-import { readSessionClasses, readCycleClasses, MAX_CLASSES } from "@/lib/session-roles";
+import { readSessionClasses, readSessionSex, readCycleClasses, MAX_CLASSES } from "@/lib/session-roles";
 import { SlotDeleteButton } from "./SlotDeleteButton";
 import { SessionDeleteButton } from "./SessionDeleteButton";
 import { sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { notDeleted } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
-import { groupLabel, groupSlots, weeklyMinutes, type SlotRow } from "@/lib/journal";
+import { groupLabel, groupSlots, latestSlots, sexLabel, weeklyMinutes, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 import {
   addPlanAction, closeSessionAction, reopenSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
@@ -83,7 +83,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const plans = current ? await db.orm.public.CyclePlan.where({ cycleId: current.id }).orderBy((p) => p.order.asc()).all() : [];
   // Journal de classe : les creneaux appartiennent a chaque prof ; la console n'en montre qu'un resume.
   const slots = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
-  const myGroups = groupSlots(slots.filter((s) => s.teacherId === user.id));
+  const myGroups = groupSlots(latestSlots(slots).filter((s) => s.teacherId === user.id)); // la version d'horaire la plus recente (01/10)
   const teacherNames = await teacherNameById();
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
   // Classes rangees par degre (1P2, 2Ca…, 3GTa…) pour les cases a cocher des cycles.
@@ -181,7 +181,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                         {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
                       </div>
                       <div className="text-xs text-ink-2">
-                        {classes.length ? classes.join(", ") : "toutes classes"} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
+                        {classes.length ? classes.join(", ") : "toutes classes"}{readSessionSex(s.settings) && <> · {sexLabel(readSessionSex(s.settings))}</>} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
                         {s.closesAt && <> → ferme à {fmtTime(s.closesAt)}</>} · {s.autoOpened ? "auto (journal de classe)" : "manuelle"}
                         {s.teacherId && teacherNames.get(s.teacherId) && <> · {teacherNames.get(s.teacherId)}</>}
                         {s.raceEndedAt && " · WOD terminé"}
@@ -277,6 +277,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     </div>
                     <div className="text-xs text-ink-2">
                       {readSessionClasses(s.settings).join(", ") || "toutes classes"}
+                      {readSessionSex(s.settings) && <> · {sexLabel(readSessionSex(s.settings))}</>}
                       {s.closesAt && <> · ferme à {fmtTime(s.closesAt)}</>}
                     </div>
                   </div>
@@ -334,10 +335,11 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                           <div className="min-w-0">
                             <div className="font-extrabold tabular-nums">{fmtMin(u.startMin)}–{fmtMin(u.endMin)}</div>
                             <div className="font-bold truncate">{u.planLabel}{u.refereeMode ? " 🏴‍☠️" : ""}</div>
-                            <div className="text-ink-2 truncate">{u.classes.length ? u.classes.join(", ") : "aucune classe"}</div>
+                            <div className="text-ink-2 truncate">{u.classes.length ? u.classes.join(", ") : "aucune classe"}{u.sex && <span className="text-ink-3"> · {sexLabel(u.sex)}</span>}</div>
                             {u.teacherName && <div className={cx("truncate", u.teacherId === user.id ? "text-brand-ink font-semibold" : "text-ink-3")}>{u.teacherName}</div>}
                           </div>
-                          {u.teacherId && (u.teacherId === user.id || canDelete) && (
+                          {/* Pas de croix sur un creneau d'un ancien horaire encore en vigueur : il ne se retouche plus (01/10). */}
+                          {u.teacherId && u.editable && (u.teacherId === user.id || canDelete) && (
                             <SlotDeleteButton teacherId={u.teacherId} weekday={u.weekday} startMin={u.startMin} endMin={u.endMin} classes={u.classes} />
                           )}
                         </div>
@@ -546,7 +548,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
               {myGroups.map((g) => (
                 <li key={g.key} className={`${ui.inset} p-2.5`}>
                   <div className="text-[11px] font-extrabold uppercase text-ink-3">{WEEKDAYS[g.weekday]} {fmtMin(g.startMin)}–{fmtMin(g.endMin)}</div>
-                  <div className="font-bold text-sm">{groupLabel(g.classes.map((c) => c.className))}</div>
+                  <div className="font-bold text-sm">{groupLabel(g.classes.map((c) => c.className))}{g.sex && <span className="text-ink-3 font-normal"> · {sexLabel(g.sex)}</span>}</div>
                 </li>
               ))}
               <li className="text-xs text-ink-3 self-center px-1">{Math.floor(weeklyMinutes(myGroups) / 60)} h {String(weeklyMinutes(myGroups) % 60).padStart(2, "0")} par semaine</li>

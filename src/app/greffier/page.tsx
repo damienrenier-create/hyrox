@@ -16,7 +16,7 @@ import { isWinterArc, isWinterArcSeason } from "@/lib/winter-arc";
 import { teammatePairs } from "@/lib/teammates";
 import { STAFF_CLASS_LABEL, STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import type { PickerData } from "./TeamsManager";
-import { notDeleted, readSessionClasses } from "@/lib/session-roles";
+import { notDeleted, readSessionClasses, readSessionSex } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
 import { ensureRaceStateAction } from "./race-actions";
 import { getSessionClasses } from "./team-actions";
@@ -125,7 +125,10 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   // Selecteur d'eleves PRECHARGE : les eleves des classes de la seance (toutes si aucune) + les profs, et pour
   // chacun ses coequipiers habituels. Plus aucune requete pendant la frappe : la suggestion est immediate.
   // Les 1P (primo-arrivants, souvent integres a d'autres classes) sont toujours dans le perimetre (Sartay 27/09).
-  const inScope = classes.length ? students.filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className))) : students;
+  // Seance garcons / filles (01/10) : le selecteur ne propose que les eleves du sexe de la seance (sexe inconnu : propose quand meme).
+  const sessionSex = readSessionSex(session.settings);
+  const inScope = (classes.length ? students.filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className))) : students)
+    .filter((u) => !sessionSex || !u.sex || u.sex === sessionSex);
   const roster = [...inScope, ...users.filter((u) => STAFF_ROLES.includes(u.role as string))]
     .map(view)
     .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));

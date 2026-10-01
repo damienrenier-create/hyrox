@@ -67,6 +67,8 @@ export type SlotRow = {
   endMin: number;
   teacherId: string | null;
   planId: string | null;
+  validFrom: string | null; // version d'horaire : en vigueur a partir de cette date (AAAA-MM-JJ), null = depuis toujours
+  sex: string | null; // "M" garcons, "F" filles, null = mixte
 };
 
 export type SlotGroup = {
@@ -76,8 +78,54 @@ export type SlotGroup = {
   startMin: number;
   endMin: number;
   planId: string | null; // seance-type imposee (premiere trouvee dans le groupe), sinon null = seance de la semaine
+  validFrom: string | null; // version d'horaire du groupe
+  sex: string | null; // garcons / filles / mixte (premier renseigne dans le groupe)
   classes: { id: string; className: string }[];
 };
+
+// ===== Versions d'horaire (01/10) =====
+// L'ecole change les horaires en cours d'annee (« a partir du lundi 5 octobre »). Chaque creneau porte la date a
+// partir de laquelle sa version s'applique ; pour un prof et un jour donne, seule compte la version la plus recente
+// dont la date est atteinte. L'ancien horaire reste en vigueur jusqu'a la veille et n'est jamais efface.
+const ownerOf = (r: { teacherId: string | null }) => r.teacherId ?? "global";
+const laterVersion = (a: string | null, b: string | null) => (a === null ? b !== null : b !== null && b > a);
+
+// Pour chaque prof, la date de la version retenue : la plus recente qui ne depasse pas `upTo` (toutes si absent).
+function versionByOwner(rows: SlotRow[], upTo?: string): Map<string, string | null> {
+  const best = new Map<string, string | null>();
+  for (const r of rows) {
+    const v = r.validFrom ?? null;
+    if (upTo !== undefined && v !== null && v > upTo) continue;
+    const k = ownerOf(r);
+    if (!best.has(k) || laterVersion(best.get(k)!, v)) best.set(k, v);
+  }
+  return best;
+}
+const keepVersion = (rows: SlotRow[], best: Map<string, string | null>) => rows.filter((r) => best.has(ownerOf(r)) && (r.validFrom ?? null) === best.get(ownerOf(r)));
+
+// Les creneaux en vigueur un jour donne (AAAA-MM-JJ, Bruxelles) : ce que l'ouverture automatique doit lire.
+export function slotsInForceAt(rows: SlotRow[], dateKey: string): SlotRow[] {
+  return keepVersion(rows, versionByOwner(rows, dateKey));
+}
+
+// La version la plus recente de chaque prof, meme si elle n'est pas encore en vigueur : celle qu'on voit et
+// qu'on modifie dans le journal de classe.
+export function latestSlots(rows: SlotRow[]): SlotRow[] {
+  return keepVersion(rows, versionByOwner(rows));
+}
+
+// Date de la version la plus recente d'un prof (null = horaire sans date, ou aucun creneau).
+export function versionStart(rows: SlotRow[], teacherId: string | null): string | null {
+  return versionByOwner(rows).get(teacherId ?? "global") ?? null;
+}
+
+// ===== Garcons / filles =====
+// Au Sartay, l'EPS se donne par sexe : une classe est a la meme heure chez deux profs, l'un avec les garcons, l'autre
+// avec les filles. Deux creneaux, deux seances ; chaque eleve ne voit que la sienne.
+export const SEX_LABEL: Record<string, string> = { M: "garçons", F: "filles" };
+export const sexLabel = (sex: string | null | undefined): string | null => (sex ? SEX_LABEL[sex] ?? null : null);
+// Deux creneaux de la meme classe a la meme heure sont compatibles seulement si l'un est « garcons » et l'autre « filles ».
+export const sexesSplit = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && a !== b;
 
 export function fmtMin(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -105,11 +153,12 @@ export function groupSlots(rows: SlotRow[]): SlotGroup[] {
     const key = groupKeyOf(r.teacherId, r.weekday, r.startMin, r.endMin);
     let g = map.get(key);
     if (!g) {
-      g = { key, teacherId: r.teacherId, weekday: r.weekday, startMin: r.startMin, endMin: r.endMin, planId: null, classes: [] };
+      g = { key, teacherId: r.teacherId, weekday: r.weekday, startMin: r.startMin, endMin: r.endMin, planId: null, validFrom: r.validFrom ?? null, sex: null, classes: [] };
       map.set(key, g);
     }
     g.classes.push({ id: r.id, className: r.className });
     if (!g.planId && r.planId) g.planId = r.planId;
+    if (!g.sex && r.sex) g.sex = r.sex;
   }
   const out = [...map.values()];
   for (const g of out) g.classes.sort((a, b) => a.className.localeCompare(b.className, "fr", { numeric: true }));

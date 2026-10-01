@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { DEFAULT_PERIODS, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, overlaps, periodsCovered, slotEndFor, type SlotRow } from "@/lib/journal";
+import { DEFAULT_PERIODS, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, latestSlots, overlaps, periodsCovered, sexLabel, sexesSplit, slotEndFor, versionStart, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
 // Actions du journal de classe. Chaque prof (ADMIN) ne modifie que le sien ; DAMZER (MASTER_ADMIN) les modifie
@@ -32,6 +32,12 @@ function bump() {
 async function allSlots(): Promise<SlotRow[]> {
   return (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
 }
+// Le journal montre et modifie la version d'horaire la plus recente de chaque prof (meme pas encore en vigueur) ;
+// les creneaux d'un ancien horaire restent en base, intouchables d'ici.
+async function editableSlots(): Promise<SlotRow[]> {
+  return latestSlots(await allSlots());
+}
+const asSex = (s: string | null | undefined): "M" | "F" | null => (s === "M" || s === "F" ? s : null);
 
 function validTimes(startMin: number, endMin: number): string | null {
   if (!Number.isInteger(startMin) || !Number.isInteger(endMin) || startMin < 0 || endMin > MINUTES_IN_DAY) return "Heures invalides.";
@@ -42,7 +48,8 @@ function validTimes(startMin: number, endMin: number): string | null {
 const dayName = (weekday: number) => (WEEKDAYS[weekday] ?? "").toLowerCase();
 
 // Ces classes peuvent-elles occuper [startMin, endMin) ce jour-la, pour ce prof ?
-// - une classe n'a cours qu'a un seul endroit a la fois (chez ce prof ou chez un autre) ;
+// - une classe n'a cours qu'a un seul endroit a la fois (chez ce prof ou chez un autre), sauf garcons chez l'un et
+//   filles chez l'autre (`sex` = sexe du creneau qu'on pose ; 01/10) ;
 // - un prof ne tient qu'une seance a la fois : ses autres creneaux ne peuvent pas chevaucher.
 // `ignore` = lignes qu'on est en train de deplacer/retimer (elles ne comptent pas contre elles-memes).
 async function conflictFor(
@@ -52,6 +59,7 @@ async function conflictFor(
   startMin: number,
   endMin: number,
   classNames: string[],
+  sex: string | null,
   ignore: Set<string>
 ): Promise<string | null> {
   let names: Map<string, string> | null = null;
@@ -60,9 +68,10 @@ async function conflictFor(
     const sameGroup = r.teacherId === teacherId && r.startMin === startMin && r.endMin === endMin;
     if (classNames.includes(r.className)) {
       if (sameGroup) return `${r.className} est déjà dans ce créneau.`;
+      if (sexesSplit(sex, r.sex)) continue; // garcons ici, filles la-bas : deux creneaux a la meme heure, c'est voulu
       names ??= await teacherNameById();
       const who = r.teacherId === teacherId ? "dans ton journal" : r.teacherId ? `chez ${names.get(r.teacherId) ?? "un autre prof"}` : "dans l'ancien horaire commun";
-      return `${r.className} a déjà cours le ${dayName(weekday)} de ${fmtMin(r.startMin)} à ${fmtMin(r.endMin)} ${who}.`;
+      return `${r.className} a déjà cours le ${dayName(weekday)} de ${fmtMin(r.startMin)} à ${fmtMin(r.endMin)} ${who}${r.sex ? ` (${sexLabel(r.sex)})` : ""}. Garçons chez l'un et filles chez l'autre ? Indique-le sur les deux créneaux (clique sur le créneau).`;
     }
     if (r.teacherId === teacherId && !sameGroup) {
       return `Tu as déjà un créneau ${fmtMin(r.startMin)}–${fmtMin(r.endMin)} le ${dayName(weekday)} qui chevauche celui-ci : ajoute la classe dedans, ou déplace-le.`;
@@ -82,28 +91,31 @@ export async function placeClassAction(input: { teacherId: string; weekday: numb
     if (!Number.isInteger(weekday) || weekday < 1 || weekday > 5) return { error: "Jour invalide (lundi à vendredi)." };
     if (!className) return { error: "Classe requise." };
 
-    const rows = await allSlots();
+    const rows = await editableSlots();
     const mine = rows.filter((r) => r.teacherId === teacherId && r.weekday === weekday);
     const host = mine.find((r) => r.startMin <= input.startMin && input.startMin < r.endMin);
     let startMin: number;
     let endMin: number;
     let planId: string | null = null;
+    let sex: string | null = null; // une classe ajoutee a un creneau en prend le sexe (garcons / filles / mixte)
     if (host) {
       startMin = host.startMin;
       endMin = host.endMin;
       const group = mine.filter((r) => r.startMin === host.startMin && r.endMin === host.endMin);
       if (group.length >= MAX_SLOT_CLASSES) return { error: `Ce créneau a déjà ${MAX_SLOT_CLASSES} classes : c'est le maximum pour une seule séance.` };
       planId = group.find((r) => r.planId)?.planId ?? null;
+      sex = group.find((r) => r.sex)?.sex ?? null;
     } else {
       startMin = input.startMin;
       endMin = input.endMin ?? slotEndFor(startMin, DEFAULT_PERIODS);
     }
     const bad = validTimes(startMin, endMin);
     if (bad) return { error: bad };
-    const conflict = await conflictFor(rows, teacherId, weekday, startMin, endMin, [className], new Set());
+    const conflict = await conflictFor(rows, teacherId, weekday, startMin, endMin, [className], sex, new Set());
     if (conflict) return { error: conflict };
 
-    await db.orm.public.ClassSlot.create({ className, weekday, startMin, endMin, teacherId, planId });
+    // Le nouveau creneau rejoint la version d'horaire en cours d'edition de ce prof.
+    await db.orm.public.ClassSlot.create({ className, weekday, startMin, endMin, teacherId, planId, validFrom: versionStart(rows, teacherId), sex: asSex(sex) });
     bump();
     return { ok: true };
   } catch (e) {
@@ -121,19 +133,22 @@ export async function moveClassAction(input: { slotId: string; weekday: number; 
     if (!row.teacherId) return { error: "Créneau de l'ancien horaire commun : supprime-le et recrée-le dans le journal." };
     if (!Number.isInteger(input.weekday) || input.weekday < 1 || input.weekday > 5) return { error: "Jour invalide." };
 
-    const rows = await allSlots();
+    const rows = await editableSlots();
+    if (!rows.some((r) => r.id === row.id)) return { error: "Ce créneau appartient à un ancien horaire : il ne se modifie plus (la page va se rafraîchir)." };
     const others = rows.filter((r) => r.id !== row.id);
     const mine = others.filter((r) => r.teacherId === row.teacherId && r.weekday === input.weekday);
     const host = mine.find((r) => r.startMin <= input.startMin && input.startMin < r.endMin);
     let startMin: number;
     let endMin: number;
     let planId = row.planId;
+    let sex = row.sex;
     if (host) {
       startMin = host.startMin;
       endMin = host.endMin;
       const group = mine.filter((r) => r.startMin === host.startMin && r.endMin === host.endMin);
       if (group.length >= MAX_SLOT_CLASSES) return { error: `Ce créneau a déjà ${MAX_SLOT_CLASSES} classes : c'est le maximum pour une seule séance.` };
       planId = group.find((r) => r.planId)?.planId ?? null;
+      sex = group.find((r) => r.sex)?.sex ?? row.sex;
     } else {
       startMin = input.startMin;
       const n = periodsCovered(row.startMin, row.endMin);
@@ -142,10 +157,10 @@ export async function moveClassAction(input: { slotId: string; weekday: number; 
     if (input.weekday === row.weekday && startMin === row.startMin && endMin === row.endMin) return { ok: true };
     const bad = validTimes(startMin, endMin);
     if (bad) return { error: bad };
-    const conflict = await conflictFor(others, row.teacherId, input.weekday, startMin, endMin, [row.className], new Set());
+    const conflict = await conflictFor(others, row.teacherId, input.weekday, startMin, endMin, [row.className], sex, new Set());
     if (conflict) return { error: conflict };
 
-    await db.orm.public.ClassSlot.where({ id: row.id }).update({ weekday: input.weekday, startMin, endMin, planId });
+    await db.orm.public.ClassSlot.where({ id: row.id }).update({ weekday: input.weekday, startMin, endMin, planId, sex: asSex(sex) });
     bump();
     return { ok: true };
   } catch (e) {
@@ -178,7 +193,7 @@ export async function setSlotTimesAction(input: GroupRef & { newStart: number; n
     await requireOwner(input.teacherId);
     const bad = validTimes(input.newStart, input.newEnd);
     if (bad) return { error: bad };
-    const rows = await allSlots();
+    const rows = await editableSlots();
     const group = await groupRows(rows, input);
     if (!group.length) return { error: "Créneau introuvable : il a peut-être déjà été modifié (la page va se rafraîchir)." };
     if (input.newStart === input.startMin && input.newEnd === input.endMin) return { ok: true };
@@ -187,7 +202,7 @@ export async function setSlotTimesAction(input: GroupRef & { newStart: number; n
     // Fusion avec un creneau du prof qui aurait deja exactement ces heures : pas plus de MAX classes au total.
     const twin = rows.filter((r) => !ids.has(r.id) && r.teacherId === input.teacherId && r.weekday === input.weekday && r.startMin === input.newStart && r.endMin === input.newEnd);
     if (twin.length + group.length > MAX_SLOT_CLASSES) return { error: `En fusionnant avec ton créneau ${fmtMin(input.newStart)}–${fmtMin(input.newEnd)}, tu dépasserais ${MAX_SLOT_CLASSES} classes.` };
-    const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.newStart, input.newEnd, group.map((r) => r.className), ids);
+    const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.newStart, input.newEnd, group.map((r) => r.className), group.find((r) => r.sex)?.sex ?? null, ids);
     if (conflict) return { error: conflict };
 
     for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).update({ startMin: input.newStart, endMin: input.newEnd });
@@ -203,9 +218,28 @@ export async function setSlotPlanAction(input: GroupRef & { planId: string | nul
   try {
     await requireOwner(input.teacherId);
     if (input.planId && !(await db.orm.public.CyclePlan.where({ id: input.planId }).first())) return { error: "Séance-type introuvable." };
-    const group = await groupRows(await allSlots(), input);
+    const group = await groupRows(await editableSlots(), input);
     if (!group.length) return { error: "Créneau introuvable." };
     for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).update({ planId: input.planId });
+    bump();
+    return { ok: true };
+  } catch (e) {
+    return { error: msg(e) };
+  }
+}
+
+// Garcons / filles / mixte pour un creneau entier (01/10). Repasser en « mixte » rend la regle stricte : aucune de
+// ses classes ne peut alors etre ailleurs a la meme heure.
+export async function setSlotSexAction(input: GroupRef & { sex: string | null }): Promise<JournalResult> {
+  try {
+    await requireOwner(input.teacherId);
+    const sex = asSex(input.sex);
+    const rows = await editableSlots();
+    const group = await groupRows(rows, input);
+    if (!group.length) return { error: "Créneau introuvable." };
+    const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.startMin, input.endMin, group.map((r) => r.className), sex, new Set(group.map((r) => r.id)));
+    if (conflict) return { error: conflict };
+    for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).update({ sex });
     bump();
     return { ok: true };
   } catch (e) {
@@ -217,7 +251,7 @@ export async function setSlotPlanAction(input: GroupRef & { planId: string | nul
 export async function deleteSlotGroupAction(input: GroupRef): Promise<JournalResult> {
   try {
     await requireOwner(input.teacherId);
-    const group = await groupRows(await allSlots(), input);
+    const group = await groupRows(await editableSlots(), input);
     for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).delete();
     bump();
     return { ok: true };

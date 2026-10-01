@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BREAKS, DAY_END, DAY_START, DEFAULT_PERIODS, MAX_SLOT_CLASSES, PERIODS, PERIOD_MIN, WEEKDAYS, fmtMin, groupSlots, parseHHMM,
-  periodIndexAt, periodsCovered, slotEndFor, weeklyMinutes, type SlotGroup, type SlotRow,
+  periodIndexAt, periodsCovered, sexLabel, slotEndFor, weeklyMinutes, type SlotGroup, type SlotRow,
 } from "@/lib/journal";
 import {
-  deleteSlotGroupAction, moveClassAction, placeClassAction, removeClassAction, setSlotPlanAction, setSlotTimesAction, type JournalResult,
+  deleteSlotGroupAction, moveClassAction, placeClassAction, removeClassAction, setSlotPlanAction, setSlotSexAction, setSlotTimesAction, type JournalResult,
 } from "./actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -275,7 +275,7 @@ Hors du cycle ${cycleName ?? "en cours"} : un créneau de cette classe n'ouvrira
                       if (armed) drop(armed, g.weekday, g.startMin);
                       else setEditing(g.key);
                     }}
-                    title={`${fmtMin(g.startMin)}–${fmtMin(g.endMin)} · ${g.classes.map((c) => c.className).join(", ")}${pl ? ` · ${pl}` : ""}\nClique pour ajuster les heures ou la séance-type.`}
+                    title={`${fmtMin(g.startMin)}–${fmtMin(g.endMin)} · ${g.classes.map((c) => c.className).join(", ")}${g.sex ? ` · ${sexLabel(g.sex)}` : ""}${pl ? ` · ${pl}` : ""}\nClique pour ajuster les heures, garçons / filles ou la séance-type.`}
                     className={cx(
                       "absolute left-1 right-1 z-10 rounded-xl border shadow-sm overflow-hidden cursor-pointer text-left",
                       g.planId ? "bg-sea-soft border-sea/40" : "bg-brand-soft border-brand/40",
@@ -284,7 +284,10 @@ Hors du cycle ${cycleName ?? "en cours"} : un créneau de cette classe n'ouvrira
                     style={{ top: y(g.startMin) + 1, height }}
                   >
                     <div className="flex items-center justify-between gap-1 px-1.5 pt-1 text-[10px] font-extrabold text-ink-2 tabular-nums leading-tight">
-                      <span>{fmtMin(g.startMin)}–{fmtMin(g.endMin)}</span>
+                      <span>
+                        {fmtMin(g.startMin)}–{fmtMin(g.endMin)}
+                        {g.sex && <span className="ml-1 text-ink-3" title={sexLabel(g.sex) ?? undefined}>{g.sex === "F" ? "♀" : "♂"} {sexLabel(g.sex)}</span>}
+                      </span>
                       {pl && <span className="truncate text-sea-ink">{pl}</span>}
                     </div>
                     <div className="flex flex-wrap gap-1 px-1.5 pb-1 pt-0.5">
@@ -413,6 +416,22 @@ function SlotEditor({
           ))}
         </div>
         <p className={`${ui.hint} mb-4`}>Pour ajouter une classe, glisse-la (ou touche-la puis touche ce créneau) depuis la grille.</p>
+
+        <p className="text-sm font-bold mb-1">Garçons / filles</p>
+        <div className={`${ui.segmented} mb-1`}>
+          {([["", "Mixte"], ["M", "♂ Garçons"], ["F", "♀ Filles"]] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              disabled={pending}
+              onClick={() => onRun(() => setSlotSexAction({ ...ref, sex: v || null }))}
+              className={cx("px-3 py-1 rounded-lg text-xs font-bold transition", (g.sex ?? "") === v ? ui.segOn : ui.segOff)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className={`${ui.hint} mb-4`}>Une classe peut être à la même heure chez deux profs si l&apos;un a les garçons et l&apos;autre les filles : deux créneaux, deux séances, et chaque élève ne voit que la sienne (le greffier ne propose que ces élèves).</p>
 
         <p className="text-sm font-bold mb-1">Périodes</p>
         <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 mb-1">

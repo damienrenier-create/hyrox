@@ -1,0 +1,128 @@
+[
+  {
+    "id": "column.public.classSlot.sex",
+    "label": "Add column \"sex\" to \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "sex",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"sex\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "sex"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"sex\"",
+        "sql": "ALTER TABLE \"public\".\"classSlot\" ADD COLUMN \"sex\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"sex\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "sex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.classSlot.validFrom",
+    "label": "Add column \"validFrom\" to \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "validFrom",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"validFrom\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "validFrom"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"validFrom\"",
+        "sql": "ALTER TABLE \"public\".\"classSlot\" ADD COLUMN \"validFrom\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"validFrom\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "classSlot",
+          "validFrom"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.classSlot.classSlot_sex_check_3b7aee9e",
+    "label": "Add check constraint \"classSlot_sex_check_3b7aee9e\" on \"classSlot\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "classSlot_sex_check_3b7aee9e",
+        "table": "classSlot"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"classSlot_sex_check_3b7aee9e\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "classSlot_sex_check_3b7aee9e",
+          "public",
+          "\"public\".\"classSlot\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"classSlot_sex_check_3b7aee9e\"",
+        "sql": "ALTER TABLE \"public\".\"classSlot\" ADD CONSTRAINT \"classSlot_sex_check_3b7aee9e\" CHECK (\"sex\" IN ('M', 'F'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"classSlot_sex_check_3b7aee9e\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "classSlot_sex_check_3b7aee9e",
+          "public",
+          "\"public\".\"classSlot\""
+        ]
+      }
+    ]
+  }
+]

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { currentCycleAndPlan } from "@/lib/scheduling";
-import { WEEKDAYS, fmtMin, groupLabel, groupSlots, type SlotRow } from "@/lib/journal";
+import { brusselsNow, currentCycleAndPlan } from "@/lib/scheduling";
+import { WEEKDAYS, fmtMin, groupLabel, groupSlots, latestSlots, sexLabel, versionStart, type SlotRow } from "@/lib/journal";
 import { listTeachers } from "@/lib/staff";
 import { readCycleClasses } from "@/lib/session-roles";
 import { displayPseudo } from "@/lib/staff-names";
@@ -24,11 +24,17 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
   const viewedName = teachers.find((t) => t.id === viewedId)?.name ?? displayPseudo(user.name);
   const nameOf = new Map(teachers.map((t) => [t.id, t.name]));
 
-  const [allSlots, students, { cycle, plan }] = await Promise.all([
+  const [rawSlots, students, { cycle, plan }] = await Promise.all([
     db.orm.public.ClassSlot.where({}).all().then((rows) => rows as SlotRow[]),
     db.orm.public.User.where({ role: "STUDENT" }).all(),
     currentCycleAndPlan(),
   ]);
+  // Le journal montre la version d'horaire la plus recente de chaque prof (01/10) ; si elle n'est pas encore en
+  // vigueur, l'ancien horaire continue d'ouvrir les seances jusqu'a la veille.
+  const allSlots = latestSlots(rawSlots);
+  const since = versionStart(rawSlots, viewedId);
+  const upcomingVersion = since && since > brusselsNow().dateKey ? since : null;
+  const fmtDateKey = (k: string) => new Date(`${k}T12:00:00Z`).toLocaleDateString("fr-BE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
   const classes = [...new Set(students.map((u) => u.className).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
   const mine = allSlots.filter((s) => s.teacherId === viewedId);
   const groups = groupSlots(mine);
@@ -37,7 +43,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
   const elsewhere: Record<string, Elsewhere[]> = {};
   for (const s of allSlots) {
     if (s.teacherId === viewedId) continue;
-    (elsewhere[s.className] ??= []).push({ weekday: s.weekday, startMin: s.startMin, endMin: s.endMin, who: s.teacherId ? nameOf.get(s.teacherId) ?? "un autre prof" : "horaire commun" });
+    (elsewhere[s.className] ??= []).push({ weekday: s.weekday, startMin: s.startMin, endMin: s.endMin, who: `${s.teacherId ? nameOf.get(s.teacherId) ?? "un autre prof" : "horaire commun"}${s.sex ? ` · ${sexLabel(s.sex)}` : ""}` });
   }
 
   const plans: PlanOption[] = cycle
@@ -74,6 +80,11 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
       </TopBar>
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        {upcomingVersion && (
+          <p className={ui.alertInfo}>
+            📅 Nouvel horaire <b>à partir du {fmtDateKey(upcomingVersion)}</b> : c&apos;est lui que tu vois et modifies ici. Jusque-là, l&apos;ancien horaire reste en vigueur pour l&apos;ouverture automatique des séances (console › vue semaine).
+          </p>
+        )}
         {!plan && (
           <p className={ui.alertWarn}>
             Aucune « séance de la semaine » n&apos;est définie dans la console : les créneaux sans séance-type imposée ne pourront rien ouvrir tant qu&apos;un cycle et une séance de la semaine n&apos;existent pas.
@@ -106,7 +117,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
                   <li key={g.key} className={`${ui.inset} p-3 flex items-center justify-between gap-2`}>
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold uppercase text-ink-3">{WEEKDAYS[g.weekday]} {fmtMin(g.startMin)}–{fmtMin(g.endMin)}</div>
-                      <div className="font-bold truncate">{groupLabel(names)}</div>
+                      <div className="font-bold truncate">{groupLabel(names)}{g.sex && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5")}>{g.sex === "F" ? "♀" : "♂"} {sexLabel(g.sex)}</span>}</div>
                     </div>
                     <Link href={href} className={btn.smGhost}>Carnet</Link>
                   </li>
