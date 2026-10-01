@@ -15,6 +15,7 @@ import type { CombinedStandings } from "@/lib/level-combined";
 import { createTwinSessionAction } from "./settings-actions";
 import { createStarTeamAction, numberTeamsAction, getEmomPlayerScoresAction, setLevelCapAction, setTeamStarsAction, startChildAction, startLevelAction, tickCardAction, untickCardAction, type LevelLive } from "./level-actions";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
+import { Snowfall } from "../_components/Snowfall";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { LevelLadderEditor } from "./LevelLadderEditor";
 import { PaceReport } from "./PaceReport";
@@ -57,8 +58,9 @@ type View = "race" | "results" | "recap" | "ladder" | "records" | "arbitrage" | 
 // temps : chaque coche est une ligne unique en base. Depuis le 28/09 (soir), UN seul greffier pendant la course : ses
 // coches restent sur le PC jusqu'a la Pause ou la Fin du WOD (voir plus bas).
 export function LevelClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false, screens = [], combined = null,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, picker, isMaster = false, showConsole = false, screens = [], combined = null, winter = false,
 }: {
+  winter?: boolean; // saison winter arc (1er octobre - 30 decembre) : flocons + interrupteur ❄️ par eleve
   combined?: CombinedStandings | null; // ecrans jumeaux : classement combine des ecrans termines
   screens?: { id: string; label: string }[]; // seances jumelles du meme creneau (un greffier par ecran), celle-ci comprise
   sessionId: string;
@@ -545,6 +547,7 @@ export function LevelClient({
   return (
     <div className={`${ui.page} pb-28`}>
       <RefereeRequestsPopup sessionId={sessionId} initial={pendingRequests} />
+      {winter && <Snowfall />}
       <header className={cx("sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-line px-4", focus ? "py-1" : "py-2")}>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="min-w-0">
@@ -802,7 +805,7 @@ export function LevelClient({
         )}
         {view === "settings" && !bundle.child && <TwinScreens sessionId={sessionId} screens={screens} canCreate={showConsole} />}
         {view === "settings" && <LevelSettings sessionId={sessionId} phase={phase} numTeams={teams.length} capMin={bundle.capMin} refereeMode={bundle.refereeMode} levelsCount={levels.length} frozen={bundle.frozen} zombies={bundle.zombies} teamList={teams} teamStars={bundle.teamStars} teamFormats={bundle.teamFormats} formatOf={formatOf} ladders={bundle.ladders} isChild={!!bundle.child} onChanged={refresh} suggestions={suggestions} />}
-        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} onSetStars={bundle.child ? undefined : (teamId, st) => run(() => setTeamStarsAction(sessionId, teamId, st))} />}
+        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} picker={picker} winterArc={winter} starsOf={bundle.child ? undefined : starsOf} onCreateStar={bundle.child || phase !== "pre" ? undefined : createStar} onNumber={bundle.child || phase !== "pre" ? undefined : numberTeams} onSetStars={bundle.child ? undefined : (teamId, st) => run(() => setTeamStarsAction(sessionId, teamId, st))} />}
       </main>
 
       <footer className="fixed bottom-0 inset-x-0 z-20 bg-card/95 backdrop-blur border-t border-line px-2 py-1.5">

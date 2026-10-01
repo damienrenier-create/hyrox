@@ -55,6 +55,9 @@ model User {
   pinCode           String?
   profileVisibility Visibility   @default(PUBLIC)
   reliability       Int          @default(0)
+  // « Winter arc » (Sartay 01/10) : l'eleve a dit oui a l'interrupteur du greffier -> vrai jusqu'a cette date
+  // (30 decembre, fin de journee a Bruxelles). null = pas en winter arc.
+  winterArcUntil    DateTime?
 
   createdAt         DateTime     @default(now())
 

@@ -12,6 +12,7 @@ import { buildLevelBundle, readChild } from "@/lib/level-context";
 import { combinedTwinStandings } from "@/lib/level-combined";
 import { ensureAutoSessions, listOpenSessions, toMs } from "@/lib/scheduling";
 import { isBirthdayToday } from "@/lib/birthday";
+import { isWinterArc, isWinterArcSeason } from "@/lib/winter-arc";
 import { teammatePairs } from "@/lib/teammates";
 import { STAFF_CLASS_LABEL, STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import type { PickerData } from "./TeamsManager";
@@ -91,7 +92,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const studentById = new Map(users.filter((u) => u.role === "STUDENT" || STAFF_ROLES.includes(u.role as string)).map((u) => [u.id, u]));
   const view = (u: (typeof users)[number]) => {
     const n = memberNames(u);
-    return { id: u.id, firstName: n.firstName, lastName: n.lastName, className: u.role === "STUDENT" ? u.className ?? null : STAFF_CLASS_LABEL };
+    return { id: u.id, firstName: n.firstName, lastName: n.lastName, className: u.role === "STUDENT" ? u.className ?? null : STAFF_CLASS_LABEL, winterArc: isWinterArc(u.winterArcUntil) };
   };
   const sortedTeams = [...rawTeams].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const membersByTeam = await Promise.all(sortedTeams.map((t) => db.orm.public.TeamMember.where({ teamId: t.id }).all()));
@@ -141,6 +142,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     return (
       <LevelClient
         combined={combined}
+        winter={isWinterArcSeason()}
         sessionId={session.id}
         showConsole={evaluator.role !== "GREFFIER"}
         sessionLabel={session.label ?? wodLabel(session.wodType)}

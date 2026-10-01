@@ -8,6 +8,7 @@ import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { TopBar } from "../../../_components/TopBar";
 import { resetStudentPinAction, updateStudentAction } from "../actions";
 import { btn, cx, ui } from "@/lib/ui";
+import { isWinterArc } from "@/lib/winter-arc";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function EleveFichePage({ params, searchParams }: { params:
         {msg && <p className={ui.alertErr}>⚠️ {msg}</p>}
 
         <section className={ui.cardPad}>
-          <h2 className={`${ui.h2} mb-3`}>Identité</h2>
+          <h2 className={`${ui.h2} mb-3`}>Identité{isWinterArc(s.winterArcUntil) && <span className={cx(ui.chip, ui.chipSea, "ml-2 align-middle")} title="Oui à l'interrupteur du greffier">❄️ winter arc jusqu&apos;au 30/12</span>}</h2>
           <form action={updateStudentAction} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
             <input type="hidden" name="id" value={s.id} />
             <label className="text-xs"><span className={ui.label}>Prénom</span><input name="firstName" defaultValue={s.firstName ?? ""} required className={ui.input} /></label>

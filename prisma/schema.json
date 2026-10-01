@@ -3379,6 +3379,13 @@
                   "namespaceId": "public",
                   "plane": "domain"
                 }
+              },
+              "winterArcUntil": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -3513,6 +3520,9 @@
                 },
                 "sex": {
                   "column": "sex"
+                },
+                "winterArcUntil": {
+                  "column": "winterArcUntil"
                 }
               },
               "namespaceId": "public",
@@ -6156,6 +6166,11 @@
                     "namespaceId": "public",
                     "plane": "storage"
                   }
+                },
+                "winterArcUntil": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
                 }
               },
               "foreignKeys": [],
@@ -6295,7 +6310,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e4a31a63c3326a10d030866be51514e4ceaee6fb15665f0c56653e3406838474"
+    "storageHash": "6cfc3e1b8915a792f17643ce6b4552db39555180deffccc568a74b7d7eb2b0e0"
   },
   "execution": {
     "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",

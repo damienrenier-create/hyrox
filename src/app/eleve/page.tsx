@@ -12,6 +12,7 @@ import { loadSelfEvalHistory } from "@/lib/student-self-evals";
 import { TopBar } from "../_components/TopBar";
 import { ui } from "@/lib/ui";
 import { isBirthdayToday } from "@/lib/birthday";
+import { isWinterArc } from "@/lib/winter-arc";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -21,6 +22,7 @@ export default async function ElevePage() {
   // Les seances de ma classe s'ouvrent automatiquement pendant mon creneau (voir scheduling.ts).
   const me = await db.orm.public.User.where({ id: user.id }).first();
   const birthday = isBirthdayToday(me?.dateOfBirth);
+  const winterArc = isWinterArc(me?.winterArcUntil); // oui a l'interrupteur du greffier (Sartay 01/10)
   const openSessions = await openSessionsForStudent(user.id, user.className ?? null);
   const mine = await sessionsForStudent(user.id);
   const openIds = new Set(openSessions.map((s) => s.id));
@@ -40,7 +42,7 @@ export default async function ElevePage() {
 
   return (
     <div className={ui.page}>
-      <TopBar title={birthday ? `${user.name} 🎂` : user.name} subtitle={birthday ? `${user.className ?? ""} · joyeux anniversaire !` : (user.className ?? "")} right={<LogoutButton />} />
+      <TopBar title={birthday ? `${user.name} 🎂` : user.name} subtitle={`${birthday ? `${user.className ?? ""} · joyeux anniversaire !` : (user.className ?? "")}${winterArc ? " · ❄️ winter arc jusqu'au 30 décembre" : ""}`} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
         <EleveTabs active="wods" todo={todo.length} />

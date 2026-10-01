@@ -11,6 +11,7 @@ import {
   setSessionClassesAction,
   teamDeletionPreviewAction,
   deleteTeamAction,
+  setWinterArcAction,
   type StudentHit,
 } from "./team-actions";
 import { decideRefereeAction } from "./referee-decisions";
@@ -24,7 +25,7 @@ import { STARS, starsLabel, starsName, type Stars } from "@/lib/wod-engines/temp
 // Tout ce dont le selecteur a besoin, precharge par la page : plus aucune requete pendant la frappe.
 export type PickerData = { roster: StudentHit[]; pairs: Record<string, PairHit[]>; elsewhere?: Record<string, string> }; // elsewhere : eleves deja sur un autre ecran (seances jumelles)
 
-export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null; birthday?: boolean };
+export type TeamMemberView = { id: string; firstName: string; lastName: string; className: string | null; birthday?: boolean; winterArc?: boolean };
 export type TeamWithMembers = { id: string; name: string; order: number; members: TeamMemberView[] };
 export type RefereeView = TeamMemberView & { note: string | null; status: string; teamName: string | null };
 
@@ -42,6 +43,7 @@ type Props = {
   onCreateStar?: (stars: Stars) => void;
   onNumber?: () => void;
   onSetStars?: (teamId: string, stars: Stars) => void; // changer le parcours d'une equipe en un clic
+  winterArc?: boolean; // saison winter arc (WOD Level) : interrupteur ❄️ a cote de chaque eleve de l'equipe
 };
 
 // Preparation du WOD par le greffier : 1) classes participantes (max 5), 2) composition des equipes
@@ -49,7 +51,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars, winterArc = false }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -131,6 +133,18 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
     setTeams((ts) => ts.map((t) => (t.id === teamId ? { ...t, members: t.members.filter((m) => m.id !== userId) } : t)));
     startTransition(async () => {
       await removeTeamMemberAction(teamId, userId);
+      scheduleRefresh();
+    });
+  }
+  // Winter arc (Sartay 01/10) : la question est posee a l'eleve devant l'ecran ; son oui reste sur son compte
+  // jusqu'au 30 decembre (il retrouve l'interrupteur allume dans ses equipes suivantes).
+  function toggleWinter(userId: string, on: boolean) {
+    setError("");
+    const apply = (v: boolean) => setTeams((ts) => ts.map((t) => ({ ...t, members: t.members.map((m) => (m.id === userId ? { ...m, winterArc: v } : m)) })));
+    apply(on);
+    startTransition(async () => {
+      const res = await setWinterArcAction(userId, on);
+      if ("error" in res) { apply(!on); setError(res.error); return; }
       scheduleRefresh();
     });
   }
@@ -262,7 +276,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
                 <ul className="text-base text-ink-2 space-y-0.5 leading-snug">
                   {team.members.map((m) => (
                     <li key={m.id} className="truncate">
-                      <span className="text-ink font-semibold">{m.firstName} {m.lastName}{cake(m.birthday)}</span>
+                      <span className="text-ink font-semibold">{m.firstName} {m.lastName}{cake(m.birthday)}{m.winterArc && <span title="En winter arc jusqu'au 30 décembre"> ❄️</span>}</span>
                       {approvedIds.has(m.id) && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>arbitre</span>}
                     </li>
                   ))}
@@ -323,6 +337,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
           onNext={() => activeIndex >= 0 && activeIndex < teams.length - 1 && setActiveTeamId(teams[activeIndex + 1].id)}
           list={active.members.map((m) => ({ ...m, tag: approvedIds.has(m.id) ? "arbitre" : null }))}
           onRemove={(id) => removeMember(active.id, id)}
+          onWinter={winterArc ? toggleWinter : undefined}
           statusOf={(h) => {
             const t = assigned.get(h.id);
             if (t === active.name) return { disabled: true, label: "déjà ici" };
@@ -431,7 +446,7 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
 
 // Modale de saisie intelligente : recherche (prefixe prenom/nom) restreinte aux classes choisies.
 function StudentPicker({
-  title, start = null, classes, picker, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote, onCreate,
+  title, start = null, classes, picker, onClose, nextLabel, onNext, list, onRemove, statusOf, onPick, withNote, onCreate, onWinter,
 }: {
   title: string;
   start?: { number: number; label: string } | null; // atelier de depart, annonce en grand aux eleves
@@ -446,6 +461,7 @@ function StudentPicker({
   onPick: (h: StudentHit, note?: string) => Promise<string | null>;
   withNote?: boolean;
   onCreate?: (p: { firstName: string; lastName: string; className: string; sex: string }) => Promise<string | null>; // hors listing
+  onWinter?: (id: string, on: boolean) => void; // interrupteur winter arc (WOD Level, d'octobre au 30 decembre)
 }) {
   const [query, setQuery] = useState("");
   // Hors listing : mini-fiche prete a partir de ce qui a ete tape (« Prenom Nom »).
@@ -628,7 +644,25 @@ function StudentPicker({
                 <span className="text-ink-3 text-sm"> · {m.className ?? "?"}</span>
                 {m.tag && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{m.tag}</span>}
               </span>
-              <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
+              <span className="flex items-center gap-3 flex-shrink-0">
+                {onWinter && (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!m.winterArc}
+                    onClick={() => onWinter(m.id, !m.winterArc)}
+                    title={m.winterArc ? "En winter arc jusqu'au 30 décembre (toucher pour retirer)" : "Es-tu en winter arc ? Oui = gardé jusqu'au 30 décembre"}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-ink-2"
+                  >
+                    <span aria-hidden>❄️</span>
+                    <span className="hidden sm:inline">Winter arc</span>
+                    <span className={cx("relative inline-block w-10 h-6 rounded-full transition-colors", m.winterArc ? "bg-sky-500" : "bg-line-2")}>
+                      <span className={cx("absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform", m.winterArc ? "translate-x-4" : "")} />
+                    </span>
+                  </button>
+                )}
+                <button onClick={() => onRemove(m.id)} disabled={pending} className={btn.smDanger}>Retirer</button>
+              </span>
             </li>
           ))}
         </ul>

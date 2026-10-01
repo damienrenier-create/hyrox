@@ -6,6 +6,8 @@ import { getSession } from "@/lib/session-server";
 import { MAX_CLASSES, REFEREE_REASONS, readSessionClasses } from "@/lib/session-roles";
 import { deleteTeam, teamDeletionPreview } from "@/lib/team-count";
 import { STAFF_CLASS_LABEL, STAFF_ROLES, fold, memberNames } from "@/lib/staff-names";
+import { instantAtBrussels } from "@/lib/scheduling";
+import { isWinterArc, isWinterArcSeason, winterArcEndKey } from "@/lib/winter-arc";
 
 async function requireGreffier() {
   const user = await getSession();
@@ -58,7 +60,7 @@ export async function searchAllStudentsAction(query: string, classes: string[] =
 
 // ===== Membres d'equipe : un eleve = une seule equipe par seance, persiste par identifiant =====
 
-export type MemberView = { id: string; firstName: string; lastName: string; className: string | null };
+export type MemberView = { id: string; firstName: string; lastName: string; className: string | null; winterArc?: boolean };
 
 // Renvoie la fiche du membre pour que l'ecran se mette a jour SANS re-rendu serveur (le greffier encode
 // vite, une equipe apres l'autre : l'eleve doit apparaitre au tap).
@@ -70,7 +72,7 @@ export async function addTeamMemberAction(teamId: string, userId: string): Promi
   // Un prof peut jouer dans une equipe comme un eleve ; le compte GREFFIER, lui, n'est pas une personne.
   if (!student || !(student.role === "STUDENT" || STAFF_ROLES.includes(student.role as string))) return { error: "Élève introuvable." };
   const names = memberNames(student);
-  const member: MemberView = { id: student.id, firstName: names.firstName, lastName: names.lastName, className: student.role === "STUDENT" ? student.className ?? null : STAFF_CLASS_LABEL };
+  const member: MemberView = { id: student.id, firstName: names.firstName, lastName: names.lastName, className: student.role === "STUDENT" ? student.className ?? null : STAFF_CLASS_LABEL, winterArc: isWinterArc(student.winterArcUntil) };
 
   const sessionTeams = await db.orm.public.Team.where({ sessionId: team.sessionId }).all();
   const teamIds = new Set(sessionTeams.map((t) => t.id));
@@ -111,6 +113,17 @@ export async function removeTeamMemberAction(teamId: string, userId: string): Pr
   const members = await db.orm.public.TeamMember.where({ teamId, userId }).all();
   for (const m of members) await db.orm.public.TeamMember.where({ id: m.id }).delete();
   return { ok: true };
+}
+
+// « Winter arc » (Sartay 01/10) : interrupteur a cote de chaque eleve a la creation des equipes. Oui = garde sur son
+// compte jusqu'au 30 decembre (fin de journee a Bruxelles) ; non = efface ce choix (rien d'autre n'est touche).
+export async function setWinterArcAction(userId: string, on: boolean): Promise<{ error: string } | { ok: true; winterArc: boolean }> {
+  await requireGreffier();
+  if (on && !isWinterArcSeason()) return { error: "Le winter arc se joue du 1er octobre au 30 décembre." };
+  const user = await db.orm.public.User.where({ id: userId }).first();
+  if (!user || !(user.role === "STUDENT" || STAFF_ROLES.includes(user.role as string))) return { error: "Élève introuvable." };
+  await db.orm.public.User.where({ id: userId }).update({ winterArcUntil: on ? instantAtBrussels(winterArcEndKey(), 23 * 60 + 59) : null });
+  return { ok: true, winterArc: on };
 }
 
 // ===== Arbitres encodes par le greffier (pendant tout le WOD : DNF, blessure...) =====
