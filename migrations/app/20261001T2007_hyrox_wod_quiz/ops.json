@@ -1,0 +1,290 @@
+[
+  {
+    "id": "dropCheckConstraint.cyclePlan.cyclePlan_wodType_check_da837c10",
+    "label": "Drop check constraint \"cyclePlan_wodType_check_da837c10\" on \"cyclePlan\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_da837c10",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_da837c10\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_da837c10",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"cyclePlan_wodType_check_da837c10\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" DROP CONSTRAINT \"cyclePlan_wodType_check_da837c10\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_da837c10\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_da837c10",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_da837c10",
+    "label": "Drop check constraint \"session_wodType_check_da837c10\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_da837c10",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_da837c10\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_da837c10",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_da837c10\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_da837c10\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_da837c10\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_da837c10",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.quizAnswer",
+    "label": "Create table \"quizAnswer\"",
+    "summary": "Creates table \"quizAnswer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "quizAnswer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"quizAnswer\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"quizAnswer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"quizAnswer\"",
+        "sql": "CREATE TABLE \"public\".\"quizAnswer\" (\n  \"answers\" json NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"score\" int4 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"total\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"quizAnswer\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"quizAnswer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.cyclePlan.cyclePlan_wodType_check_7c965a6d",
+    "label": "Add check constraint \"cyclePlan_wodType_check_7c965a6d\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_7c965a6d",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_7c965a6d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"cyclePlan_wodType_check_7c965a6d\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" ADD CONSTRAINT \"cyclePlan_wodType_check_7c965a6d\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_7c965a6d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.quizAnswer.quizAnswer_sessionId_studentId_key",
+    "label": "Add unique constraint on \"quizAnswer\" (sessionId, studentId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "quizAnswer_sessionId_studentId_key",
+        "table": "quizAnswer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"quizAnswer_sessionId_studentId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "quizAnswer_sessionId_studentId_key",
+          "public",
+          "\"public\".\"quizAnswer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"quizAnswer_sessionId_studentId_key\"",
+        "sql": "ALTER TABLE \"public\".\"quizAnswer\" ADD CONSTRAINT \"quizAnswer_sessionId_studentId_key\" UNIQUE (\"sessionId\", \"studentId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"quizAnswer_sessionId_studentId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "quizAnswer_sessionId_studentId_key",
+          "public",
+          "\"public\".\"quizAnswer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_7c965a6d",
+    "label": "Add check constraint \"session_wodType_check_7c965a6d\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_7c965a6d",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_7c965a6d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_7c965a6d\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_7c965a6d\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_7c965a6d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.quizAnswer.quizAnswer_sessionId_idx_29f415d4",
+    "label": "Create index \"quizAnswer_sessionId_idx_29f415d4\" on \"quizAnswer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "quizAnswer_sessionId_idx_29f415d4",
+        "table": "quizAnswer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"quizAnswer_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"quizAnswer_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"quizAnswer_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"quizAnswer_sessionId_idx_29f415d4\" ON \"public\".\"quizAnswer\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"quizAnswer_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"quizAnswer_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  }
+]

@@ -7,6 +7,8 @@ import { buildBoardData } from "@/lib/referee-board";
 import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
+import { HyroxClient } from "./hyrox-client";
+import { buildHXBundle } from "@/lib/hyrox-context";
 import { LevelClient } from "./level-client";
 import { buildLevelBundle, readChild } from "@/lib/level-context";
 import { combinedTwinStandings } from "@/lib/level-combined";
@@ -161,6 +163,27 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         pendingRequests={pendingRequests}
         picker={picker}
         screens={screens}
+      />
+    );
+  }
+  if (session.wodType === "HYROX") {
+    const hxBundle = await buildHXBundle(session.id);
+    return (
+      <HyroxClient
+        sessionId={session.id}
+        showConsole={evaluator.role !== "GREFFIER"}
+        sessionLabel={session.label ?? wodLabel(session.wodType)}
+        sessionOptions={options}
+        olderSession={olderSession}
+        newerSession={newerSession}
+        bundle={hxBundle}
+        teamsWithMembers={teamsWithMembers}
+        classes={classes}
+        allClasses={allClasses}
+        referees={referees}
+        pendingRequests={pendingRequests}
+        board={board}
+        picker={picker}
       />
     );
   }

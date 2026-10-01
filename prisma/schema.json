@@ -52,6 +52,10 @@
       "model": "MineReveal",
       "namespace": "public"
     },
+    "quizAnswer": {
+      "model": "QuizAnswer",
+      "namespace": "public"
+    },
     "racePause": {
       "model": "RacePause",
       "namespace": "public"
@@ -216,6 +220,10 @@
               {
                 "name": "LEVEL",
                 "value": "LEVEL"
+              },
+              {
+                "name": "HYROX",
+                "value": "HYROX"
               }
             ]
           }
@@ -1499,6 +1507,87 @@
               },
               "namespaceId": "public",
               "table": "mineReveal"
+            }
+          },
+          "QuizAnswer": {
+            "fields": {
+              "answers": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "score": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "studentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "total": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "answers": {
+                  "column": "answers"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "score": {
+                  "column": "score"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "studentId": {
+                  "column": "studentId"
+                },
+                "total": {
+                  "column": "total"
+                }
+              },
+              "namespaceId": "public",
+              "table": "quizAnswer"
             }
           },
           "RacePause": {
@@ -3896,8 +3985,8 @@
             "cyclePlan": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL')",
-                  "name": "cyclePlan_wodType_check_da837c10",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX')",
+                  "name": "cyclePlan_wodType_check_7c965a6d",
                   "prefix": "cyclePlan_wodType_check"
                 }
               ],
@@ -4728,6 +4817,73 @@
                 }
               ]
             },
+            "quizAnswer": {
+              "columns": {
+                "answers": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "score": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "studentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "total": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "quizAnswer_sessionId_idx_29f415d4",
+                  "prefix": "quizAnswer_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "sessionId",
+                    "studentId"
+                  ]
+                }
+              ]
+            },
             "racePause": {
               "columns": {
                 "from": {
@@ -5395,8 +5551,8 @@
             "session": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL')",
-                  "name": "session_wodType_check_da837c10",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX')",
+                  "name": "session_wodType_check_7c965a6d",
                   "prefix": "session_wodType_check"
                 }
               ],
@@ -6350,7 +6506,8 @@
                 "RELAIS_SPRINT",
                 "TOUCHE_COULE_HYROX",
                 "FETE_FORAINE",
-                "LEVEL"
+                "LEVEL",
+                "HYROX"
               ]
             }
           }
@@ -6359,10 +6516,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "8a73f98ff5fecbcc47e9d0372301b587bb897daadfbca32934fa55895d8cc88e"
+    "storageHash": "e41ef3adbf0bcfa738e65fc5b4cd99e6fd8fc95de24e8d066dd02d0bd8e4a65c"
   },
   "execution": {
-    "executionHash": "0aa627f08147a0809c01ed1236a6fc24bca4b5a53ca404bea09201c7b576271d",
+    "executionHash": "9696cc2f88aebb47ecbfc1c7da9f97f83bfcc100181db893941497773c3fe91f",
     "mutations": {
       "defaults": [
         {
@@ -6495,6 +6652,17 @@
             "column": "id",
             "namespace": "public",
             "table": "mineReveal"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "quizAnswer"
           }
         },
         {

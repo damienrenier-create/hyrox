@@ -39,14 +39,16 @@ export async function greffierPulseAction(sessionId: string): Promise<Pulse> {
     db.orm.public.Team.where({ sessionId }).all(),
   ]);
   const teamIds = teams.map((t) => t.id);
-  const [laps, cards, evals, refs, members] = await Promise.all([
+  const [laps, cards, evals, refs, members, stations] = await Promise.all([
     rs ? count(() => db.orm.public.Lap.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     rs ? count(() => db.orm.public.YellowCard.where({ raceStateId: rs.id }).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
     count(() => db.orm.public.Evaluation.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
     count(() => db.orm.public.SessionReferee.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
     teamIds.length ? count(() => db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).aggregate((a) => ({ n: a.count() }))) : Promise.resolve(0),
+    // Pointages Fete Foraine / Hyrox (encodage depuis un deuxieme appareil).
+    count(() => db.orm.public.StationEvent.where({ sessionId }).aggregate((a) => ({ n: a.count() }))),
   ]);
-  return `${laps}|${cards}|${evals}|${refs}|${members}|${teams.length}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}`;
+  return `${laps}|${cards}|${evals}|${refs}|${members}|${teams.length}|${rs?.startedAt ? 1 : 0}|${rs?.endedAt ? 1 : 0}|${stations}`;
 }
 
 // Espace eleve en attente d'autorisation d'arbitrage : seul son propre statut compte.

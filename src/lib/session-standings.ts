@@ -4,6 +4,8 @@ import { standings, total, finishAt, startOf, fmt, timeline } from "@/lib/wod-en
 import { teamRows, fmt as ffFmt, colorOf } from "@/lib/wod-engines/templates/fete-foraine-engine";
 import { buildLevelBundle, levelStandings, phaseExtras, teamFinishedAbsMs } from "@/lib/level-context";
 import { levelLabel } from "@/lib/wod-engines/templates/level-engine";
+import { buildHXBundle } from "@/lib/hyrox-context";
+import { fmt as hxFmt, timeRows as hxTimeRows } from "@/lib/wod-engines/templates/hyrox-engine";
 
 // Classement « generique » d'une seance, quel que soit son moteur (Pyramide = tours, Fete Foraine = ateliers/score),
 // pour l'espace eleve et la consultation admin. Les colonnes portent leur libelle selon le moteur.
@@ -55,6 +57,23 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
       };
     });
     return { columns: { laps: "Niveaux", time: "Dernière coche", reps: "Reps", cards: "🟨", start: "En cours" }, rows, finishedAtMs };
+  }
+  if (session.wodType === "HYROX") {
+    const b = await buildHXBundle(session.id);
+    const rows: StandingRow[] = hxTimeRows(b.ctx).map((st, i) => ({
+      rank: i + 1,
+      teamId: st.team.id,
+      teamName: st.team.name,
+      laps: st.stationsDone,
+      lapsTotal: b.ctx.settings.stations.length,
+      time: st.scoreMs !== null ? hxFmt(st.scoreMs) : st.lastMs !== null ? hxFmt(st.lastMs) : null,
+      late: null,
+      start: `${st.startIndex + 1} · ${b.ctx.settings.stations[st.startIndex]?.label ?? ""}`,
+      reps: st.cindy.length,
+      cards: st.cards,
+      done: st.finishedMs !== null,
+    }));
+    return { columns: { laps: "Stations", time: "Temps", reps: "Cindy", cards: "🟨", start: "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
   }
   if (session.wodType === "FETE_FORAINE") {
     const b = await buildFFBundle(session.id);

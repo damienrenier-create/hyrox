@@ -2,11 +2,13 @@ import { WodTemplate } from "./core/types";
 import { PyramideClassique } from "./templates/pyramide";
 import { FeteForaine } from "./templates/fete-foraine";
 import { LevelWod } from "./templates/level";
+import { HyroxWod } from "./templates/hyrox";
 
 const templates: Record<string, WodTemplate> = {
   [PyramideClassique.id]: PyramideClassique,
   [FeteForaine.id]: FeteForaine,
   [LevelWod.id]: LevelWod,
+  [HyroxWod.id]: HyroxWod,
   // Prochaines seances du cycle Hyrox (AMRAP, EMOM, Cindy, Intro, Eval) et autres cycles : ajouter ici.
 };
 

@@ -15,6 +15,7 @@ enum WodTemplate {
   TOUCHE_COULE_HYROX = "TOUCHE_COULE_HYROX"
   FETE_FORAINE = "FETE_FORAINE"
   LEVEL = "LEVEL"
+  HYROX = "HYROX"
 }
 
 enum Visibility {
@@ -208,7 +209,24 @@ model TeamMember {
   @@index([userId])
 }
 
-// Fete Foraine : pointages du greffier (corde = repetable, exN = un seul, "fin" = Fin du WOD).
+// QCM du WOD Hyrox (01/10) : une reponse par eleve et par seance, sur le telephone, quand le prof l'a ouvert.
+// answers = { [questionId]: string[] } (enonces coches), score = questions entierement justes sur `total`.
+// Jamais efface (regle d'or) : une seconde tentative est refusee.
+model QuizAnswer {
+  id        String   @id @default(uuid())
+  sessionId String
+  studentId String
+  answers   Json
+  score     Int
+  total     Int
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+}
+
+// Fete Foraine / Hyrox : pointages du greffier (corde = repetable, exN = un seul, "fin" = Fin du WOD ;
+// Hyrox : "st:<station>", "run:<n>", "cindy" repetable).
 model StationEvent {
   id        String   @id @default(uuid())
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)

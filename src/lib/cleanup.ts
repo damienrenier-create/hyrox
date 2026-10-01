@@ -103,6 +103,7 @@ export async function deleteSession(sessionId: string): Promise<number> {
   n += await deleteAll(await db.orm.public.BoatPlacement.where({ sessionId }).all(), (id) => db.orm.public.BoatPlacement.where({ id }).delete());
   n += await deleteAll(await db.orm.public.SessionReferee.where({ sessionId }).all(), (id) => db.orm.public.SessionReferee.where({ id }).delete());
   n += await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
+  n += await deleteAll(await db.orm.public.QuizAnswer.where({ sessionId }).all(), (id) => db.orm.public.QuizAnswer.where({ id }).delete());
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const teamIds = teams.map((t) => t.id);
