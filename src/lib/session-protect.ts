@@ -20,15 +20,17 @@ export async function sessionsPlayedByRealStudents(sessionIds: string[]): Promis
   const teamIds = [...realTeams];
   const sessionOfTeam = new Map(teams.map((t) => [t.id, t.sessionId]));
   const raceStates = await db.orm.public.RaceState.where((r) => r.sessionId.in(sessionIds)).all();
-  const [ticks, laps, stations, selfs] = await Promise.all([
+  const [ticks, laps, stations, selfs, quiz] = await Promise.all([
     db.orm.public.LevelTick.where((t) => t.teamId.in(teamIds)).all(),
     raceStates.length ? db.orm.public.Lap.where((l) => l.raceStateId.in(raceStates.map((r) => r.id))).all() : Promise.resolve([]),
     db.orm.public.StationEvent.where((e) => e.teamId.in(teamIds)).all(),
     db.orm.public.SelfEvaluation.where((e) => e.sessionId.in(sessionIds)).all(),
+    db.orm.public.QuizAnswer.where((q) => q.sessionId.in(sessionIds)).all(),
   ]);
   for (const t of ticks) out.add(t.sessionId);
   for (const l of laps) if (realTeams.has(l.teamId)) { const s = sessionOfTeam.get(l.teamId); if (s) out.add(s); }
   for (const e of stations) out.add(e.sessionId);
   for (const e of selfs) if (real.has(e.studentId)) out.add(e.sessionId);
+  for (const q of quiz) if (real.has(q.studentId)) out.add(q.sessionId);
   return out;
 }

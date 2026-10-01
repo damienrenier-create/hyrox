@@ -283,6 +283,21 @@ export async function closeSessionAction(formData: FormData) {
   done("Séance fermée.");
 }
 
+// QCM bonus du WOD Hyrox (Sartay 01/10) : ouvert par le prof, ferme a la main depuis la console. Les reponses deja
+// donnees restent (regle d'or) ; ferme = plus personne ne peut repondre.
+export async function setQuizOpenAction(formData: FormData) {
+  await requireStaff();
+  const s = await db.orm.public.Session.where({ id: str(formData, "id") }).first();
+  if (!s) fail("Séance introuvable.");
+  if (s.wodType !== "HYROX") fail("Le QCM n'existe que pour le WOD Hyrox.");
+  const open = str(formData, "open") === "1";
+  const prev = (s.settings as Record<string, unknown> | null) ?? {};
+  const quiz: Record<string, string | boolean> = { ...((prev.quiz as Record<string, string | boolean> | undefined) ?? {}), open };
+  quiz[open ? "openedAt" : "closedAt"] = new Date().toISOString();
+  await db.orm.public.Session.where({ id: s.id }).update({ settings: { ...prev, quiz } });
+  done(open ? "QCM ouvert : les élèves de cette séance le voient sur leur téléphone." : "QCM fermé : plus personne ne peut répondre.");
+}
+
 // ===== Suppression douce (Sartay 27/09 : « une tete de mort sur la fiche, une confirmation, un soft delete ») =====
 // La seance disparait de partout mais reste en base : « Annuler » juste apres, ou Nettoyage > Corbeille pour la
 // restaurer ou l'effacer pour de bon. L'echauffement et le finisher d'un WOD Level suivent leur WOD.

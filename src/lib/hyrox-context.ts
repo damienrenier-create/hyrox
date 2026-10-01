@@ -25,6 +25,8 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   const members = teamIds.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(teamIds)).all() : [];
   const users = members.length ? await db.orm.public.User.where((u) => u.id.in([...new Set(members.map((m) => m.userId))])).all() : [];
   const userById = new Map(users.map((u) => [u.id, u]));
+  // QCM bonus : score de chaque eleve ayant repondu.
+  const quizBy = new Map((await db.orm.public.QuizAnswer.where({ sessionId }).all()).map((q) => [q.studentId, q.score]));
   const teams: HXTeam[] = rawTeams.map((t) => ({
     id: t.id,
     order: t.order ?? 0,
@@ -34,7 +36,7 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
       .filter((m) => m.teamId === t.id)
       .flatMap((m) => {
         const u = userById.get(m.userId);
-        return u ? [{ memberId: m.id, userId: u.id, name: memberNames(u).firstName || u.name }] : [];
+        return u ? [{ memberId: m.id, userId: u.id, name: memberNames(u).firstName || u.name, quiz: quizBy.get(u.id) ?? null }] : [];
       })
       .sort((a, b) => a.name.localeCompare(b.name, "fr")),
   }));

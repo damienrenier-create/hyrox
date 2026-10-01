@@ -7,12 +7,14 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA, SELF_EVAL_INSTRUCTION, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { toMs } from "@/lib/scheduling";
+import Link from "next/link";
+import { readQuizOpen } from "@/lib/session-roles";
 import { combinedTwinStandings } from "@/lib/level-combined";
 import { listExercises } from "@/lib/level";
 import { criteriaComment, isLiked, readCriteria } from "@/lib/level-criteria";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
 import { TopBar } from "../../_components/TopBar";
-import { ui } from "@/lib/ui";
+import { cx, ui } from "@/lib/ui";
 
 export default async function EleveSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -90,6 +92,9 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
   const comb = session.wodType === "LEVEL" && ended ? await combinedTwinStandings(sessionId) : null;
   const combined = comb && comb.rows.length ? { pending: comb.pending, rows: comb.rows.map((r) => ({ rank: r.rank, teamName: r.teamName, screen: r.screen, points: r.points, levels: r.levels, mine: r.teamId === myTeam.id })) } : null;
   const dateMs = rs?.startedAt ? toMs(rs.startedAt) : session.opensAt ? toMs(session.opensAt) : toMs(session.createdAt);
+  // QCM bonus du Hyrox (01/10) : lien vers le questionnaire quand le prof l'a ouvert, resultat sinon.
+  const quizAnswer = session.wodType === "HYROX" ? await db.orm.public.QuizAnswer.where({ sessionId, studentId: user.id }).first() : null;
+  const quizOpen = session.wodType === "HYROX" && readQuizOpen(session.settings);
 
   return (
     <div className={ui.page}>
@@ -101,6 +106,12 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
       />
 
       <main className="max-w-2xl mx-auto p-4">
+        {(quizOpen || quizAnswer) && (
+          <Link href={`/eleve/${sessionId}/qcm`} className={cx("block rounded-2xl border p-3 mb-4 transition", quizAnswer ? "border-line bg-card" : "border-brand bg-brand-soft hover:bg-brand-soft/70")}>
+            <span className="font-extrabold">📝 QCM bonus{quizAnswer ? ` · ${quizAnswer.score}/${quizAnswer.total}` : " · ouvert"}</span>
+            <span className="block text-xs text-ink-2">{quizAnswer ? "Tu as répondu : revoir la correction ›" : "5 questions sur les critères de réalisation, une seule tentative ›"}</span>
+          </Link>
+        )}
         <WodView
           sessionId={sessionId}
           ended={ended}

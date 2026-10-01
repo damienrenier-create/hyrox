@@ -437,7 +437,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
         <p className={`${ui.hint} mb-2`}>Temps à la dernière station, + {ctx.settings.penSec} s par carte jaune. Les équipes non arrivées suivent, classées par segments faits.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[13px] border-collapse whitespace-nowrap">
-            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves</th><th className={thR}>Départ</th><th className={thR}>Stations</th><th className={thR}>Runs</th><th className={thR}>Temps</th><th className={thR}>🟨</th><th className={thR}>Score</th></tr></thead>
+            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves</th><th className={thR}>Départ</th><th className={thR}>Stations</th><th className={thR}>Runs</th><th className={thR}>Temps</th><th className={thR}>🟨</th><th className={thR}>Score</th><th className={thR} title="QCM bonus : points des élèves ayant répondu (barème à fixer)">📝 QCM</th></tr></thead>
             <tbody>
               {timeRows(ctx).map((st) => {
                 if (st.scoreMs !== null) rank++;
@@ -452,6 +452,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
                     <td className="p-2">{st.finishedMs !== null ? fmt(st.finishedMs) : st.lastMs !== null ? `(${fmt(st.lastMs)})` : "—"}</td>
                     <td className="p-2">{st.cards ? `×${st.cards} (+${fmt(st.penMs)})` : ""}</td>
                     <td className="p-2 font-extrabold">{st.scoreMs !== null ? fmt(st.scoreMs) : "—"}</td>
+                    <td className="p-2">{st.quiz.done ? `${st.quiz.score} pt${st.quiz.score > 1 ? "s" : ""}${st.quiz.done < st.team.members.length ? ` (${st.quiz.done}/${st.team.members.length})` : ""}` : ""}</td>
                   </tr>
                 );
               })}

@@ -16,8 +16,9 @@ import { teacherNameById } from "@/lib/staff";
 import {
   addPlanAction, closeSessionAction, reopenSessionAction, createCycleAction, decideRefereeFormAction, deleteCycleAction, deletePlanAction,
   openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
-  restoreSessionAction,
+  restoreSessionAction, setQuizOpenAction,
 } from "./cycles-actions";
+import { readQuizOpen } from "@/lib/session-roles";
 import { TopBar } from "../_components/TopBar";
 import { LogoutButton } from "../_components/LogoutButton";
 import { btn, cx, ui } from "@/lib/ui";
@@ -69,6 +70,20 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const recentRecaps = recapCandidates.filter((_, i) => played[i]).slice(0, 6);
   // Historique protege (regle d'or) : pas de tete de mort sur une seance jouee par de vrais eleves.
   const pastPlayed = await sessionsPlayedByRealStudents(past.map((s) => s.id));
+  // QCM bonus du Hyrox (01/10) : reponses recues par seance, pour l'interrupteur ouvrir / fermer.
+  const quizIds = [...open, ...past].filter((s) => s.wodType === "HYROX").map((s) => s.id);
+  const quizCounts = new Map<string, number>();
+  if (quizIds.length) for (const q of await db.orm.public.QuizAnswer.where((x) => x.sessionId.in(quizIds)).all()) quizCounts.set(q.sessionId, (quizCounts.get(q.sessionId) ?? 0) + 1);
+  const quizToggle = (s: { id: string; wodType: string; settings: unknown }) =>
+    s.wodType === "HYROX" ? (
+      <form action={setQuizOpenAction}>
+        <input type="hidden" name="id" value={s.id} />
+        <input type="hidden" name="open" value={readQuizOpen(s.settings) ? "0" : "1"} />
+        <button type="submit" className={readQuizOpen(s.settings) ? btn.smDanger : btn.smSuccess} title="QCM bonus sur le téléphone des élèves de cette séance (une tentative chacun)">
+          {readQuizOpen(s.settings) ? "📝 Fermer le QCM" : "📝 Ouvrir le QCM"}{quizCounts.get(s.id) ? ` · ${quizCounts.get(s.id)} rép.` : ""}
+        </button>
+      </form>
+    ) : null;
   // Pour la confirmation de la tete de mort : nombre d'equipes et WOD lance ou non.
   const pastInfo = new Map(
     await Promise.all(
@@ -196,6 +211,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>
                         </form>
                       )}
+                      {quizToggle(s)}
                       {canDelete && (
                         <form action={closeSessionAction}>
                           <input type="hidden" name="id" value={s.id} />
@@ -244,6 +260,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <Link href={`/admin/resultats?session=${s.id}`} className={btn.smGhost}>Consultation</Link>
                       <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
                       {s.refereeMode && s.wodType !== "LEVEL" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                      {quizToggle(s)}
                       {!s.isActive && (!s.closesAt || toMs(s.closesAt) > Date.now()) && (
                         <form action={reopenSessionAction}>
                           <input type="hidden" name="id" value={s.id} />

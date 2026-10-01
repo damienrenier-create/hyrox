@@ -61,7 +61,7 @@ export function readHXSettings(settings: unknown): HXSettings {
   };
 }
 
-export type HXMember = { memberId: string; userId: string; name: string };
+export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
 export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[] };
 export type HXEvent = { id: string; teamId: string; key: string; at: number }; // key = "st:<id>" | "run:<n>" | "cindy" ; at = ms ecoulees
 export type HXCard = { id: string; teamId: string; at: number };
@@ -119,6 +119,7 @@ export type HXTeamState = {
   lastMs: number | null;
   stationsDone: number;
   runsDone: number;
+  quiz: { done: number; score: number }; // QCM bonus : eleves ayant repondu, somme de leurs points (bareme a fixer)
 };
 
 export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
@@ -153,6 +154,7 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
     lastMs,
     stationsDone: segments.slice(0, done).filter((s) => s.kind === "station").length,
     runsDone: segments.slice(0, done).filter((s) => s.kind === "run").length,
+    quiz: { done: team.members.filter((m) => m.quiz !== null).length, score: team.members.reduce((a, m) => a + (m.quiz ?? 0), 0) },
   };
 }
 
@@ -216,11 +218,11 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   const L: string[] = [];
   const members = (t: HXTeam) => t.members.map((m) => m.name).join(" / ");
   L.push("Classement au temps");
-  L.push(["Rang", "Equipe", "Eleves", "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", "Tours Cindy"].join(";"));
+  L.push(["Rang", "Equipe", "Eleves", "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", "Tours Cindy", "QCM (points)", "QCM (reponses)"].join(";"));
   let rank = 0;
   timeRows(ctx).forEach((st) => {
     if (st.scoreMs !== null) rank++;
-    L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.cindy.length].join(";"));
+    L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.cindy.length, st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
   });
   L.push("");
   L.push("Classement Cindy");

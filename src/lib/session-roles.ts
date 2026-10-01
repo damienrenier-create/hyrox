@@ -33,6 +33,11 @@ export function readSessionSex(settings: unknown): "M" | "F" | null {
   return s === "M" || s === "F" ? s : null;
 }
 
+// QCM bonus du WOD Hyrox (01/10) : ouvert par le prof depuis la console (settings.quiz.open), ferme a la main.
+export function readQuizOpen(settings: unknown): boolean {
+  return (settings as { quiz?: { open?: unknown } } | null)?.quiz?.open === true;
+}
+
 // Classes concernees par un cycle (Cycle.classes, JSON) : null ou vide = toutes les classes.
 // Ex. : le cycle Hyrox n'a jamais de deuxiemes ; leurs creneaux ne doivent alors rien ouvrir dans ce cycle.
 export function readCycleClasses(classes: unknown): string[] | null {

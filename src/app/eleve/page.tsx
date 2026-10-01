@@ -10,10 +10,10 @@ import { RefereeRequest } from "./RefereeRequest";
 import { EleveTabs } from "./EleveTabs";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
 import { TopBar } from "../_components/TopBar";
-import { ui } from "@/lib/ui";
+import { cx, ui } from "@/lib/ui";
 import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
-import { readSessionSex } from "@/lib/session-roles";
+import { readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
 
 export default async function ElevePage() {
@@ -33,6 +33,11 @@ export default async function ElevePage() {
   const history = mine.filter((r) => !openIds.has(r.sessionId) && r.recorded);
   const byCycle = groupHistory(history);
   const { todo } = await loadSelfEvalHistory(user.id, mine);
+  // QCM bonus du Hyrox (01/10) : ouvert par le prof, une reponse par eleve.
+  const quizDone = new Set((await db.orm.public.QuizAnswer.where({ studentId: user.id }).all()).map((a) => a.sessionId));
+  const hyroxIds = [...new Set([...openSessions, ...history.map((r) => ({ id: r.sessionId, wodType: r.wodType }))].filter((s) => s.wodType === "HYROX").map((s) => s.id))];
+  const quizOpenIds = new Set(hyroxIds.length ? (await db.orm.public.Session.where((s) => s.id.in(hyroxIds)).all()).filter((s) => readQuizOpen(s.settings)).map((s) => s.id) : []);
+  const quizLink = (id: string) => (quizOpenIds.has(id) || quizDone.has(id) ? { href: `/eleve/${id}/qcm`, label: quizDone.has(id) ? "📝 QCM répondu" : "📝 QCM bonus ouvert" } : null);
 
   const cards = [];
   for (const s of openSessions) {
@@ -113,6 +118,9 @@ export default async function ElevePage() {
                       </div>
                     )}
                   </div>
+                  {membership && quizLink(s.id) && (
+                    <Link href={quizLink(s.id)!.href} className={cx("block mt-2 rounded-xl border px-3 py-2 text-sm font-bold text-center transition", quizDone.has(s.id) ? "border-line bg-paper text-ink-2" : "border-brand bg-brand-soft text-brand-ink")}>{quizLink(s.id)!.label} ›</Link>
+                  )}
                 </div>
               ))}
             </div>
@@ -135,6 +143,7 @@ export default async function ElevePage() {
                         <span>
                           <span className="block font-bold text-sm capitalize">{fmtDate(new Date(r.dateMs).toISOString())}</span>
                           <span className="block text-xs text-ink-2">{r.teamName} · résultats, arbitrages, auto-éval</span>
+                          {quizLink(r.sessionId) && <span className={cx(ui.chip, quizDone.has(r.sessionId) ? ui.chipMuted : ui.chipBrand, "mt-1")}>{quizLink(r.sessionId)!.label}</span>}
                         </span>
                         <span className="text-ink-3 font-black">›</span>
                       </Link>
