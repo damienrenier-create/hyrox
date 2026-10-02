@@ -33,6 +33,12 @@ export function readSessionSex(settings: unknown): "M" | "F" | null {
   return s === "M" || s === "F" ? s : null;
 }
 
+// Co-profs d'une seance tenue a plusieurs (settings.coTeachers, herite du creneau fusionne ; voir journal.ts mergeCoTaught).
+export function readCoTeachers(settings: unknown): string[] {
+  const c = (settings as { coTeachers?: unknown } | null)?.coTeachers;
+  return Array.isArray(c) ? (c as unknown[]).filter((x): x is string => typeof x === "string") : [];
+}
+
 // QCM bonus du WOD Hyrox (01/10) : ouvert par le prof depuis la console (settings.quiz.open), ferme a la main.
 export function readQuizOpen(settings: unknown): boolean {
   return (settings as { quiz?: { open?: unknown } } | null)?.quiz?.open === true;

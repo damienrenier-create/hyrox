@@ -80,6 +80,7 @@ export type SlotGroup = {
   planId: string | null; // seance-type imposee (premiere trouvee dans le groupe), sinon null = seance de la semaine
   validFrom: string | null; // version d'horaire du groupe
   sex: string | null; // garcons / filles / mixte (premier renseigne dans le groupe)
+  teacherIds: string[]; // profs qui tiennent ce creneau ensemble (co-enseignement, voir mergeCoTaught) ; teacherId = le principal
   classes: { id: string; className: string }[];
 };
 
@@ -120,12 +121,11 @@ export function versionStart(rows: SlotRow[], teacherId: string | null): string 
 }
 
 // ===== Garcons / filles =====
-// Au Sartay, l'EPS se donne par sexe : une classe est a la meme heure chez deux profs, l'un avec les garcons, l'autre
-// avec les filles. Deux creneaux, deux seances ; chaque eleve ne voit que la sienne.
+// Les horaires de l'ecole marquent (G) / (F), mais au Sartay les deux profs donnent le meme cours ensemble (Sartay 02/10) :
+// un creneau est MIXTE par defaut. Garcons / Filles ne sert que si deux profs separent vraiment les groupes : chaque
+// eleve ne voit alors que la seance de son sexe.
 export const SEX_LABEL: Record<string, string> = { M: "garçons", F: "filles" };
 export const sexLabel = (sex: string | null | undefined): string | null => (sex ? SEX_LABEL[sex] ?? null : null);
-// Deux creneaux de la meme classe a la meme heure sont compatibles seulement si l'un est « garcons » et l'autre « filles ».
-export const sexesSplit = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && a !== b;
 
 export function fmtMin(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -153,7 +153,7 @@ export function groupSlots(rows: SlotRow[]): SlotGroup[] {
     const key = groupKeyOf(r.teacherId, r.weekday, r.startMin, r.endMin);
     let g = map.get(key);
     if (!g) {
-      g = { key, teacherId: r.teacherId, weekday: r.weekday, startMin: r.startMin, endMin: r.endMin, planId: null, validFrom: r.validFrom ?? null, sex: null, classes: [] };
+      g = { key, teacherId: r.teacherId, weekday: r.weekday, startMin: r.startMin, endMin: r.endMin, planId: null, validFrom: r.validFrom ?? null, sex: null, teacherIds: r.teacherId ? [r.teacherId] : [], classes: [] };
       map.set(key, g);
     }
     g.classes.push({ id: r.id, className: r.className });
@@ -162,6 +162,32 @@ export function groupSlots(rows: SlotRow[]): SlotGroup[] {
   }
   const out = [...map.values()];
   for (const g of out) g.classes.sort((a, b) => a.className.localeCompare(b.className, "fr", { numeric: true }));
+  out.sort((a, b) => a.weekday - b.weekday || a.startMin - b.startMin || a.endMin - b.endMin);
+  return out;
+}
+
+// Co-enseignement (Sartay 02/10 : « on donne le même cours en même temps ensemble ») : deux profs qui ont les MEMES
+// classes aux memes heures (meme sexe : mixte en general) tiennent UNE seule seance. Les groupes identiques de profs
+// differents sont fusionnes pour l'ouverture automatique ; `teacherIds` = tous, `teacherId` = le principal (le premier
+// par identifiant, stable d'un jour a l'autre : la cle d'ouverture en depend).
+export function mergeCoTaught(groups: SlotGroup[]): SlotGroup[] {
+  const map = new Map<string, SlotGroup>();
+  for (const g of groups) {
+    const key = `${g.weekday}_${g.startMin}_${g.endMin}_${g.sex ?? ""}_${g.classes.map((c) => c.className).sort().join(",")}`;
+    const m = map.get(key);
+    if (!m) {
+      map.set(key, { ...g, classes: [...g.classes], teacherIds: [...g.teacherIds] });
+      continue;
+    }
+    for (const t of g.teacherIds) if (!m.teacherIds.includes(t)) m.teacherIds.push(t);
+    if (!m.planId && g.planId) m.planId = g.planId;
+  }
+  const out = [...map.values()];
+  for (const g of out) {
+    g.teacherIds.sort();
+    if (g.teacherIds.length) g.teacherId = g.teacherIds[0];
+    g.key = groupKeyOf(g.teacherId, g.weekday, g.startMin, g.endMin);
+  }
   out.sort((a, b) => a.weekday - b.weekday || a.startMin - b.startMin || a.endMin - b.endMin);
   return out;
 }

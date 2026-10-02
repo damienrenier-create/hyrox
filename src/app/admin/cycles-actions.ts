@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen, toMs } from "@/lib/scheduling";
+import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen, slotSessionSettings, toMs } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { PROTECTED_MESSAGE, sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { getWodEngine } from "@/lib/wod-engines";
@@ -244,6 +244,7 @@ export async function prepareSessionAction(formData: FormData) {
     closesAt: instantAtBrussels(slot.dateKey, slot.endMin),
     slotKey: slot.slotKey,
     autoOpened: true,
+    settings: slotSessionSettings(slot.sex, slot.teacherIds),
   });
   redirect(`/greffier?session=${session.id}`);
 }

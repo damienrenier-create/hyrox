@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { DEFAULT_PERIODS, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, latestSlots, overlaps, periodsCovered, sexLabel, sexesSplit, slotEndFor, versionStart, type SlotRow } from "@/lib/journal";
-import { teacherNameById } from "@/lib/staff";
+import { DEFAULT_PERIODS, MAX_SLOT_CLASSES, WEEKDAYS, fmtMin, latestSlots, overlaps, periodsCovered, slotEndFor, versionStart, type SlotRow } from "@/lib/journal";
 
 // Actions du journal de classe. Chaque prof (ADMIN) ne modifie que le sien ; DAMZER (MASTER_ADMIN) les modifie
 // tous. Toute verification de conflit se fait ici, cote serveur : le client ne fait que poser et deplacer.
@@ -48,34 +47,20 @@ function validTimes(startMin: number, endMin: number): string | null {
 const dayName = (weekday: number) => (WEEKDAYS[weekday] ?? "").toLowerCase();
 
 // Ces classes peuvent-elles occuper [startMin, endMin) ce jour-la, pour ce prof ?
-// - une classe n'a cours qu'a un seul endroit a la fois (chez ce prof ou chez un autre), sauf garcons chez l'un et
-//   filles chez l'autre (`sex` = sexe du creneau qu'on pose ; 01/10) ;
+// - une classe n'est pas deux fois dans le meme creneau ;
 // - un prof ne tient qu'une seance a la fois : ses autres creneaux ne peuvent pas chevaucher.
+// Une classe PEUT etre a la meme heure chez un autre prof : au Sartay, deux profs donnent le meme cours ensemble
+// (Sartay 02/10) — leurs creneaux identiques ne font qu'une seule seance (journal.ts mergeCoTaught).
 // `ignore` = lignes qu'on est en train de deplacer/retimer (elles ne comptent pas contre elles-memes).
-async function conflictFor(
-  rows: SlotRow[],
-  teacherId: string,
-  weekday: number,
-  startMin: number,
-  endMin: number,
-  classNames: string[],
-  sex: string | null,
-  ignore: Set<string>
-): Promise<string | null> {
-  let names: Map<string, string> | null = null;
+function conflictFor(rows: SlotRow[], teacherId: string, weekday: number, startMin: number, endMin: number, classNames: string[], ignore: Set<string>): string | null {
   for (const r of rows) {
-    if (ignore.has(r.id) || r.weekday !== weekday || !overlaps(startMin, endMin, r.startMin, r.endMin)) continue;
-    const sameGroup = r.teacherId === teacherId && r.startMin === startMin && r.endMin === endMin;
-    if (classNames.includes(r.className)) {
-      if (sameGroup) return `${r.className} est déjà dans ce créneau.`;
-      if (sexesSplit(sex, r.sex)) continue; // garcons ici, filles la-bas : deux creneaux a la meme heure, c'est voulu
-      names ??= await teacherNameById();
-      const who = r.teacherId === teacherId ? "dans ton journal" : r.teacherId ? `chez ${names.get(r.teacherId) ?? "un autre prof"}` : "dans l'ancien horaire commun";
-      return `${r.className} a déjà cours le ${dayName(weekday)} de ${fmtMin(r.startMin)} à ${fmtMin(r.endMin)} ${who}${r.sex ? ` (${sexLabel(r.sex)})` : ""}. Garçons chez l'un et filles chez l'autre ? Indique-le sur les deux créneaux (clique sur le créneau).`;
+    if (ignore.has(r.id) || r.teacherId !== teacherId || r.weekday !== weekday || !overlaps(startMin, endMin, r.startMin, r.endMin)) continue;
+    const sameGroup = r.startMin === startMin && r.endMin === endMin;
+    if (sameGroup) {
+      if (classNames.includes(r.className)) return `${r.className} est déjà dans ce créneau.`;
+      continue;
     }
-    if (r.teacherId === teacherId && !sameGroup) {
-      return `Tu as déjà un créneau ${fmtMin(r.startMin)}–${fmtMin(r.endMin)} le ${dayName(weekday)} qui chevauche celui-ci : ajoute la classe dedans, ou déplace-le.`;
-    }
+    return `Tu as déjà un créneau ${fmtMin(r.startMin)}–${fmtMin(r.endMin)} le ${dayName(weekday)} qui chevauche celui-ci : ajoute la classe dedans, ou déplace-le.`;
   }
   return null;
 }
@@ -111,7 +96,7 @@ export async function placeClassAction(input: { teacherId: string; weekday: numb
     }
     const bad = validTimes(startMin, endMin);
     if (bad) return { error: bad };
-    const conflict = await conflictFor(rows, teacherId, weekday, startMin, endMin, [className], sex, new Set());
+    const conflict = conflictFor(rows, teacherId, weekday, startMin, endMin, [className], new Set());
     if (conflict) return { error: conflict };
 
     // Le nouveau creneau rejoint la version d'horaire en cours d'edition de ce prof.
@@ -157,7 +142,7 @@ export async function moveClassAction(input: { slotId: string; weekday: number; 
     if (input.weekday === row.weekday && startMin === row.startMin && endMin === row.endMin) return { ok: true };
     const bad = validTimes(startMin, endMin);
     if (bad) return { error: bad };
-    const conflict = await conflictFor(others, row.teacherId, input.weekday, startMin, endMin, [row.className], sex, new Set());
+    const conflict = conflictFor(others, row.teacherId, input.weekday, startMin, endMin, [row.className], new Set());
     if (conflict) return { error: conflict };
 
     await db.orm.public.ClassSlot.where({ id: row.id }).update({ weekday: input.weekday, startMin, endMin, planId, sex: asSex(sex) });
@@ -202,7 +187,7 @@ export async function setSlotTimesAction(input: GroupRef & { newStart: number; n
     // Fusion avec un creneau du prof qui aurait deja exactement ces heures : pas plus de MAX classes au total.
     const twin = rows.filter((r) => !ids.has(r.id) && r.teacherId === input.teacherId && r.weekday === input.weekday && r.startMin === input.newStart && r.endMin === input.newEnd);
     if (twin.length + group.length > MAX_SLOT_CLASSES) return { error: `En fusionnant avec ton créneau ${fmtMin(input.newStart)}–${fmtMin(input.newEnd)}, tu dépasserais ${MAX_SLOT_CLASSES} classes.` };
-    const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.newStart, input.newEnd, group.map((r) => r.className), group.find((r) => r.sex)?.sex ?? null, ids);
+    const conflict = conflictFor(rows, input.teacherId, input.weekday, input.newStart, input.newEnd, group.map((r) => r.className), ids);
     if (conflict) return { error: conflict };
 
     for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).update({ startMin: input.newStart, endMin: input.newEnd });
@@ -228,17 +213,14 @@ export async function setSlotPlanAction(input: GroupRef & { planId: string | nul
   }
 }
 
-// Garcons / filles / mixte pour un creneau entier (01/10). Repasser en « mixte » rend la regle stricte : aucune de
-// ses classes ne peut alors etre ailleurs a la meme heure.
+// Garcons / filles / mixte pour un creneau entier (01/10). Mixte par defaut : deux profs qui ont le meme creneau le
+// tiennent ensemble ; un sexe ne se pose que si les groupes sont vraiment separes (chaque eleve ne voit que le sien).
 export async function setSlotSexAction(input: GroupRef & { sex: string | null }): Promise<JournalResult> {
   try {
     await requireOwner(input.teacherId);
     const sex = asSex(input.sex);
-    const rows = await editableSlots();
-    const group = await groupRows(rows, input);
+    const group = await groupRows(await editableSlots(), input);
     if (!group.length) return { error: "Créneau introuvable." };
-    const conflict = await conflictFor(rows, input.teacherId, input.weekday, input.startMin, input.endMin, group.map((r) => r.className), sex, new Set(group.map((r) => r.id)));
-    if (conflict) return { error: conflict };
     for (const r of group) await db.orm.public.ClassSlot.where({ id: r.id }).update({ sex });
     bump();
     return { ok: true };

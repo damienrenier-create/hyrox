@@ -2,7 +2,7 @@ import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
 import { MAX_CLASSES, notDeleted, readSessionClasses, readSessionSex, readCycleClasses } from "@/lib/session-roles";
-import { groupSlots, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
+import { groupSlots, mergeCoTaught, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
 type Instant = TemporalNS.Instant;
@@ -91,8 +91,9 @@ export type UpcomingSlot = {
   endMin: number;
   startsAtMs: number;
   classes: string[];
-  teacherId: string | null;
-  teacherName: string | null;
+  teacherId: string | null; // prof principal
+  teacherIds: string[]; // tous les profs du creneau (co-enseignement)
+  teacherName: string | null; // « D. Renier + G. Tasquin »
   cycleId: string;
   planId: string;
   planLabel: string;
@@ -126,7 +127,8 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
     // Version d'horaire en vigueur ce jour-la (l'ancien horaire jusqu'a la veille du nouveau), creneaux deja passes aujourd'hui exclus.
     const rows = slotsInForceAt(slots, dateKey).filter((s) => s.weekday === weekday && !(d === 0 && s.endMin <= now.minutes));
 
-    for (const g of groupSlots(rows)) {
+    // Co-enseignement : deux profs avec les memes classes aux memes heures = un seul creneau, une seule seance.
+    for (const g of mergeCoTaught(groupSlots(rows))) {
       const p = planOf(g, planById, weekly as PlanRow | null);
       if (!p) continue; // sans seance-type, rien ne peut s'ouvrir
       const inCycle = classesInCycle(g, cycleClasses.get(p.cycleId));
@@ -140,7 +142,8 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         startsAtMs: toMs(instantAtBrussels(dateKey, g.startMin).toString()),
         classes: inCycle.sort().slice(0, MAX_CLASSES),
         teacherId: g.teacherId,
-        teacherName: g.teacherId ? names.get(g.teacherId) ?? null : null,
+        teacherIds: g.teacherIds,
+        teacherName: g.teacherIds.map((id) => names.get(id)).filter((n): n is string => !!n).join(" + ") || null,
         cycleId: p.cycleId,
         planId: p.id,
         planLabel: p.label,
@@ -209,6 +212,12 @@ export async function openSession(input: OpenSessionInput) {
   });
 }
 
+// Reglages herites du creneau par la seance : garcons / filles (settings.sex) et co-profs (settings.coTeachers,
+// quand plusieurs profs tiennent le creneau ensemble).
+export function slotSessionSettings(sex: string | null, teacherIds: string[]): Record<string, unknown> {
+  return { ...(sex ? { sex } : {}), ...(teacherIds.length > 1 ? { coTeachers: teacherIds } : {}) };
+}
+
 export async function currentCycleAndPlan() {
   const cycle = await db.orm.public.Cycle.where({ isCurrent: true }).first();
   if (!cycle) return { cycle: null, plan: null };
@@ -230,8 +239,9 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
   const active = today.filter((s) => s.startMin <= minutes && minutes < s.endMin);
   const wanted = onlyClasses ? active.filter((s) => onlyClasses.includes(s.className)) : active;
   if (wanted.length === 0) return [];
-  const wantedIds = new Set(wanted.map((s) => s.id));
-  const groups = groupSlots(active).filter((g) => g.classes.some((c) => wantedIds.has(c.id)));
+  const wantedNames = new Set(wanted.map((s) => s.className));
+  // Co-enseignement : les creneaux identiques de deux profs ne font qu'une seance.
+  const groups = mergeCoTaught(groupSlots(active)).filter((g) => g.classes.some((c) => wantedNames.has(c.className)));
 
   const { plan: weekly } = await currentCycleAndPlan();
   const [planById, cycleClasses] = await Promise.all([allPlansById(), cycleClassesById()]);
@@ -258,7 +268,7 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
         closesAt: instantAtBrussels(dateKey, g.endMin),
         slotKey,
         autoOpened: true,
-        ...(g.sex ? { settings: { sex: g.sex } } : {}), // seance garcons / filles : heritee du creneau
+        settings: slotSessionSettings(g.sex, g.teacherIds),
       });
       created.push(session);
     } catch {

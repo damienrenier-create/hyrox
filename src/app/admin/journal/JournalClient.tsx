@@ -431,7 +431,7 @@ function SlotEditor({
             </button>
           ))}
         </div>
-        <p className={`${ui.hint} mb-4`}>Une classe peut être à la même heure chez deux profs si l&apos;un a les garçons et l&apos;autre les filles : deux créneaux, deux séances, et chaque élève ne voit que la sienne (le greffier ne propose que ces élèves).</p>
+        <p className={`${ui.hint} mb-4`}>Mixte par défaut : deux profs qui ont les mêmes classes à la même heure donnent le cours ensemble, c&apos;est <b>une seule séance</b>. Garçons / Filles seulement si vous séparez vraiment les groupes : chaque élève ne voit alors que la séance de son sexe (le greffier ne propose que ces élèves).</p>
 
         <p className="text-sm font-bold mb-1">Périodes</p>
         <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 mb-1">

@@ -18,7 +18,7 @@ import {
   openSessionAction, prepareSessionAction, unprepareSessionAction, renameCycleAction, setCurrentCycleAction, setCurrentPlanAction, setCycleClassesAction,
   restoreSessionAction, setQuizOpenAction,
 } from "./cycles-actions";
-import { readQuizOpen } from "@/lib/session-roles";
+import { readCoTeachers, readQuizOpen } from "@/lib/session-roles";
 import { TopBar } from "../_components/TopBar";
 import { LogoutButton } from "../_components/LogoutButton";
 import { btn, cx, ui } from "@/lib/ui";
@@ -100,6 +100,9 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const slots = (await db.orm.public.ClassSlot.where({}).all()) as SlotRow[];
   const myGroups = groupSlots(latestSlots(slots).filter((s) => s.teacherId === user.id)); // la version d'horaire la plus recente (01/10)
   const teacherNames = await teacherNameById();
+  // Prof principal + co-profs (creneau tenu a deux) : « D. Renier + G. Tasquin ».
+  const teacherLabel = (s: { teacherId: string | null; settings: unknown }) =>
+    [...new Set([s.teacherId, ...readCoTeachers(s.settings)].filter((id): id is string => !!id))].map((id) => teacherNames.get(id)).filter((n): n is string => !!n).join(" + ");
   const allClasses = [...new Set((await db.orm.public.User.where({ role: "STUDENT" }).all()).map((u) => u.className).filter((c): c is string => !!c))].sort();
   // Classes rangees par degre (1P2, 2Ca…, 3GTa…) pour les cases a cocher des cycles.
   const families = (() => {
@@ -198,7 +201,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <div className="text-xs text-ink-2">
                         {classes.length ? classes.join(", ") : "toutes classes"}{readSessionSex(s.settings) && <> · {sexLabel(readSessionSex(s.settings))}</>} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
                         {s.closesAt && <> → ferme à {fmtTime(s.closesAt)}</>} · {s.autoOpened ? "auto (journal de classe)" : "manuelle"}
-                        {s.teacherId && teacherNames.get(s.teacherId) && <> · {teacherNames.get(s.teacherId)}</>}
+                        {teacherLabel(s) && <> · {teacherLabel(s)}</>}
                         {s.raceEndedAt && " · WOD terminé"}
                       </div>
                     </div>
