@@ -1,0 +1,356 @@
+[
+  {
+    "id": "table.observation",
+    "label": "Create table \"observation\"",
+    "summary": "Creates table \"observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"observation\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"observation\"",
+        "sql": "CREATE TABLE \"public\".\"observation\" (\n  \"endedAt\" timestamptz,\n  \"endsAt\" timestamptz,\n  \"evaluatorId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"mode\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"startedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"targetUserId\" text NOT NULL,\n  \"teamId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"observation\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.repEntry",
+    "label": "Create table \"repEntry\"",
+    "summary": "Creates table \"repEntry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "repEntry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"repEntry\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"repEntry\"",
+        "sql": "CREATE TABLE \"public\".\"repEntry\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"evaluatorId\" text NOT NULL,\n  \"exerciseId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"observationId\" text NOT NULL,\n  \"reps\" int4 NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"targetUserId\" text NOT NULL,\n  \"voidedAt\" timestamptz,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"repEntry\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.evaluation.observationId",
+    "label": "Add column \"observationId\" to \"evaluation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "observationId",
+        "table": "evaluation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"observationId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "observationId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"observationId\"",
+        "sql": "ALTER TABLE \"public\".\"evaluation\" ADD COLUMN \"observationId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"observationId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "evaluation",
+          "observationId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.observation.observation_evaluatorId_idx_010145e1",
+    "label": "Create index \"observation_evaluatorId_idx_010145e1\" on \"observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "observation_evaluatorId_idx_010145e1",
+        "table": "observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"observation_evaluatorId_idx_010145e1\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_evaluatorId_idx_010145e1\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"observation_evaluatorId_idx_010145e1\"",
+        "sql": "CREATE INDEX \"observation_evaluatorId_idx_010145e1\" ON \"public\".\"observation\" (\"evaluatorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"observation_evaluatorId_idx_010145e1\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_evaluatorId_idx_010145e1\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.observation.observation_sessionId_idx_29f415d4",
+    "label": "Create index \"observation_sessionId_idx_29f415d4\" on \"observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "observation_sessionId_idx_29f415d4",
+        "table": "observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"observation_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"observation_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"observation_sessionId_idx_29f415d4\" ON \"public\".\"observation\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"observation_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.observation.observation_targetUserId_idx_e0d638f0",
+    "label": "Create index \"observation_targetUserId_idx_e0d638f0\" on \"observation\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "observation_targetUserId_idx_e0d638f0",
+        "table": "observation"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"observation_targetUserId_idx_e0d638f0\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"observation_targetUserId_idx_e0d638f0\"",
+        "sql": "CREATE INDEX \"observation_targetUserId_idx_e0d638f0\" ON \"public\".\"observation\" (\"targetUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"observation_targetUserId_idx_e0d638f0\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"observation_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.repEntry.repEntry_observationId_idx_d3d19fef",
+    "label": "Create index \"repEntry_observationId_idx_d3d19fef\" on \"repEntry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "repEntry_observationId_idx_d3d19fef",
+        "table": "repEntry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"repEntry_observationId_idx_d3d19fef\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_observationId_idx_d3d19fef\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"repEntry_observationId_idx_d3d19fef\"",
+        "sql": "CREATE INDEX \"repEntry_observationId_idx_d3d19fef\" ON \"public\".\"repEntry\" (\"observationId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"repEntry_observationId_idx_d3d19fef\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_observationId_idx_d3d19fef\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.repEntry.repEntry_sessionId_idx_29f415d4",
+    "label": "Create index \"repEntry_sessionId_idx_29f415d4\" on \"repEntry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "repEntry_sessionId_idx_29f415d4",
+        "table": "repEntry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"repEntry_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"repEntry_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"repEntry_sessionId_idx_29f415d4\" ON \"public\".\"repEntry\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"repEntry_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.repEntry.repEntry_targetUserId_idx_e0d638f0",
+    "label": "Create index \"repEntry_targetUserId_idx_e0d638f0\" on \"repEntry\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "repEntry_targetUserId_idx_e0d638f0",
+        "table": "repEntry"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"repEntry_targetUserId_idx_e0d638f0\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"repEntry_targetUserId_idx_e0d638f0\"",
+        "sql": "CREATE INDEX \"repEntry_targetUserId_idx_e0d638f0\" ON \"public\".\"repEntry\" (\"targetUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"repEntry_targetUserId_idx_e0d638f0\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"repEntry_targetUserId_idx_e0d638f0\""
+        ]
+      }
+    ]
+  }
+]

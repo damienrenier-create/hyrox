@@ -196,7 +196,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <div className="font-bold">
                         {s.label ?? wodLabel(s.wodType)}
                         <span className="text-ink-3 font-normal"> · {engineName(s.wodType)}</span>
-                        {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
+                        {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : s.wodType === "HYROX" ? "👁 Dispensés : arbitres" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
                       </div>
                       <div className="text-xs text-ink-2">
                         {classes.length ? classes.join(", ") : "toutes classes"}{readSessionSex(s.settings) && <> · {sexLabel(readSessionSex(s.settings))}</>} · ouverte {fmtDay(s.createdAt)} {fmtTime(s.createdAt)}
@@ -208,8 +208,9 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/greffier?session=${s.id}`} className={btn.smPrimary}>Greffier</Link>
                       {/* Un deuxieme prof arbitre pendant que le premier tient le greffier : chacun son ecran. */}
-                      {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>{s.wodType === "LEVEL" ? "💣 Arbitrer" : "🏴‍☠️ Arbitrer"}</Link>}
-                      {s.refereeMode && s.wodType !== "LEVEL" && (
+                      {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>{s.wodType === "LEVEL" ? "💣 Arbitrer" : s.wodType === "HYROX" ? "👁 Arbitrer" : "🏴‍☠️ Arbitrer"}</Link>}
+                      {s.wodType === "HYROX" && <Link href={`/admin/observations?session=${s.id}`} className={btn.smGhost}>📋 Compte rendu arbitres</Link>}
+                      {s.refereeMode && s.wodType !== "LEVEL" && s.wodType !== "HYROX" && (
                         <form action={runGenerateGhostFleets.bind(null, s.id)}>
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>
                         </form>
@@ -262,7 +263,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       {s.wodType === "LEVEL" && !(s.settings as { child?: unknown } | null)?.child && <Link href={`/admin/recap?session=${s.id}`} className={btn.smGhost} title="Faits marquants par classe : arbitrages bizarres, équipes trop fortes ou trop faibles, triche suspectée, évaluations extrêmes">📋 Récap</Link>}
                       <Link href={`/admin/resultats?session=${s.id}`} className={btn.smGhost}>Consultation</Link>
                       <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
-                      {s.refereeMode && s.wodType !== "LEVEL" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                      {s.refereeMode && s.wodType !== "LEVEL" && s.wodType !== "HYROX" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
+                      {s.wodType === "HYROX" && <Link href={`/admin/observations?session=${s.id}`} className={btn.smGhost}>📋 Compte rendu arbitres</Link>}
                       {quizToggle(s)}
                       {!s.isActive && (!s.closesAt || toMs(s.closesAt) > Date.now()) && (
                         <form action={reopenSessionAction}>
@@ -293,7 +295,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <div className="font-bold">
                       {s.label ?? wodLabel(s.wodType)}
                       <span className="text-ink-3 font-normal"> · ouvre {fmtDay(s.opensAt)} à {fmtTime(s.opensAt)}</span>
-                      {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
+                      {s.refereeMode && <span className={`${ui.chip} ${ui.chipSea} ml-2`}>{s.wodType === "LEVEL" ? "💣 Dispensés : démineur" : s.wodType === "HYROX" ? "👁 Dispensés : arbitres" : "🏴‍☠️ Dispensés : Touché-Coulé"}</span>}
                     </div>
                     <div className="text-xs text-ink-2">
                       {readSessionClasses(s.settings).join(", ") || "toutes classes"}

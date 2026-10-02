@@ -95,8 +95,8 @@ export default async function ElevePage() {
                       <div className="bg-paper text-ink-3 font-bold text-center rounded-xl py-4 px-2 text-sm">Pas d&apos;arbitrage sur ce WOD</div>
                     ) : access.allowed ? (
                       <Link href={`/touche-coule?session=${s.id}`} className="bg-sea hover:bg-sea-hover text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm transition">
-                        🏴‍☠️ Arbitre
-                        <span className="block text-[11px] font-normal text-white/80 mt-1">Touché-Coulé</span>
+                        {s.wodType === "HYROX" ? "👁 Arbitre" : "🏴‍☠️ Arbitre"}
+                        <span className="block text-[11px] font-normal text-white/80 mt-1">{s.wodType === "HYROX" ? "Suivre un élève 5 min" : "Touché-Coulé"}</span>
                       </Link>
                     ) : (
                       <RefereeRequest

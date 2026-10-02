@@ -15,8 +15,16 @@ import { wodLabel } from "@/lib/student-sessions";
 import type { BoardShip } from "./Board";
 import { btn, ui } from "@/lib/ui";
 import { notDeleted } from "@/lib/session-roles";
+import { ObservationClient, type ObsHistoryRow } from "./ObservationClient";
+import { activeStudentObservation, loadObsView, obsStations, participantsOf, staffCoverage, staffObservation } from "@/lib/observations";
+import { toMs } from "@/lib/scheduling";
 
-export default async function ToucheCoulePage({ searchParams }: { searchParams: Promise<{ session?: string }> }) {
+// Heure du serveur (hors du rendu, regle react-hooks/purity) : le compte a rebours de l'arbitre s'y recale.
+function serverNow(): number {
+  return Date.now();
+}
+
+export default async function ToucheCoulePage({ searchParams }: { searchParams: Promise<{ session?: string; eleve?: string }> }) {
   const evaluator = await getSession();
   if (!evaluator) {
     redirect("/");
@@ -25,7 +33,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
   // Choix de la seance : ?session=, sinon une seance OUVERTE avec arbitrage (celle de la classe de l'eleve),
   // sinon la plus recente avec arbitrage. Pas de filtre isActive sur le repli : la fin du WOD ne coupe pas
   // l'acces au Touché-Coulé (§28) — elle ne fait que basculer les tirs suivants en POST_WOD.
-  const { session: requested } = await searchParams;
+  const { session: requested, eleve } = await searchParams;
   let session = requested ? await db.orm.public.Session.where({ id: requested, refereeMode: true }).first() : null;
   if (session?.deletedAt) session = null; // seance supprimee (corbeille)
   if (!session) {
@@ -65,6 +73,33 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
         </div>
       </div>
     );
+  }
+
+  // WOD Eval (Sartay 04/10) : ni flotte ni demineur. L'eleve arbitre suit un eleve tire au sort pendant 5 minutes ; le
+  // prof evalue qui il veut (?eleve=), sur 6 criteres, avec le rappel de ce qui a deja ete evalue.
+  if (session.wodType === "HYROX") {
+    const staff = evaluator.role !== "STUDENT";
+    const [parts, rs] = await Promise.all([participantsOf(session.id), db.orm.public.RaceState.where({ sessionId: session.id }).first()]);
+    const race = !rs?.startedAt ? "pre" : rs.endedAt || session.raceEndedAt ? "post" : "run";
+    const common = { sessionId: session.id, sessionLabel: session.label ?? wodLabel(session.wodType), race, serverNowMs: serverNow() } as const;
+    if (staff) {
+      const coverage = await staffCoverage(session.id);
+      const roster = parts.map((p) => ({ ...p, done: coverage[p.userId] ?? {} }));
+      const selected = roster.find((p) => p.userId === eleve) ?? null;
+      const row = selected ? await staffObservation(session.id, evaluator.id, selected.userId) : null;
+      return <ObservationClient {...common} mode="STAFF" backHref={`/greffier?session=${session.id}`} stations={obsStations(session, "STAFF")} obs={row ? await loadObsView(row, parts) : null} roster={roster} selected={selected} />;
+    }
+    const row = await activeStudentObservation(session.id, evaluator.id);
+    const ended = (await db.orm.public.Observation.where({ sessionId: session.id, evaluatorId: evaluator.id }).all()).filter((o) => o.endedAt != null).sort((a, b) => toMs(b.startedAt) - toMs(a.startedAt)).slice(0, 8);
+    const labelOf = new Map(obsStations(session, "STUDENT").map((s) => [s.id, s.label]));
+    const history: ObsHistoryRow[] = [];
+    for (const o of ended) {
+      const v = await loadObsView(o, parts);
+      const totals = new Map<string, number[]>();
+      for (const e of v.entries) if (!e.voided) totals.set(e.exerciseId, [...(totals.get(e.exerciseId) ?? []), e.reps]);
+      history.push({ id: v.id, targetName: v.targetName, teamName: v.teamName, clock: new Date(v.startedAtMs).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }), summary: [...totals].map(([id, sets]) => `${labelOf.get(id) ?? id} : ${sets.join(" - ")}`).join(" · ") });
+    }
+    return <ObservationClient {...common} mode="STUDENT" backHref="/eleve" stations={obsStations(session, "STUDENT")} obs={row ? await loadObsView(row, parts) : null} history={history} />;
   }
 
   // WOD Level : pas de flotte ni de tirs, un demineur eleves x exercices (une carte par seance, figee avec

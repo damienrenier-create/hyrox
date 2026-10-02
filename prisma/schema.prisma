@@ -289,6 +289,8 @@ model Evaluation {
   // Demineur (Sartay 28/09) : criteres de realisation observes par l'arbitre, figes a l'evaluation
   // [{ label, met }] dans l'ordre d'importance ; l'appreciation (note) en est deduite, le commentaire de l'eleve aussi.
   criteria     Json?
+  // WOD Eval : appreciation rendue pendant une observation (un arbitre suit un eleve) ; null ailleurs.
+  observationId String?
   createdAt    DateTime @default(now())
 
   shot Shot?
@@ -296,6 +298,43 @@ model Evaluation {
   @@index([sessionId])
   @@index([teamId])
   @@index([evaluatorId])
+  @@index([targetUserId])
+}
+
+// Arbitrage du WOD Eval (Sartay 04/10). Une OBSERVATION = un arbitre suit un eleve. Eleve arbitre (mode STUDENT) :
+// cible tiree au sort par l'appli, 5 minutes chrono (endsAt). Prof (mode STAFF) : il choisit qui, quand, combien de temps.
+model Observation {
+  id           String    @id @default(uuid())
+  sessionId    String
+  evaluatorId  String
+  targetUserId String
+  teamId       String
+  mode         String
+  startedAt    DateTime  @default(now())
+  endsAt       DateTime?
+  endedAt      DateTime?
+
+  @@index([sessionId])
+  @@index([evaluatorId])
+  @@index([targetUserId])
+}
+
+// Une serie de repetitions comptee par l'arbitre pendant une observation, HORODATEE (« pompages : 5 - 10 - 3 » = trois
+// lignes). Jamais effacee (regle d'or) : une erreur de saisie est annulee (voidedAt), pas supprimee. Le compte rendu
+// compare ces heures aux clics du greffier (l'equipe etait-elle bien a cette station a ce moment-la ?).
+model RepEntry {
+  id            String    @id @default(uuid())
+  observationId String
+  sessionId     String
+  evaluatorId   String
+  targetUserId  String
+  exerciseId    String
+  reps          Int
+  at            DateTime  @default(now())
+  voidedAt      DateTime?
+
+  @@index([sessionId])
+  @@index([observationId])
   @@index([targetUserId])
 }
 

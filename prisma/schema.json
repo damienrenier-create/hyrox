@@ -52,6 +52,10 @@
       "model": "MineReveal",
       "namespace": "public"
     },
+    "observation": {
+      "model": "Observation",
+      "namespace": "public"
+    },
     "quizAnswer": {
       "model": "QuizAnswer",
       "namespace": "public"
@@ -70,6 +74,10 @@
     },
     "refereeShip": {
       "model": "RefereeShip",
+      "namespace": "public"
+    },
+    "repEntry": {
+      "model": "RepEntry",
       "namespace": "public"
     },
     "score": {
@@ -742,6 +750,13 @@
                   "kind": "scalar"
                 }
               },
+              "observationId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "repsObserved": {
                 "nullable": false,
                 "type": {
@@ -859,6 +874,9 @@
                 },
                 "note": {
                   "column": "note"
+                },
+                "observationId": {
+                  "column": "observationId"
                 },
                 "repsObserved": {
                   "column": "repsObserved"
@@ -1509,6 +1527,107 @@
               "table": "mineReveal"
             }
           },
+          "Observation": {
+            "fields": {
+              "endedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "endsAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "evaluatorId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "mode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "targetUserId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "teamId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "endedAt": {
+                  "column": "endedAt"
+                },
+                "endsAt": {
+                  "column": "endsAt"
+                },
+                "evaluatorId": {
+                  "column": "evaluatorId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "mode": {
+                  "column": "mode"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "startedAt": {
+                  "column": "startedAt"
+                },
+                "targetUserId": {
+                  "column": "targetUserId"
+                },
+                "teamId": {
+                  "column": "teamId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "observation"
+            }
+          },
           "QuizAnswer": {
             "fields": {
               "answers": {
@@ -2117,6 +2236,107 @@
               },
               "namespaceId": "public",
               "table": "refereeShip"
+            }
+          },
+          "RepEntry": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "evaluatorId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "exerciseId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "observationId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reps": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "targetUserId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "voidedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "evaluatorId": {
+                  "column": "evaluatorId"
+                },
+                "exerciseId": {
+                  "column": "exerciseId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "observationId": {
+                  "column": "observationId"
+                },
+                "reps": {
+                  "column": "reps"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "targetUserId": {
+                  "column": "targetUserId"
+                },
+                "voidedAt": {
+                  "column": "voidedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "repEntry"
             }
           },
           "Score": {
@@ -4148,6 +4368,11 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
+                "observationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "repsObserved": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
@@ -4817,6 +5042,92 @@
                 }
               ]
             },
+            "observation": {
+              "columns": {
+                "endedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "endsAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "evaluatorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "mode": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "targetUserId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "teamId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "evaluatorId"
+                  ],
+                  "name": "observation_evaluatorId_idx_010145e1",
+                  "prefix": "observation_evaluatorId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "observation_sessionId_idx_29f415d4",
+                  "prefix": "observation_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "targetUserId"
+                  ],
+                  "name": "observation_targetUserId_idx_e0d638f0",
+                  "prefix": "observation_targetUserId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "quizAnswer": {
               "columns": {
                 "answers": {
@@ -5284,6 +5595,92 @@
                   ],
                   "name": "refereeShip_fleetId_idx_dce13b35",
                   "prefix": "refereeShip_fleetId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "repEntry": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "evaluatorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "exerciseId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "observationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "reps": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "targetUserId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "voidedAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "observationId"
+                  ],
+                  "name": "repEntry_observationId_idx_d3d19fef",
+                  "prefix": "repEntry_observationId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "repEntry_sessionId_idx_29f415d4",
+                  "prefix": "repEntry_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "targetUserId"
+                  ],
+                  "name": "repEntry_targetUserId_idx_e0d638f0",
+                  "prefix": "repEntry_targetUserId_idx",
                   "unique": false
                 }
               ],
@@ -6516,10 +6913,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e41ef3adbf0bcfa738e65fc5b4cd99e6fd8fc95de24e8d066dd02d0bd8e4a65c"
+    "storageHash": "f107e9ce68352319522dfd7921e0cfa95c9573a5244e0290dea4dc63a17f9f0b"
   },
   "execution": {
-    "executionHash": "9696cc2f88aebb47ecbfc1c7da9f97f83bfcc100181db893941497773c3fe91f",
+    "executionHash": "2949a3b0e1f08f3d101e69a3b603ecc5ac843524d5d35e9b8cd4d9fa4c4cb298",
     "mutations": {
       "defaults": [
         {
@@ -6662,6 +7059,17 @@
           "ref": {
             "column": "id",
             "namespace": "public",
+            "table": "observation"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
             "table": "quizAnswer"
           }
         },
@@ -6707,6 +7115,17 @@
             "column": "id",
             "namespace": "public",
             "table": "refereeShip"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "repEntry"
           }
         },
         {

@@ -289,6 +289,8 @@ const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", P
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
+// Grille COMPLETE d'un exercice (les 6 criteres, du plus important au moins important) : arbitre prof du WOD Eval.
+export const fullCriteriaFor = (label: string): string[] => CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
 
 // Emoji-resume de chaque critere de l'arbitre (Sartay 29/09 nuit : « pour que l'arbitre trouve plus vite ce qu'il doit
 // observer ; l'emoji est une sorte de resume du critere »), dans l'ordre de REFEREE_CRITERIA (3 techniques + intensite).

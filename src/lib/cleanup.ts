@@ -36,6 +36,9 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
     await db.orm.public.RaceState.where({ id: rs.id }).update({ startedAt: null, endedAt: null });
   }
   deleted.stations = await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
+  // Arbitrage de l'Eval : series comptees et observations repartent avec la course (les evaluations suivent plus bas).
+  await deleteAll(await db.orm.public.RepEntry.where({ sessionId }).all(), (id) => db.orm.public.RepEntry.where({ id }).delete());
+  await deleteAll(await db.orm.public.Observation.where({ sessionId }).all(), (id) => db.orm.public.Observation.where({ id }).delete());
   // Donnees de course portees par les equipes : dernier exercice saisi apres la fin (Pyramide), penalites et
   // points Finisher (Fete Foraine). Les equipes et leurs membres restent.
   const raceTeams = await db.orm.public.Team.where({ sessionId }).all();
@@ -104,6 +107,8 @@ export async function deleteSession(sessionId: string): Promise<number> {
   n += await deleteAll(await db.orm.public.SessionReferee.where({ sessionId }).all(), (id) => db.orm.public.SessionReferee.where({ id }).delete());
   n += await deleteAll(await db.orm.public.StationEvent.where({ sessionId }).all(), (id) => db.orm.public.StationEvent.where({ id }).delete());
   n += await deleteAll(await db.orm.public.QuizAnswer.where({ sessionId }).all(), (id) => db.orm.public.QuizAnswer.where({ id }).delete());
+  n += await deleteAll(await db.orm.public.RepEntry.where({ sessionId }).all(), (id) => db.orm.public.RepEntry.where({ id }).delete());
+  n += await deleteAll(await db.orm.public.Observation.where({ sessionId }).all(), (id) => db.orm.public.Observation.where({ id }).delete());
 
   const teams = await db.orm.public.Team.where({ sessionId }).all();
   const teamIds = teams.map((t) => t.id);

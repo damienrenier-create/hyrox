@@ -51,7 +51,7 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 // l'exercice suivant s'affiche aussitot ; « ⋯ » ouvre le detail. A droite : le top 3 de chaque station. Onglets cartes
 // jaunes, classement au temps, statistiques. Ecran PC projete.
 export function HyroxClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker, showConsole = false, winter = false,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, obsCounts = null, picker, showConsole = false, winter = false,
 }: {
   showConsole?: boolean;
   winter?: boolean; // saison winter arc : flocons
@@ -67,6 +67,7 @@ export function HyroxClient({
   referees: RefereeView[];
   pendingRequests: PendingRequest[];
   board: BoardData | null;
+  obsCounts?: { observations: number; entries: number } | null; // arbitrage de l'Eval (observations d'eleves, series comptees)
   picker: PickerData;
 }) {
   const router = useRouter();
@@ -316,6 +317,11 @@ export function HyroxClient({
               Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
               {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
             </button>
+            {obsCounts && (
+              <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
+                👁 Arbitres <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{obsCounts.observations}</span>
+              </button>
+            )}
             {board && (
               <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
                 Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
@@ -366,6 +372,17 @@ export function HyroxClient({
         {view === "stats" && <StatsView ctx={liveCtx} />}
         {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} picker={picker} winterArc={winter} />}
         {view === "arbitrage" && board && <ArbitrageTab board={board} />}
+        {view === "arbitrage" && obsCounts && (
+          <div className={`${ui.cardPad} max-w-xl space-y-3`}>
+            <h3 className={ui.h3}>👁 Arbitres de l&apos;Eval</h3>
+            <p className={ui.muted}><b>{obsCounts.observations}</b> observation{obsCounts.observations > 1 ? "s" : ""} · <b>{obsCounts.entries}</b> série{obsCounts.entries > 1 ? "s" : ""} de reps horodatée{obsCounts.entries > 1 ? "s" : ""}.</p>
+            <p className={ui.hint}>Élèves arbitres : un élève tiré au sort, suivi 5 minutes, 4 critères. Profs : qui ils veulent, 6 critères, objectif 3 exercices par élève. Le compte rendu compare l&apos;heure de chaque série aux clics de cet écran.</p>
+            <div className="flex flex-wrap gap-2">
+              <a href={`/admin/observations?session=${sessionId}`} target="_blank" rel="noopener" className={btn.primary}>📋 Compte rendu des arbitres ↗</a>
+              <a href={`/touche-coule?session=${sessionId}`} target="_blank" rel="noopener" className={btn.sea}>👁 Arbitrer (prof) ↗</a>
+            </div>
+          </div>
+        )}
       </main>
 
       {settingsOpen && (

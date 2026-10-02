@@ -53,7 +53,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
     exerciseLabels[e.id] = e.label;
   }
   if (session.wodType === "LEVEL") for (const e of await listExercises()) { exerciseNumber[e.id] = 0; exerciseLabels[e.id] = e.label; }
-  const evals = session.wodType === "LEVEL"
+  const evals = session.wodType === "LEVEL" || session.wodType === "HYROX"
     ? await db.orm.public.Evaluation.where({ sessionId, targetUserId: user.id }).all()
     : await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
   const refereeEvals: RefereeEvalRow[] = evals
@@ -128,7 +128,7 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
             submittedAt: existing ? new Date(String(existing.submittedAt)).getTime() : null,
           }}
           review={review}
-          individual={session.wodType === "LEVEL"}
+          individual={session.wodType === "LEVEL" || session.wodType === "HYROX"}
           records={records}
           combined={combined}
         />

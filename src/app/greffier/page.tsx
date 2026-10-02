@@ -78,7 +78,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   await ensureRaceStateAction(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
-  const board = session.refereeMode && session.wodType !== "LEVEL" ? await buildBoardData(session.id) : null;
+  const board = session.refereeMode && session.wodType !== "LEVEL" && session.wodType !== "HYROX" ? await buildBoardData(session.id) : null;
 
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
   // Les eleves sont charges UNE fois (une requete) et les membres de toutes les equipes en parallele :
@@ -168,6 +168,10 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   }
   if (session.wodType === "HYROX") {
     const hxBundle = await buildHXBundle(session.id);
+    // Arbitrage de l'Eval : deux compteurs suffisent ici (le compte rendu complet a sa page).
+    const obsCounts = session.refereeMode
+      ? { observations: (await db.orm.public.Observation.where({ sessionId: session.id }).all()).length, entries: (await db.orm.public.RepEntry.where({ sessionId: session.id }).all()).filter((e) => e.voidedAt == null).length }
+      : null;
     return (
       <HyroxClient
         winter={isWinterArcSeason()}
@@ -178,6 +182,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         olderSession={olderSession}
         newerSession={newerSession}
         bundle={hxBundle}
+        obsCounts={obsCounts}
         teamsWithMembers={teamsWithMembers}
         classes={classes}
         allClasses={allClasses}
