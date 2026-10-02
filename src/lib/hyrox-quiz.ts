@@ -121,6 +121,21 @@ export const DISTRACTORS: Record<string, string[]> = {
     "Le poids passe devant le ventre, jamais dans le dos.",
     "Les mains se posent au sol entre deux tours.",
   ],
+  "BURPEES BROAD JUMP": [
+    "Seules les mains touchent le sol : le corps reste en planche haute.",
+    "Le saut se fait en courant, un pied après l'autre.",
+    "L'élève fait deux pas d'élan entre la réception et le burpee suivant.",
+  ],
+  "FENTES MARCHÉES": [
+    "Le genou arrière reste à mi-hauteur, sans jamais s'approcher du sol.",
+    "Le buste se penche vers l'avant pour aider la poussée.",
+    "L'élève garde toujours la même jambe devant pour aller plus vite.",
+  ],
+  "FARMER CARRY": [
+    "Les charges sont ramassées jambes tendues, en se penchant.",
+    "Les charges sont lâchées au sol dès que la ligne est franchie.",
+    "L'élève court à grandes foulées en laissant les charges se balancer.",
+  ],
   "TOUR DE POUTRE": [
     "Au-dessus, l'élève reste au ras de la poutre pour gagner du temps.",
     "En dessous, le dos glisse sur le sol pour passer plus vite.",

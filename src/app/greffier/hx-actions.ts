@@ -29,7 +29,7 @@ const toMs = (v: unknown) => new Date(String(v)).getTime();
 // Deux validations de la meme equipe a moins de 5 s : un double clic, jamais un vrai segment.
 const MIN_GAP_MS = 5_000;
 
-// Valide le segment en cours de l'equipe (station ou run, dans l'ordre de son parcours) ; parcours fini = un tour de Cindy.
+// Valide le segment en cours de l'equipe (station ou run, dans l'ordre de son parcours). Parcours fini : plus rien a valider.
 export async function hxTapAction(sessionId: string, teamId: string): Promise<{ error: string } | { ok: true; key: string }> {
   await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
@@ -48,12 +48,13 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   const last = events[events.length - 1];
   if (last && Date.now() - toMs(last.at) < MIN_GAP_MS) return { error: `Validation refusée : ${team.name} vient d'en recevoir une il y a ${Math.round((Date.now() - toMs(last.at)) / 1000)} s (double clic ?).` };
   const done = events.filter((e) => e.stationId !== CINDY_KEY).length;
-  const key = done < segments.length ? segments[done].key : CINDY_KEY;
+  if (done >= segments.length) return { error: `${team.name} a terminé son parcours : il n'y a plus rien à valider.` };
+  const key = segments[done].key;
   await db.orm.public.StationEvent.create({ sessionId, teamId, stationId: key, at: Temporal.Now.instant() });
   return { ok: true, key };
 }
 
-// Annule la derniere validation de CETTE equipe (station, run ou tour de Cindy).
+// Annule la derniere validation de CETTE equipe (station ou run).
 export async function hxUndoTeamAction(sessionId: string, teamId: string): Promise<Result> {
   await requireGreffier();
   const last = await db.orm.public.StationEvent.where({ sessionId, teamId }).orderBy((e) => e.at.desc()).first();
@@ -109,11 +110,10 @@ export type HXSettingsInput = {
   laps: number;
   capMin: number;
   penSec: number;
-  cindyLabel: string;
 };
 
 // Reglages de la seance (Session.settings.hyrox). Des qu'un pointage existe, stations et runs sont figes (le parcours
-// de chaque equipe en depend) ; temps limite, penalite et libelle de Cindy restent modifiables.
+// de chaque equipe en depend) ; temps limite et penalite restent modifiables.
 export async function hxSettingsAction(sessionId: string, input: HXSettingsInput): Promise<Result> {
   await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();

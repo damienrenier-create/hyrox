@@ -69,11 +69,11 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
       time: st.scoreMs !== null ? hxFmt(st.scoreMs) : st.lastMs !== null ? hxFmt(st.lastMs) : null,
       late: null,
       start: `${st.startIndex + 1} · ${b.ctx.settings.stations[st.startIndex]?.label ?? ""}`,
-      reps: st.cindy.length,
+      reps: st.runsDone,
       cards: st.cards,
       done: st.finishedMs !== null,
     }));
-    return { columns: { laps: "Stations", time: "Temps", reps: "Cindy", cards: "🟨", start: "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
+    return { columns: { laps: "Stations", time: "Temps", reps: "Runs", cards: "🟨", start: "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
   }
   if (session.wodType === "FETE_FORAINE") {
     const b = await buildFFBundle(session.id);

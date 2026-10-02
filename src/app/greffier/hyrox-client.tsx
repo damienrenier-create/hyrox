@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  CINDY_KEY, HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, cindyRows, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
+  HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
   type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
 } from "@/lib/wod-engines/templates/hyrox-engine";
 import type { HXBundle } from "@/lib/hyrox-context";
@@ -49,7 +49,7 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 // l'ecran (toutes les equipes visibles d'un coup), chaque fiche = « ÉQUIPE X » (police panneau) + l'exercice en cours
 // (police display) + un chrono depuis le dernier clic, dans la couleur de son tour. UN CLIC sur la fiche = validation,
 // l'exercice suivant s'affiche aussitot ; « ⋯ » ouvre le detail. A droite : le top 3 de chaque station. Onglets cartes
-// jaunes, classements (temps / Cindy), statistiques. Ecran PC projete.
+// jaunes, classement au temps, statistiques. Ecran PC projete.
 export function HyroxClient({
   sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker, showConsole = false, winter = false,
 }: {
@@ -126,7 +126,7 @@ export function HyroxClient({
       const st = teamState(ctx, t);
       x.ats.slice(-missing).forEach((at, i) => {
         const idx = st.done + i;
-        extra.push({ id: `local-${teamId}-${i}`, teamId, key: idx < st.segments.length ? st.segments[idx].key : CINDY_KEY, at });
+        if (idx < st.segments.length) extra.push({ id: `local-${teamId}-${i}`, teamId, key: st.segments[idx].key, at });
       });
     }
     return extra.length ? { ...ctx, events: [...ctx.events, ...extra] } : ctx;
@@ -163,9 +163,10 @@ export function HyroxClient({
       }
     });
   }
-  // Un clic sur une fiche = le segment en cours est valide (ou un tour de Cindy si le parcours est fini).
+  // Un clic sur une fiche = le segment en cours est valide. Parcours fini : le clic ouvre le detail de l'equipe.
   function validate(teamId: string) {
     setError("");
+    if (states.get(teamId)?.finishedMs != null) { setOpenTeamId(teamId); return; }
     const at = liveMs;
     const serverCount = eventCounts(ctx.events).get(teamId) ?? 0;
     setLocal((l) => ({ ...l, [teamId]: { count: Math.max(l[teamId]?.count ?? 0, serverCount) + 1, ats: [...(l[teamId]?.ats ?? []), at] } }));
@@ -351,7 +352,7 @@ export function HyroxClient({
                     compact={compact}
                     flashing={flash === team.id}
                     disabled={isPaused}
-                    onClick={() => (phase === "run" ? validate(team.id) : setOpenTeamId(team.id))}
+                    onClick={() => (phase === "run" && states.get(team.id)!.finishedMs === null ? validate(team.id) : setOpenTeamId(team.id))}
                     onMore={() => setOpenTeamId(team.id)}
                   />
                 ))}
@@ -381,12 +382,12 @@ export function HyroxClient({
 // Une fiche du pave : « ÉQUIPE 3 » (police panneau), les prenoms, l'exercice en cours (police display), sa consigne,
 // le chrono depuis le dernier clic, la progression. Couleur = tour en cours. Clic = validation ; « ⋯ » = detail.
 function TeamTile({ st, phase, laps, liveMs, compact, flashing, disabled, onClick, onMore }: { st: HXTeamState; phase: Phase; laps: number; liveMs: number; compact: boolean; flashing: boolean; disabled: boolean; onClick: () => void; onMore: () => void }) {
-  const { team, current, finishedMs, cindy, cards, done, segments } = st;
+  const { team, current, finishedMs, cards, done, segments } = st;
   const finished = finishedMs !== null;
   const style = lapStyle(st.lap);
   const bg = finished ? "bg-success text-white" : phase === "pre" ? "bg-card text-ink border border-line-2" : current?.kind === "run" ? style.run : style.station;
   const main = finished ? `🏁 ${fmt(finishedMs)}` : current ? current.label : "";
-  const detail = phase === "pre" ? `Départ : ${segments[0].detail}` : finished ? `Cindy ×${cindy.length} · clic = tour suivant` : current?.detail ?? "";
+  const detail = phase === "pre" ? `Départ : ${segments[0].detail}` : finished ? "Parcours terminé" : current?.detail ?? "";
   const pct = segments.length ? Math.round((done / segments.length) * 100) : 0;
   // Temps ecoule depuis la derniere validation de CETTE equipe (depuis le depart tant qu'elle n'a rien valide).
   const since = phase === "run" ? Math.max(0, liveMs - (st.lastMs ?? 0)) : null;
@@ -395,7 +396,7 @@ function TeamTile({ st, phase, laps, liveMs, compact, flashing, disabled, onClic
       <button
         onClick={onClick}
         disabled={disabled}
-        title={phase === "run" ? `Valider : ${main}` : "Ouvrir l'équipe"}
+        title={phase === "run" && !finished ? `Valider : ${main}` : "Ouvrir l'équipe"}
         className={cx("w-full h-full text-left flex flex-col disabled:opacity-60 active:scale-[.985] transition-transform", compact ? "px-2 py-1" : "px-2.5 py-1.5")}
       >
         <span className="flex items-center gap-1.5 pr-7 min-w-0">
@@ -454,13 +455,13 @@ function TopsColumn({ stations, tops }: { stations: HXStat[]; tops: Record<strin
   );
 }
 
-// Detail d'une equipe : progression, gros bouton Valider (segment en cours ou tour de Cindy), retour arriere,
+// Detail d'une equipe : progression, gros bouton Valider (segment en cours), retour arriere,
 // cartes jaunes, station de depart avant la course.
 function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, onClose }: { ctx: HXContext; st: HXTeamState; sessionId: string; phase: Phase; isPaused: boolean; liveMs: number; onValidate: () => void; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const { team, segments, times, splits, done, current, finishedMs, cindy, cards } = st;
+  const { team, segments, times, splits, done, current, finishedMs, cards } = st;
   const finished = finishedMs !== null;
   const canValidate = phase === "run" && !isPaused;
   const laps = ctx.settings.laps;
@@ -479,7 +480,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
     });
   }
   function undo() {
-    const last = cindy.length ? "Tour de Cindy" : done ? segments[done - 1].label : null;
+    const last = done ? segments[done - 1].label : null;
     if (!last) return;
     if (!confirm(`Annuler la dernière validation de ${team.name} : ${last} ?`)) return;
     act(() => hxUndoTeamAction(sessionId, team.id));
@@ -516,20 +517,20 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
 
         <div className={cx("rounded-2xl p-4 mb-3 shadow-card", finished ? "bg-success text-white" : current?.kind === "run" ? style.run : style.station)}>
           <p className="text-xs font-extrabold uppercase tracking-wide opacity-80">{finished ? "Parcours terminé" : `En cours · ${laps > 1 ? `tour ${st.lap}/${laps} · ` : ""}segment ${done + 1}/${segments.length}`}</p>
-          <p className="font-display text-[28px] font-extrabold leading-tight">{finished ? `🏁 ${fmt(finishedMs)} · Cindy ×${cindy.length}` : current?.label ?? ""}</p>
-          <p className="text-sm opacity-90 mb-3">{finished ? ctx.settings.cindyLabel : current?.detail}</p>
-          <button
+          <p className="font-display text-[28px] font-extrabold leading-tight">{finished ? `🏁 ${fmt(finishedMs)}` : current?.label ?? ""}</p>
+          <p className={cx("text-sm opacity-90", !finished && "mb-3")}>{finished ? `Les ${segments.length} segments sont validés.` : current?.detail}</p>
+          {!finished && <button
             onClick={() => { onValidate(); onClose(); }}
             disabled={pending || !canValidate}
             className="w-full rounded-2xl bg-white text-ink font-display font-extrabold text-xl py-4 shadow-sm disabled:opacity-50 active:scale-[.98] transition"
           >
-            {finished ? `➕ Tour de Cindy n° ${cindy.length + 1}` : `✅ Valider : ${current?.label ?? ""}`}
-          </button>
-          {!canValidate && <p className="text-xs opacity-90 mt-2">{phase === "pre" ? "Lance d'abord la course." : phase === "post" ? "Course terminée." : "Course en pause."}</p>}
+            ✅ Valider : {current?.label ?? ""}
+          </button>}
+          {!finished && !canValidate && <p className="text-xs opacity-90 mt-2">{phase === "pre" ? "Lance d'abord la course." : phase === "post" ? "Course terminée." : "Course en pause."}</p>}
         </div>
 
         <div className="flex flex-wrap gap-2 mb-3">
-          <button onClick={undo} disabled={pending || (done === 0 && cindy.length === 0)} className={btn.ghost}>↶ Annuler la dernière validation</button>
+          <button onClick={undo} disabled={pending || done === 0} className={btn.ghost}>↶ Annuler la dernière validation</button>
           <span className={`${ui.inset} flex items-center gap-2 px-3 py-1.5`}>
             <span className="text-sm font-bold">🟨 Cartes jaunes</span>
             <button onClick={() => act(() => hxCardAction(sessionId, team.id, -1))} disabled={pending || cards === 0 || phase === "pre"} className="w-8 h-8 rounded-lg border border-line-2 font-extrabold">−</button>
@@ -556,14 +557,6 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
                   </tr>
                 );
               })}
-              {cindy.map((c, i) => (
-                <tr key={`cindy${i}`} className={`${ui.tr} text-success-ink`}>
-                  <td className="p-2 font-display font-extrabold">C{i + 1}</td>
-                  <td className="p-2 font-bold" colSpan={laps > 1 ? 3 : 2}>Tour de Cindy</td>
-                  <td className="p-2 text-right tabular-nums">{fmt(c)}</td>
-                  <td className="p-2 text-right tabular-nums font-bold">{fmt(c - (i ? cindy[i - 1] : finishedMs ?? 0))}</td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
@@ -597,7 +590,7 @@ function CardsView({ states, teams, sessionId, phase, penSec, onRun, pending }: 
   );
 }
 
-// Deux classements separes (Sartay) : le temps du WOD, et les tours de Cindy. Le bareme de bonus viendra plus tard.
+// Classement au temps du WOD (+ penalites) ; la colonne QCM montre les points bonus, bareme a fixer par Sartay.
 function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
   const thR = `${ui.th} text-right`;
   if (!hasData) return <p className={`${ui.muted} py-4`}>Rien à afficher. Encode tes équipes, puis lance la course.</p>;
@@ -605,7 +598,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
   const members = (t: HXContext["teams"][number]) => t.members.map((m) => m.name).join(" · ");
   const stationTotal = ctx.settings.stations.length * ctx.settings.laps;
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4 items-start">
+    <div>
       <div>
         <h3 className={`${ui.h3} mb-1.5`}>⏱ Classement au temps</h3>
         <p className={`${ui.hint} mb-2`}>Temps au dernier segment ({ctx.settings.laps} tour{ctx.settings.laps > 1 ? "s" : ""}), + {ctx.settings.penSec} s par carte jaune. Les équipes non arrivées suivent, classées par segments faits.</p>
@@ -630,25 +623,6 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div>
-        <h3 className={`${ui.h3} mb-1.5`}>💪 Classement Cindy</h3>
-        <p className={`${ui.hint} mb-2`}>{ctx.settings.cindyLabel} · tours validés après le parcours ; à égalité, l&apos;arrivée la plus rapide devant.</p>
-        <div className={`${ui.card} overflow-auto`}>
-          <table className="w-full text-[13px] border-collapse whitespace-nowrap">
-            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={thR}>Tours</th><th className={thR}>Temps WOD</th></tr></thead>
-            <tbody>
-              {cindyRows(ctx).map((st, i) => (
-                <tr key={st.team.id} className={`${ui.tr} text-right tabular-nums`}>
-                  <td className="p-2 text-left font-display font-extrabold">{st.cindy.length ? i + 1 : "—"}</td>
-                  <td className="p-2 text-left font-bold">{st.team.name}</td>
-                  <td className="p-2 font-extrabold">{st.cindy.length}</td>
-                  <td className="p-2">{st.scoreMs !== null ? fmt(st.scoreMs) : "—"}</td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
@@ -698,7 +672,7 @@ function StatsView({ ctx }: { ctx: HXContext }) {
               <tr>
                 <th className={ui.th}>Équipe</th>
                 {ctx.settings.stations.map((s, i) => <th key={s.id} className={thR} title={s.label}>S{i + 1}</th>)}
-                <th className={thR}>Temps</th><th className={thR}>Cindy</th>
+                <th className={thR}>Temps</th>
               </tr>
             </thead>
             <tbody>
@@ -712,7 +686,6 @@ function StatsView({ ctx }: { ctx: HXContext }) {
                       <td key={s.id} className="p-2">{Array.from({ length: laps }, (_, l) => d[lapKey(s.id, l + 1)]).filter((v): v is number => v !== undefined).map((v) => fmt(v)).join(" · ")}</td>
                     ))}
                     <td className="p-2 font-extrabold">{st.finishedMs !== null ? fmt(st.finishedMs) : ""}</td>
-                    <td className="p-2">{st.cindy.length || ""}</td>
                   </tr>
                 );
               })}
@@ -726,7 +699,7 @@ function StatsView({ ctx }: { ctx: HXContext }) {
 }
 
 // Reglages de la seance : les stations (libelle, quantite, unite ; on en ajoute ou retire), le run et ses parties, le
-// nombre de tours, le temps limite, la carte jaune, Cindy, le nombre d'equipes. Le parcours se fige a la premiere validation.
+// nombre de tours, le temps limite, la carte jaune, le nombre d'equipes. Le parcours se fige a la premiere validation.
 function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClose, onSaved }: { sessionId: string; settings: HXSettings; locked: boolean; numTeams: number; canResize: boolean; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<HXSettingsInput>({
     stations: settings.stations.map((s) => ({ label: s.label, reps: s.reps, unit: s.unit })),
@@ -736,7 +709,6 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
     laps: settings.laps,
     capMin: settings.capMin,
     penSec: settings.penSec,
-    cindyLabel: settings.cindyLabel,
   });
   const [partsText, setPartsText] = useState(settings.runParts.join(", "));
   const [teams, setTeams] = useState(numTeams);
@@ -768,7 +740,7 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
           <h3 className={ui.h2}>⚙️ Réglages de l&apos;Eval</h3>
           <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
         </div>
-        {locked && <p className={`${ui.alertWarn} mb-3`}>Des validations existent déjà : stations, runs et tours sont figés. Temps limite, carte jaune et libellé de Cindy restent modifiables.</p>}
+        {locked && <p className={`${ui.alertWarn} mb-3`}>Des validations existent déjà : stations, runs et tours sont figés. Temps limite et carte jaune restent modifiables.</p>}
         {error && <p className={`${ui.alertErr} mb-3`}>{error}</p>}
 
         <p className="text-sm font-bold mb-1">Les {form.stations.length} stations</p>
@@ -807,7 +779,6 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
           <label className="text-xs"><span className={ui.label}>Temps limite (min)</span><input type="number" min={5} max={180} value={form.capMin} onChange={(e) => setForm({ ...form, capMin: parseInt(e.target.value, 10) || 50 })} className={ui.input} /></label>
           <label className="text-xs"><span className={ui.label}>Carte jaune (s)</span><input type="number" min={0} max={600} value={form.penSec} onChange={(e) => setForm({ ...form, penSec: parseInt(e.target.value, 10) || 0 })} className={ui.input} /></label>
-          <label className="text-xs col-span-2"><span className={ui.label}>Cindy (après le parcours)</span><input value={form.cindyLabel} onChange={(e) => setForm({ ...form, cindyLabel: e.target.value })} className={ui.input} /></label>
         </div>
         <label className="text-xs block mb-4"><span className={ui.label}>Nombre d&apos;équipes {canResize ? "" : "(figé : course lancée)"}</span><input type="number" min={1} max={50} value={teams} disabled={!canResize} onChange={(e) => setTeams(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)))} className={`${ui.input} w-28`} /></label>
 

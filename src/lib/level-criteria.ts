@@ -178,6 +178,8 @@ export const CRITERIA: Record<string, string[]> = {
     "Le bassin descend au moins au niveau des genoux (cuisses parallèles au sol).",
     "Les talons restent au sol et les genoux suivent l'axe des pieds.",
     "Le dos reste droit, poitrine haute, et l'élève se relève en extension complète des hanches.",
+    "Les pieds restent écartés à la largeur des épaules et ne bougent pas pendant la série.",
+    "La descente est contrôlée (l'élève ne se laisse pas tomber).",
     "L'élève enchaîne les squats à un rythme régulier, sans pause.",
   ],
   // HELICO (30/09) : criteres ecrits pour l'exercice ajoute par Sartay (3 techniques + intensite), a faire valider.
@@ -186,6 +188,32 @@ export const CRITERIA: Record<string, string[]> = {
     "Le poids passe bien dans le dos, de la main droite à la main gauche, sans tomber.",
     "Les bras sont tendus quand le poids repasse devant, sans que les mains se posent au sol.",
     "L'élève enchaîne les tours à un rythme régulier, sans pause.",
+  ],
+  // Stations du WOD Eval (03/10) : PROPOSITION de 6 criteres par station, du plus important (securite, posture) au
+  // moins important (rythme), a travailler avec Sartay. « Pompage » = les criteres des POMPES (voir LABEL_ALIASES).
+  "BURPEES BROAD JUMP": [
+    "La poitrine et les cuisses touchent le sol lors de la phase basse.",
+    "Le saut en longueur part des deux pieds en même temps et se réceptionne sur les deux pieds.",
+    "La réception est amortie (genoux fléchis, pieds à plat), sans déséquilibre vers l'avant.",
+    "L'élève saute vers l'avant le plus loin possible, bras lancés vers l'avant.",
+    "Le burpee suivant repart de l'endroit de la réception (aucun pas d'élan entre deux sauts).",
+    "L'élève enchaîne burpee et saut à un rythme soutenu, sans pause.",
+  ],
+  "FENTES MARCHÉES": [
+    "Le genou arrière touche ou frôle doucement le sol à chaque pas.",
+    "Le genou avant reste dans l'axe du pied et ne dépasse pas excessivement la pointe du pied.",
+    "Le buste reste droit et gainé, regard devant (il ne s'affaisse pas vers l'avant).",
+    "L'élève se redresse complètement (jambes tendues) entre deux fentes.",
+    "Les jambes alternent à chaque pas, avec de grands pas réguliers.",
+    "L'élève avance à un rythme soutenu, sans s'arrêter entre les pas.",
+  ],
+  "FARMER CARRY": [
+    "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).",
+    "Le buste reste droit, épaules basses et en arrière, regard devant pendant tout le trajet.",
+    "Les bras restent tendus le long du corps, les charges ne se balancent pas.",
+    "Les charges sont posées au sol, jamais lâchées, et seulement derrière la ligne.",
+    "La ligne est franchie avec les charges à chaque extrémité avant le demi-tour.",
+    "L'élève marche vite, à petits pas rapides, sans s'arrêter.",
   ],
   "TOUR DE POUTRE": [
     "Les passages s'effectuent de façon contrôlée, sans heurter la poutre violemment.",
@@ -236,7 +264,10 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
-  SQUATS: ["Cuisses parallèles", "Talons au sol", "Dos droit, debout", "Rythme régulier"],
+  SQUATS: ["Cuisses parallèles", "Talons au sol", "Dos droit, debout", "Pieds largeur d'épaules, fixes", "Descente contrôlée", "Rythme régulier"],
+  "BURPEES BROAD JUMP": ["Poitrine et cuisses au sol", "Départ et arrivée à deux pieds", "Réception amortie", "Saut loin, bras lancés", "Repart de la réception", "Rythme soutenu"],
+  "FENTES MARCHÉES": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Buste droit, gainé", "Retour debout complet", "Grands pas alternés", "Rythme soutenu"],
+  "FARMER CARRY": ["Soulevé jambes fléchies, dos droit", "Buste droit, épaules basses", "Bras tendus, charges stables", "Charges posées, pas lâchées", "Ligne franchie", "Marche rapide"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
@@ -254,7 +285,7 @@ export const GENERIC_CRITERIA = [
 ];
 
 // Anciens libelles encore figes dans des seances passees (29/09 : le tire tapis n'est plus un aller-retour).
-const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS" };
+const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES" }; // + alias : « pompage » = pompes (station du WOD Eval)
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
@@ -286,6 +317,9 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   "BOX JUMP": ["👣", "📦", "🧍", "⏱️"],
   SQUATS: ["⬇️", "🦶", "🧍", "⏱️"],
   HELICO: ["📏", "🔄", "💪", "⏱️"],
+  "BURPEES BROAD JUMP": ["⬇️", "👣", "🪶", "🔥"],
+  "FENTES MARCHÉES": ["🦵", "🎯", "🧍", "⏱️"],
+  "FARMER CARRY": ["🏋️", "🧍", "💪", "⏱️"],
   "TOUR DE POUTRE": ["🛡️", "⬆️", "⬇️", "🔥"],
 };
 const GENERIC_EMOJI = ["🧍", "📐", "🎛️", "🔥"];

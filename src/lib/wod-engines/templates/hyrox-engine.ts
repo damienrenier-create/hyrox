@@ -1,8 +1,8 @@
 // Moteur « Eval » (ex-« Hyrox », Sartay 01-03/10 ; identifiant de WOD inchange : HYROX). Equipes de 3, 9 stations,
 // un run APRES chaque station, le circuit se fait 2 FOIS (2 tours), depart decale (chaque equipe commence a SA station
-// et tourne), temps limite 50 min ; parcours fini = Cindy en AMRAP jusqu'au temps limite. Chaque station et chaque run
-// sont valides a l'ordi : un pointage date par segment -> temps par station, par run, total ; deux classements separes
-// (temps du WOD, tours de Cindy). Tout est reglable par seance (stations, reps, parties d'un run, nombre de tours).
+// et tourne), temps limite 50 min (la Cindy de fin de parcours a ete abandonnee le 03/10). Chaque station et chaque run
+// sont valides a l'ordi : un pointage date par segment -> temps par station, par run, total ; un classement au temps
+// (+ penalites des cartes jaunes). Tout est reglable par seance (stations, reps, parties d'un run, nombre de tours).
 // Module PUR : temps en ms ECOULEES de course (pauses deduites), comme la Fete Foraine.
 
 export const HX_MIN_STATIONS = 2;
@@ -32,9 +32,8 @@ export type HXSettings = {
   runParts: string[];
   runAfterLast: boolean; // un run apres la toute derniere station aussi (Eval : oui, « apres CHAQUE station »)
   laps: number; // nombre de tours du circuit (Eval : 2)
-  capMin: number; // temps limite du WOD (Cindy comprise)
+  capMin: number; // temps limite du WOD
   penSec: number; // secondes ajoutees au temps par carte jaune
-  cindyLabel: string;
 };
 export const HX_MAX_RUN_PARTS = 4;
 export const HX_PART_LETTERS = ["A", "B", "C", "D"];
@@ -46,7 +45,6 @@ export const HX_DEFAULTS: HXSettings = {
   laps: 2,
   capMin: 50,
   penSec: 60,
-  cindyLabel: "Cindy : 5 tractions · 10 pompes · 15 squats",
 };
 
 const str = (v: unknown, d: string) => (typeof v === "string" && v.trim() ? v.trim() : d);
@@ -72,16 +70,17 @@ export function readHXSettings(settings: unknown): HXSettings {
     laps: num(h?.laps, h ? 1 : HX_DEFAULTS.laps, 1, HX_MAX_LAPS),
     capMin: num(h?.capMin, HX_DEFAULTS.capMin, 5, 180),
     penSec: num(h?.penSec, HX_DEFAULTS.penSec, 0, 600),
-    cindyLabel: str(h?.cindyLabel, HX_DEFAULTS.cindyLabel),
   };
 }
 
 export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
 export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[] };
-export type HXEvent = { id: string; teamId: string; key: string; at: number }; // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" | "cindy" ; at = ms ecoulees
+export type HXEvent = { id: string; teamId: string; key: string; at: number }; // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees
 export type HXCard = { id: string; teamId: string; at: number };
 export type HXContext = { teams: HXTeam[]; settings: HXSettings; events: HXEvent[]; cards: HXCard[] };
 
+// Ancienne cle des tours de Cindy (AMRAP apres le parcours, abandonnee le 03/10 : « on laisse tomber le cindy »). Les
+// pointages deja enregistres sous cette cle restent en base (regle d'or) et sont ignores par le calcul.
 export const CINDY_KEY = "cindy";
 
 export function fmt(ms: number | null | undefined): string {
@@ -145,11 +144,10 @@ export type HXTeamState = {
   current: HXSegment | null; // segment en cours (null = parcours fini)
   lap: number; // tour en cours (le dernier une fois fini)
   finishedMs: number | null; // temps du WOD (dernier segment)
-  cindy: number[]; // ms ecoulees de chaque tour de Cindy valide
   cards: number;
   penMs: number;
   scoreMs: number | null; // temps + penalites
-  lastMs: number | null; // derniere validation (station, run ou Cindy)
+  lastMs: number | null; // derniere validation (station ou run)
   stationsDone: number;
   runsDone: number;
   quiz: { done: number; score: number }; // QCM bonus : eleves ayant repondu, somme de leurs points (bareme a fixer)
@@ -160,17 +158,16 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
   const segments = segmentsFor(ctx.settings, startIndex);
   const ev = ctx.events.filter((e) => e.teamId === team.id).sort((a, b) => a.at - b.at);
   const times: number[] = [];
-  const cindy: number[] = [];
   for (const e of ev) {
-    if (e.key === CINDY_KEY) cindy.push(e.at);
-    else if (times.length < segments.length) times.push(e.at);
+    if (e.key === CINDY_KEY) continue; // ancien pointage Cindy : ignore
+    if (times.length < segments.length) times.push(e.at);
   }
   const splits = times.map((t, i) => t - (i ? times[i - 1] : 0));
   const done = times.length;
   const finishedMs = done >= segments.length ? times[segments.length - 1] : null;
   const cards = ctx.cards.filter((c) => c.teamId === team.id).length;
   const penMs = cards * ctx.settings.penSec * 1000;
-  const lastMs = cindy.length ? cindy[cindy.length - 1] : done ? times[done - 1] : null;
+  const lastMs = done ? times[done - 1] : null;
   const current = finishedMs === null ? segments[done] : null;
   const nParts = ctx.settings.runParts.length || 1;
   return {
@@ -183,7 +180,6 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
     current,
     lap: current?.lap ?? Math.max(1, ctx.settings.laps),
     finishedMs,
-    cindy,
     cards,
     penMs,
     scoreMs: finishedMs === null ? null : finishedMs + penMs,
@@ -207,13 +203,6 @@ export function timeRows(ctx: HXContext): HXTeamState[] {
     if (a.lastMs !== null && b.lastMs !== null && a.lastMs !== b.lastMs) return a.lastMs - b.lastMs;
     return a.team.order - b.team.order;
   });
-  return out;
-}
-
-// Classement Cindy : tours faits, puis temps du WOD (arrivee plus rapide devant a egalite).
-export function cindyRows(ctx: HXContext): HXTeamState[] {
-  const out = ctx.teams.map((t) => teamState(ctx, t));
-  out.sort((a, b) => b.cindy.length - a.cindy.length || (a.scoreMs ?? Infinity) - (b.scoreMs ?? Infinity) || a.team.order - b.team.order);
   return out;
 }
 
@@ -276,7 +265,7 @@ export function segmentStats(ctx: HXContext, topN = 3): { stations: HXStat[]; ru
 }
 
 export function segmentLabel(ctx: HXContext, teamId: string, key: string): string {
-  if (key === CINDY_KEY) return "Tour de Cindy";
+  if (key === CINDY_KEY) return "Tour de Cindy (ancien)";
   const team = ctx.teams.find((t) => t.id === teamId);
   if (!team) return key;
   const seg = segmentsFor(ctx.settings, startIndexOf(ctx, team)).find((s) => s.key === key);
@@ -289,21 +278,17 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   const L: string[] = [];
   const members = (t: HXTeam) => t.members.map((m) => m.name).join(" / ");
   L.push("Classement au temps");
-  L.push(["Rang", "Equipe", "Eleves", "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", "Tours Cindy", "QCM (points)", "QCM (reponses)"].join(";"));
+  L.push(["Rang", "Equipe", "Eleves", "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", "QCM (points)", "QCM (reponses)"].join(";"));
   let rank = 0;
   timeRows(ctx).forEach((st) => {
     if (st.scoreMs !== null) rank++;
-    L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.cindy.length, st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
+    L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
   });
-  L.push("");
-  L.push("Classement Cindy");
-  L.push(["Rang", "Equipe", "Tours", "Temps WOD"].join(";"));
-  cindyRows(ctx).forEach((st, i) => L.push([i + 1, st.team.name, st.cindy.length, st.scoreMs !== null ? fmt(st.scoreMs) : ""].join(";")));
   L.push("");
   L.push("Detail par equipe (temps ecoule a la validation ; entre parentheses : duree du segment)");
   ctx.teams.forEach((t) => {
     const st = teamState(ctx, t);
-    L.push([t.name, ...st.segments.map((s, i) => `${ctx.settings.laps > 1 ? `T${s.lap} ` : ""}${s.label}${i < st.done ? ` ${fmt(st.times[i])} (${fmt(st.splits[i])})` : ""}`), ...st.cindy.map((c, i) => `Cindy ${i + 1} ${fmt(c)}`)].join(";"));
+    L.push([t.name, ...st.segments.map((s, i) => `${ctx.settings.laps > 1 ? `T${s.lap} ` : ""}${s.label}${i < st.done ? ` ${fmt(st.times[i])} (${fmt(st.splits[i])})` : ""}`)].join(";"));
   });
   L.push("");
   L.push("Statistiques (stations : tous tours confondus)");
