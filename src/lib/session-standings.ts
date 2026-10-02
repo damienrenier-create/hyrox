@@ -65,7 +65,7 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
       teamId: st.team.id,
       teamName: st.team.name,
       laps: st.stationsDone,
-      lapsTotal: b.ctx.settings.stations.length,
+      lapsTotal: b.ctx.settings.stations.length * b.ctx.settings.laps,
       time: st.scoreMs !== null ? hxFmt(st.scoreMs) : st.lastMs !== null ? hxFmt(st.lastMs) : null,
       late: null,
       start: `${st.startIndex + 1} · ${b.ctx.settings.stations[st.startIndex]?.label ?? ""}`,

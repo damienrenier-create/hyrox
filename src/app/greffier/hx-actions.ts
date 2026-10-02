@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { CINDY_KEY, readHXSettings, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
+import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, readHXSettings, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
 
 // Actions du greffier Hyrox (Sartay 01/10). Les profs (ADMIN) tiennent aussi ce greffier : leurs seances s'ouvrent
 // desormais depuis leur propre journal de classe.
@@ -106,6 +106,7 @@ export type HXSettingsInput = {
   runLabel: string;
   runParts: string[];
   runAfterLast: boolean;
+  laps: number;
   capMin: number;
   penSec: number;
   cindyLabel: string;
@@ -117,19 +118,24 @@ export async function hxSettingsAction(sessionId: string, input: HXSettingsInput
   await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) return { error: "Séance introuvable." };
+  if (input.stations.length < HX_MIN_STATIONS || input.stations.length > HX_MAX_STATIONS) return { error: `Il faut entre ${HX_MIN_STATIONS} et ${HX_MAX_STATIONS} stations.` };
   const current = readHXSettings(session.settings);
-  const next: HXSettings = readHXSettings({ hyrox: { ...input, stations: input.stations.map((s, i) => ({ id: current.stations[i]?.id ?? `st${i + 1}`, ...s })) } });
+  const next: HXSettings = readHXSettings({ hyrox: { ...input, stations: input.stations.map((s, i) => ({ id: `st${i + 1}`, ...s })) } });
   const locked = !!(await db.orm.public.StationEvent.where({ sessionId }).first());
   const courseChanged =
     next.runAfterLast !== current.runAfterLast ||
+    next.laps !== current.laps ||
     next.runParts.join("|") !== current.runParts.join("|") ||
+    next.stations.length !== current.stations.length ||
     next.stations.some((s, i) => s.label !== current.stations[i].label || s.reps !== current.stations[i].reps || s.unit !== current.stations[i].unit);
-  if (locked && courseChanged) return { error: "Des validations existent déjà : les stations et les runs ne se modifient plus (« Remettre à zéro » pour repartir)." };
+  if (locked && courseChanged) return { error: "Des validations existent déjà : les stations, les runs et les tours ne se modifient plus (« Remettre à zéro » pour repartir)." };
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  // Libelles aussi dans settings.exercises : colonnes du Touche-Coule des arbitres (exercisesFor).
-  const prevEx = (prev.exercises as Record<string, { label?: string; number?: number }> | undefined) ?? {};
-  const exercises = { ...prevEx };
-  next.stations.forEach((s, i) => { exercises[s.id] = { ...(prevEx[s.id] ?? {}), label: s.label, number: i + 1 }; });
-  await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, hyrox: next, exercises } });
+  // Une station de depart qui n'existe plus (moins de stations) retombe sur le round-robin.
+  if (next.stations.length < current.stations.length) {
+    const ids = new Set(next.stations.map((s) => s.id));
+    for (const t of await db.orm.public.Team.where({ sessionId }).all()) if (t.startExerciseId && !ids.has(t.startExerciseId)) await db.orm.public.Team.where({ id: t.id }).update({ startExerciseId: null });
+  }
+  // Les colonnes du Touche-Coule lisent directement ces stations (session-exercises.ts).
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: { ...prev, hyrox: next } });
   return { ok: true };
 }

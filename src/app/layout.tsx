@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
+import { Geist, Geist_Mono, Bricolage_Grotesque, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 // Police display (titres, chronos, marque) : caractere sportif sans tomber dans le neon.
 const display = Bricolage_Grotesque({
   variable: "--font-display",
+  subsets: ["latin"],
+});
+
+// Police « panneau d'affichage » (condensee, capitales) : le nom de l'equipe sur les fiches du greffier Eval, pour le
+// distinguer d'un coup d'oeil du nom de la station (Sartay 03/10 : « deux polices differentes »).
+const team = Bebas_Neue({
+  variable: "--font-bebas",
+  weight: "400",
   subsets: ["latin"],
 });
 
@@ -37,7 +45,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} ${team.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

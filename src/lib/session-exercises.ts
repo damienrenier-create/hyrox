@@ -1,4 +1,5 @@
 import { getWodEngine } from "@/lib/wod-engines";
+import { readHXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
 
 export type ExerciseDef = { id: string; label: string; number: number };
 export type ExerciseOverride = { label?: string; number?: number };
@@ -22,6 +23,8 @@ export function readExerciseOverrides(settings: unknown): Record<string, Exercis
 }
 
 export function exercisesFor(session: { wodType: string; settings?: unknown }): ExerciseDef[] {
+  // WOD Eval (HYROX) : les stations (nombre et libelles) sont celles reglees pour CETTE seance.
+  if (session.wodType === "HYROX") return readHXSettings(session.settings).stations.map((s, i) => ({ id: s.id, label: s.label, number: i + 1 }));
   const base = getWodEngine(session.wodType).exercises;
   const ov = readExerciseOverrides(session.settings);
   return base

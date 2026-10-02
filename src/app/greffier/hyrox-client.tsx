@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  CINDY_KEY, HX_MAX_RUN_PARTS, HX_UNITS, cindyRows, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
-  type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState,
+  CINDY_KEY, HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, cindyRows, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
+  type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
 } from "@/lib/wod-engines/templates/hyrox-engine";
 import type { HXBundle } from "@/lib/hyrox-context";
 import type { BoardData } from "@/lib/referee-board";
@@ -28,12 +28,28 @@ type View = "race" | "cards" | "results" | "stats" | "teams" | "arbitrage";
 type Phase = "pre" | "run" | "post";
 type ActionResult = { error: string } | { ok: true } | { ok: true; key: string };
 const COLS = 5;
+// Une couleur par TOUR (Sartay 03/10) : tour 1 bleu, tour 2 violet (puis sarcelle, rose) ; le run est la nuance foncee.
+const LAP_STYLE = [
+  { station: "bg-brand text-white", run: "bg-sea text-white" },
+  { station: "bg-violet-600 text-white", run: "bg-violet-900 text-white" },
+  { station: "bg-teal-600 text-white", run: "bg-teal-800 text-white" },
+  { station: "bg-rose-600 text-white", run: "bg-rose-800 text-white" },
+];
+const lapStyle = (lap: number) => LAP_STYLE[(Math.max(1, lap) - 1) % LAP_STYLE.length];
+// Validations locales en attente de confirmation : nombre total attendu pour l'equipe, heure (ms ecoulees) de chaque clic.
+type LocalTaps = { count: number; ats: number[] };
+function eventCounts(events: HXEvent[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const e of events) m.set(e.teamId, (m.get(e.teamId) ?? 0) + 1);
+  return m;
+}
+const MEDALS = ["🥇", "🥈", "🥉"];
 
-// Greffier « Hyrox » (Sartay 01-02/10) : chrono et temps limite en haut, pave de 5 colonnes qui remplit l'ecran
-// (toutes les equipes visibles d'un coup : 20 equipes = 4 lignes), chaque fiche = « ÉQUIPE X » + l'exercice en cours
-// (station, ou RUN 1 A / B / C). UN CLIC sur la fiche = validation, l'exercice suivant s'affiche aussitot ; « ⋯ » ouvre le
-// detail (progression, retour arriere, cartes, station de depart). Onglets cartes jaunes, classements (temps / Cindy),
-// statistiques par station et par run. Ecran PC projete.
+// Greffier « Eval » (WOD HYROX ; Sartay 01-03/10) : chrono et temps limite en haut, pave de 5 colonnes qui remplit
+// l'ecran (toutes les equipes visibles d'un coup), chaque fiche = « ÉQUIPE X » (police panneau) + l'exercice en cours
+// (police display) + un chrono depuis le dernier clic, dans la couleur de son tour. UN CLIC sur la fiche = validation,
+// l'exercice suivant s'affiche aussitot ; « ⋯ » ouvre le detail. A droite : le top 3 de chaque station. Onglets cartes
+// jaunes, classements (temps / Cindy), statistiques. Ecran PC projete.
 export function HyroxClient({
   sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, picker, showConsole = false, winter = false,
 }: {
@@ -88,31 +104,38 @@ export function HyroxClient({
   const capMs = ctx.settings.capMin * 60_000;
   const remainMs = capMs - liveMs;
 
-  // Validation OPTIMISTE : au clic, la fiche passe tout de suite a l'exercice suivant (validation locale « en attente »),
-  // le serveur confirme ensuite ; quand le rendu serveur revient, les validations locales sont retirees (pattern
-  // « ajuster l'etat quand une prop change », pendant le rendu).
-  const [bumps, setBumps] = useState<Record<string, number>>({});
+  // Validation OPTIMISTE : au clic, la fiche passe tout de suite a l'exercice suivant et son chrono repart de l'instant
+  // du clic ; le serveur confirme ensuite. Pour chaque equipe on retient le NOMBRE de validations attendu et l'heure de
+  // chaque clic en attente : tant que le serveur en montre moins, on complete localement ; des qu'il a rattrape, l'entree
+  // tombe (pattern « ajuster l'etat quand une prop change », pendant le rendu). Deux clics rapproches sur deux equipes ne
+  // se marchent donc pas dessus, meme si leurs reponses arrivent dans le desordre.
+  const [local, setLocal] = useState<Record<string, LocalTaps>>({});
   const [seenBundle, setSeenBundle] = useState(bundle);
   if (seenBundle !== bundle) {
     setSeenBundle(bundle);
-    setBumps({});
+    const counts = eventCounts(bundle.ctx.events);
+    setLocal((l) => Object.fromEntries(Object.entries(l).filter(([teamId, x]) => (counts.get(teamId) ?? 0) < x.count)));
   }
   const liveCtx = useMemo<HXContext>(() => {
+    const counts = eventCounts(ctx.events);
     const extra: HXEvent[] = [];
-    for (const [teamId, n] of Object.entries(bumps)) {
-      const t = ctx.teams.find((x) => x.id === teamId);
-      if (!t || !n) continue;
+    for (const [teamId, x] of Object.entries(local)) {
+      const t = ctx.teams.find((y) => y.id === teamId);
+      const missing = x.count - (counts.get(teamId) ?? 0);
+      if (!t || missing <= 0) continue;
       const st = teamState(ctx, t);
-      for (let i = 0; i < n; i++) {
+      x.ats.slice(-missing).forEach((at, i) => {
         const idx = st.done + i;
-        extra.push({ id: `local-${teamId}-${i}`, teamId, key: idx < st.segments.length ? st.segments[idx].key : CINDY_KEY, at: liveMs });
-      }
+        extra.push({ id: `local-${teamId}-${i}`, teamId, key: idx < st.segments.length ? st.segments[idx].key : CINDY_KEY, at });
+      });
     }
     return extra.length ? { ...ctx, events: [...ctx.events, ...extra] } : ctx;
-  }, [ctx, bumps, liveMs]);
+  }, [ctx, local]);
 
   const states = useMemo(() => new Map(liveCtx.teams.map((t) => [t.id, teamState(liveCtx, t)])), [liveCtx]);
   const teams = useMemo(() => [...ctx.teams].sort((a, b) => a.order - b.order), [ctx.teams]);
+  // Top 3 par station : sur les validations confirmees par le serveur (pas les clics en attente).
+  const stats = useMemo(() => segmentStats(ctx), [ctx]);
   // Station de depart annoncee aux eleves pendant l'encodage (onglet Equipes & arbitres, ecran projete).
   const startByTeam = useMemo(() => Object.fromEntries(teams.map((t) => { const s0 = states.get(t.id)!.segments[0]; return [t.id, { number: s0.stationNo, label: s0.short }]; })), [teams, states]);
   const totalCards = ctx.cards.length;
@@ -120,27 +143,49 @@ export function HyroxClient({
   function refresh() {
     router.refresh();
   }
+  // Rechargement groupe apres des validations : la fiche est deja a jour localement, inutile de relancer tout le rendu
+  // serveur a chaque clic (une equipe valide toutes les quelques secondes).
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function scheduleRefresh() {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => router.refresh(), 1200);
+  }
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
+  // Actions de l'en-tete (pause, annuler, remise a zero…) : les validations locales en attente sont oubliees, le serveur fait foi.
   function run(action: () => Promise<ActionResult>) {
     setError("");
     startTransition(async () => {
       const res = await action();
       if ("error" in res) setError(res.error);
-      else refresh();
+      else {
+        setLocal({});
+        refresh();
+      }
     });
   }
   // Un clic sur une fiche = le segment en cours est valide (ou un tour de Cindy si le parcours est fini).
   function validate(teamId: string) {
     setError("");
-    setBumps((b) => ({ ...b, [teamId]: (b[teamId] ?? 0) + 1 }));
+    const at = liveMs;
+    const serverCount = eventCounts(ctx.events).get(teamId) ?? 0;
+    setLocal((l) => ({ ...l, [teamId]: { count: Math.max(l[teamId]?.count ?? 0, serverCount) + 1, ats: [...(l[teamId]?.ats ?? []), at] } }));
     setFlash(teamId);
     startTransition(async () => {
       const res = await hxTapAction(sessionId, teamId);
       if ("error" in res) {
-        setBumps((b) => ({ ...b, [teamId]: Math.max(0, (b[teamId] ?? 0) - 1) }));
+        // Refuse (double clic, pause…) : la validation locale est retiree, la fiche revient a l'etat du serveur.
+        setLocal((l) => {
+          const cur = l[teamId];
+          if (!cur) return l;
+          const rest = { ...l };
+          if (cur.ats.length <= 1) delete rest[teamId];
+          else rest[teamId] = { count: cur.count - 1, ats: cur.ats.slice(0, -1) };
+          return rest;
+        });
         setError(res.error);
         return;
       }
-      refresh();
+      scheduleRefresh();
     });
   }
   function handleStart() {
@@ -184,7 +229,7 @@ export function HyroxClient({
     const d = new Date();
     const p = (n: number) => (n < 10 ? "0" : "") + n;
     a.href = url;
-    a.download = `hyrox_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
+    a.download = `eval_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -195,6 +240,7 @@ export function HyroxClient({
   const tabBtn = (on: boolean) => cx("text-xs font-bold px-2.5 py-1 rounded-lg transition", on ? ui.segOn : ui.segOff);
   const rows = Math.max(1, Math.ceil(teams.length / COLS));
   const compact = rows >= 5;
+  const laps = ctx.settings.laps;
 
   return (
     <div className={cx(ui.page, "h-dvh flex flex-col overflow-hidden")}>
@@ -205,7 +251,7 @@ export function HyroxClient({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <div className="flex items-center gap-4 min-w-0">
             <div className="min-w-0">
-              <span className={ui.eyebrow}>Greffier · Hyrox</span>
+              <span className={ui.eyebrow}>Greffier · Eval</span>
               <div className="flex items-center gap-1.5 min-w-0">
                 <SessionStep to={olderSession} dir="older" />
                 {sessionOptions.length > 1 ? (
@@ -228,7 +274,7 @@ export function HyroxClient({
                     {remainMs >= 0 ? `reste ${fmt(remainMs)}` : `+${fmt(-remainMs)} après ${ctx.settings.capMin} min`}
                   </p>
                 )}
-                <p className="text-[11px] text-ink-2">{phase === "pre" ? `Chrono à l'arrêt · ${ctx.settings.capMin} min` : phase === "post" ? "Course terminée" : isPaused ? "EN PAUSE — validations bloquées" : "Course en cours · un clic sur la fiche = validé"}</p>
+                <p className="text-[11px] text-ink-2">{phase === "pre" ? `Chrono à l'arrêt · ${ctx.settings.capMin} min · ${ctx.settings.stations.length} stations × ${laps} tour${laps > 1 ? "s" : ""}` : phase === "post" ? "Course terminée" : isPaused ? "EN PAUSE — validations bloquées" : "Course en cours · un clic sur la fiche = validé"}</p>
               </div>
             </div>
           </div>
@@ -259,19 +305,30 @@ export function HyroxClient({
           </div>
         </div>
         {error && <p className={`${ui.alertErr} mt-1 py-1 text-sm`}>{error}</p>}
-        <div className={`${ui.segmented} mt-1.5 flex-wrap`}>
-          <button onClick={() => setView("race")} className={tabBtn(view === "race")}>Course</button>
-          <button onClick={() => setView("cards")} className={tabBtn(view === "cards")}>🟨 Cartes jaunes{totalCards > 0 && <span className={`${ui.chip} ${ui.chipWarn} ml-1`}>{totalCards}</span>}</button>
-          <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Classement</button>
-          <button onClick={() => setView("stats")} className={tabBtn(view === "stats")}>Stats</button>
-          <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
-            Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
-            {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
-          </button>
-          {board && (
-            <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
-              Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
+        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+          <div className={`${ui.segmented} flex-wrap`}>
+            <button onClick={() => setView("race")} className={tabBtn(view === "race")}>Course</button>
+            <button onClick={() => setView("cards")} className={tabBtn(view === "cards")}>🟨 Cartes jaunes{totalCards > 0 && <span className={`${ui.chip} ${ui.chipWarn} ml-1`}>{totalCards}</span>}</button>
+            <button onClick={() => setView("results")} className={tabBtn(view === "results")}>Classement</button>
+            <button onClick={() => setView("stats")} className={tabBtn(view === "stats")}>Stats</button>
+            <button onClick={() => setView("teams")} className={tabBtn(view === "teams")}>
+              Équipes &amp; arbitres <span className={cx(ui.chip, "ml-1", memberCount ? ui.chipOk : ui.chipWarn)}>{memberCount}</span>
+              {referees.length > 0 && <span className={`${ui.chip} ${ui.chipSea} ml-1`}>🏴‍☠️ {referees.length}</span>}
             </button>
+            {board && (
+              <button onClick={() => setView("arbitrage")} className={tabBtn(view === "arbitrage")}>
+                Arbitrage <span className={`${ui.chip} ${ui.chipAccent} ml-1`}>{board.evaluationsCount}</span>
+              </button>
+            )}
+          </div>
+          {/* Legende des tours : une couleur par tour (station), le run en plus fonce. */}
+          {view === "race" && laps > 1 && (
+            <span className="flex items-center gap-2 text-[11px] font-bold text-ink-2">
+              {Array.from({ length: laps }, (_, i) => (
+                <span key={i} className="flex items-center gap-1"><span className={cx("w-3 h-3 rounded", lapStyle(i + 1).station)} /><span className={cx("w-3 h-3 rounded", lapStyle(i + 1).run)} /> tour {i + 1}</span>
+              ))}
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-success" /> fini</span>
+            </span>
           )}
         </div>
       </header>
@@ -281,20 +338,25 @@ export function HyroxClient({
           teams.length === 0 ? (
             <p className={`${ui.muted} py-6 text-center`}>Aucune équipe : règle le nombre d&apos;équipes dans ⚙️ Réglages.</p>
           ) : (
-            /* Pave : 5 colonnes, autant de lignes que necessaire, et TOUT l'ecran : les 20 fiches sont visibles d'un coup. */
-            <div className="grid h-full gap-1.5" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
-              {teams.map((team) => (
-                <TeamTile
-                  key={team.id}
-                  st={states.get(team.id)!}
-                  phase={phase}
-                  compact={compact}
-                  flashing={flash === team.id}
-                  disabled={isPaused}
-                  onClick={() => (phase === "run" ? validate(team.id) : setOpenTeamId(team.id))}
-                  onMore={() => setOpenTeamId(team.id)}
-                />
-              ))}
+            <div className="flex h-full gap-1.5">
+              {/* Pave : 5 colonnes, autant de lignes que necessaire, et TOUT l'ecran : toutes les fiches sont visibles d'un coup. */}
+              <div className="grid flex-1 min-w-0 h-full gap-1.5" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
+                {teams.map((team) => (
+                  <TeamTile
+                    key={team.id}
+                    st={states.get(team.id)!}
+                    phase={phase}
+                    laps={laps}
+                    liveMs={liveMs}
+                    compact={compact}
+                    flashing={flash === team.id}
+                    disabled={isPaused}
+                    onClick={() => (phase === "run" ? validate(team.id) : setOpenTeamId(team.id))}
+                    onMore={() => setOpenTeamId(team.id)}
+                  />
+                ))}
+              </div>
+              <TopsColumn stations={stats.stations} tops={stats.tops} />
             </div>
           )
         )}
@@ -316,15 +378,18 @@ export function HyroxClient({
   );
 }
 
-// Une fiche du pave : « ÉQUIPE 3 », les prenoms, l'exercice en cours en gros, sa consigne, la progression.
-// Clic = validation (course en cours) ; « ⋯ » = detail de l'equipe.
-function TeamTile({ st, phase, compact, flashing, disabled, onClick, onMore }: { st: HXTeamState; phase: Phase; compact: boolean; flashing: boolean; disabled: boolean; onClick: () => void; onMore: () => void }) {
+// Une fiche du pave : « ÉQUIPE 3 » (police panneau), les prenoms, l'exercice en cours (police display), sa consigne,
+// le chrono depuis le dernier clic, la progression. Couleur = tour en cours. Clic = validation ; « ⋯ » = detail.
+function TeamTile({ st, phase, laps, liveMs, compact, flashing, disabled, onClick, onMore }: { st: HXTeamState; phase: Phase; laps: number; liveMs: number; compact: boolean; flashing: boolean; disabled: boolean; onClick: () => void; onMore: () => void }) {
   const { team, current, finishedMs, cindy, cards, done, segments } = st;
   const finished = finishedMs !== null;
-  const bg = finished ? "bg-success text-white" : phase === "pre" ? "bg-card text-ink border border-line-2" : current?.kind === "run" ? "bg-sea text-white" : "bg-brand text-white";
+  const style = lapStyle(st.lap);
+  const bg = finished ? "bg-success text-white" : phase === "pre" ? "bg-card text-ink border border-line-2" : current?.kind === "run" ? style.run : style.station;
   const main = finished ? `🏁 ${fmt(finishedMs)}` : current ? current.label : "";
   const detail = phase === "pre" ? `Départ : ${segments[0].detail}` : finished ? `Cindy ×${cindy.length} · clic = tour suivant` : current?.detail ?? "";
   const pct = segments.length ? Math.round((done / segments.length) * 100) : 0;
+  // Temps ecoule depuis la derniere validation de CETTE equipe (depuis le depart tant qu'elle n'a rien valide).
+  const since = phase === "run" ? Math.max(0, liveMs - (st.lastMs ?? 0)) : null;
   return (
     <div className={cx("relative rounded-2xl min-h-0 overflow-hidden shadow-card transition-transform", bg, flashing && "levelup")}>
       <button
@@ -333,14 +398,18 @@ function TeamTile({ st, phase, compact, flashing, disabled, onClick, onMore }: {
         title={phase === "run" ? `Valider : ${main}` : "Ouvrir l'équipe"}
         className={cx("w-full h-full text-left flex flex-col disabled:opacity-60 active:scale-[.985] transition-transform", compact ? "px-2 py-1" : "px-2.5 py-1.5")}
       >
-        <span className="flex items-baseline gap-1.5 pr-7">
-          <span className={cx("font-display font-extrabold leading-none uppercase tracking-tight", compact ? "text-[20px]" : "text-[26px]")}>Équipe {team.order}</span>
-          {cards > 0 && <span className="text-[10px] font-extrabold bg-yellow-300 text-yellow-900 rounded-md px-1 py-0.5 leading-none">🟨 ×{cards}</span>}
+        <span className="flex items-center gap-1.5 pr-7 min-w-0">
+          <span className={cx("font-team leading-[0.9] uppercase tracking-wide whitespace-nowrap", compact ? "text-[25px]" : "text-[33px]")}>Équipe {team.order}</span>
+          {cards > 0 && <span className="text-[10px] font-extrabold bg-yellow-300 text-yellow-900 rounded-md px-1 py-0.5 leading-none whitespace-nowrap">🟨 ×{cards}</span>}
         </span>
-        <span className="text-[11px] opacity-80 truncate leading-tight">{team.members.map((m) => m.name).join(" & ") || "—"}</span>
-        <span className={cx("font-extrabold leading-tight mt-0.5", compact ? "text-[15px] line-clamp-1" : "text-[20px] line-clamp-2")}>{main}</span>
+        <span className="flex items-center gap-1.5 min-w-0">
+          <span className="flex-1 min-w-0 text-[11px] opacity-80 truncate leading-tight">{team.members.map((m) => m.name).join(" · ") || "—"}</span>
+          {laps > 1 && phase !== "pre" && !finished && <span className="text-[10px] font-extrabold uppercase bg-white/25 rounded-md px-1 py-0.5 leading-none whitespace-nowrap">Tour {st.lap}/{laps}</span>}
+        </span>
+        <span className={cx("font-display font-extrabold leading-tight mt-0.5", compact ? "text-[15px] line-clamp-1" : "text-[19px] line-clamp-2")}>{main}</span>
         <span className="text-[11px] opacity-85 truncate">{detail}</span>
         <span className="mt-auto pt-1 flex items-center gap-1.5 text-[10.5px] font-bold tabular-nums">
+          {since !== null && <span className="font-mono text-[12px] bg-black/20 rounded px-1 leading-tight" title="Temps écoulé depuis la dernière validation de cette équipe">⏱ {fmt(since)}</span>}
           <span className="flex-1 h-1.5 rounded-full bg-black/15 overflow-hidden"><span className="block h-full bg-white/90" style={{ width: `${pct}%` }} /></span>
           <span>{done}/{segments.length}</span>
         </span>
@@ -357,6 +426,34 @@ function TeamTile({ st, phase, compact, flashing, disabled, onClick, onMore }: {
   );
 }
 
+// Colonne de droite : le top 3 des equipes sur chaque station (meilleur passage de chaque equipe) et leur temps.
+function TopsColumn({ stations, tops }: { stations: HXStat[]; tops: Record<string, HXTop[]> }) {
+  return (
+    <aside className="hidden lg:flex w-[236px] shrink-0 flex-col rounded-2xl border border-line bg-card overflow-hidden">
+      <p className="px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-ink-2 border-b border-line">🏆 Top 3 par station</p>
+      <ul className="flex-1 min-h-0 overflow-auto divide-y divide-line">
+        {stations.map((s) => {
+          const top = tops[s.key] ?? [];
+          return (
+            <li key={s.key} className="px-2.5 py-1">
+              <p className="font-display font-extrabold text-[12.5px] leading-tight truncate">{s.label}</p>
+              {top.length === 0 ? (
+                <p className="text-[11px] text-ink-3 leading-snug">—</p>
+              ) : (
+                <p className="flex gap-2 text-[11.5px] tabular-nums leading-snug whitespace-nowrap">
+                  {top.map((x, i) => (
+                    <span key={x.teamId} title={`${x.name} : ${fmt(x.ms)}`}>{MEDALS[i]}<b className="font-team text-[15px] tracking-wide"> É{x.order}</b> {fmt(x.ms)}</span>
+                  ))}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+}
+
 // Detail d'une equipe : progression, gros bouton Valider (segment en cours ou tour de Cindy), retour arriere,
 // cartes jaunes, station de depart avant la course.
 function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, onClose }: { ctx: HXContext; st: HXTeamState; sessionId: string; phase: Phase; isPaused: boolean; liveMs: number; onValidate: () => void; onClose: () => void }) {
@@ -366,6 +463,8 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
   const { team, segments, times, splits, done, current, finishedMs, cindy, cards } = st;
   const finished = finishedMs !== null;
   const canValidate = phase === "run" && !isPaused;
+  const laps = ctx.settings.laps;
+  const style = lapStyle(st.lap);
 
   function act(fn: () => Promise<ActionResult>) {
     setError("");
@@ -389,9 +488,9 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
   return (
     <div className="fixed inset-0 z-30 bg-paper flex flex-col">
       <div className="flex justify-between items-center gap-3 px-4 py-3 bg-card border-b border-line">
-        <h3 className="font-display text-[22px] font-extrabold leading-tight uppercase">
-          {team.name}
-          {team.members.length > 0 && <span className="block text-sm font-normal font-sans normal-case text-ink-2">{team.members.map((m) => m.name).join(" & ")}</span>}
+        <h3 className="leading-tight">
+          <span className="font-team text-[34px] uppercase tracking-wide leading-none">{team.name}</span>
+          {team.members.length > 0 && <span className="block text-sm text-ink-2">{team.members.map((m) => m.name).join(" · ")}</span>}
         </h3>
         <div className="flex items-center gap-3">
           <span className={cx("font-display text-[30px] font-extrabold tabular-nums", finished ? "text-success" : "text-ink")}>{finished ? fmt(finishedMs) : phase !== "pre" ? fmt(liveMs) : "0:00"}</span>
@@ -404,10 +503,10 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
         {phase === "pre" && (
           <div className={`${ui.cardPad} mb-3`}>
             <p className="text-sm font-bold mb-1">Station de départ</p>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
               {ctx.settings.stations.map((s, i) => (
-                <button key={s.id} type="button" disabled={pending} onClick={() => act(() => hxSetStartAction(sessionId, team.id, s.id))} className={cx("rounded-xl px-2 py-2 text-sm font-bold border transition", st.startIndex === i ? "bg-brand text-white border-brand" : "bg-card border-line hover:border-brand")}>
-                  <span className="font-display text-lg font-extrabold mr-1">{i + 1}</span><span className="truncate">{s.label}</span>
+                <button key={s.id} type="button" disabled={pending} onClick={() => act(() => hxSetStartAction(sessionId, team.id, s.id))} className={cx("rounded-xl px-2 py-2 text-sm font-bold border transition text-left truncate", st.startIndex === i ? "bg-brand text-white border-brand" : "bg-card border-line hover:border-brand")}>
+                  <span className="font-display text-lg font-extrabold mr-1">{i + 1}</span>{s.label}
                 </button>
               ))}
             </div>
@@ -415,8 +514,8 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
           </div>
         )}
 
-        <div className={cx("rounded-2xl p-4 mb-3 text-white shadow-card", finished ? "bg-success" : current?.kind === "run" ? "bg-sea" : "bg-brand")}>
-          <p className="text-xs font-extrabold uppercase tracking-wide opacity-80">{finished ? "Parcours terminé" : `En cours · segment ${done + 1}/${segments.length}`}</p>
+        <div className={cx("rounded-2xl p-4 mb-3 shadow-card", finished ? "bg-success text-white" : current?.kind === "run" ? style.run : style.station)}>
+          <p className="text-xs font-extrabold uppercase tracking-wide opacity-80">{finished ? "Parcours terminé" : `En cours · ${laps > 1 ? `tour ${st.lap}/${laps} · ` : ""}segment ${done + 1}/${segments.length}`}</p>
           <p className="font-display text-[28px] font-extrabold leading-tight">{finished ? `🏁 ${fmt(finishedMs)} · Cindy ×${cindy.length}` : current?.label ?? ""}</p>
           <p className="text-sm opacity-90 mb-3">{finished ? ctx.settings.cindyLabel : current?.detail}</p>
           <button
@@ -442,13 +541,14 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
 
         <div className={`${ui.card} overflow-hidden`}>
           <table className="w-full text-sm">
-            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Segment</th><th className={ui.th}>Consigne</th><th className={`${ui.th} text-right`}>Validé à</th><th className={`${ui.th} text-right`}>Durée</th></tr></thead>
+            <thead><tr><th className={ui.th}>#</th>{laps > 1 && <th className={ui.th}>Tour</th>}<th className={ui.th}>Segment</th><th className={ui.th}>Consigne</th><th className={`${ui.th} text-right`}>Validé à</th><th className={`${ui.th} text-right`}>Durée</th></tr></thead>
             <tbody>
               {segments.map((seg, i) => {
                 const state = i < done ? "done" : i === done && !finished ? "current" : "todo";
                 return (
                   <tr key={seg.key} className={cx(ui.tr, state === "current" && "bg-brand-soft", state === "todo" && "text-ink-3")}>
                     <td className="p-2 font-display font-extrabold">{seg.n}</td>
+                    {laps > 1 && <td className="p-2"><span className={cx("inline-block w-2.5 h-2.5 rounded-sm mr-1 align-middle", lapStyle(seg.lap).station)} />{seg.lap}</td>}
                     <td className="p-2 font-bold">{seg.kind === "run" ? "🏃 " : ""}{seg.label}</td>
                     <td className="p-2 text-ink-2">{seg.detail}</td>
                     <td className="p-2 text-right tabular-nums">{i < done ? fmt(times[i]) : ""}</td>
@@ -459,7 +559,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
               {cindy.map((c, i) => (
                 <tr key={`cindy${i}`} className={`${ui.tr} text-success-ink`}>
                   <td className="p-2 font-display font-extrabold">C{i + 1}</td>
-                  <td className="p-2 font-bold" colSpan={2}>Tour de Cindy</td>
+                  <td className="p-2 font-bold" colSpan={laps > 1 ? 3 : 2}>Tour de Cindy</td>
                   <td className="p-2 text-right tabular-nums">{fmt(c)}</td>
                   <td className="p-2 text-right tabular-nums font-bold">{fmt(c - (i ? cindy[i - 1] : finishedMs ?? 0))}</td>
                 </tr>
@@ -484,8 +584,8 @@ function CardsView({ states, teams, sessionId, phase, penSec, onRun, pending }: 
           return (
             <div key={team.id} className={cx("rounded-2xl border p-2.5 min-h-[96px] flex flex-col", st.cards ? "bg-yellow-50 border-yellow-400" : "bg-card border-line")}>
               <button onClick={() => { if (confirm(`Carte jaune pour ${team.name} ?`)) onRun(() => hxCardAction(sessionId, team.id, 1)); }} disabled={pending || phase === "pre"} className="text-left flex-1 disabled:opacity-50">
-                <span className="font-display text-[22px] font-extrabold leading-none uppercase">Équipe {team.order}</span>
-                <span className="block text-[11px] text-ink-2 truncate">{team.members.map((m) => m.name).join(" & ") || "—"}</span>
+                <span className="font-team text-[28px] leading-none uppercase tracking-wide">Équipe {team.order}</span>
+                <span className="block text-[11px] text-ink-2 truncate">{team.members.map((m) => m.name).join(" · ") || "—"}</span>
                 <span className="block font-bold mt-1">🟨 ×{st.cards}{st.cards ? <span className="text-xs text-ink-3 font-normal"> (+{fmt(st.penMs)})</span> : null}</span>
               </button>
               {st.cards > 0 && <button onClick={() => onRun(() => hxCardAction(sessionId, team.id, -1))} disabled={pending} className={`${btn.smGhost} mt-1 self-start`}>retirer</button>}
@@ -502,12 +602,13 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
   const thR = `${ui.th} text-right`;
   if (!hasData) return <p className={`${ui.muted} py-4`}>Rien à afficher. Encode tes équipes, puis lance la course.</p>;
   let rank = 0;
-  const members = (t: HXContext["teams"][number]) => t.members.map((m) => m.name).join(" & ");
+  const members = (t: HXContext["teams"][number]) => t.members.map((m) => m.name).join(" · ");
+  const stationTotal = ctx.settings.stations.length * ctx.settings.laps;
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4 items-start">
       <div>
         <h3 className={`${ui.h3} mb-1.5`}>⏱ Classement au temps</h3>
-        <p className={`${ui.hint} mb-2`}>Temps à la dernière station, + {ctx.settings.penSec} s par carte jaune. Les équipes non arrivées suivent, classées par segments faits.</p>
+        <p className={`${ui.hint} mb-2`}>Temps au dernier segment ({ctx.settings.laps} tour{ctx.settings.laps > 1 ? "s" : ""}), + {ctx.settings.penSec} s par carte jaune. Les équipes non arrivées suivent, classées par segments faits.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[13px] border-collapse whitespace-nowrap">
             <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves</th><th className={thR}>Départ</th><th className={thR}>Stations</th><th className={thR}>Runs</th><th className={thR}>Temps</th><th className={thR}>🟨</th><th className={thR}>Score</th><th className={thR} title="QCM bonus : points des élèves ayant répondu (barème à fixer)">📝 QCM</th></tr></thead>
@@ -520,7 +621,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
                     <td className="p-2 text-left font-bold">{st.team.name}</td>
                     <td className="p-2 text-left text-ink-2">{members(st.team) || "—"}</td>
                     <td className="p-2">{st.startIndex + 1}</td>
-                    <td className="p-2">{st.stationsDone}/{ctx.settings.stations.length}</td>
+                    <td className="p-2">{st.stationsDone}/{stationTotal}</td>
                     <td className="p-2">{st.runsDone}</td>
                     <td className="p-2">{st.finishedMs !== null ? fmt(st.finishedMs) : st.lastMs !== null ? `(${fmt(st.lastMs)})` : "—"}</td>
                     <td className="p-2">{st.cards ? `×${st.cards} (+${fmt(st.penMs)})` : ""}</td>
@@ -556,19 +657,20 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
   );
 }
 
-// Tableau de statistiques d'un type de segment : equipes passees, meilleur, moyen.
-function StatTable({ title, rows }: { title: string; rows: HXStat[] }) {
+// Tableau de statistiques d'un type de segment : passages, meilleur, moyen (+ top 3 pour les stations).
+function StatTable({ title, rows, tops }: { title: string; rows: HXStat[]; tops?: Record<string, HXTop[]> }) {
   const thR = `${ui.th} text-right`;
   return (
     <div>
       <h3 className={`${ui.h3} mb-1.5`}>{title}</h3>
       <div className={`${ui.card} overflow-auto`}>
         <table className="w-full text-[13px] border-collapse whitespace-nowrap">
-          <thead><tr><th className={ui.th}>Segment</th><th className={thR}>Équipes</th><th className={thR}>Meilleur</th><th className={thR}>Moyen</th></tr></thead>
+          <thead><tr><th className={ui.th}>Segment</th><th className={thR}>Passages</th><th className={thR}>Meilleur</th><th className={thR}>Moyen</th>{tops && <th className={ui.th}>Top 3</th>}</tr></thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.key} className={`${ui.tr} text-right tabular-nums`}>
                 <td className="p-2 text-left font-bold">{s.label}</td><td className="p-2">{s.n}</td><td className="p-2 font-extrabold text-success-ink">{s.best !== null ? fmt(s.best) : "—"}</td><td className="p-2">{s.avg !== null ? fmt(s.avg) : "—"}</td>
+                {tops && <td className="p-2 text-left text-ink-2">{(tops[s.key] ?? []).map((x, i) => `${MEDALS[i]} ${x.name} ${fmt(x.ms)}`).join("  ") || "—"}</td>}
               </tr>
             ))}
           </tbody>
@@ -578,27 +680,24 @@ function StatTable({ title, rows }: { title: string; rows: HXStat[] }) {
   );
 }
 
-// Statistiques : par station et par run complet (meilleur, moyen), puis le detail des durees par equipe.
+// Statistiques : par station (tous tours confondus) et par run complet, puis le detail des durees par equipe.
 function StatsView({ ctx }: { ctx: HXContext }) {
   const stats = useMemo(() => segmentStats(ctx), [ctx]);
   const thR = `${ui.th} text-right`;
-  const nRuns = stats.runs.length;
+  const laps = ctx.settings.laps;
+  const lapKey = (id: string, lap: number) => `st:${id}${lap > 1 ? `:${lap}` : ""}`;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <StatTable title="Stations" rows={stats.stations} />
-        <StatTable title={`Runs (${ctx.settings.runParts.length > 1 ? `${ctx.settings.runParts.length} parties additionnées` : "complets"})`} rows={stats.runs} />
-      </div>
+      <StatTable title={`Stations${laps > 1 ? ` (les ${laps} tours confondus)` : ""}`} rows={stats.stations} tops={stats.tops} />
       <div>
         <h3 className={`${ui.h3} mb-1.5`}>Durées par équipe</h3>
-        <p className={`${ui.hint} mb-2`}>S1…S{ctx.settings.stations.length} = durée passée à chaque station (dans l&apos;ordre des stations, pas du parcours de l&apos;équipe) ; R1…R{nRuns} = runs complets dans l&apos;ordre du parcours.</p>
+        <p className={`${ui.hint} mb-2`}>S1…S{ctx.settings.stations.length} = durée passée à chaque station (dans l&apos;ordre des stations){laps > 1 ? " : tour 1 · tour 2" : ""}.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[12px] border-collapse whitespace-nowrap">
             <thead>
               <tr>
                 <th className={ui.th}>Équipe</th>
                 {ctx.settings.stations.map((s, i) => <th key={s.id} className={thR} title={s.label}>S{i + 1}</th>)}
-                {stats.runs.map((r, i) => <th key={r.key} className={thR}>R{i + 1}</th>)}
                 <th className={thR}>Temps</th><th className={thR}>Cindy</th>
               </tr>
             </thead>
@@ -609,8 +708,9 @@ function StatsView({ ctx }: { ctx: HXContext }) {
                 return (
                   <tr key={t.id} className={`${ui.tr} text-right tabular-nums`}>
                     <td className="p-2 text-left font-bold">{t.name}</td>
-                    {ctx.settings.stations.map((s) => <td key={s.id} className="p-2">{d[`st:${s.id}`] !== undefined ? fmt(d[`st:${s.id}`]) : ""}</td>)}
-                    {stats.runs.map((r) => <td key={r.key} className="p-2">{d[r.key] !== undefined ? fmt(d[r.key]) : ""}</td>)}
+                    {ctx.settings.stations.map((s) => (
+                      <td key={s.id} className="p-2">{Array.from({ length: laps }, (_, l) => d[lapKey(s.id, l + 1)]).filter((v): v is number => v !== undefined).map((v) => fmt(v)).join(" · ")}</td>
+                    ))}
                     <td className="p-2 font-extrabold">{st.finishedMs !== null ? fmt(st.finishedMs) : ""}</td>
                     <td className="p-2">{st.cindy.length || ""}</td>
                   </tr>
@@ -620,18 +720,20 @@ function StatsView({ ctx }: { ctx: HXContext }) {
           </table>
         </div>
       </div>
+      <StatTable title={`Runs (${ctx.settings.runParts.length > 1 ? `${ctx.settings.runParts.length} parties additionnées` : ctx.settings.runParts[0]})`} rows={stats.runs} />
     </div>
   );
 }
 
-// Reglages de la seance : les 8 stations (libelle, reps, unite), le run et ses parties, le temps limite, la carte
-// jaune, Cindy, le nombre d'equipes. Stations et runs se figent a la premiere validation.
+// Reglages de la seance : les stations (libelle, quantite, unite ; on en ajoute ou retire), le run et ses parties, le
+// nombre de tours, le temps limite, la carte jaune, Cindy, le nombre d'equipes. Le parcours se fige a la premiere validation.
 function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClose, onSaved }: { sessionId: string; settings: HXSettings; locked: boolean; numTeams: number; canResize: boolean; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<HXSettingsInput>({
     stations: settings.stations.map((s) => ({ label: s.label, reps: s.reps, unit: s.unit })),
     runLabel: settings.runLabel,
     runParts: settings.runParts,
     runAfterLast: settings.runAfterLast,
+    laps: settings.laps,
     capMin: settings.capMin,
     penSec: settings.penSec,
     cindyLabel: settings.cindyLabel,
@@ -642,10 +744,12 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
   const [error, setError] = useState("");
   const setStation = (i: number, patch: Partial<HXSettingsInput["stations"][number]>) => setForm((f) => ({ ...f, stations: f.stations.map((s, k) => (k === i ? { ...s, ...patch } : s)) }));
   const parts = partsText.split(",").map((p) => p.trim()).filter(Boolean).slice(0, HX_MAX_RUN_PARTS);
+  const nSeg = form.laps * form.stations.length * (1 + Math.max(1, parts.length)) - (form.runAfterLast ? 0 : Math.max(1, parts.length));
 
   function save() {
     setError("");
-    if (!parts.length) { setError("Indique au moins une partie de run (ex. « Élève 1, Élève 2, À deux »)."); return; }
+    if (!parts.length) { setError("Indique ce qu'est un run (ex. « 2 allers-retours »)."); return; }
+    if (form.stations.some((s) => !s.label.trim())) { setError("Chaque station a besoin d'un nom."); return; }
     startTransition(async () => {
       const res = await hxSettingsAction(sessionId, { ...form, runParts: parts });
       if ("error" in res) { setError(res.error); return; }
@@ -661,33 +765,44 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
     <div className={ui.backdrop} onClick={onClose}>
       <div className={`${ui.sheet} sm:max-w-2xl`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-3">
-          <h3 className={ui.h2}>⚙️ Réglages du Hyrox</h3>
+          <h3 className={ui.h2}>⚙️ Réglages de l&apos;Eval</h3>
           <button onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
         </div>
-        {locked && <p className={`${ui.alertWarn} mb-3`}>Des validations existent déjà : les stations et les runs sont figés. Temps limite, carte jaune et libellé de Cindy restent modifiables.</p>}
+        {locked && <p className={`${ui.alertWarn} mb-3`}>Des validations existent déjà : stations, runs et tours sont figés. Temps limite, carte jaune et libellé de Cindy restent modifiables.</p>}
         {error && <p className={`${ui.alertErr} mb-3`}>{error}</p>}
 
         <p className="text-sm font-bold mb-1">Les {form.stations.length} stations</p>
-        <div className="space-y-1.5 mb-4">
+        <div className="space-y-1.5 mb-2">
           {form.stations.map((s, i) => (
             <div key={i} className="grid grid-cols-[28px_1fr_80px_90px] gap-1.5 items-center">
               <span className="font-display font-extrabold text-lg text-ink-3">{i + 1}</span>
               <input value={s.label} disabled={locked} onChange={(e) => setStation(i, { label: e.target.value })} className={ui.input} placeholder="Exercice" />
               <input type="number" min={0} value={s.reps} disabled={locked} onChange={(e) => setStation(i, { reps: Math.max(0, parseInt(e.target.value, 10) || 0) })} className={`${ui.input} text-right`} />
               <select value={s.unit} disabled={locked} onChange={(e) => setStation(i, { unit: e.target.value })} className={ui.input}>
-                {HX_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                {HX_UNITS.map((u) => <option key={u} value={u}>{u === "A/R" ? "allers-retours" : u}</option>)}
                 {!(HX_UNITS as readonly string[]).includes(s.unit) && <option value={s.unit}>{s.unit}</option>}
               </select>
             </div>
           ))}
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] gap-2 mb-1">
-          <label className="text-xs"><span className={ui.label}>Nom du run</span><input value={form.runLabel} disabled={locked} onChange={(e) => setForm({ ...form, runLabel: e.target.value })} className={ui.input} /></label>
-          <label className="text-xs"><span className={ui.label}>Parties d&apos;un run, séparées par des virgules (une validation chacune)</span><input value={partsText} disabled={locked} onChange={(e) => setPartsText(e.target.value)} className={ui.input} placeholder="Élève 1, Élève 2, À deux" /></label>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button type="button" disabled={locked || form.stations.length >= HX_MAX_STATIONS} onClick={() => setForm((f) => ({ ...f, stations: [...f.stations, { label: `Station ${f.stations.length + 1}`, reps: 60, unit: "rép." }] }))} className={btn.smGhost}>＋ Ajouter une station</button>
+          <button type="button" disabled={locked || form.stations.length <= HX_MIN_STATIONS} onClick={() => setForm((f) => ({ ...f, stations: f.stations.slice(0, -1) }))} className={btn.smGhost}>− Retirer la dernière</button>
         </div>
-        <p className={`${ui.hint} mb-2`}>Sur les fiches : {parts.length > 1 ? parts.map((p, i) => `${form.runLabel.toUpperCase()} 1 ${["A", "B", "C", "D"][i]} (${p})`).join(" · ") : `${form.runLabel.toUpperCase()} 1`}.</p>
-        <label className="flex items-center gap-2 text-sm mb-4"><input type="checkbox" checked={form.runAfterLast} disabled={locked} onChange={(e) => setForm({ ...form, runAfterLast: e.target.checked })} className={ui.check} /> Un run aussi après la dernière station (sinon : {form.stations.length - 1} runs, entre les stations)</label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr_110px] gap-2 mb-1">
+          <label className="text-xs"><span className={ui.label}>Nom du run</span><input value={form.runLabel} disabled={locked} onChange={(e) => setForm({ ...form, runLabel: e.target.value })} className={ui.input} /></label>
+          <label className="text-xs"><span className={ui.label}>Un run = (plusieurs validations : sépare par des virgules)</span><input value={partsText} disabled={locked} onChange={(e) => setPartsText(e.target.value)} className={ui.input} placeholder="2 allers-retours" /></label>
+          <label className="text-xs"><span className={ui.label}>Tours du circuit</span>
+            <select value={form.laps} disabled={locked} onChange={(e) => setForm({ ...form, laps: Number(e.target.value) })} className={ui.input}>
+              {Array.from({ length: HX_MAX_LAPS }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} tour{i ? "s" : ""}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="flex items-center gap-2 text-sm mb-1"><input type="checkbox" checked={form.runAfterLast} disabled={locked} onChange={(e) => setForm({ ...form, runAfterLast: e.target.checked })} className={ui.check} /> Un run aussi après la toute dernière station</label>
+        <p className={`${ui.hint} mb-4`}>
+          Sur les fiches : « {form.stations[0]?.label} » ({amountText(form.stations[0]?.reps ?? 0, form.stations[0]?.unit ?? "")}), puis {parts.length > 1 ? parts.map((p, i) => `${form.runLabel.toUpperCase()} 1 ${["A", "B", "C", "D"][i]} (${p})`).join(", ") : `${form.runLabel.toUpperCase()} 1 (${parts[0] ?? "…"})`}… · {nSeg} validations par équipe.
+        </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
           <label className="text-xs"><span className={ui.label}>Temps limite (min)</span><input type="number" min={5} max={180} value={form.capMin} onChange={(e) => setForm({ ...form, capMin: parseInt(e.target.value, 10) || 50 })} className={ui.input} /></label>
