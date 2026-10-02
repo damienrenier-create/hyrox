@@ -104,7 +104,7 @@ export async function hxSetStartAction(sessionId: string, teamId: string, statio
 export type HXSettingsInput = {
   stations: { label: string; reps: number; unit: string }[];
   runLabel: string;
-  runDetail: string;
+  runParts: string[];
   runAfterLast: boolean;
   capMin: number;
   penSec: number;
@@ -120,7 +120,10 @@ export async function hxSettingsAction(sessionId: string, input: HXSettingsInput
   const current = readHXSettings(session.settings);
   const next: HXSettings = readHXSettings({ hyrox: { ...input, stations: input.stations.map((s, i) => ({ id: current.stations[i]?.id ?? `st${i + 1}`, ...s })) } });
   const locked = !!(await db.orm.public.StationEvent.where({ sessionId }).first());
-  const courseChanged = next.runAfterLast !== current.runAfterLast || next.stations.some((s, i) => s.label !== current.stations[i].label || s.reps !== current.stations[i].reps || s.unit !== current.stations[i].unit);
+  const courseChanged =
+    next.runAfterLast !== current.runAfterLast ||
+    next.runParts.join("|") !== current.runParts.join("|") ||
+    next.stations.some((s, i) => s.label !== current.stations[i].label || s.reps !== current.stations[i].reps || s.unit !== current.stations[i].unit);
   if (locked && courseChanged) return { error: "Des validations existent déjà : les stations et les runs ne se modifient plus (« Remettre à zéro » pour repartir)." };
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
   // Libelles aussi dans settings.exercises : colonnes du Touche-Coule des arbitres (exercisesFor).

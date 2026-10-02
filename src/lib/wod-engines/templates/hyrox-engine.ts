@@ -23,16 +23,20 @@ export const HX_DEFAULT_STATIONS: HXStation[] = [
 export type HXSettings = {
   stations: HXStation[];
   runLabel: string;
-  runDetail: string; // ce qu'est un run, affiche aux eleves (ex. 3 allers-retours : eleve 1, eleve 2, puis a deux)
+  // Un run se valide en plusieurs parties (Sartay 02/10 : « RUN 1 A, RUN 1 B, RUN 1 C » = un aller-retour eleve 1,
+  // un eleve 2, un a deux) : une validation a l'ordi par partie. 1 a 4 parties, nommees.
+  runParts: string[];
   runAfterLast: boolean; // un run apres la 8e station aussi (sinon : 7 runs, entre les stations)
   capMin: number; // temps limite du WOD (Cindy comprise)
   penSec: number; // secondes ajoutees au temps par carte jaune
   cindyLabel: string;
 };
+export const HX_MAX_RUN_PARTS = 4;
+export const HX_PART_LETTERS = ["A", "B", "C", "D"];
 export const HX_DEFAULTS: HXSettings = {
   stations: HX_DEFAULT_STATIONS,
   runLabel: "Run",
-  runDetail: "3 allers-retours : élève 1, puis élève 2, puis à deux",
+  runParts: ["Élève 1", "Élève 2", "À deux"],
   runAfterLast: false,
   capMin: 50,
   penSec: 60,
@@ -50,10 +54,11 @@ export function readHXSettings(settings: unknown): HXSettings {
     const s = raw[i];
     return { id: d.id, label: str(s?.label, d.label), reps: num(s?.reps, d.reps, 0, 100000), unit: str(s?.unit, d.unit) };
   });
+  const parts = Array.isArray(h?.runParts) ? (h!.runParts as unknown[]).filter((p): p is string => typeof p === "string" && p.trim() !== "").map((p) => p.trim()).slice(0, HX_MAX_RUN_PARTS) : [];
   return {
     stations,
     runLabel: str(h?.runLabel, HX_DEFAULTS.runLabel),
-    runDetail: str(h?.runDetail, HX_DEFAULTS.runDetail),
+    runParts: parts.length ? parts : HX_DEFAULTS.runParts,
     runAfterLast: h?.runAfterLast === true,
     capMin: num(h?.capMin, HX_DEFAULTS.capMin, 5, 180),
     penSec: num(h?.penSec, HX_DEFAULTS.penSec, 0, 600),
@@ -78,20 +83,27 @@ export function fmt(ms: number | null | undefined): string {
   return (neg ? "−" : "") + m + ":" + (r < 10 ? "0" : "") + r;
 }
 
-// Un segment du parcours d'une equipe : une station ou un run. `n` = position (1..), `stationNo` = numero de la station
-// (pour un run : la station VERS laquelle on court, 0 = retour a l'arrivee apres la derniere).
-export type HXSegment = { key: string; kind: "station" | "run"; n: number; station: HXStation | null; stationNo: number; label: string; short: string; detail: string };
+// Un segment du parcours d'une equipe : une station, ou une PARTIE de run (RUN 1 A, B, C). `n` = position (1..),
+// `stationNo` = numero de la station (pour un run : celle VERS laquelle on court, 0 = arrivee apres la derniere),
+// `run` / `part` = numero du run et de sa partie. `label` = ce que lit l'eleve sur la fiche (nom de l'exo, sans numero).
+export type HXSegment = { key: string; kind: "station" | "run"; n: number; station: HXStation | null; stationNo: number; run: number; part: number; label: string; short: string; detail: string };
 
 export function segmentsFor(s: HXSettings, startIndex: number): HXSegment[] {
   const out: HXSegment[] = [];
   const N = s.stations.length;
+  const parts = s.runParts.length ? s.runParts : HX_DEFAULTS.runParts;
   for (let i = 0; i < N; i++) {
     const idx = (startIndex + i) % N;
     const st = s.stations[idx];
-    out.push({ key: `st:${st.id}`, kind: "station", n: out.length + 1, station: st, stationNo: idx + 1, label: `${idx + 1} · ${st.label}`, short: st.label, detail: `${st.reps} ${st.unit}` });
+    out.push({ key: `st:${st.id}`, kind: "station", n: out.length + 1, station: st, stationNo: idx + 1, run: 0, part: 0, label: st.label, short: st.label, detail: `${st.reps} ${st.unit} · station ${idx + 1}` });
     if (i < N - 1 || s.runAfterLast) {
-      const nextNo = i < N - 1 ? ((startIndex + i + 1) % N) + 1 : 0;
-      out.push({ key: `run:${i + 1}`, kind: "run", n: out.length + 1, station: null, stationNo: nextNo, label: nextNo ? `${s.runLabel} → ${nextNo}` : `${s.runLabel} → 🏁`, short: s.runLabel, detail: s.runDetail });
+      const nextIdx = i < N - 1 ? (startIndex + i + 1) % N : -1;
+      const nextNo = nextIdx >= 0 ? nextIdx + 1 : 0;
+      const towards = nextIdx >= 0 ? `→ ${s.stations[nextIdx].label}` : "→ arrivée";
+      parts.forEach((p, k) => {
+        const letter = parts.length > 1 ? ` ${HX_PART_LETTERS[k] ?? k + 1}` : "";
+        out.push({ key: parts.length > 1 ? `run:${i + 1}:${k + 1}` : `run:${i + 1}`, kind: "run", n: out.length + 1, station: null, stationNo: nextNo, run: i + 1, part: k + 1, label: `${s.runLabel.toUpperCase()} ${i + 1}${letter}`, short: `${s.runLabel.toUpperCase()} ${i + 1}${letter}`, detail: `${p} ${towards}` });
+      });
     }
   }
   return out;
@@ -153,7 +165,8 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
     scoreMs: finishedMs === null ? null : finishedMs + penMs,
     lastMs,
     stationsDone: segments.slice(0, done).filter((s) => s.kind === "station").length,
-    runsDone: segments.slice(0, done).filter((s) => s.kind === "run").length,
+    // Runs COMPLETS (toutes les parties validees).
+    runsDone: segments.slice(0, done).filter((s) => s.kind === "run" && s.part === (ctx.settings.runParts.length || 1)).length,
     quiz: { done: team.members.filter((m) => m.quiz !== null).length, score: team.members.reduce((a, m) => a + (m.quiz ?? 0), 0) },
   };
 }
@@ -182,17 +195,32 @@ export function cindyRows(ctx: HXContext): HXTeamState[] {
 
 export type HXStat = { key: string; label: string; n: number; best: number | null; avg: number | null };
 
-// Statistiques par station et par run (durees des segments valides, toutes equipes confondues).
+// Statistiques par station et par run (durees des segments valides, toutes equipes confondues). Un run compte quand
+// toutes ses parties sont validees : sa duree = la somme des parties. Cles : "st:<id>" et "run:<n>".
 export function segmentStats(ctx: HXContext): { stations: HXStat[]; runs: HXStat[]; byTeam: Record<string, Record<string, number>> } {
   const acc = new Map<string, number[]>();
   const byTeam: Record<string, Record<string, number>> = {};
+  const nParts = ctx.settings.runParts.length || 1;
   for (const t of ctx.teams) {
     const st = teamState(ctx, t);
     byTeam[t.id] = {};
+    const runAcc = new Map<number, { n: number; ms: number }>();
     for (let i = 0; i < st.done; i++) {
-      const seg = st.segments[i]; // "st:<id>" ou "run:<numero du run dans le parcours>"
-      acc.set(seg.key, [...(acc.get(seg.key) ?? []), st.splits[i]]);
-      byTeam[t.id][seg.key] = st.splits[i];
+      const seg = st.segments[i];
+      if (seg.kind === "station") {
+        acc.set(seg.key, [...(acc.get(seg.key) ?? []), st.splits[i]]);
+        byTeam[t.id][seg.key] = st.splits[i];
+      } else {
+        const r = runAcc.get(seg.run) ?? { n: 0, ms: 0 };
+        r.n++;
+        r.ms += st.splits[i];
+        runAcc.set(seg.run, r);
+      }
+    }
+    for (const [run, r] of runAcc) {
+      if (r.n < nParts) continue;
+      acc.set(`run:${run}`, [...(acc.get(`run:${run}`) ?? []), r.ms]);
+      byTeam[t.id][`run:${run}`] = r.ms;
     }
   }
   const stat = (key: string, label: string): HXStat => {
@@ -201,7 +229,7 @@ export function segmentStats(ctx: HXContext): { stations: HXStat[]; runs: HXStat
   };
   const stations = ctx.settings.stations.map((s, i) => stat(`st:${s.id}`, `${i + 1} · ${s.label}`));
   const nRuns = ctx.settings.stations.length - (ctx.settings.runAfterLast ? 0 : 1);
-  const runs = Array.from({ length: nRuns }, (_, i) => stat(`run:${i + 1}`, `${ctx.settings.runLabel} ${i + 1}`));
+  const runs = Array.from({ length: nRuns }, (_, i) => stat(`run:${i + 1}`, `${ctx.settings.runLabel.toUpperCase()} ${i + 1}`));
   return { stations, runs, byTeam };
 }
 
@@ -247,7 +275,7 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   L.push("");
   L.push("Reglages");
   ctx.settings.stations.forEach((s, i) => L.push([`Station ${i + 1}`, s.label, `${s.reps} ${s.unit}`].join(";")));
-  L.push(["Run", ctx.settings.runLabel, ctx.settings.runDetail].join(";"));
+  L.push(["Run", ctx.settings.runLabel, ctx.settings.runParts.join(" / ")].join(";"));
   L.push(["Temps limite (min)", ctx.settings.capMin].join(";"));
   L.push(["Carte jaune (s)", ctx.settings.penSec].join(";"));
   L.push(["Temps ecoule", fmt(liveMs)].join(";"));

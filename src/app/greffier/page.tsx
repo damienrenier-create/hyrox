@@ -170,6 +170,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
     const hxBundle = await buildHXBundle(session.id);
     return (
       <HyroxClient
+        winter={isWinterArcSeason()}
         sessionId={session.id}
         showConsole={evaluator.role !== "GREFFIER"}
         sessionLabel={session.label ?? wodLabel(session.wodType)}
