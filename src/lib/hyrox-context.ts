@@ -50,7 +50,7 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
     db.orm.public.StationEvent.where({ sessionId }).orderBy((e) => e.at.asc()).all(),
   ]);
   const pauses = pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
-  const events = rawEvents.map((e) => ({ id: e.id, teamId: e.teamId, key: e.stationId, at: elapsed(startedAtMs, pauses, toMs(e.at)) ?? 0 }));
+  const events = rawEvents.map((e) => ({ id: e.id, teamId: e.teamId, key: e.stationId, at: elapsed(startedAtMs, pauses, toMs(e.at)) ?? 0, abs: toMs(e.at) }));
   const cards = cardsRaw.map((c) => ({ id: c.id, teamId: c.teamId, at: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 }));
 
   const ctx: HXContext = { teams, settings: readHXSettings(session.settings), events, cards };

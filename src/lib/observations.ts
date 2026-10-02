@@ -7,8 +7,8 @@ import { criteriaFor, fullCriteriaFor, readCriteria } from "@/lib/level-criteria
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
-import { fmt, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
-import { OBS_MINUTES, OBS_TOLERANCE_MS, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
+import { clockText, fmt, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
+import { OBS_MINUTES, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
 
 // Arbitrage du WOD Eval (Sartay 04/10).
 // - Arbitre ELEVE : l'appli lui tire un eleve au sort, il le suit 5 minutes chrono, consigne chaque serie de reps
@@ -161,6 +161,17 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
     return { match: "off", where, raceAt: fmt(t) };
   };
 
+  // Passages de l'equipe a une station, en heures d'horloge : ce que le greffier a clique (a mettre en face des series).
+  const passes = (teamId: string, exerciseId: string): GreffierPass[] => {
+    const st = stateByTeam.get(teamId);
+    if (!st || b.startedAtMs === null) return [];
+    return st.segments.flatMap((seg, i) => {
+      if (i > st.done || seg.kind !== "station" || seg.station?.id !== exerciseId) return [];
+      const from = clockText(i ? st.clocks[i - 1] : b.startedAtMs) || null;
+      return [{ lap: seg.lap, from, to: i < st.done ? clockText(st.clocks[i]) || null : null }];
+    });
+  };
+
   const observations: ReportObs[] = obs
     .map((o) => {
       const p = partById.get(o.targetUserId);
@@ -181,6 +192,7 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
           label: labelOf.get(exerciseId) ?? exerciseId,
           entries: list,
           total: list.filter((e) => !e.voided).reduce((n, e) => n + e.reps, 0),
+          greffier: passes(o.teamId, exerciseId),
           app: a ? { code: qualityCodeFromValue(a.note), met: c.filter((x) => x.met).length, total: c.length, unmet: c.filter((x) => !x.met).map((x) => x.label) } : null,
         };
       });

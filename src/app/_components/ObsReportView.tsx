@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { OBS_STAFF_TARGET, obsCsv, type ObsReport, type ReportObs } from "@/lib/observation-types";
+import { OBS_STAFF_TARGET, greffierText, obsCsv, type ObsReport, type ReportObs } from "@/lib/observation-types";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Compte rendu des arbitres du WOD Eval (Sartay 04/10) : par eleve observe, chaque serie de reps avec son heure, et la
@@ -107,6 +107,7 @@ export function ObsReportView({ report }: { report: ObsReport }) {
                         <span className="text-ink-2"> · {g.total} reps</span>
                         {g.app && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5")} title={g.app.unmet.length ? `Non vus : ${g.app.unmet.join(" | ")}` : "Tous les critères vus"}>{g.app.code ?? "?"} · {g.app.met}/{g.app.total} critères</span>}
                         {!g.app && <span className={cx(ui.chip, ui.chipWarn, "ml-1.5")}>sans appréciation</span>}
+                        <span className="block text-[12px] text-ink-3 tabular-nums" title="Heures des clics du greffier pour cette station : de la validation précédente à celle de la station">🖥 Greffier : {g.greffier.length ? greffierText(g.greffier) : "l'équipe n'est pas encore passée à cette station"}</span>
                         <span className="flex flex-wrap gap-1.5 mt-1">
                           {g.entries.map((e) => (
                             <span

@@ -75,13 +75,19 @@ export function readHXSettings(settings: unknown): HXSettings {
 
 export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
 export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[] };
-export type HXEvent = { id: string; teamId: string; key: string; at: number }; // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees
+// key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees de course ; abs = heure d'horloge du clic (ms epoch,
+// null pour un clic local pas encore confirme par le serveur) : c'est elle qu'on compare a l'heure des arbitres.
+export type HXEvent = { id: string; teamId: string; key: string; at: number; abs: number | null };
 export type HXCard = { id: string; teamId: string; at: number };
 export type HXContext = { teams: HXTeam[]; settings: HXSettings; events: HXEvent[]; cards: HXCard[] };
 
 // Ancienne cle des tours de Cindy (AMRAP apres le parcours, abandonnee le 03/10 : « on laisse tomber le cindy »). Les
 // pointages deja enregistres sous cette cle restent en base (regle d'or) et sont ignores par le calcul.
 export const CINDY_KEY = "cindy";
+
+// Heure d'horloge (Bruxelles) d'une validation : « 09:12:05 ». Meme rendu cote serveur et cote navigateur.
+const CLOCK = new Intl.DateTimeFormat("fr-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+export const clockText = (abs: number | null | undefined): string => (abs == null ? "" : CLOCK.format(abs));
 
 export function fmt(ms: number | null | undefined): string {
   if (ms == null) return "";
@@ -139,6 +145,7 @@ export type HXTeamState = {
   startIndex: number;
   segments: HXSegment[];
   times: number[]; // ms ecoulees a chaque validation, dans l'ordre du parcours
+  clocks: (number | null)[]; // heure d'horloge de chaque validation (meme ordre)
   splits: number[]; // duree de chaque segment valide
   done: number;
   current: HXSegment | null; // segment en cours (null = parcours fini)
@@ -158,9 +165,13 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
   const segments = segmentsFor(ctx.settings, startIndex);
   const ev = ctx.events.filter((e) => e.teamId === team.id).sort((a, b) => a.at - b.at);
   const times: number[] = [];
+  const clocks: (number | null)[] = [];
   for (const e of ev) {
     if (e.key === CINDY_KEY) continue; // ancien pointage Cindy : ignore
-    if (times.length < segments.length) times.push(e.at);
+    if (times.length < segments.length) {
+      times.push(e.at);
+      clocks.push(e.abs);
+    }
   }
   const splits = times.map((t, i) => t - (i ? times[i - 1] : 0));
   const done = times.length;
@@ -175,6 +186,7 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
     startIndex,
     segments,
     times,
+    clocks,
     splits,
     done,
     current,
@@ -285,10 +297,10 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
     L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
   });
   L.push("");
-  L.push("Detail par equipe (temps ecoule a la validation ; entre parentheses : duree du segment)");
+  L.push("Detail par equipe (heure du clic, temps ecoule a la validation ; entre parentheses : duree du segment)");
   ctx.teams.forEach((t) => {
     const st = teamState(ctx, t);
-    L.push([t.name, ...st.segments.map((s, i) => `${ctx.settings.laps > 1 ? `T${s.lap} ` : ""}${s.label}${i < st.done ? ` ${fmt(st.times[i])} (${fmt(st.splits[i])})` : ""}`)].join(";"));
+    L.push([t.name, ...st.segments.map((s, i) => `${ctx.settings.laps > 1 ? `T${s.lap} ` : ""}${s.label}${i < st.done ? ` ${st.clocks[i] != null ? `${clockText(st.clocks[i])} ` : ""}${fmt(st.times[i])} (${fmt(st.splits[i])})` : ""}`)].join(";"));
   });
   L.push("");
   L.push("Statistiques (stations : tous tours confondus)");
@@ -298,9 +310,9 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   stats.runs.forEach((s) => L.push([s.label, s.n, s.best !== null ? fmt(s.best) : "", s.avg !== null ? fmt(s.avg) : "", ""].join(";")));
   L.push("");
   L.push("Journal chronologique");
-  L.push(["Temps", "Equipe", "Validation"].join(";"));
+  L.push(["Heure", "Temps de course", "Equipe", "Validation"].join(";"));
   const teamName = new Map(ctx.teams.map((t) => [t.id, t.name]));
-  [...ctx.events].sort((a, b) => a.at - b.at).forEach((e) => L.push([fmt(e.at), teamName.get(e.teamId) ?? e.teamId, segmentLabel(ctx, e.teamId, e.key)].join(";")));
+  [...ctx.events].sort((a, b) => a.at - b.at).forEach((e) => L.push([clockText(e.abs), fmt(e.at), teamName.get(e.teamId) ?? e.teamId, segmentLabel(ctx, e.teamId, e.key)].join(";")));
   L.push("");
   L.push("Reglages");
   ctx.settings.stations.forEach((s, i) => L.push([`Station ${i + 1}`, s.label, amountText(s.reps, s.unit)].join(";")));

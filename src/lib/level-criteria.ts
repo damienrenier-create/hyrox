@@ -172,14 +172,15 @@ export const CRITERIA: Record<string, string[]> = {
     "Le retour au sol est contrôlé pour éviter les blessures (saut amorti ou descente un pied après l'autre).",
     "L'élève maintient un rythme continu sans pauses excessives.",
   ],
-  // SQUATS (29/09 soir) : squat sans saut des parcours 1 et 2 etoiles, criteres ecrits dans l'esprit du squat jump
-  // (3 techniques + intensite), a faire valider.
+  // SQUATS (29/09 soir, squat sans saut des parcours 1 et 2 etoiles ; reecrit le 04/10 sur le standard HYROX du squat
+  // des wall balls, rulebook 26/27 § 8.8 : hanches plus bas que les genoux, depart et fin debout hanches et genoux
+  // tendus), puis la technique. Les evaluations deja rendues gardent les phrases d'avant.
   SQUATS: [
-    "Le bassin descend au moins au niveau des genoux (cuisses parallèles au sol).",
+    "Les hanches descendent plus bas que les genoux (sous la parallèle) à chaque squat.",
+    "Chaque squat se termine debout : hanches et genoux complètement tendus.",
     "Les talons restent au sol et les genoux suivent l'axe des pieds.",
-    "Le dos reste droit, poitrine haute, et l'élève se relève en extension complète des hanches.",
+    "Le dos reste droit, poitrine haute, regard devant.",
     "Les pieds restent écartés à la largeur des épaules et ne bougent pas pendant la série.",
-    "La descente est contrôlée (l'élève ne se laisse pas tomber).",
     "L'élève enchaîne les squats à un rythme régulier, sans pause.",
   ],
   // HELICO (30/09) : criteres ecrits pour l'exercice ajoute par Sartay (3 techniques + intensite), a faire valider.
@@ -189,30 +190,33 @@ export const CRITERIA: Record<string, string[]> = {
     "Les bras sont tendus quand le poids repasse devant, sans que les mains se posent au sol.",
     "L'élève enchaîne les tours à un rythme régulier, sans pause.",
   ],
-  // Stations du WOD Eval (03/10) : PROPOSITION de 6 criteres par station, du plus important (securite, posture) au
-  // moins important (rythme), a travailler avec Sartay. « Pompage » = les criteres des POMPES (voir LABEL_ALIASES).
+  // Stations du WOD Eval : 6 criteres par station. Sartay 04/10 : « essaye de trouver les criteres hyrox : pose des
+  // mains juste devant les pieds etc. (…) et s'il n'y en a pas assez alors tu parles des criteres techniques ». Les
+  // standards OFFICIELS d'abord (HYROX Rulebook Singles, saison 26/27 : § 8.4 burpee broad jump, § 8.7 sandbag lunge,
+  // § 8.6 farmers carry), completes par la technique, le rythme en dernier (grille de l'arbitre eleve = les 3 premiers
+  // + le dernier). « Pompage » = les criteres des POMPES (voir LEGACY_LABELS).
   "BURPEES BROAD JUMP": [
-    "La poitrine et les cuisses touchent le sol lors de la phase basse.",
-    "Le saut en longueur part des deux pieds en même temps et se réceptionne sur les deux pieds.",
-    "La réception est amortie (genoux fléchis, pieds à plat), sans déséquilibre vers l'avant.",
-    "L'élève saute vers l'avant le plus loin possible, bras lancés vers l'avant.",
-    "Le burpee suivant repart de l'endroit de la réception (aucun pas d'élan entre deux sauts).",
+    "La poitrine touche clairement le sol en bas de chaque burpee.",
+    "Les mains se posent juste devant les pieds (30 cm maximum, environ une longueur de pied) et n'avancent plus une fois posées.",
+    "Le saut part des deux pieds en même temps et se réceptionne sur les deux pieds en même temps (pieds à la même hauteur).",
+    "Aucun pas ni petit sursaut en plus : ni avant le saut, ni entre la réception et le burpee suivant.",
+    "En se relevant du burpee, les pieds reviennent derrière les mains (ils ne dépassent pas le bout des doigts).",
     "L'élève enchaîne burpee et saut à un rythme soutenu, sans pause.",
   ],
   "FENTES MARCHÉES": [
-    "Le genou arrière touche ou frôle doucement le sol à chaque pas.",
-    "Le genou avant reste dans l'axe du pied et ne dépasse pas excessivement la pointe du pied.",
-    "Le buste reste droit et gainé, regard devant (il ne s'affaisse pas vers l'avant).",
-    "L'élève se redresse complètement (jambes tendues) entre deux fentes.",
-    "Les jambes alternent à chaque pas, avec de grands pas réguliers.",
-    "L'élève avance à un rythme soutenu, sans s'arrêter entre les pas.",
+    "Le genou arrière touche clairement le sol à chaque fente (posé en douceur, sans le cogner).",
+    "Chaque fente se termine debout : genoux et hanches complètement tendus.",
+    "Les jambes alternent : c'est un genou différent qui touche le sol à chaque fente.",
+    "Aucun pas ni petit pas d'ajustement entre deux fentes (on enchaîne, ou on s'arrête pieds parallèles).",
+    "À chaque extrémité, le pied avant franchit complètement la ligne ; on repart debout, les deux pieds derrière la ligne.",
+    "L'élève avance à un rythme soutenu, sans s'arrêter entre les fentes.",
   ],
   "FARMER CARRY": [
+    "Les deux charges sont portées pendant tout le déplacement : on n'avance jamais avec une seule charge.",
+    "Les charges sont portées bras tendus le long du corps (ni sur l'épaule, ni contre le ventre).",
+    "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.",
+    "La ligne est franchie avec les deux charges en main à chaque extrémité, et les charges sont rangées à leur place à la fin.",
     "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).",
-    "Le buste reste droit, épaules basses et en arrière, regard devant pendant tout le trajet.",
-    "Les bras restent tendus le long du corps, les charges ne se balancent pas.",
-    "Les charges sont posées au sol, jamais lâchées, et seulement derrière la ligne.",
-    "La ligne est franchie avec les charges à chaque extrémité avant le demi-tour.",
     "L'élève marche vite, à petits pas rapides, sans s'arrêter.",
   ],
   "TOUR DE POUTRE": [
@@ -264,10 +268,10 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
-  SQUATS: ["Cuisses parallèles", "Talons au sol", "Dos droit, debout", "Pieds largeur d'épaules, fixes", "Descente contrôlée", "Rythme régulier"],
-  "BURPEES BROAD JUMP": ["Poitrine et cuisses au sol", "Départ et arrivée à deux pieds", "Réception amortie", "Saut loin, bras lancés", "Repart de la réception", "Rythme soutenu"],
-  "FENTES MARCHÉES": ["Genou arrière frôle le sol", "Genou avant dans l'axe", "Buste droit, gainé", "Retour debout complet", "Grands pas alternés", "Rythme soutenu"],
-  "FARMER CARRY": ["Soulevé jambes fléchies, dos droit", "Buste droit, épaules basses", "Bras tendus, charges stables", "Charges posées, pas lâchées", "Ligne franchie", "Marche rapide"],
+  SQUATS: ["Hanches sous les genoux", "Debout complet en haut", "Talons au sol, genoux dans l'axe", "Dos droit, poitrine haute", "Pieds largeur d'épaules, fixes", "Rythme régulier"],
+  "BURPEES BROAD JUMP": ["Poitrine au sol", "Mains juste devant les pieds", "Départ et arrivée à deux pieds", "Aucun pas en plus", "Pieds derrière les mains", "Rythme soutenu"],
+  "FENTES MARCHÉES": ["Genou arrière au sol", "Debout complet entre deux", "Jambes alternées", "Aucun pas entre deux fentes", "Pied avant passe la ligne", "Rythme soutenu"],
+  "FARMER CARRY": ["Toujours les deux charges", "Bras tendus le long du corps", "Charges posées sur place", "Ligne franchie, charges rangées", "Soulevé jambes fléchies, dos droit", "Marche rapide"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
@@ -317,11 +321,11 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   "FENTES DISK": ["🦵", "🎯", "🧍", "⏱️"],
   TRACTIONS: ["🔝", "💪", "🚫", "🔥"],
   "BOX JUMP": ["👣", "📦", "🧍", "⏱️"],
-  SQUATS: ["⬇️", "🦶", "🧍", "⏱️"],
+  SQUATS: ["⬇️", "↕️", "🦶", "⏱️"],
   HELICO: ["📏", "🔄", "💪", "⏱️"],
-  "BURPEES BROAD JUMP": ["⬇️", "👣", "🪶", "🔥"],
-  "FENTES MARCHÉES": ["🦵", "🎯", "🧍", "⏱️"],
-  "FARMER CARRY": ["🏋️", "🧍", "💪", "⏱️"],
+  "BURPEES BROAD JUMP": ["⬇️", "✋", "👣", "🔥"],
+  "FENTES MARCHÉES": ["🦵", "🧍", "🔀", "⏱️"],
+  "FARMER CARRY": ["🏋️", "💪", "📍", "⏱️"],
   "TOUR DE POUTRE": ["🛡️", "⬆️", "⬇️", "🔥"],
 };
 const GENERIC_EMOJI = ["🧍", "📐", "🎛️", "🔥"];

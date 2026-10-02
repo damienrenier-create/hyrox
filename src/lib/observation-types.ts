@@ -35,7 +35,10 @@ export type ReportEntry = {
   match: "ok" | "off" | "na"; // concorde avec les clics du greffier / ne concorde pas / non verifiable
   where: string | null; // si ca ne concorde pas : ou le greffier situait l'equipe a cette heure
 };
-export type ReportGroup = { exerciseId: string; label: string; entries: ReportEntry[]; total: number; app: { code: string | null; met: number; total: number; unmet: string[] } | null };
+// Passage de l'equipe a une station d'apres les clics du greffier : de la validation precedente (from) a celle de la
+// station (to ; null = station en cours, pas encore validee). Heures de Bruxelles HH:MM:SS.
+export type GreffierPass = { lap: number; from: string | null; to: string | null };
+export type ReportGroup = { exerciseId: string; label: string; entries: ReportEntry[]; total: number; greffier: GreffierPass[]; app: { code: string | null; met: number; total: number; unmet: string[] } | null };
 export type ReportObs = {
   id: string;
   mode: ObsMode;
@@ -58,16 +61,21 @@ export type ObsReport = {
   minutes: number;
 };
 
+// « tour 1 : 09:12:05 → 09:15:40 · tour 2 : en cours depuis 09:31:02 » : la station vue par le greffier.
+export const greffierText = (passes: GreffierPass[]): string =>
+  passes.map((p) => `tour ${p.lap} : ${p.to ? `${p.from ?? "?"} → ${p.to}` : `en cours depuis ${p.from ?? "?"}`}`).join(" · ");
+
 // Export CSV du compte rendu : une ligne par serie, avec son heure et sa concordance.
 export function obsCsv(r: ObsReport): string {
   const L: string[] = [];
-  L.push(["Eleve", "Classe", "Equipe", "Arbitre", "Type", "Debut observation", "Exercice", "Reps", "Heure", "Temps de course", "Annulee", "Concordance greffier", "Greffier situait l'equipe a", "Appreciation", "Criteres"].join(";"));
+  L.push(["Eleve", "Classe", "Equipe", "Arbitre", "Type", "Debut observation", "Exercice", "Reps", "Heure", "Temps de course", "Annulee", "Concordance greffier", "Greffier situait l'equipe a", "Station d'apres le greffier", "Appreciation", "Criteres"].join(";"));
   for (const o of r.observations) {
     for (const g of o.groups) {
       const app = g.app ? [g.app.code ?? "", `${g.app.met}/${g.app.total}`] : ["", ""];
-      if (!g.entries.length) L.push([o.targetName, o.className ?? "", o.teamName, o.evaluatorName, o.mode === "STAFF" ? "prof" : "eleve", o.clock, g.label, "", "", "", "", "", "", ...app].join(";"));
+      const pass = greffierText(g.greffier);
+      if (!g.entries.length) L.push([o.targetName, o.className ?? "", o.teamName, o.evaluatorName, o.mode === "STAFF" ? "prof" : "eleve", o.clock, g.label, "", "", "", "", "", "", pass, ...app].join(";"));
       for (const e of g.entries) {
-        L.push([o.targetName, o.className ?? "", o.teamName, o.evaluatorName, o.mode === "STAFF" ? "prof" : "eleve", o.clock, g.label, e.reps, e.clock, e.raceAt ?? "", e.voided ? "oui" : "", e.voided ? "" : e.match === "ok" ? "oui" : e.match === "off" ? "NON" : "non verifiable", e.where ?? "", ...app].join(";"));
+        L.push([o.targetName, o.className ?? "", o.teamName, o.evaluatorName, o.mode === "STAFF" ? "prof" : "eleve", o.clock, g.label, e.reps, e.clock, e.raceAt ?? "", e.voided ? "oui" : "", e.voided ? "" : e.match === "ok" ? "oui" : e.match === "off" ? "NON" : "non verifiable", e.where ?? "", pass, ...app].join(";"));
       }
     }
   }

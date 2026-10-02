@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
+  HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, clockText, fmt, hxCsv, segmentLabel, segmentStats, teamState, timeRows,
   type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
 } from "@/lib/wod-engines/templates/hyrox-engine";
 import type { HXBundle } from "@/lib/hyrox-context";
@@ -127,7 +127,7 @@ export function HyroxClient({
       const st = teamState(ctx, t);
       x.ats.slice(-missing).forEach((at, i) => {
         const idx = st.done + i;
-        if (idx < st.segments.length) extra.push({ id: `local-${teamId}-${i}`, teamId, key: st.segments[idx].key, at });
+        if (idx < st.segments.length) extra.push({ id: `local-${teamId}-${i}`, teamId, key: st.segments[idx].key, at, abs: null });
       });
     }
     return extra.length ? { ...ctx, events: [...ctx.events, ...extra] } : ctx;
@@ -478,7 +478,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const { team, segments, times, splits, done, current, finishedMs, cards } = st;
+  const { team, segments, times, clocks, splits, done, current, finishedMs, cards } = st;
   const finished = finishedMs !== null;
   const canValidate = phase === "run" && !isPaused;
   const laps = ctx.settings.laps;
@@ -559,7 +559,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
 
         <div className={`${ui.card} overflow-hidden`}>
           <table className="w-full text-sm">
-            <thead><tr><th className={ui.th}>#</th>{laps > 1 && <th className={ui.th}>Tour</th>}<th className={ui.th}>Segment</th><th className={ui.th}>Consigne</th><th className={`${ui.th} text-right`}>Validé à</th><th className={`${ui.th} text-right`}>Durée</th></tr></thead>
+            <thead><tr><th className={ui.th}>#</th>{laps > 1 && <th className={ui.th}>Tour</th>}<th className={ui.th}>Segment</th><th className={ui.th}>Consigne</th><th className={`${ui.th} text-right`} title="Heure du clic de validation">Heure</th><th className={`${ui.th} text-right`} title="Temps de course écoulé à la validation">Chrono</th><th className={`${ui.th} text-right`}>Durée</th></tr></thead>
             <tbody>
               {segments.map((seg, i) => {
                 const state = i < done ? "done" : i === done && !finished ? "current" : "todo";
@@ -569,6 +569,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
                     {laps > 1 && <td className="p-2"><span className={cx("inline-block w-2.5 h-2.5 rounded-sm mr-1 align-middle", lapStyle(seg.lap).station)} />{seg.lap}</td>}
                     <td className="p-2 font-bold">{seg.kind === "run" ? "🏃 " : ""}{seg.label}</td>
                     <td className="p-2 text-ink-2">{seg.detail}</td>
+                    <td className="p-2 text-right tabular-nums text-ink-2">{i < done ? clockText(clocks[i]) || "…" : ""}</td>
                     <td className="p-2 text-right tabular-nums">{i < done ? fmt(times[i]) : ""}</td>
                     <td className="p-2 text-right tabular-nums font-bold">{i < done ? fmt(splits[i]) : ""}</td>
                   </tr>
