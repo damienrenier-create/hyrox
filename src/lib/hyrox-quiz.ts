@@ -138,7 +138,8 @@ export const DISTRACTORS: Record<string, string[]> = {
     "À l'extrémité, il suffit que le genou arrière atteigne la ligne avant de faire demi-tour.",
   ],
   "FARMER CARRY": [
-    "Quand c'est trop lourd, on avance avec une charge puis on revient chercher l'autre.",
+    "Quand c'est trop lourd, on peut traîner la charge au sol sur quelques mètres.",
+    "Il suffit que la charge dépasse la ligne : les pieds peuvent rester derrière.",
     "Les charges peuvent être portées sur les épaules ou contre le ventre pour soulager les mains.",
     "Pour se reposer, on fait glisser les charges vers l'avant en les posant : c'est toujours ça de gagné.",
     "Les charges sont lâchées au sol dès que la ligne est franchie.",

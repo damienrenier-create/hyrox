@@ -212,12 +212,14 @@ export const CRITERIA: Record<string, string[]> = {
     "L'élève travaille à une intensité qui lui est maximale.", // Sartay 04/10 : remplace « rythme soutenu »
   ],
   "FARMER CARRY": [
-    "Les deux charges sont portées pendant tout le déplacement : on n'avance jamais avec une seule charge.",
-    "Les charges sont portées bras tendus le long du corps (ni sur l'épaule, ni contre le ventre).",
+    // Relu par Sartay le 04/10 : « la charge » (une ou deux), ligne franchie avec le pied, intensite en dernier. Il n'a
+    // pas recopie le critere du souleve dos droit : garde en 5e (prof seulement) pour que la grille du prof reste a 6.
+    "La charge est portée pendant tout le déplacement.",
+    "Les bras chargés restent tendus le long du corps (ni sur l'épaule, ni contre le ventre).",
     "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.",
-    "La ligne est franchie avec les deux charges en main à chaque extrémité, et les charges sont rangées à leur place à la fin.",
+    "La ligne est franchie avec le pied à chaque extrémité.",
     "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).",
-    "L'élève marche vite, à petits pas rapides, sans s'arrêter.",
+    "L'élève travaille à une intensité qui lui est maximale.",
   ],
   "TOUR DE POUTRE": [
     "Les passages s'effectuent de façon contrôlée, sans heurter la poutre violemment.",
@@ -271,7 +273,7 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   SQUATS: ["Hanches sous les genoux", "Debout complet en haut", "Talons au sol, genoux dans l'axe", "Dos droit, poitrine haute", "Pieds largeur d'épaules, fixes", "Rythme régulier"],
   "BURPEES BROAD JUMP": ["Poitrine au sol", "Mains juste devant les pieds", "Départ et arrivée à deux pieds", "Aucun pas en plus", "Pieds derrière les mains", "Intensité maximale"],
   "FENTES MARCHÉES": ["Genou arrière au sol", "Debout complet entre deux", "Jambes alternées", "Aucun pas entre deux fentes", "Pied avant passe la ligne", "Intensité maximale"],
-  "FARMER CARRY": ["Toujours les deux charges", "Bras tendus le long du corps", "Charges posées sur place", "Ligne franchie, charges rangées", "Soulevé jambes fléchies, dos droit", "Marche rapide"],
+  "FARMER CARRY": ["Charge toujours portée", "Bras chargés tendus", "Charges posées sur place", "Ligne franchie avec le pied","Soulevé jambes fléchies, dos droit", "Marche rapide"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
@@ -325,7 +327,7 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   HELICO: ["📏", "🔄", "💪", "⏱️"],
   "BURPEES BROAD JUMP": ["⬇️", "✋", "👣", "🔥"],
   "FENTES MARCHÉES": ["🦵", "🧍", "🔀", "🔥"],
-  "FARMER CARRY": ["🏋️", "💪", "📍", "⏱️"],
+  "FARMER CARRY": ["🏋️", "💪", "📍", "🔥"],
   "TOUR DE POUTRE": ["🛡️", "⬆️", "⬇️", "🔥"],
 };
 const GENERIC_EMOJI = ["🧍", "📐", "🎛️", "🔥"];
