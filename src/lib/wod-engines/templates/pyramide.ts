@@ -25,6 +25,7 @@ export const PyramideClassique: WodTemplate = {
   // Pyramide 5 -> 10 -> 5, 40 minutes de temps limite, 20 equipes.
   raceDefaults: { rep0: 5, peak: 10, step: 1, capMin: 40, afterMin: 10, penMin: 1 },
   defaultTeams: 20,
+  teamSize: 2,
 
   calculateScores(teams: TeamState[], startTime: number, unitMs: number, mode: "avg" | "sum"): WodEngineResult {
     const result: WodEngineResult = {

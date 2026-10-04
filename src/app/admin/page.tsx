@@ -126,6 +126,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   );
   const engines = listWodEngines();
   const engineName = (id: string) => engines.find((e) => e.id === id)?.name ?? wodLabel(id);
+  const teamSizeOf = (id: string) => engines.find((e) => e.id === id)?.teamSize ?? null; // equipes de taille fixe : nombre selon l'effectif
   const now = brusselsNow();
 
   // Demandes d'arbitrage en attente sur les seances ouvertes (un prof peut trancher a la place du greffier).
@@ -359,6 +360,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                             <div className="font-bold truncate">{u.planLabel}{u.refereeMode ? " 🏴‍☠️" : ""}</div>
                             <div className="text-ink-2 truncate">{u.classes.length ? u.classes.join(", ") : "aucune classe"}{u.sex && <span className="text-ink-3"> · {sexLabel(u.sex)}</span>}</div>
                             {u.teacherName && <div className={cx("truncate", u.teacherId === user.id ? "text-brand-ink font-semibold" : "text-ink-3")}>{u.teacherName}</div>}
+                            {!u.sessionId && teamSizeOf(u.wodType) && <div className="text-ink-3 truncate" title="Nombre d'équipes à l'ouverture, d'après l'effectif des classes ; réglable au greffier avant le départ">{u.numTeams} équipes de {teamSizeOf(u.wodType)}</div>}
                           </div>
                           {/* Pas de croix sur un creneau d'un ancien horaire encore en vigueur : il ne se retouche plus (01/10). */}
                           {u.teacherId && u.editable && (u.teacherId === user.id || canDelete) && (
@@ -450,7 +452,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             </fieldset>
             <label className="text-sm">
               <span className={fieldLabel}>Nombre d&apos;équipes</span>
-              <input type="number" name="numTeams" defaultValue={plans.find((p) => p.isCurrent)?.numTeams ?? 20} min={1} max={50} className={input} />
+              <input type="number" name="numTeams" placeholder="auto" min={1} max={50} className={input} />
+              <span className={`${ui.hint} block mt-1`}>Vide = ce qu&apos;il faut pour l&apos;effectif des classes cochées (Eval par 3, Pyramide par 2) ; sinon le nombre de la séance-type.</span>
             </label>
             <label className="text-sm">
               <span className={fieldLabel}>Reste ouverte pendant</span>
@@ -507,7 +510,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <li key={p.id} className={cx("flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 border", p.isCurrent ? "bg-brand-soft border-brand/40" : "bg-paper border-line")}>
                       <div className="text-sm">
                         <span className="font-bold">{p.order}. {p.label}</span>
-                        <span className="text-ink-3"> · {engineName(p.wodType)} · {p.numTeams} équipes{p.refereeMode ? " · Dispensés" : ""}</span>
+                        <span className="text-ink-3"> · {engineName(p.wodType)} · {teamSizeOf(p.wodType) ? `équipes de ${teamSizeOf(p.wodType)} selon l'effectif des classes` : `${p.numTeams} équipes`}{p.refereeMode ? " · Dispensés" : ""}</span>
                         {p.isCurrent && <span className={`${ui.chip} bg-brand text-white ml-2`}>SEMAINE</span>}
                       </div>
                       <div className="flex gap-2">

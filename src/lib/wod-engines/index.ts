@@ -21,8 +21,8 @@ export function getWodEngine(id: string): WodTemplate {
 }
 
 // Seances-types disponibles pour la console (seuls les moteurs reellement codes sont proposes).
-export function listWodEngines(): { id: string; name: string }[] {
-  return Object.values(templates).map((t) => ({ id: t.id, name: (t as { name?: string }).name ?? t.id }));
+export function listWodEngines(): { id: string; name: string; teamSize: number | null }[] {
+  return Object.values(templates).map((t) => ({ id: t.id, name: (t as { name?: string }).name ?? t.id, teamSize: t.teamSize ?? null }));
 }
 
 export * from "./core/types";

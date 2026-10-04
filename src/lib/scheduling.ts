@@ -62,6 +62,47 @@ export function slotKeyFor(dateKey: string, teacherId: string | null, planId: st
 
 type PlanRow = { id: string; cycleId: string; label: string; wodType: string; numTeams: number; refereeMode: boolean };
 
+// ===== Nombre d'equipes selon l'effectif (Sartay 04/10 : « encode par defaut le nombre d'equipes necessaire a la
+// taille des groupes ») =====
+// Pour un WOD a equipes de taille fixe (Eval par 3, Pyramide par 2), une seance s'ouvre avec autant d'equipes qu'il en
+// faut pour TOUS les eleves inscrits dans ses classes (du sexe de la seance si elle est garcons / filles ; un eleve
+// sans sexe renseigne compte dans les deux). Sinon — taille d'equipe libre, aucune classe, classe vide — on garde le
+// nombre de la seance-type. Le greffier peut toujours l'ajuster avant le depart.
+type ClassCount = { n: number; m: number; f: number };
+const teamSizeOf = (wodType: string): number | null => {
+  try {
+    return getWodEngine(wodType).teamSize ?? null;
+  } catch {
+    return null;
+  }
+};
+async function studentCounts(classes: string[]): Promise<Map<string, ClassCount>> {
+  const out = new Map<string, ClassCount>();
+  if (!classes.length) return out;
+  for (const u of await db.orm.public.User.where((x) => x.className.in(classes)).all()) {
+    if (u.role !== "STUDENT" || !u.className) continue;
+    const c = out.get(u.className) ?? { n: 0, m: 0, f: 0 };
+    c.n++;
+    if (u.sex === "M") c.m++;
+    else if (u.sex === "F") c.f++;
+    out.set(u.className, c);
+  }
+  return out;
+}
+function teamsFor(wodType: string, classes: string[], sex: string | null, counts: Map<string, ClassCount>, fallback: number): number {
+  const size = teamSizeOf(wodType);
+  if (!size) return fallback;
+  const n = classes.reduce((sum, c) => {
+    const k = counts.get(c);
+    return sum + (!k ? 0 : sex === "M" ? k.n - k.f : sex === "F" ? k.n - k.m : k.n);
+  }, 0);
+  return n ? Math.min(50, Math.max(1, Math.ceil(n / size))) : fallback;
+}
+export async function teamsNeeded(wodType: string, classes: string[], sex: string | null, fallback: number): Promise<number> {
+  if (!teamSizeOf(wodType) || !classes.length) return fallback;
+  return teamsFor(wodType, classes, sex, await studentCounts(classes), fallback);
+}
+
 // La seance-type d'un groupe : celle imposee sur le creneau si elle existe encore, sinon la seance de la semaine.
 function planOf(g: SlotGroup, planById: Map<string, PlanRow>, weekly: PlanRow | null): PlanRow | null {
   return (g.planId && planById.get(g.planId)) || weekly;
@@ -98,7 +139,7 @@ export type UpcomingSlot = {
   planId: string;
   planLabel: string;
   wodType: string;
-  numTeams: number;
+  numTeams: number; // selon l'effectif des classes quand le WOD a des equipes de taille fixe, sinon celui de la seance-type
   refereeMode: boolean;
   sessionId: string | null; // deja preparee ?
   sex: string | null; // seance garcons (M) / filles (F) / mixte (null), heritee du creneau
@@ -164,6 +205,12 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
   const prepared = keys.length ? (await db.orm.public.Session.where((x) => x.slotKey.in(keys)).all()).filter(notDeleted) : [];
   const byKey = new Map(prepared.map((x) => [x.slotKey, x.id]));
   for (const u of top) u.sessionId = byKey.get(u.slotKey) ?? null;
+  // Nombre d'equipes selon l'effectif des classes : UNE requete pour tous les creneaux affiches.
+  const sized = top.filter((u) => teamSizeOf(u.wodType));
+  if (sized.length) {
+    const counts = await studentCounts([...new Set(sized.flatMap((u) => u.classes))]);
+    for (const u of sized) u.numTeams = teamsFor(u.wodType, u.classes, u.sex, counts, u.numTeams);
+  }
   return top;
 }
 
@@ -256,11 +303,12 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
     const existing = await db.orm.public.Session.where({ slotKey }).first();
     if (existing) continue;
     try {
+      const classes = inCycle.sort().slice(0, MAX_CLASSES);
       const session = await openSession({
         wodType: p.wodType,
         label: p.label,
-        classes: inCycle.sort().slice(0, MAX_CLASSES),
-        numTeams: p.numTeams,
+        classes,
+        numTeams: await teamsNeeded(p.wodType, classes, g.sex, p.numTeams),
         refereeMode: p.refereeMode,
         cycleId: p.cycleId,
         planId: p.id,

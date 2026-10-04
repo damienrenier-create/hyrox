@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen, slotSessionSettings, toMs } from "@/lib/scheduling";
+import { openSession, parseHHMM, upcomingSessions, instantAtBrussels, isSessionOpen, slotSessionSettings, teamsNeeded, toMs } from "@/lib/scheduling";
 import { MAX_CLASSES } from "@/lib/session-roles";
 import { PROTECTED_MESSAGE, sessionsPlayedByRealStudents } from "@/lib/session-protect";
 import { getWodEngine } from "@/lib/wod-engines";
@@ -173,7 +173,10 @@ export async function openSessionAction(formData: FormData) {
 
   let wodType = str(formData, "wodType") || "PYRAMIDE_CLASSIQUE";
   let label = str(formData, "label");
-  let numTeams = Math.min(50, Math.max(1, int(formData, "numTeams", defaultTeamsOf(wodType))));
+  // Nombre d'equipes : celui qui est tape ; champ vide = ce qu'il faut pour l'effectif des classes cochees (WOD a
+  // equipes de taille fixe), sinon celui de la seance-type.
+  const typedTeams = parseInt(str(formData, "numTeams"), 10);
+  let fallbackTeams = defaultTeamsOf(wodType);
   let refereeMode = formData.get("refereeMode") === "on";
   let cycleId: string | null = null;
 
@@ -182,11 +185,12 @@ export async function openSessionAction(formData: FormData) {
     if (!plan) fail("Séance-type introuvable.");
     wodType = plan.wodType;
     label = label || plan.label;
-    numTeams = int(formData, "numTeams", plan.numTeams);
+    fallbackTeams = plan.numTeams;
     refereeMode = formData.has("refereeModeSet") ? refereeMode : plan.refereeMode;
     cycleId = plan.cycleId;
   }
   if (!label) label = "WOD Pyramide";
+  const numTeams = Number.isFinite(typedTeams) ? Math.min(50, Math.max(1, typedTeams)) : await teamsNeeded(wodType, classes, null, fallbackTeams);
 
   const session = await openSession({
     wodType,

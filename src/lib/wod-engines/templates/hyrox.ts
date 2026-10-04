@@ -11,6 +11,7 @@ export const HyroxWod: WodTemplate = {
   exercises: HX_DEFAULT_STATIONS.map((s, i) => ({ id: s.id, label: s.label, number: i + 1 })),
   raceDefaults: { rep0: 5, peak: 10, step: 1, capMin: 50, afterMin: 0, penMin: 1 },
   defaultTeams: 16,
+  teamSize: 3,
   calculateScores(): WodEngineResult {
     return { teamScores: {}, runnerScores: {} };
   },

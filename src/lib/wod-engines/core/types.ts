@@ -37,6 +37,9 @@ export interface WodTemplate {
   raceDefaults?: { rep0: number; peak: number; step: number; capMin: number; afterMin: number; penMin: number };
   // Nombre d'equipes propose a la creation d'une seance.
   defaultTeams?: number;
+  // Taille d'une equipe quand elle est FIXE (Eval : 3, Pyramide : 2). La seance s'ouvre alors avec le nombre d'equipes
+  // qu'il faut pour l'effectif de ses classes (scheduling.ts, teamsNeeded) ; sans elle, on garde defaultTeams.
+  teamSize?: number;
   
   // Calcul du score à partir de l'état
   calculateScores(
