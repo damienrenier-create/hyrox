@@ -3,8 +3,11 @@
 // fausses sont des formulations plausibles mais contraires a SES regles — y compris d'anciens criteres abandonnes —
 // que ni un eleve qui n'a pas ecoute ni une IA generaliste ne reperent. Tirage deterministe par (seance, eleve) : chaque
 // eleve a son QCM, la correction se recalcule cote serveur. Module PUR.
+// Pour un exercice de l'Eval, les vraies viennent de SA grille (EVAL_CRITERIA, relue par Sartay le 04/10), sans les
+// criteres d'intensite. Le QCM tel que l'eleve l'a vu est enregistre avec ses reponses (QuizSnapshot) : sa correction
+// reste lisible meme si les criteres changent ensuite.
 
-import { CRITERIA } from "@/lib/level-criteria";
+import { CRITERIA, evalQuizTruths } from "@/lib/level-criteria";
 
 export const QUIZ_QUESTIONS = 5;
 export const QUIZ_STATEMENTS = 4;
@@ -126,7 +129,6 @@ export const DISTRACTORS: Record<string, string[]> = {
   "BURPEES BROAD JUMP": [
     "Les mains se posent le plus loin possible devant les pieds pour gagner de la distance.",
     "Une fois les mains posées, on peut les avancer pour allonger le burpee.",
-    "En se relevant, les pieds peuvent se poser devant les mains pour gagner du terrain.",
     "Un petit pas d'ajustement est autorisé entre la réception et le burpee suivant.",
     "Le saut part d'un pied et se réceptionne sur l'autre, comme une foulée bondissante.",
   ],
@@ -190,11 +192,13 @@ export function buildQuiz(seed: string, n = QUIZ_QUESTIONS): { questions: QuizQu
   const questions: QuizQuestion[] = [];
   const key: QuizKey = {};
   for (const ex of exercises) {
-    const trues = CRITERIA[ex];
+    // Les vraies : la grille de l'Eval sans l'intensite, sinon les criteres techniques de l'exercice (les 5 premiers ;
+    // le 6e est souvent « il fait de son mieux »).
+    const trues = evalQuizTruths(ex) ?? CRITERIA[ex].slice(0, 5);
     const falses = DISTRACTORS[ex];
-    // 1 a 3 vraies parmi les criteres techniques (les 5 premiers ; le 6e est souvent « il fait de son mieux »).
+    // 1 a 3 vraies sur 4.
     const nTrue = 1 + Math.floor(rnd() * 3);
-    const pickT = shuffle(trues.slice(0, Math.min(5, trues.length)).map((t, i) => ({ id: `v${i}`, text: t })), rnd).slice(0, nTrue);
+    const pickT = shuffle(trues.map((t, i) => ({ id: `v${i}`, text: t })), rnd).slice(0, nTrue);
     const pickF = shuffle(falses.map((t, i) => ({ id: `f${i}`, text: t })), rnd).slice(0, QUIZ_STATEMENTS - nTrue);
     const statements = shuffle([...pickT, ...pickF], rnd);
     questions.push({ id: ex, exercise: ex, statements });
@@ -204,6 +208,25 @@ export function buildQuiz(seed: string, n = QUIZ_QUESTIONS): { questions: QuizQu
 }
 
 export const quizSeed = (sessionId: string, studentId: string) => `qcm:${sessionId}:${studentId}`;
+
+// Ce qui est enregistre dans QuizAnswer.answers : les coches par question et, sous QUIZ_SNAPSHOT_KEY, le QCM tel que
+// l'eleve l'a vu (questions + correction). Sans lui, la page de correction retirerait le QCM avec les criteres du jour :
+// apres une modification des criteres, les phrases affichees ne seraient plus celles auxquelles l'eleve a repondu.
+export const QUIZ_SNAPSHOT_KEY = "_quiz";
+export type QuizSnapshot = { questions: QuizQuestion[]; key: QuizKey };
+export function readQuizAnswers(raw: unknown): { checked: Record<string, string[]>; snapshot: QuizSnapshot | null } {
+  const checked: Record<string, string[]> = {};
+  let snapshot: QuizSnapshot | null = null;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (k === QUIZ_SNAPSHOT_KEY) {
+        const s = v as Partial<QuizSnapshot> | null;
+        if (s && Array.isArray(s.questions) && s.key && typeof s.key === "object") snapshot = { questions: s.questions, key: s.key };
+      } else if (Array.isArray(v)) checked[k] = v.filter((x): x is string => typeof x === "string");
+    }
+  }
+  return { checked, snapshot };
+}
 
 // Note : 1 point par question entierement juste (toutes les vraies cochees, aucune fausse).
 export function gradeQuiz(key: QuizKey, checked: Record<string, string[]>): { score: number; total: number; perQuestion: Record<string, boolean> } {

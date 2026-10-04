@@ -194,8 +194,8 @@ export const CRITERIA: Record<string, string[]> = {
   // Stations du WOD Eval : 6 criteres par station. Sartay 04/10 : « essaye de trouver les criteres hyrox : pose des
   // mains juste devant les pieds etc. (…) et s'il n'y en a pas assez alors tu parles des criteres techniques ». Les
   // standards OFFICIELS d'abord (HYROX Rulebook Singles, saison 26/27 : § 8.4 burpee broad jump, § 8.7 sandbag lunge,
-  // § 8.6 farmers carry), completes par la technique, le rythme en dernier (grille de l'arbitre eleve = les 3 premiers
-  // + le dernier). « Pompage » = les criteres des POMPES (voir LEGACY_LABELS).
+  // § 8.6 farmers carry), completes par la technique. ⚠️ La grille d'arbitrage de l'Eval (qui coche quoi, dans quel ordre) est plus bas :
+  // EVAL_CRITERIA. Ces listes-ci servent de criteres generaux (QCM hors Eval, exercice repris dans un autre WOD).
   "BURPEES BROAD JUMP": [
     "La poitrine touche clairement le sol en bas de chaque burpee.",
     "Les mains se posent juste devant les pieds (30 cm maximum, environ une longueur de pied) et n'avancent plus une fois posées.",
@@ -292,17 +292,13 @@ export const GENERIC_CRITERIA = [
 ];
 
 // Anciens libelles encore figes dans des seances passees (29/09 : le tire tapis n'est plus un aller-retour).
-// + alias : « pompage » = pompes (station du WOD Eval) ; RUN = le run entre deux stations de l'Eval, juge sur les
-// criteres de l'aller-retour tant que Sartay n'en a pas ecrit d'autres (RUN_CRITERIA_KEY).
-const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES", RUN: "ALLER-RETOUR" };
-export const RUN_CRITERIA_KEY = "RUN";
+// + alias : « pompage » = pompes (station du WOD Eval).
+const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES" };
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
-// Grille du PROF (WOD Eval), 6 criteres : d'abord les 4 de l'arbitre eleve, dans le meme ordre (3 techniques +
-// intensite), puis en 5 et 6 les deux criteres techniques suivants de la liste (Sartay 04/10 : « mettre ceux pour les
-// eleves en premier puis ceux pour le prof en 5 et 6 »). Dans CRITERIA, la liste reste rangee comme avant (3 techniques,
-// les 2 du prof, puis l'intensite) : seul l'ordre d'affichage change.
+// Grille de 6 d'un exercice SANS grille Eval (station ajoutee a la main dans les reglages) : les 4 de l'arbitre eleve
+// dans le meme ordre (3 techniques + intensite), puis en 5 et 6 les deux criteres techniques suivants de CRITERIA.
 export const fullCriteriaFor = (label: string): string[] => {
   const k = keyOf(label);
   const all = CRITERIA[k];
@@ -310,6 +306,115 @@ export const fullCriteriaFor = (label: string): string[] => {
   const four = REFEREE_CRITERIA[k];
   return [...four, ...all.slice(TECH_CRITERIA).filter((c) => !four.includes(c)).slice(0, 2)];
 };
+
+// ===== Grilles du WOD Eval =====
+// Sartay a relu un par un les 10 exercices de l'Eval (04/10 : « mettre ceux pour les eleves en premier puis ceux
+// pour le prof en 5 et 6 », puis exercice par exercice : « intervertir le 4 et le 5 », « l'intensite est pour le prof
+// pour cet exo »…). Chaque grille est ecrite dans l'ORDRE D'AFFICHAGE : les 4 premiers criteres pour l'arbitre eleve
+// (le prof les a aussi, dans le meme ordre), les 5e et 6e pour le prof seulement. Ces grilles sont propres a l'Eval :
+// celles du WOD Level (CRITERIA : 3 techniques + intensite) ne bougent pas. `noQuiz` = critere d'intensite, de rythme
+// ou d'organisation : jamais propose comme affirmation du QCM.
+export type EvalCriterion = { text: string; emoji: string; noQuiz?: boolean };
+export const EVAL_STUDENT_CRITERIA = 4;
+export const RUN_CRITERIA_KEY = "RUN"; // le run entre deux stations, observe comme un exercice
+export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
+  "BURPEES BROAD JUMP": [
+    { text: "La poitrine touche clairement le sol en bas de chaque burpee.", emoji: "⬇️" },
+    { text: "Les mains se posent juste devant les pieds (30 cm maximum, environ une longueur de pied) et n'avancent plus une fois posées.", emoji: "✋" },
+    { text: "Le saut part des deux pieds en même temps et se réceptionne sur les deux pieds en même temps (pieds à la même hauteur).", emoji: "👣" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
+    { text: "Aucun pas ni petit sursaut en plus : ni avant le saut, ni entre la réception et le burpee suivant.", emoji: "🚫" },
+    { text: "La transition entre les élèves est correctement effectuée.", emoji: "🤝", noQuiz: true },
+  ],
+  "FENTES MARCHÉES": [
+    { text: "Le genou arrière touche clairement le sol à chaque fente (posé en douceur, sans le cogner).", emoji: "🦵" },
+    { text: "Chaque fente se termine debout : genoux et hanches complètement tendus.", emoji: "🧍" },
+    { text: "Les jambes alternent : c'est un genou différent qui touche le sol à chaque fente.", emoji: "🔀" },
+    { text: "Aucun pas ni petit pas d'ajustement entre deux fentes (on enchaîne, ou on s'arrête pieds parallèles).", emoji: "🚫" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
+    { text: "À chaque extrémité, le pied avant franchit complètement la ligne ; on repart debout, les deux pieds derrière la ligne.", emoji: "🏁" },
+  ],
+  "FARMER CARRY": [
+    { text: "La charge est portée pendant tout le déplacement.", emoji: "🏋️" },
+    { text: "Les bras chargés restent tendus le long du corps (ni sur l'épaule, ni contre le ventre).", emoji: "💪" },
+    { text: "La ligne est franchie avec le pied à chaque extrémité.", emoji: "🏁" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
+    { text: "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.", emoji: "📍" },
+    { text: "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).", emoji: "🧍" },
+  ],
+  "ONE REP": [
+    { text: "L'élève démarre debout et ses pieds ne bougent pas pendant l'exercice.", emoji: "🦶" },
+    { text: "L'élève se redresse en station debout complète (extension totale) à la fin de la répétition.", emoji: "🧍" },
+    { text: "Toutes les touches sont exécutées franchement et de manière croisée (main/épaule, main/genou, main/pied).", emoji: "✋" },
+    { text: "L'exercice est réalisé avec rythme et sans pause au sol.", emoji: "⏱️", noQuiz: true },
+    { text: "La descente et la remontée (crawling) sont contrôlées et sécurisées sur les appuis.", emoji: "🐾" },
+    { text: "Le bassin reste le plus stable possible et ne vrille pas de gauche à droite lors des touches croisées.", emoji: "🧱" },
+  ],
+  SQUATS: [
+    { text: "Les hanches descendent plus bas que les genoux (sous la parallèle) à chaque squat.", emoji: "⬇️" },
+    { text: "Chaque squat se termine debout : hanches et genoux complètement tendus.", emoji: "↕️" },
+    { text: "Les talons restent au sol et les genoux restent dans l'axe des pieds, y compris durant la flexion et l'extension.", emoji: "🦶" },
+    { text: "Les pieds sont écartés à la largeur des épaules.", emoji: "↔️" },
+    { text: "Le dos reste droit, la poitrine haute.", emoji: "🧍" },
+    { text: "L'intensité est maximale compte tenu de l'effort et de l'élève.", emoji: "🔥", noQuiz: true },
+  ],
+  // « Pompage » sur la fiche de l'Eval (alias LEGACY_LABELS).
+  POMPES: [
+    { text: "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes).", emoji: "📏" },
+    { text: "La poitrine touche ou frôle le sol à chaque descente.", emoji: "⬇️" },
+    { text: "Les bras sont complètement tendus lors de la remontée (fin de poussée).", emoji: "💪" },
+    { text: "Le bassin ne s'affaisse pas et ne se lève pas pendant le mouvement.", emoji: "🧱" },
+    { text: "L'élève maintient un rythme régulier et fait de son mieux.", emoji: "⏱️", noQuiz: true },
+    { text: "La descente est contrôlée (l'élève ne se laisse pas tomber).", emoji: "🎛️" },
+  ],
+  CORDE: [
+    { text: "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).", emoji: "🪶" },
+    { text: "Le dos est droit, les épaules sont relâchées et le regard est droit devant.", emoji: "🧍" },
+    { text: "Le mouvement de la corde est initié par une rotation des poignets (et non par les bras entiers).", emoji: "🔄" },
+    { text: "La corde passe de manière fluide et le mouvement est synchronisé.", emoji: "〰️" },
+    { text: "L'intensité est maximale par rapport au niveau technique de l'élève.", emoji: "🔥", noQuiz: true },
+    { text: "L'élève maintient un rythme régulier, continu, en essayant de limiter les ratés.", emoji: "⏱️" },
+  ],
+  // Sartay 04/10 : « la hauteur demandee : ce sont les yeux ».
+  "KB SWING": [
+    { text: "Le mouvement est initié par une extension explosive du bassin (les hanches propulsent le poids).", emoji: "🚀" },
+    { text: "Le dos reste droit, neutre et gainé.", emoji: "🧍" },
+    { text: "Les bras servent de balancier et restent souples (ils ne tirent pas le poids).", emoji: "〰️" },
+    { text: "La kettlebell atteint la hauteur demandée : celle des yeux.", emoji: "👀" },
+    { text: "Le rythme est soutenu : l'élève enchaîne les swings sans s'arrêter.", emoji: "⏱️", noQuiz: true },
+    { text: "En fin d'extension (debout), les fessiers et les abdominaux sont contractés.", emoji: "🔒" },
+  ],
+  "WALL BALL SHOT": [
+    { text: "Le squat est profond (creux des hanches sous les genoux) avant le lancer.", emoji: "⬇️" },
+    { text: "La balle touche la cible à la hauteur exacte demandée.", emoji: "🎯" },
+    { text: "L'élève réceptionne la balle en amortissant directement dans un nouveau squat.", emoji: "🤲" },
+    { text: "Le mouvement est un seul flux continu (les jambes propulsent la balle).", emoji: "🌊" },
+    { text: "Le dos reste droit et le regard fixé sur la cible lors de la descente.", emoji: "🧍" },
+    { text: "L'élève enchaîne les lancers à un rythme soutenu, sans pause entre les répétitions.", emoji: "⏱️", noQuiz: true },
+  ],
+  // Run entre deux stations, par equipe de 3. Sartay 04/10 : « plutot parler de la technique de course de base, le
+  // fait de respecter la distance, le nombre d'AR demande, de rester avec ses 2 coequipiers, de ne pas demarrer ni
+  // aller sur la prochaine station sans que l'equipe ne soit complete ». Proposition : les 4 regles visibles pour
+  // l'arbitre eleve, la technique de course (en deux criteres) pour le prof. A faire valider.
+  [RUN_CRITERIA_KEY]: [
+    { text: "La distance est respectée : la ligne est franchie à chaque extrémité, sans couper le demi-tour.", emoji: "🏁" },
+    { text: "Le nombre d'allers-retours demandé est fait en entier.", emoji: "🔢" },
+    { text: "L'élève reste avec ses deux coéquipiers pendant tout le run : l'équipe court groupée.", emoji: "👥" },
+    { text: "L'élève ne démarre pas le run et ne va pas à la station suivante tant que l'équipe n'est pas complète.", emoji: "🚦" },
+    { text: "Technique de course : le buste est droit, le regard devant, les épaules relâchées.", emoji: "🧍" },
+    { text: "Technique de course : les bras fléchis accompagnent la foulée, les appuis sont légers et dynamiques (l'élève ne traîne pas les pieds).", emoji: "🏃" },
+  ],
+};
+// Grille d'un exercice de l'Eval : 4 criteres pour l'arbitre eleve, 6 pour le prof. Sans grille Eval (station ajoutee
+// a la main), on retombe sur les criteres generaux de l'exercice.
+export function evalCriteriaFor(label: string, mode: "STUDENT" | "STAFF"): string[] {
+  const grid = EVAL_CRITERIA[keyOf(label)];
+  if (!grid) return mode === "STAFF" ? fullCriteriaFor(label) : criteriaFor(label);
+  const texts = grid.map((c) => c.text);
+  return mode === "STAFF" ? texts : texts.slice(0, EVAL_STUDENT_CRITERIA);
+}
+// QCM : les affirmations VRAIES d'un exercice qui a une grille Eval (null sinon).
+export const evalQuizTruths = (key: string): string[] | null => EVAL_CRITERIA[key]?.filter((c) => !c.noQuiz).map((c) => c.text) ?? null;
 
 // Emoji-resume de chaque critere de l'arbitre (Sartay 29/09 nuit : « pour que l'arbitre trouve plus vite ce qu'il doit
 // observer ; l'emoji est une sorte de resume du critere »), dans l'ordre de REFEREE_CRITERIA (3 techniques + intensite).
@@ -349,6 +454,8 @@ export const criteriaEmojisFor = (label: string): string[] => CRITERIA_EMOJI[key
 const EMOJI_BY_SENTENCE = new Map<string, string>([
   ...Object.entries(REFEREE_CRITERIA).flatMap(([k, list]) => list.map((sentence, i) => [sentence, (CRITERIA_EMOJI[k] ?? GENERIC_EMOJI)[i]] as [string, string])),
   ...GENERIC_CRITERIA.map((sentence, i) => [sentence, GENERIC_EMOJI[i]] as [string, string]),
+  // Grilles de l'Eval : chaque critere porte son emoji (les phrases communes avec le Level gardent le meme).
+  ...Object.values(EVAL_CRITERIA).flatMap((list) => list.map((c) => [c.text, c.emoji] as [string, string])),
 ]);
 export const criterionEmoji = (sentence: string): string | null => EMOJI_BY_SENTENCE.get(sentence) ?? null;
 

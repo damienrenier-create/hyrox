@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { readQuizOpen } from "@/lib/session-roles";
-import { buildQuiz, quizSeed } from "@/lib/hyrox-quiz";
+import { buildQuiz, quizSeed, readQuizAnswers } from "@/lib/hyrox-quiz";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { TopBar } from "../../../_components/TopBar";
 import { QuizClient } from "./QuizClient";
@@ -23,14 +23,16 @@ export default async function QuizPage({ params }: { params: Promise<{ sessionId
 
   const open = readQuizOpen(session.settings);
   const existing = await db.orm.public.QuizAnswer.where({ sessionId, studentId: user.id }).first();
-  const { questions, key } = buildQuiz(quizSeed(sessionId, user.id));
+  // Deja repondu : on relit le QCM enregistre avec les reponses (celui que l'eleve a vu) ; sinon, le tirage du jour.
+  const stored = existing ? readQuizAnswers(existing.answers) : null;
+  const { questions, key } = stored?.snapshot ?? buildQuiz(quizSeed(sessionId, user.id));
 
   return (
     <div className={ui.page}>
       <TopBar brand={false} back={{ href: `/eleve/${sessionId}`, label: "Retour" }} title="📝 QCM bonus" subtitle={`${wodLabel(session.wodType)} · ${fmtDate(session.createdAt)}`} />
       <main className="max-w-2xl mx-auto p-4">
-        {existing ? (
-          <QuizClient sessionId={sessionId} questions={questions} result={{ checked: existing.answers as Record<string, string[]>, key, score: existing.score, total: existing.total, at: new Date(String(existing.createdAt)).getTime() }} />
+        {existing && stored ? (
+          <QuizClient sessionId={sessionId} questions={questions} result={{ checked: stored.checked, key, score: existing.score, total: existing.total, at: new Date(String(existing.createdAt)).getTime() }} />
         ) : !open ? (
           <p className={`${ui.cardPad} ${ui.muted}`}>Le QCM n&apos;est pas ouvert pour l&apos;instant. Ton prof l&apos;ouvre depuis sa console ; reviens ici ensuite.</p>
         ) : (

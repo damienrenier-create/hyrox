@@ -3,7 +3,7 @@ import { toMs } from "@/lib/scheduling";
 import { STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
 import { exercisesFor } from "@/lib/session-exercises";
-import { RUN_CRITERIA_KEY, criteriaFor, fullCriteriaFor, readCriteria } from "@/lib/level-criteria";
+import { RUN_CRITERIA_KEY, evalCriteriaFor, readCriteria } from "@/lib/level-criteria";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
@@ -24,7 +24,7 @@ const clock = (ms: number) => new Date(ms).toLocaleTimeString("fr-BE", { hour: "
 // Les stations de la seance, puis le RUN (Sartay 04/10 : « les criteres de tous les exercices de l'eval, run compris ») :
 // un seul exercice « run » pour tous les runs du parcours, ses series se comptent en allers-retours.
 export function obsStations(session: { wodType: string; settings?: unknown }, mode: ObsMode): ObsStation[] {
-  const grid = (label: string) => (mode === "STAFF" ? fullCriteriaFor(label) : criteriaFor(label));
+  const grid = (label: string) => evalCriteriaFor(label, mode);
   const out = exercisesFor(session).map((e) => ({ id: e.id, label: e.label, criteria: grid(e.label) }));
   if (session.wodType === "HYROX") out.push({ id: OBS_RUN_ID, label: readHXSettings(session.settings).runLabel, criteria: grid(RUN_CRITERIA_KEY) });
   return out;
