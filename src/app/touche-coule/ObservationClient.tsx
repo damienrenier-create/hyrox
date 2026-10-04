@@ -309,6 +309,19 @@ function StationPanel({
     setTicks((t) => ({ ...t, [station.id]: next }));
     onApp(station.id, next.flatMap((v, k) => (v ? [k] : [])));
   }
+  // « Aucun critere n'est respecte » (Sartay 04/10) : une appreciation existe et rien n'y est coche. Sans elle, un
+  // exercice dont on a compte les series mais ou l'on n'a rien coche resterait « sans appreciation » au compte rendu.
+  const none = (autoSave ? touched : dirty || !!app) && nMet === 0;
+  function setNone() {
+    if (!station) return;
+    const next = station.criteria.map(() => false);
+    if (!autoSave) {
+      setDraft({ ex: station.id, met: next });
+      return;
+    }
+    setTicks((t) => ({ ...t, [station.id]: next }));
+    onApp(station.id, []);
+  }
 
   return (
     <section className={ui.cardPad}>
@@ -328,7 +341,7 @@ function StationPanel({
             >
               <span className="block truncate">{s.label}</span>
               <span className={cx("block text-[11px] font-semibold", s.id === exerciseId ? "text-white/85" : "text-ink-3")}>
-                {total ? `${total} reps` : already ? `déjà vu · ${already.by}` : "—"}{hasApp ? " · ✓ apprécié" : ""}
+                {total ? `${total} reps` : already ? `déjà vu · ${already.by}` : "—"}{hasApp ? " · ✓ apprécié" : autoSave && total ? " · ⚠ à apprécier" : ""}
               </span>
             </button>
           );
@@ -371,9 +384,15 @@ function StationPanel({
 
           <div>
             <p className="text-sm font-bold mb-1">Appréciation · coche ce que tu as VU ({station.criteria.length} critères)</p>
-            <CriteriaChecklist labels={station.criteria} met={met} onToggle={toggle} />
+            <CriteriaChecklist labels={station.criteria} met={met} onToggle={toggle} none={none} onNone={setNone} />
             {autoSave ? (
-              <p className={cx(ui.hint, "mt-2")}>{touched ? `✓ Enregistré : ${nMet}/${met.length} critères · ${qualityCodeFromValue(qualityFromCriteria(nMet, met.length)) ?? "?"}` : "Chaque coche est enregistrée tout de suite."}</p>
+              <p className={cx("text-xs mt-2", !touched && live.length > 0 ? "text-warn-ink font-bold" : "text-ink-3")}>
+                {touched
+                  ? `✓ Enregistré : ${nMet === 0 ? "aucun critère respecté" : `${nMet}/${met.length} critères`} · ${qualityCodeFromValue(qualityFromCriteria(nMet, met.length)) ?? "?"}`
+                  : live.length > 0
+                    ? "⚠ Pas encore d'appréciation : coche ce que tu as vu, ou « Aucun critère n'est respecté »."
+                    : "Chaque coche est enregistrée tout de suite."}
+              </p>
             ) : (
               <button
                 type="button"
