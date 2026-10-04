@@ -342,6 +342,19 @@ export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
     { text: "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.", emoji: "📍" },
     { text: "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).", emoji: "🧍" },
   ],
+  // Station 4 de l'Eval depuis le 04/10 (Sartay : « faut remplacer le one rep par du break dance, y compris les
+  // criteres »). Les criteres du break dance du Level, ranges comme les autres grilles : 3 techniques + le rythme pour
+  // l'eleve, puis les 2 techniques suivants pour le prof. A faire relire par Sartay comme les autres exercices.
+  "BREAK DANCE": [
+    { text: "La jambe qui passe sous le corps est tendue au maximum.", emoji: "🦵" },
+    { text: "Le bassin pivote, descend, mais ne se repose pas sur le sol.", emoji: "🚫" },
+    { text: "Le tronc tourne correctement tout en gardant l'équilibre sur une main et un pied.", emoji: "🌀" },
+    { text: "L'enchaînement gauche/droite est rythmé et fluide.", emoji: "↔️", noQuiz: true },
+    { text: "Le bras libre accompagne le mouvement en tirant vers l'arrière de manière dynamique.", emoji: "💪" },
+    { text: "Le retour en position initiale (quadrupédie) est stable.", emoji: "🐾" },
+  ],
+  // Le one rep n'est plus dans le parcours par defaut (04/10) ; sa grille relue par Sartay reste pour une station
+  // « One rep » remise a la main dans les reglages.
   "ONE REP": [
     { text: "L'élève démarre debout et ses pieds ne bougent pas pendant l'exercice.", emoji: "🦶" },
     { text: "L'élève se redresse en station debout complète (extension totale) à la fin de la répétition.", emoji: "🧍" },

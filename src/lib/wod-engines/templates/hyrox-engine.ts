@@ -12,11 +12,13 @@ export type HXStation = { id: string; label: string; reps: number; unit: string 
 export const HX_UNITS = ["rép.", "A/R", "m", "s"] as const;
 // Version « Eval » du 03/10 : 3 stations en allers-retours puis 6 stations a 60 repetitions. Les stations sont des
 // EMPLACEMENTS st1..stN (Team.startExerciseId, colonnes du Touche-Coule) ; libelles, reps et nombre se reglent avant le depart.
+// 04/10 (Sartay) : le break dance remplace le one rep en station 4. Une seance deja jouee garde SON parcours : il est
+// fige dans ses reglages a la premiere validation (freezeHXCourse, hyrox-context.ts).
 export const HX_DEFAULT_STATIONS: HXStation[] = [
   { id: "st1", label: "Burpees broad jump", reps: 3, unit: "A/R" },
   { id: "st2", label: "Fentes marchées", reps: 3, unit: "A/R" },
   { id: "st3", label: "Farmer carry", reps: 3, unit: "A/R" },
-  { id: "st4", label: "One rep", reps: 60, unit: "rép." },
+  { id: "st4", label: "Break dance", reps: 60, unit: "rép." },
   { id: "st5", label: "Squats", reps: 60, unit: "rép." },
   { id: "st6", label: "Pompage", reps: 60, unit: "rép." },
   { id: "st7", label: "Corde", reps: 60, unit: "rép." },

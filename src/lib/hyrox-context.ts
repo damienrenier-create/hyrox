@@ -13,6 +13,16 @@ export type HXBundle = {
   locked: boolean; // des pointages existent : stations et runs ne se modifient plus
 };
 
+// Fige le parcours dans la seance a sa PREMIERE validation (stations, reps, runs, tours). Tant que rien n'est joue, une
+// seance sans reglages suit le parcours par defaut du code ; une fois jouee, elle ne doit plus bouger quand ce parcours
+// change (04/10 : le break dance a remplace le one rep). Regle d'or : garder la trace des WOD faits par de vrais eleves.
+export async function freezeHXCourse(session: { id: string; settings: unknown }): Promise<boolean> {
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  if (prev.hyrox) return false; // deja fige (ou regle a la main dans les reglages)
+  await db.orm.public.Session.where({ id: session.id }).update({ settings: { ...prev, hyrox: readHXSettings(prev) } });
+  return true;
+}
+
 // Contexte pur du moteur Hyrox a partir de Postgres : equipes + membres (identifiants permanents), pointages et cartes
 // jaunes en ms ecoulees (pauses deduites via RaceState/RacePause), reglages de la seance. Requetes groupees : la page
 // greffier est re-rendue a chaque rafraichissement.

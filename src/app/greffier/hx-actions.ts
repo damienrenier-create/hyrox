@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, readHXSettings, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
+import { freezeHXCourse } from "@/lib/hyrox-context";
 
 // Actions du greffier Hyrox (Sartay 01/10). Les profs (ADMIN) tiennent aussi ce greffier : leurs seances s'ouvrent
 // desormais depuis leur propre journal de classe.
@@ -50,6 +51,8 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   const done = events.filter((e) => e.stationId !== CINDY_KEY).length;
   if (done >= segments.length) return { error: `${team.name} a terminé son parcours : il n'y a plus rien à valider.` };
   const key = segments[done].key;
+  // Premiere validation de la seance : son parcours est fige dans ses reglages (il ne suivra plus le parcours par defaut).
+  await freezeHXCourse(session);
   await db.orm.public.StationEvent.create({ sessionId, teamId, stationId: key, at: Temporal.Now.instant() });
   return { ok: true, key };
 }
