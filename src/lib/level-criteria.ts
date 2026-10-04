@@ -314,108 +314,109 @@ export const fullCriteriaFor = (label: string): string[] => {
 // (le prof les a aussi, dans le meme ordre), les 5e et 6e pour le prof seulement. Ces grilles sont propres a l'Eval :
 // celles du WOD Level (CRITERIA : 3 techniques + intensite) ne bougent pas. `noQuiz` = critere d'intensite, de rythme
 // ou d'organisation : jamais propose comme affirmation du QCM.
-export type EvalCriterion = { text: string; emoji: string; noQuiz?: boolean };
+// `short` = version courte (2 a 5 mots) pour les dias projetees ; sur le telephone, la phrase complete.
+export type EvalCriterion = { text: string; short: string; emoji: string; noQuiz?: boolean };
 export const EVAL_STUDENT_CRITERIA = 4;
 export const RUN_CRITERIA_KEY = "RUN"; // le run entre deux stations, observe comme un exercice
 export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
   "BURPEES BROAD JUMP": [
-    { text: "La poitrine touche clairement le sol en bas de chaque burpee.", emoji: "⬇️" },
-    { text: "Les mains se posent juste devant les pieds (30 cm maximum, environ une longueur de pied) et n'avancent plus une fois posées.", emoji: "✋" },
-    { text: "Le saut part des deux pieds en même temps et se réceptionne sur les deux pieds en même temps (pieds à la même hauteur).", emoji: "👣" },
-    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
-    { text: "Aucun pas ni petit sursaut en plus : ni avant le saut, ni entre la réception et le burpee suivant.", emoji: "🚫" },
-    { text: "La transition entre les élèves est correctement effectuée.", emoji: "🤝", noQuiz: true },
+    { text: "La poitrine touche clairement le sol en bas de chaque burpee.", short: "Poitrine au sol", emoji: "⬇️" },
+    { text: "Les mains se posent juste devant les pieds (30 cm maximum, environ une longueur de pied) et n'avancent plus une fois posées.", short: "Mains juste devant les pieds", emoji: "✋" },
+    { text: "Le saut part des deux pieds en même temps et se réceptionne sur les deux pieds en même temps (pieds à la même hauteur).", short: "Saut et réception à deux pieds", emoji: "👣" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", short: "Intensité maximale", emoji: "🔥", noQuiz: true },
+    { text: "Aucun pas ni petit sursaut en plus : ni avant le saut, ni entre la réception et le burpee suivant.", short: "Aucun pas en plus", emoji: "🚫" },
+    { text: "La transition entre les élèves est correctement effectuée.", short: "Transition entre élèves", emoji: "🤝", noQuiz: true },
   ],
   "FENTES MARCHÉES": [
-    { text: "Le genou arrière touche clairement le sol à chaque fente (posé en douceur, sans le cogner).", emoji: "🦵" },
-    { text: "Chaque fente se termine debout : genoux et hanches complètement tendus.", emoji: "🧍" },
-    { text: "Les jambes alternent : c'est un genou différent qui touche le sol à chaque fente.", emoji: "🔀" },
-    { text: "Aucun pas ni petit pas d'ajustement entre deux fentes (on enchaîne, ou on s'arrête pieds parallèles).", emoji: "🚫" },
-    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
-    { text: "À chaque extrémité, le pied avant franchit complètement la ligne ; on repart debout, les deux pieds derrière la ligne.", emoji: "🏁" },
+    { text: "Le genou arrière touche clairement le sol à chaque fente (posé en douceur, sans le cogner).", short: "Genou arrière au sol", emoji: "🦵" },
+    { text: "Chaque fente se termine debout : genoux et hanches complètement tendus.", short: "Debout complet entre deux", emoji: "🧍" },
+    { text: "Les jambes alternent : c'est un genou différent qui touche le sol à chaque fente.", short: "Jambes alternées", emoji: "🔀" },
+    { text: "Aucun pas ni petit pas d'ajustement entre deux fentes (on enchaîne, ou on s'arrête pieds parallèles).", short: "Aucun pas entre deux fentes", emoji: "🚫" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", short: "Intensité maximale", emoji: "🔥", noQuiz: true },
+    { text: "À chaque extrémité, le pied avant franchit complètement la ligne ; on repart debout, les deux pieds derrière la ligne.", short: "Pied avant passe la ligne", emoji: "🏁" },
   ],
   "FARMER CARRY": [
-    { text: "La charge est portée pendant tout le déplacement.", emoji: "🏋️" },
-    { text: "Les bras chargés restent tendus le long du corps (ni sur l'épaule, ni contre le ventre).", emoji: "💪" },
-    { text: "La ligne est franchie avec le pied à chaque extrémité.", emoji: "🏁" },
-    { text: "L'élève travaille à une intensité qui lui est maximale.", emoji: "🔥", noQuiz: true },
-    { text: "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.", emoji: "📍" },
-    { text: "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).", emoji: "🧍" },
+    { text: "La charge est portée pendant tout le déplacement.", short: "Charge toujours portée", emoji: "🏋️" },
+    { text: "Les bras chargés restent tendus le long du corps (ni sur l'épaule, ni contre le ventre).", short: "Bras tendus le long du corps", emoji: "💪" },
+    { text: "La ligne est franchie avec le pied à chaque extrémité.", short: "Ligne franchie avec le pied", emoji: "🏁" },
+    { text: "L'élève travaille à une intensité qui lui est maximale.", short: "Intensité maximale", emoji: "🔥", noQuiz: true },
+    { text: "Pour se reposer, les charges sont posées sur place : elles ne sont ni lâchées, ni lancées, ni glissées vers l'avant.", short: "Charges posées sur place", emoji: "📍" },
+    { text: "Les charges sont soulevées et reposées jambes fléchies, dos droit (jamais dos rond).", short: "Soulevé jambes fléchies, dos droit", emoji: "🧍" },
   ],
   // Station 4 de l'Eval depuis le 04/10 (Sartay : « faut remplacer le one rep par du break dance, y compris les
   // criteres »). Les criteres du break dance du Level, ranges comme les autres grilles : 3 techniques + le rythme pour
   // l'eleve, puis les 2 techniques suivants pour le prof. A faire relire par Sartay comme les autres exercices.
   "BREAK DANCE": [
-    { text: "La jambe qui passe sous le corps est tendue au maximum.", emoji: "🦵" },
-    { text: "Le bassin pivote, descend, mais ne se repose pas sur le sol.", emoji: "🚫" },
-    { text: "Le tronc tourne correctement tout en gardant l'équilibre sur une main et un pied.", emoji: "🌀" },
-    { text: "L'enchaînement gauche/droite est rythmé et fluide.", emoji: "↔️", noQuiz: true },
-    { text: "Le bras libre accompagne le mouvement en tirant vers l'arrière de manière dynamique.", emoji: "💪" },
-    { text: "Le retour en position initiale (quadrupédie) est stable.", emoji: "🐾" },
+    { text: "La jambe qui passe sous le corps est tendue au maximum.", short: "Jambe tendue sous le corps", emoji: "🦵" },
+    { text: "Le bassin pivote, descend, mais ne se repose pas sur le sol.", short: "Bassin ne touche pas le sol", emoji: "🚫" },
+    { text: "Le tronc tourne correctement tout en gardant l'équilibre sur une main et un pied.", short: "Tronc tourne, en équilibre", emoji: "🌀" },
+    { text: "L'enchaînement gauche/droite est rythmé et fluide.", short: "Gauche / droite rythmé", emoji: "↔️", noQuiz: true },
+    { text: "Le bras libre accompagne le mouvement en tirant vers l'arrière de manière dynamique.", short: "Bras libre dynamique", emoji: "💪" },
+    { text: "Le retour en position initiale (quadrupédie) est stable.", short: "Retour stable à 4 pattes", emoji: "🐾" },
   ],
   // Le one rep n'est plus dans le parcours par defaut (04/10) ; sa grille relue par Sartay reste pour une station
   // « One rep » remise a la main dans les reglages.
   "ONE REP": [
-    { text: "L'élève démarre debout et ses pieds ne bougent pas pendant l'exercice.", emoji: "🦶" },
-    { text: "L'élève se redresse en station debout complète (extension totale) à la fin de la répétition.", emoji: "🧍" },
-    { text: "Toutes les touches sont exécutées franchement et de manière croisée (main/épaule, main/genou, main/pied).", emoji: "✋" },
-    { text: "L'exercice est réalisé avec rythme et sans pause au sol.", emoji: "⏱️", noQuiz: true },
-    { text: "La descente et la remontée (crawling) sont contrôlées et sécurisées sur les appuis.", emoji: "🐾" },
-    { text: "Le bassin reste le plus stable possible et ne vrille pas de gauche à droite lors des touches croisées.", emoji: "🧱" },
+    { text: "L'élève démarre debout et ses pieds ne bougent pas pendant l'exercice.", short: "Debout, pieds fixes", emoji: "🦶" },
+    { text: "L'élève se redresse en station debout complète (extension totale) à la fin de la répétition.", short: "Debout complet à la fin", emoji: "🧍" },
+    { text: "Toutes les touches sont exécutées franchement et de manière croisée (main/épaule, main/genou, main/pied).", short: "Touches franches et croisées", emoji: "✋" },
+    { text: "L'exercice est réalisé avec rythme et sans pause au sol.", short: "Rythme, sans pause", emoji: "⏱️", noQuiz: true },
+    { text: "La descente et la remontée (crawling) sont contrôlées et sécurisées sur les appuis.", short: "Crawling contrôlé", emoji: "🐾" },
+    { text: "Le bassin reste le plus stable possible et ne vrille pas de gauche à droite lors des touches croisées.", short: "Bassin ne vrille pas", emoji: "🧱" },
   ],
   SQUATS: [
-    { text: "Les hanches descendent plus bas que les genoux (sous la parallèle) à chaque squat.", emoji: "⬇️" },
-    { text: "Chaque squat se termine debout : hanches et genoux complètement tendus.", emoji: "↕️" },
-    { text: "Les talons restent au sol et les genoux restent dans l'axe des pieds, y compris durant la flexion et l'extension.", emoji: "🦶" },
-    { text: "Les pieds sont écartés à la largeur des épaules.", emoji: "↔️" },
-    { text: "Le dos reste droit, la poitrine haute.", emoji: "🧍" },
-    { text: "L'intensité est maximale compte tenu de l'effort et de l'élève.", emoji: "🔥", noQuiz: true },
+    { text: "Les hanches descendent plus bas que les genoux (sous la parallèle) à chaque squat.", short: "Hanches sous les genoux", emoji: "⬇️" },
+    { text: "Chaque squat se termine debout : hanches et genoux complètement tendus.", short: "Debout complet en haut", emoji: "↕️" },
+    { text: "Les talons restent au sol et les genoux restent dans l'axe des pieds, y compris durant la flexion et l'extension.", short: "Talons au sol, genoux dans l'axe", emoji: "🦶" },
+    { text: "Les pieds sont écartés à la largeur des épaules.", short: "Pieds largeur d'épaules", emoji: "↔️" },
+    { text: "Le dos reste droit, la poitrine haute.", short: "Dos droit, poitrine haute", emoji: "🧍" },
+    { text: "L'intensité est maximale compte tenu de l'effort et de l'élève.", short: "Intensité maximale", emoji: "🔥", noQuiz: true },
   ],
   // « Pompage » sur la fiche de l'Eval (alias LEGACY_LABELS).
   POMPES: [
-    { text: "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes).", emoji: "📏" },
-    { text: "La poitrine touche ou frôle le sol à chaque descente.", emoji: "⬇️" },
-    { text: "Les bras sont complètement tendus lors de la remontée (fin de poussée).", emoji: "💪" },
-    { text: "Le bassin ne s'affaisse pas et ne se lève pas pendant le mouvement.", emoji: "🧱" },
-    { text: "L'élève maintient un rythme régulier et fait de son mieux.", emoji: "⏱️", noQuiz: true },
-    { text: "La descente est contrôlée (l'élève ne se laisse pas tomber).", emoji: "🎛️" },
+    { text: "Le corps est parfaitement aligné en planche (tête, dos, bassin, jambes).", short: "Corps aligné", emoji: "📏" },
+    { text: "La poitrine touche ou frôle le sol à chaque descente.", short: "Poitrine au sol", emoji: "⬇️" },
+    { text: "Les bras sont complètement tendus lors de la remontée (fin de poussée).", short: "Bras tendus en haut", emoji: "💪" },
+    { text: "Le bassin ne s'affaisse pas et ne se lève pas pendant le mouvement.", short: "Bassin fixe", emoji: "🧱" },
+    { text: "L'élève maintient un rythme régulier et fait de son mieux.", short: "Rythme régulier", emoji: "⏱️", noQuiz: true },
+    { text: "La descente est contrôlée (l'élève ne se laisse pas tomber).", short: "Descente contrôlée", emoji: "🎛️" },
   ],
   CORDE: [
-    { text: "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).", emoji: "🪶" },
-    { text: "Le dos est droit, les épaules sont relâchées et le regard est droit devant.", emoji: "🧍" },
-    { text: "Le mouvement de la corde est initié par une rotation des poignets (et non par les bras entiers).", emoji: "🔄" },
-    { text: "La corde passe de manière fluide et le mouvement est synchronisé.", emoji: "〰️" },
-    { text: "L'intensité est maximale par rapport au niveau technique de l'élève.", emoji: "🔥", noQuiz: true },
-    { text: "L'élève maintient un rythme régulier, continu, en essayant de limiter les ratés.", emoji: "⏱️" },
+    { text: "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).", short: "Sauts souples, amortis", emoji: "🪶" },
+    { text: "Le dos est droit, les épaules sont relâchées et le regard est droit devant.", short: "Dos droit, épaules relâchées", emoji: "🧍" },
+    { text: "Le mouvement de la corde est initié par une rotation des poignets (et non par les bras entiers).", short: "Rotation des poignets", emoji: "🔄" },
+    { text: "La corde passe de manière fluide et le mouvement est synchronisé.", short: "Corde fluide", emoji: "〰️" },
+    { text: "L'intensité est maximale par rapport au niveau technique de l'élève.", short: "Intensité maximale", emoji: "🔥", noQuiz: true },
+    { text: "L'élève maintient un rythme régulier, continu, en essayant de limiter les ratés.", short: "Rythme régulier", emoji: "⏱️" },
   ],
   // Sartay 04/10 : « la hauteur demandee : ce sont les yeux ».
   "KB SWING": [
-    { text: "Le mouvement est initié par une extension explosive du bassin (les hanches propulsent le poids).", emoji: "🚀" },
-    { text: "Le dos reste droit, neutre et gainé.", emoji: "🧍" },
-    { text: "Les bras servent de balancier et restent souples (ils ne tirent pas le poids).", emoji: "〰️" },
-    { text: "La kettlebell atteint la hauteur demandée : celle des yeux.", emoji: "👀" },
-    { text: "Le rythme est soutenu : l'élève enchaîne les swings sans s'arrêter.", emoji: "⏱️", noQuiz: true },
-    { text: "En fin d'extension (debout), les fessiers et les abdominaux sont contractés.", emoji: "🔒" },
+    { text: "Le mouvement est initié par une extension explosive du bassin (les hanches propulsent le poids).", short: "Explosion du bassin", emoji: "🚀" },
+    { text: "Le dos reste droit, neutre et gainé.", short: "Dos droit, gainé", emoji: "🧍" },
+    { text: "Les bras servent de balancier et restent souples (ils ne tirent pas le poids).", short: "Bras souples", emoji: "〰️" },
+    { text: "La kettlebell atteint la hauteur demandée : celle des yeux.", short: "Hauteur des yeux", emoji: "👀" },
+    { text: "Le rythme est soutenu : l'élève enchaîne les swings sans s'arrêter.", short: "Rythme soutenu", emoji: "⏱️", noQuiz: true },
+    { text: "En fin d'extension (debout), les fessiers et les abdominaux sont contractés.", short: "Fessiers et abdos serrés", emoji: "🔒" },
   ],
   "WALL BALL SHOT": [
-    { text: "Le squat est profond (creux des hanches sous les genoux) avant le lancer.", emoji: "⬇️" },
-    { text: "La balle touche la cible à la hauteur exacte demandée.", emoji: "🎯" },
-    { text: "L'élève réceptionne la balle en amortissant directement dans un nouveau squat.", emoji: "🤲" },
-    { text: "Le mouvement est un seul flux continu (les jambes propulsent la balle).", emoji: "🌊" },
-    { text: "Le dos reste droit et le regard fixé sur la cible lors de la descente.", emoji: "🧍" },
-    { text: "L'élève enchaîne les lancers à un rythme soutenu, sans pause entre les répétitions.", emoji: "⏱️", noQuiz: true },
+    { text: "Le squat est profond (creux des hanches sous les genoux) avant le lancer.", short: "Squat profond", emoji: "⬇️" },
+    { text: "La balle touche la cible à la hauteur exacte demandée.", short: "Cible à la bonne hauteur", emoji: "🎯" },
+    { text: "L'élève réceptionne la balle en amortissant directement dans un nouveau squat.", short: "Réception en squat", emoji: "🤲" },
+    { text: "Le mouvement est un seul flux continu (les jambes propulsent la balle).", short: "Un seul flux continu", emoji: "🌊" },
+    { text: "Le dos reste droit et le regard fixé sur la cible lors de la descente.", short: "Dos droit, regard cible", emoji: "🧍" },
+    { text: "L'élève enchaîne les lancers à un rythme soutenu, sans pause entre les répétitions.", short: "Rythme soutenu", emoji: "⏱️", noQuiz: true },
   ],
   // Run entre deux stations, par equipe de 3. Sartay 04/10 : « plutot parler de la technique de course de base, le
   // fait de respecter la distance, le nombre d'AR demande, de rester avec ses 2 coequipiers, de ne pas demarrer ni
   // aller sur la prochaine station sans que l'equipe ne soit complete ». Proposition : les 4 regles visibles pour
   // l'arbitre eleve, la technique de course (en deux criteres) pour le prof. A faire valider.
   [RUN_CRITERIA_KEY]: [
-    { text: "La distance est respectée : la ligne est franchie à chaque extrémité, sans couper le demi-tour.", emoji: "🏁" },
-    { text: "Le nombre d'allers-retours demandé est fait en entier.", emoji: "🔢" },
-    { text: "L'élève reste avec ses deux coéquipiers pendant tout le run : l'équipe court groupée.", emoji: "👥" },
-    { text: "L'élève ne démarre pas le run et ne va pas à la station suivante tant que l'équipe n'est pas complète.", emoji: "🚦" },
-    { text: "Technique de course : le buste est droit, le regard devant, les épaules relâchées.", emoji: "🧍" },
-    { text: "Technique de course : les bras fléchis accompagnent la foulée, les appuis sont légers et dynamiques (l'élève ne traîne pas les pieds).", emoji: "🏃" },
+    { text: "La distance est respectée : la ligne est franchie à chaque extrémité, sans couper le demi-tour.", short: "Distance respectée", emoji: "🏁" },
+    { text: "Le nombre d'allers-retours demandé est fait en entier.", short: "Tous les allers-retours", emoji: "🔢" },
+    { text: "L'élève reste avec ses deux coéquipiers pendant tout le run : l'équipe court groupée.", short: "Reste avec ses 2 coéquipiers", emoji: "👥" },
+    { text: "L'élève ne démarre pas le run et ne va pas à la station suivante tant que l'équipe n'est pas complète.", short: "Équipe complète avant de partir", emoji: "🚦" },
+    { text: "Technique de course : le buste est droit, le regard devant, les épaules relâchées.", short: "Buste droit, regard devant", emoji: "🧍" },
+    { text: "Technique de course : les bras fléchis accompagnent la foulée, les appuis sont légers et dynamiques (l'élève ne traîne pas les pieds).", short: "Bras et appuis dynamiques", emoji: "🏃" },
   ],
 };
 // Grille d'un exercice de l'Eval : 4 criteres pour l'arbitre eleve, 6 pour le prof. Sans grille Eval (station ajoutee
@@ -425,6 +426,15 @@ export function evalCriteriaFor(label: string, mode: "STUDENT" | "STAFF"): strin
   if (!grid) return mode === "STAFF" ? fullCriteriaFor(label) : criteriaFor(label);
   const texts = grid.map((c) => c.text);
   return mode === "STAFF" ? texts : texts.slice(0, EVAL_STUDENT_CRITERIA);
+}
+// Grille d'un exercice de l'Eval pour une dia : emoji + version courte de chaque critere (4 pour l'arbitre eleve, 6
+// pour le prof). Sans grille Eval, les criteres generaux de l'exercice, en version courte quand elle existe.
+export function evalShortFor(label: string, mode: "STUDENT" | "STAFF"): { emoji: string | null; short: string }[] {
+  const grid = EVAL_CRITERIA[keyOf(label)];
+  if (grid) return (mode === "STAFF" ? grid : grid.slice(0, EVAL_STUDENT_CRITERIA)).map((c) => ({ emoji: c.emoji, short: c.short }));
+  const full = criteriaFor(label);
+  const short = shortCriteriaFor(label);
+  return full.map((sentence, i) => ({ emoji: criterionEmoji(sentence), short: short[i] ?? sentence }));
 }
 // QCM : les affirmations VRAIES d'un exercice qui a une grille Eval (null sinon).
 export const evalQuizTruths = (key: string): string[] | null => EVAL_CRITERIA[key]?.filter((c) => !c.noQuiz).map((c) => c.text) ?? null;

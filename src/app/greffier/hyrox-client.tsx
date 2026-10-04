@@ -381,6 +381,11 @@ export function HyroxClient({
               <a href={`/admin/observations?session=${sessionId}`} target="_blank" rel="noopener" className={btn.primary}>📋 Compte rendu des arbitres ↗</a>
               <a href={`/touche-coule?session=${sessionId}`} target="_blank" rel="noopener" className={btn.sea}>👁 Arbitrer (prof) ↗</a>
             </div>
+            {/* Dias a projeter en debut de seance (ou Imprimer -> PDF) : le parcours et les criteres de CETTE seance. */}
+            <div className="flex flex-wrap gap-2">
+              <a href={`/admin/eval/dias?doc=regles&session=${sessionId}`} target="_blank" rel="noopener" className={btn.ghost}>📄 Règles du WOD (participants) ↗</a>
+              <a href={`/admin/eval/dias?doc=arbitres&session=${sessionId}`} target="_blank" rel="noopener" className={btn.ghost}>📄 Guide des arbitres ↗</a>
+            </div>
           </div>
         )}
       </main>
