@@ -1,37 +1,44 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CriteriaChecklist } from "../_components/CriteriaChecklist";
-import { OBS_MINUTES, OBS_STAFF_TARGET, type ObsMode, type ObsParticipant, type ObsStation, type ObsView } from "@/lib/observation-types";
-import { obsAddRepsAction, obsAppreciateAction, obsDrawAction, obsFinishAction, obsVoidLastAction } from "./obs-actions";
+import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_STAFF_TARGET, type ObsMode, type ObsParticipant, type ObsStation, type ObsView } from "@/lib/observation-types";
+import { obsAddRepsAction, obsAppreciateAction, obsDrawAction, obsVoidLastAction } from "./obs-actions";
+import { qualityFromCriteria } from "@/lib/level-criteria";
+import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { btn, cx, ui } from "@/lib/ui";
 
 type Done = Record<string, { by: string; atMs: number }>;
 export type StaffRosterRow = ObsParticipant & { done: Done };
 export type ObsHistoryRow = { id: string; targetName: string; teamName: string; clock: string; summary: string };
+type AppJob = { observationId: string; exerciseId: string; met: number[] };
 
 const TZ = "Europe/Brussels";
 const clock = (ms: number) => new Date(ms).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ });
 const mmss = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 // Arbitrage du WOD Eval (Sartay 04/10), sur le telephone de l'arbitre.
-// ELEVE : l'appli tire un eleve au sort ; pendant 5 minutes chrono il consigne chaque serie de reps (horodatee) et coche
-// 4 criteres par exercice observe ; a la fin, il termine et tire le suivant.
+// ELEVE : cycle automatique. L'appli annonce un eleve (prenom, nom, classe) : 1 minute pour le reperer. Puis l'ecran
+// d'observation s'ouvre tout seul pour 5 minutes : chaque serie de reps (horodatee), 4 criteres par exercice observe,
+// chaque coche enregistree tout de suite. A la fin du chrono l'ecran se ferme, le prochain eleve est annonce, et ainsi
+// de suite jusqu'a la fin du WOD.
 // PROF : il choisit l'eleve et l'exercice quand il veut ; 6 criteres ; la liste lui dit qui a deja ete evalue sur quoi
 // (objectif : 3 exercices differents par eleve).
 export function ObservationClient({
-  sessionId, sessionLabel, mode, backHref, stations, obs, serverNowMs, race, history = [], roster = [], selected = null,
+  sessionId, sessionLabel, mode, backHref, stations, obs, serverNowMs, race, paused = false, cycleStarted = false, history = [], roster = [], selected = null,
 }: {
   sessionId: string;
   sessionLabel: string;
   mode: ObsMode;
   backHref: string;
   stations: ObsStation[];
-  obs: ObsView | null;
+  obs: ObsView | null; // eleve : l'observation du moment (eleve annonce ou fenetre en cours) ; prof : celle de l'eleve ouvert
   serverNowMs: number;
   race: "pre" | "run" | "post";
-  history?: ObsHistoryRow[]; // eleve : ses observations terminees
+  paused?: boolean; // WOD en pause : aucun nouvel eleve n'est annonce
+  cycleStarted?: boolean; // eleve : il a deja commence a arbitrer cette seance (le suivant s'enchaine tout seul)
+  history?: ObsHistoryRow[]; // eleve : ses fenetres fermees
   roster?: StaffRosterRow[]; // prof : tous les eleves avec ce qui est deja evalue
   selected?: StaffRosterRow | null; // prof : eleve ouvert
 }) {
@@ -39,7 +46,7 @@ export function ObservationClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [exerciseId, setExerciseId] = useState<string | null>(null);
-  // Horloge recalee sur le serveur : le compte a rebours ne depend pas de l'heure du telephone.
+  // Horloge recalee sur le serveur : les decomptes ne dependent pas de l'heure du telephone.
   const [offset] = useState(() => serverNowMs - Date.now());
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -47,9 +54,18 @@ export function ObservationClient({
     return () => clearInterval(t);
   }, []);
   const staff = mode === "STAFF";
-  const remaining = obs?.endsAtMs != null ? obs.endsAtMs - (now + offset) : null;
-  const timeUp = remaining !== null && remaining <= 0;
-  const target = staff ? (selected ? { id: selected.userId, name: selected.name, teamName: selected.teamName, className: selected.className } : null) : obs ? { id: obs.targetId, name: obs.targetName, teamName: obs.teamName, className: obs.className } : null;
+  const serverClock = now + offset;
+  // Cycle de l'arbitre eleve : eleve annonce (1 min) -> fenetre ouverte (5 min) -> fenetre fermee (le suivant arrive).
+  const phase: "staff" | "idle" | "preview" | "eval" | "over" = staff ? "staff" : !obs || obs.endsAtMs == null ? "idle" : serverClock < obs.startedAtMs ? "preview" : serverClock < obs.endsAtMs ? "eval" : "over";
+  const remaining = phase === "eval" && obs?.endsAtMs != null ? obs.endsAtMs - serverClock : null;
+  const target = staff ? (selected ? { id: selected.userId, name: selected.name, teamName: selected.teamName, className: selected.className } : null) : phase === "eval" && obs ? { id: obs.targetId, name: obs.targetName, teamName: obs.teamName, className: obs.className } : null;
+
+  // Nouvel eleve annonce : l'exercice choisi pour le precedent ne vaut plus (ajuste pendant le rendu, pas dans un effet).
+  const [seenObs, setSeenObs] = useState<string | null>(obs?.id ?? null);
+  if (!staff && (obs?.id ?? null) !== seenObs) {
+    setSeenObs(obs?.id ?? null);
+    setExerciseId(null);
+  }
 
   function run(action: () => Promise<{ error: string } | { ok: true }>, after?: () => void) {
     setError("");
@@ -62,6 +78,63 @@ export function ObservationClient({
     });
   }
   const ref = { observationId: obs?.id ?? null, targetUserId: target?.id ?? null };
+
+  // Fin d'une fenetre (ou retour sur la page apres une fenetre fermee) : l'ecran demande tout seul le prochain eleve.
+  // Tant que le serveur ne peut pas en annoncer un (pause, WOD fini, personne a suivre), on redemande toutes les 10 s.
+  const wantNext = !staff && race === "run" && !paused && (phase === "over" || (phase === "idle" && cycleStarted));
+  const cycleKey = obs?.id ?? "start";
+  const [retry, setRetry] = useState(0);
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wantNext) {
+      asked.current = null;
+      return;
+    }
+    const key = `${cycleKey}:${retry}`;
+    if (asked.current === key) return;
+    asked.current = key;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    obsDrawAction(sessionId).then((res) => {
+      if ("error" in res) {
+        setError(res.soft ? "" : res.error);
+        timer = setTimeout(() => setRetry((n) => n + 1), 10_000);
+      } else setError("");
+      router.refresh(); // nouvel eleve annonce, ou etat du WOD a jour (pause, fin)
+    });
+    return () => { if (timer) clearTimeout(timer); };
+  }, [wantNext, cycleKey, retry, sessionId, router]);
+
+  // WOD pas encore lance, ou en pause : on relit l'etat toutes les 10 s (le depart et la reprise se voient tout seuls).
+  const waiting = !staff && (race === "pre" || (race === "run" && paused));
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(() => router.refresh(), 10_000);
+    return () => clearInterval(t);
+  }, [waiting, router]);
+
+  // Arbitre eleve : chaque coche part tout de suite. Les envois se suivent un par un (jamais deux enregistrements en
+  // meme temps pour le meme exercice) ; si l'arbitre coche plus vite que le reseau, seul le dernier etat part.
+  const saver = useRef<{ busy: boolean; todo: Map<string, AppJob> }>({ busy: false, todo: new Map() });
+  function queueApp(job: AppJob) {
+    const s = saver.current;
+    s.todo.set(`${job.observationId}:${job.exerciseId}`, job);
+    if (s.busy) return;
+    s.busy = true;
+    void (async () => {
+      try {
+        while (s.todo.size) {
+          const [key, next] = s.todo.entries().next().value as [string, AppJob];
+          s.todo.delete(key);
+          const res = await obsAppreciateAction(sessionId, next);
+          if ("error" in res) setError(res.error);
+        }
+      } finally {
+        s.busy = false;
+      }
+    })();
+  }
+
+  const between = phase === "over" || (phase === "idle" && cycleStarted);
 
   return (
     <div className={ui.page}>
@@ -77,63 +150,94 @@ export function ObservationClient({
         {error && <p className={ui.alertErr}>{error}</p>}
         {race === "pre" && <p className={ui.alertInfo}>Le WOD n&apos;est pas encore lancé : l&apos;arbitrage commence au coup d&apos;envoi.</p>}
 
-        {/* ===== ELEVE : tirage au sort ===== */}
-        {!staff && !obs && (
+        {/* ===== ELEVE : depart du cycle ===== */}
+        {phase === "idle" && !cycleStarted && (
           <section className={`${ui.cardPad} text-center`}>
-            <div className="text-5xl mb-2">🎲</div>
+            <div className="text-5xl mb-2">👁</div>
             <h1 className={`${ui.h2} mb-1`}>Ton rôle d&apos;arbitre</h1>
             <p className={`${ui.muted} mb-4`}>
-              L&apos;appli te tire un élève au sort. Tu le suis pendant <b>{OBS_MINUTES} minutes</b> : note <b>chaque série</b> de répétitions qu&apos;il fait (ex. pompages : 5 puis 10 puis 3),
-              et coche les critères que tu as vus. Sois sûr à 100 % de qui tu regardes : demande-lui son prénom au besoin.
+              L&apos;appli t&apos;annonce un élève : tu as <b>1 minute</b> pour le repérer. Puis l&apos;écran s&apos;ouvre pour <b>{OBS_MINUTES} minutes</b> : note <b>chaque série</b> de répétitions qu&apos;il fait
+              (ex. pompages : 5 puis 10 puis 3) et coche les critères que tu as vus. À la fin du chrono l&apos;écran se ferme tout seul et le prochain élève s&apos;affiche, et ainsi de suite jusqu&apos;à la fin du WOD.
             </p>
-            <button onClick={() => run(() => obsDrawAction(sessionId))} disabled={pending || race !== "run"} className={`${btn.lgPrimary} w-full`}>{pending ? "Tirage…" : "🎲 Tirer un élève au sort"}</button>
+            <button onClick={() => run(() => obsDrawAction(sessionId))} disabled={pending || race !== "run" || paused} className={`${btn.lgPrimary} w-full`}>{pending ? "Tirage…" : "▶ Commencer : mon premier élève"}</button>
             {race === "post" && <p className={`${ui.hint} mt-2`}>Le WOD est terminé.</p>}
+            {race === "run" && paused && <p className={`${ui.hint} mt-2`}>Le WOD est en pause : tu pourras commencer à la reprise.</p>}
+          </section>
+        )}
+
+        {/* ===== ELEVE : entre deux fenetres ===== */}
+        {between && (
+          <section className={`${ui.cardPad} text-center`}>
+            {race === "post" ? (
+              <>
+                <div className="text-5xl mb-2">🏁</div>
+                <h1 className={`${ui.h2} mb-1`}>Le WOD est terminé</h1>
+                <p className={ui.muted}>Merci pour ton arbitrage : tout ce que tu as noté est enregistré.</p>
+              </>
+            ) : paused ? (
+              <>
+                <div className="text-5xl mb-2">⏸</div>
+                <h1 className={`${ui.h2} mb-1`}>WOD en pause</h1>
+                <p className={ui.muted}>Ton prochain élève s&apos;affichera à la reprise.</p>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl mb-2">🎲</div>
+                <h1 className={`${ui.h2} mb-1`}>Prochain élève…</h1>
+                <p className={ui.muted}>La fenêtre est fermée : l&apos;appli choisit ton prochain élève.</p>
+                {error && <button onClick={() => run(() => obsDrawAction(sessionId))} disabled={pending} className={`${btn.primary} mt-3`}>Réessayer</button>}
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ===== ELEVE : le prochain eleve est annonce, 1 minute pour le reperer ===== */}
+        {phase === "preview" && obs && (
+          <section className="rounded-2xl p-5 text-white shadow-card bg-sea text-center">
+            <p className="text-[11px] font-extrabold uppercase tracking-wide opacity-80">Ton prochain élève</p>
+            <p className="font-display text-[34px] font-extrabold leading-tight mt-1">{obs.targetName}</p>
+            <p className="text-lg font-bold opacity-95">{[obs.className, obs.teamName].filter(Boolean).join(" · ")}</p>
+            <p className="font-display text-[64px] font-extrabold leading-none tabular-nums mt-4">{mmss(obs.startedAtMs - serverClock)}</p>
+            <div className="mt-3 h-2 rounded-full bg-black/20 overflow-hidden"><div className="h-full bg-white/90 transition-all" style={{ width: `${Math.min(100, Math.max(0, 100 - ((obs.startedAtMs - serverClock) / OBS_PREVIEW_MS) * 100))}%` }} /></div>
+            <p className="text-sm opacity-90 mt-3">Repère-le dans la salle. À 0:00, l&apos;observation s&apos;ouvre toute seule pour {OBS_MINUTES} minutes.</p>
           </section>
         )}
 
         {/* ===== PROF : liste des eleves, avec ce qui est deja evalue ===== */}
         {staff && <StaffRoster roster={roster} stations={stations} selectedId={selected?.userId ?? null} onPick={(id) => { setExerciseId(null); router.push(`/touche-coule?session=${sessionId}&eleve=${id}`); }} />}
 
-        {/* ===== Eleve suivi ===== */}
+        {/* ===== Eleve suivi (eleve : fenetre ouverte) ===== */}
         {target && (
-          <section className={cx("rounded-2xl p-4 text-white shadow-card", !staff && timeUp ? "bg-accent" : "bg-brand")}>
+          <section className="rounded-2xl p-4 text-white shadow-card bg-brand">
             <p className="text-[11px] font-extrabold uppercase tracking-wide opacity-80">{staff ? "Tu évalues" : "Tu suis"}</p>
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-display text-[26px] font-extrabold leading-tight truncate">{target.name}</p>
                 <p className="text-sm opacity-90">{target.teamName}{target.className ? ` · ${target.className}` : ""}</p>
               </div>
-              {!staff && remaining !== null && (
-                <p className="font-display text-[40px] font-extrabold leading-none tabular-nums">{timeUp ? "0:00" : mmss(remaining)}</p>
-              )}
+              {remaining !== null && <p className="font-display text-[40px] font-extrabold leading-none tabular-nums">{mmss(remaining)}</p>}
             </div>
-            {!staff && obs?.endsAtMs != null && (
-              <div className="mt-2 h-2 rounded-full bg-black/20 overflow-hidden"><div className="h-full bg-white/90 transition-all" style={{ width: `${Math.min(100, Math.max(0, 100 - ((remaining ?? 0) / (OBS_MINUTES * 60_000)) * 100))}%` }} /></div>
+            {remaining !== null && (
+              <div className="mt-2 h-2 rounded-full bg-black/20 overflow-hidden"><div className="h-full bg-white/90 transition-all" style={{ width: `${Math.min(100, Math.max(0, 100 - (remaining / (OBS_MINUTES * 60_000)) * 100))}%` }} /></div>
             )}
-            {!staff && timeUp && <p className="text-sm font-bold mt-2">⏱ Temps écoulé : complète tes appréciations, puis termine.</p>}
+            {remaining !== null && <p className="text-xs opacity-90 mt-2">À 0:00 l&apos;écran se ferme tout seul : note les séries et coche les critères au fur et à mesure.</p>}
           </section>
         )}
 
         {target && (
           <StationPanel
-            key={target.id}
+            key={staff ? target.id : obs?.id ?? target.id}
             stations={stations}
             obs={obs}
             exerciseId={exerciseId}
             onExercise={setExerciseId}
-            canAdd={staff || !timeUp}
             pending={pending}
+            autoSave={!staff}
             staffDone={staff ? selected?.done ?? {} : null}
             onAdd={(ex, reps) => run(() => obsAddRepsAction(sessionId, { ...ref, exerciseId: ex, reps }))}
             onVoid={(ex) => run(() => obsVoidLastAction(sessionId, { ...ref, exerciseId: ex }))}
-            onApp={(ex, met) => run(() => obsAppreciateAction(sessionId, { ...ref, exerciseId: ex, met }))}
+            onApp={(ex, met) => (staff ? run(() => obsAppreciateAction(sessionId, { ...ref, exerciseId: ex, met })) : obs && queueApp({ observationId: obs.id, exerciseId: ex, met }))}
           />
-        )}
-
-        {!staff && obs && (
-          <button onClick={() => run(() => obsFinishAction(sessionId, obs.id), () => setExerciseId(null))} disabled={pending || !(timeUp || race === "post")} className={`${btn.lgSuccess} w-full`}>
-            {timeUp || race === "post" ? "✓ Terminer · tirer l'élève suivant" : `Encore ${mmss(remaining ?? 0)} avec ${target?.name.split(" ")[0] ?? "ton élève"}`}
-          </button>
         )}
 
         {!staff && history.length > 0 && (
@@ -156,14 +260,14 @@ export function ObservationClient({
 
 // Choix de l'exercice observe, series deja notees (avec leur heure), saisie d'une serie, criteres a cocher.
 function StationPanel({
-  stations, obs, exerciseId, onExercise, canAdd, pending, staffDone, onAdd, onVoid, onApp,
+  stations, obs, exerciseId, onExercise, pending, autoSave, staffDone, onAdd, onVoid, onApp,
 }: {
   stations: ObsStation[];
   obs: ObsView | null;
   exerciseId: string | null;
   onExercise: (id: string) => void;
-  canAdd: boolean;
   pending: boolean;
+  autoSave: boolean; // arbitre eleve : chaque coche est enregistree tout de suite (la fenetre se ferme toute seule)
   staffDone: Done | null; // prof : exercices deja evalues par un prof pour cet eleve
   onAdd: (exerciseId: string, reps: number) => void;
   onVoid: (exerciseId: string) => void;
@@ -174,11 +278,15 @@ function StationPanel({
   const entries = useMemo(() => (obs?.entries ?? []).filter((e) => e.exerciseId === exerciseId), [obs, exerciseId]);
   const live = entries.filter((e) => !e.voided);
   const app = (obs?.apps ?? []).find((a) => a.exerciseId === exerciseId) ?? null;
-  // Criteres coches : ceux deja enregistres pour cet exercice, modifiables tant que l'observation est ouverte.
+  // Criteres deja enregistres pour cet exercice, retrouves par leur PHRASE, pas par leur rang (l'ordre de la grille peut changer).
+  const saved = station ? station.criteria.map((label) => { const k = app ? app.labels.indexOf(label) : -1; return k >= 0 && !!app?.met[k]; }) : [];
+  // Prof : brouillon jusqu'au bouton. Eleve : les coches de cette fenetre, deja parties vers le serveur.
   const [draft, setDraft] = useState<{ ex: string | null; met: boolean[] }>({ ex: null, met: [] });
-  // Retrouves par leur PHRASE, pas par leur rang : l'ordre de la grille peut changer (prof : les 4 de l'eleve d'abord).
-  const met = draft.ex === exerciseId ? draft.met : station ? station.criteria.map((label) => { const k = app ? app.labels.indexOf(label) : -1; return k >= 0 && !!app?.met[k]; }) : [];
+  const [ticks, setTicks] = useState<Record<string, boolean[]>>({});
+  const met = autoSave ? (exerciseId ? ticks[exerciseId] : undefined) ?? saved : draft.ex === exerciseId ? draft.met : saved;
   const dirty = draft.ex === exerciseId;
+  const touched = !!app || (exerciseId !== null && ticks[exerciseId] !== undefined);
+  const nMet = met.filter(Boolean).length;
   const totals = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of obs?.entries ?? []) if (!e.voided) m.set(e.exerciseId, (m.get(e.exerciseId) ?? 0) + e.reps);
@@ -191,6 +299,16 @@ function StationPanel({
     onAdd(station.id, n);
     setReps("");
   }
+  function toggle(i: number) {
+    if (!station) return;
+    const next = met.map((v, k) => (k === i ? !v : v));
+    if (!autoSave) {
+      setDraft({ ex: station.id, met: next });
+      return;
+    }
+    setTicks((t) => ({ ...t, [station.id]: next }));
+    onApp(station.id, next.flatMap((v, k) => (v ? [k] : [])));
+  }
 
   return (
     <section className={ui.cardPad}>
@@ -198,7 +316,7 @@ function StationPanel({
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
         {stations.map((s) => {
           const total = totals.get(s.id) ?? 0;
-          const hasApp = (obs?.apps ?? []).some((a) => a.exerciseId === s.id);
+          const hasApp = (obs?.apps ?? []).some((a) => a.exerciseId === s.id) || ticks[s.id] !== undefined;
           const already = staffDone?.[s.id];
           return (
             <button
@@ -245,25 +363,27 @@ function StationPanel({
               onChange={(e) => setReps(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") add(); }}
               placeholder="Reps de la série"
-              disabled={!canAdd}
               className={`${ui.input} text-lg font-bold text-center flex-1`}
             />
-            <button type="button" onClick={add} disabled={pending || !canAdd || !Number.isInteger(n) || n < 1} className={btn.primary}>＋ Ajouter la série</button>
+            <button type="button" onClick={add} disabled={pending || !Number.isInteger(n) || n < 1} className={btn.primary}>＋ Ajouter la série</button>
           </div>
           {live.length > 0 && <button type="button" onClick={() => onVoid(station.id)} disabled={pending} className={btn.smGhost}>↶ Annuler la dernière série ({live[live.length - 1].reps})</button>}
-          {!canAdd && <p className={ui.hint}>Les {OBS_MINUTES} minutes sont écoulées : plus de nouvelle série, mais tu peux encore cocher les critères.</p>}
 
           <div>
             <p className="text-sm font-bold mb-1">Appréciation · coche ce que tu as VU ({station.criteria.length} critères)</p>
-            <CriteriaChecklist labels={station.criteria} met={met} onToggle={(i) => setDraft({ ex: station.id, met: met.map((v, k) => (k === i ? !v : v)) })} />
-            <button
-              type="button"
-              onClick={() => { onApp(station.id, met.flatMap((v, i) => (v ? [i] : []))); setDraft({ ex: null, met: [] }); }}
-              disabled={pending || (!dirty && !!app)}
-              className={`${btn.success} w-full mt-2`}
-            >
-              {app && !dirty ? `✓ Appréciation enregistrée (${app.met.filter(Boolean).length}/${app.met.length}${app.code ? ` · ${app.code}` : ""})` : "Enregistrer l'appréciation"}
-            </button>
+            <CriteriaChecklist labels={station.criteria} met={met} onToggle={toggle} />
+            {autoSave ? (
+              <p className={cx(ui.hint, "mt-2")}>{touched ? `✓ Enregistré : ${nMet}/${met.length} critères · ${qualityCodeFromValue(qualityFromCriteria(nMet, met.length)) ?? "?"}` : "Chaque coche est enregistrée tout de suite."}</p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { onApp(station.id, met.flatMap((v, i) => (v ? [i] : []))); setDraft({ ex: null, met: [] }); }}
+                disabled={pending || (!dirty && !!app)}
+                className={`${btn.success} w-full mt-2`}
+              >
+                {app && !dirty ? `✓ Appréciation enregistrée (${app.met.filter(Boolean).length}/${app.met.length}${app.code ? ` · ${app.code}` : ""})` : "Enregistrer l'appréciation"}
+              </button>
+            )}
           </div>
         </div>
       )}

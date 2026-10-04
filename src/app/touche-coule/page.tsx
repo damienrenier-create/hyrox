@@ -16,8 +16,7 @@ import type { BoardShip } from "./Board";
 import { btn, ui } from "@/lib/ui";
 import { notDeleted } from "@/lib/session-roles";
 import { ObservationClient, type ObsHistoryRow } from "./ObservationClient";
-import { activeStudentObservation, loadObsView, obsStations, participantsOf, staffCoverage, staffObservation } from "@/lib/observations";
-import { toMs } from "@/lib/scheduling";
+import { currentObservation, loadObsView, obsStations, participantsOf, staffCoverage, staffObservation, studentObservations } from "@/lib/observations";
 
 // Heure du serveur (hors du rendu, regle react-hooks/purity) : le compte a rebours de l'arbitre s'y recale.
 function serverNow(): number {
@@ -81,7 +80,8 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     const staff = evaluator.role !== "STUDENT";
     const [parts, rs] = await Promise.all([participantsOf(session.id), db.orm.public.RaceState.where({ sessionId: session.id }).first()]);
     const race = !rs?.startedAt ? "pre" : rs.endedAt || session.raceEndedAt ? "post" : "run";
-    const common = { sessionId: session.id, sessionLabel: session.label ?? wodLabel(session.wodType), race, serverNowMs: serverNow() } as const;
+    const nowMs = serverNow();
+    const common = { sessionId: session.id, sessionLabel: session.label ?? wodLabel(session.wodType), race, serverNowMs: nowMs } as const;
     if (staff) {
       const coverage = await staffCoverage(session.id);
       const roster = parts.map((p) => ({ ...p, done: coverage[p.userId] ?? {} }));
@@ -89,8 +89,13 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       const row = selected ? await staffObservation(session.id, evaluator.id, selected.userId) : null;
       return <ObservationClient {...common} mode="STAFF" backHref={`/greffier?session=${session.id}`} stations={obsStations(session, "STAFF")} obs={row ? await loadObsView(row, parts) : null} roster={roster} selected={selected} />;
     }
-    const row = await activeStudentObservation(session.id, evaluator.id);
-    const ended = (await db.orm.public.Observation.where({ sessionId: session.id, evaluatorId: evaluator.id }).all()).filter((o) => o.endedAt != null).sort((a, b) => toMs(b.startedAt) - toMs(a.startedAt)).slice(0, 8);
+    // Cycle de l'arbitre eleve : l'observation du moment (eleve annonce, ou fenetre de 5 minutes en cours), et les
+    // fenetres deja fermees. Le prochain eleve est demande par l'ecran lui-meme a la fin de chaque fenetre : rien n'est
+    // cree ici, a la simple lecture de la page.
+    const mine = await studentObservations(session.id, evaluator.id);
+    const row = currentObservation(mine, nowMs);
+    const ended = mine.filter((o) => o !== row).slice(0, 8);
+    const paused = rs ? (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).some((p) => p.to == null) : false;
     const labelOf = new Map(obsStations(session, "STUDENT").map((s) => [s.id, s.label]));
     const history: ObsHistoryRow[] = [];
     for (const o of ended) {
@@ -99,7 +104,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
       for (const e of v.entries) if (!e.voided) totals.set(e.exerciseId, [...(totals.get(e.exerciseId) ?? []), e.reps]);
       history.push({ id: v.id, targetName: v.targetName, teamName: v.teamName, clock: new Date(v.startedAtMs).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }), summary: [...totals].map(([id, sets]) => `${labelOf.get(id) ?? id} : ${sets.join(" - ")}`).join(" · ") });
     }
-    return <ObservationClient {...common} mode="STUDENT" backHref="/eleve" stations={obsStations(session, "STUDENT")} obs={row ? await loadObsView(row, parts) : null} history={history} />;
+    return <ObservationClient {...common} mode="STUDENT" backHref="/eleve" stations={obsStations(session, "STUDENT")} obs={row ? await loadObsView(row, parts) : null} history={history} cycleStarted={mine.length > 0} paused={paused} />;
   }
 
   // WOD Level : pas de flotte ni de tirs, un demineur eleves x exercices (une carte par seance, figee avec

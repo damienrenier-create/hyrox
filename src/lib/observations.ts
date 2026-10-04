@@ -8,11 +8,14 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
 import { clockText, fmt, readHXSettings, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
-import { OBS_MINUTES, OBS_RUN_ID, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
+import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_RUN_ID, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
 
 // Arbitrage du WOD Eval (Sartay 04/10).
 // - Arbitre ELEVE : l'appli lui tire un eleve au sort, il le suit 5 minutes chrono, consigne chaque serie de reps
 //   (« pompages : 5 - 10 - 3 », chaque ligne horodatee) et rend une appreciation sur 4 criteres par exercice observe.
+//   Cycle automatique (Sartay 04/10) : 1 minute d'ecran avec le prenom, le nom et la classe du prochain eleve, puis
+//   la fenetre de 5 minutes s'ouvre et se ferme toute seule, puis le suivant, et ainsi de suite. Une observation est
+//   creee des l'annonce : startedAt = debut de la fenetre (dans 1 minute), endsAt = sa fin.
 // - Arbitre PROF : il evalue qui il veut, quand il veut ; 6 criteres ; l'appli lui dit qui a deja ete vu sur quoi
 //   (objectif : chaque eleve sur 3 exercices differents au moins).
 // - Compte rendu : chaque serie avec son heure, comparee aux clics du greffier (l'equipe etait-elle a cette station ?).
@@ -51,11 +54,14 @@ export async function participantsOf(sessionId: string): Promise<ObsParticipant[
 
 type ObsRow = { id: string; sessionId: string; evaluatorId: string; targetUserId: string; teamId: string; mode: string; startedAt: unknown; endsAt: unknown | null; endedAt: unknown | null };
 
-// Observation en cours d'un arbitre eleve : la derniere non cloturee (il n'en a qu'une a la fois).
-export async function activeStudentObservation(sessionId: string, evaluatorId: string): Promise<ObsRow | null> {
+// Observations d'un arbitre eleve dans la seance, de la plus recente a la plus ancienne.
+export async function studentObservations(sessionId: string, evaluatorId: string): Promise<ObsRow[]> {
   const rows = (await db.orm.public.Observation.where({ sessionId, evaluatorId }).all()) as ObsRow[];
-  return rows.filter((o) => o.mode === "STUDENT" && o.endedAt == null).sort((a, b) => toMs(b.startedAt) - toMs(a.startedAt))[0] ?? null;
+  return rows.filter((o) => o.mode === "STUDENT").sort((a, b) => toMs(b.startedAt) - toMs(a.startedAt));
 }
+// Celle du moment : l'eleve annonce (avant startedAt) ou la fenetre de 5 minutes en cours (jusqu'a endsAt). Une
+// fenetre fermee n'est plus « en cours » : rien a cloturer a la main.
+export const currentObservation = (rows: ObsRow[], now: number): ObsRow | null => rows.find((o) => o.endsAt != null && toMs(o.endsAt) > now) ?? null;
 // Observation libre d'un prof sur un eleve : une seule par (prof, eleve, seance), rouverte a chaque passage.
 export async function staffObservation(sessionId: string, evaluatorId: string, targetUserId: string): Promise<ObsRow | null> {
   const rows = (await db.orm.public.Observation.where({ sessionId, evaluatorId, targetUserId }).all()) as ObsRow[];
@@ -89,28 +95,62 @@ export async function loadObsView(o: ObsRow, parts?: ObsParticipant[]): Promise<
   };
 }
 
-// Tirage au sort de l'eleve a suivre : jamais soi-meme ni sa propre equipe, jamais un eleve deja suivi en ce moment
-// par un autre arbitre ; on prend parmi les MOINS observes de la seance (tout le monde doit etre vu), et si possible
-// quelqu'un que cet arbitre n'a pas encore suivi.
+// Tirage au sort du PROCHAIN eleve a suivre (Sartay 04/10).
+// - Jamais soi-meme ni sa propre equipe, ni un eleve qui est lui-meme en train d'arbitrer (il ne joue pas).
+// - Jamais un eleve deja annonce ou suivi en ce moment par un autre arbitre : un eleve n'a qu'un arbitre a la fois.
+// - « Qu'un maximum d'eleves soient evalues le plus vite possible ; une fois que tous sont evalues, ils le sont une
+//   fois de plus par quelqu'un d'autre si possible, et ainsi de suite » : on prend parmi les MOINS evalues par les
+//   arbitres eleves, et parmi eux d'abord ceux que cet arbitre n'a pas encore suivis.
+// - Au hasard dans ce qui reste : deux arbitres n'ont donc pas les memes eleves dans le meme ordre.
+// Compte d'un eleve : 1 par fenetre qui a servi (au moins une serie ou une appreciation) ou qui est en cours ; 0,5 par
+// fenetre fermee VIDE (arbitre absent, eleve introuvable) : cet eleve repasse avant ceux qui ont vraiment ete evalues,
+// mais pas indefiniment. L'observation commence dans OBS_PREVIEW_MS (le temps de reperer l'eleve) et dure OBS_MINUTES.
+const DRAW_ATTEMPTS = 8; // tirages successifs au plus quand plusieurs arbitres visent le meme eleve au meme instant
 export async function drawTarget(sessionId: string, evaluatorId: string, ownTeamId: string | null): Promise<{ error: string } | { ok: true; observationId: string }> {
   const parts = await participantsOf(sessionId);
-  const candidates = parts.filter((p) => p.userId !== evaluatorId && p.teamId !== ownTeamId);
-  if (!candidates.length) return { error: "Aucun élève à suivre : les équipes ne sont pas encore encodées." };
-  const all = (await db.orm.public.Observation.where({ sessionId }).all()) as ObsRow[];
+  const others = parts.filter((p) => p.userId !== evaluatorId && p.teamId !== ownTeamId);
+  if (!others.length) return { error: "Aucun élève à suivre : les équipes ne sont pas encore encodées." };
   const now = Date.now();
-  const busy = new Set(all.filter((o) => o.evaluatorId !== evaluatorId && o.endedAt == null && (o.endsAt == null || toMs(o.endsAt) > now) && o.mode === "STUDENT").map((o) => o.targetUserId));
-  const seen = new Map<string, number>();
-  for (const o of all) seen.set(o.targetUserId, (seen.get(o.targetUserId) ?? 0) + 1);
-  const mine = new Set(all.filter((o) => o.evaluatorId === evaluatorId).map((o) => o.targetUserId));
-  let pool = candidates.filter((p) => !busy.has(p.userId));
-  if (!pool.length) pool = candidates;
-  const min = Math.min(...pool.map((p) => seen.get(p.userId) ?? 0));
-  let least = pool.filter((p) => (seen.get(p.userId) ?? 0) === min);
-  const fresh = least.filter((p) => !mine.has(p.userId));
-  if (fresh.length) least = fresh;
-  const pick = least[Math.floor(Math.random() * least.length)];
-  const created = await db.orm.public.Observation.create({ sessionId, evaluatorId, targetUserId: pick.userId, teamId: pick.teamId, mode: "STUDENT", startedAt: Temporal.Instant.fromEpochMilliseconds(now), endsAt: Temporal.Instant.fromEpochMilliseconds(now + OBS_MINUTES * 60_000) });
-  return { ok: true, observationId: created.id };
+  const startMs = now + OBS_PREVIEW_MS;
+  const live = (o: ObsRow) => o.mode === "STUDENT" && o.endsAt != null && toMs(o.endsAt) > now; // annonce ou fenetre en cours
+  const [entries, evals] = await Promise.all([db.orm.public.RepEntry.where({ sessionId }).all(), db.orm.public.Evaluation.where({ sessionId }).all()]);
+  const used = new Set<string>([...entries.filter((e) => e.voidedAt == null).map((e) => e.observationId), ...evals.flatMap((e) => (e.observationId ? [e.observationId] : []))]);
+  let createdId: string | null = null;
+  for (let attempt = 0; attempt < DRAW_ATTEMPTS; attempt++) {
+    const all =((await db.orm.public.Observation.where({ sessionId }).all()) as ObsRow[]).filter((o) => o.mode === "STUDENT" && o.id !== createdId);
+    // Un eleve inscrit dans une equipe mais qui arbitre (blessure, abandon) n'est plus a observer.
+    const refereeing = new Set(all.filter((o) => o.endsAt != null && toMs(o.endsAt) > now - 15 * 60_000).map((o) => o.evaluatorId));
+    const playing = others.filter((p) => !refereeing.has(p.userId));
+    const candidates = playing.length ? playing : others;
+    const busy = new Set(all.filter((o) => o.evaluatorId !== evaluatorId && live(o)).map((o) => o.targetUserId));
+    const seen = new Map<string, number>();
+    for (const o of all) seen.set(o.targetUserId, (seen.get(o.targetUserId) ?? 0) + (live(o) || used.has(o.id) ? 1 : 0.5));
+    const mine = new Set(all.filter((o) => o.evaluatorId === evaluatorId).map((o) => o.targetUserId));
+    let pool = candidates.filter((p) => !busy.has(p.userId));
+    const everyoneBusy = !pool.length; // plus d'arbitres que d'eleves libres : un eleve peut alors etre suivi a deux
+    if (everyoneBusy) pool = candidates;
+    // Rang d'un eleve pour CET arbitre : son compte, + 0,75 s'il l'a deja suivi. Un eleve en retard d'une evaluation
+    // entiere passe toujours d'abord ; a egalite (ou a une demi-fenetre pres), l'arbitre prend quelqu'un de nouveau
+    // pour lui et laisse l'eleve qu'il connait a un autre arbitre.
+    const rank = (p: ObsParticipant) => (seen.get(p.userId) ?? 0) + (mine.has(p.userId) ? 0.75 : 0);
+    const min = Math.min(...pool.map(rank));
+    const least = pool.filter((p) => rank(p) === min);
+    const pick = least[Math.floor(Math.random() * least.length)];
+    if (createdId === null) {
+      createdId = (await db.orm.public.Observation.create({ sessionId, evaluatorId, targetUserId: pick.userId, teamId: pick.teamId, mode: "STUDENT", startedAt: Temporal.Instant.fromEpochMilliseconds(startMs), endsAt: Temporal.Instant.fromEpochMilliseconds(startMs + OBS_MINUTES * 60_000) })).id;
+    } else {
+      await db.orm.public.Observation.where({ id: createdId }).update({ targetUserId: pick.userId, teamId: pick.teamId });
+    }
+    if (everyoneBusy) break;
+    // Des arbitres qui tirent au meme instant peuvent tomber sur le meme eleve (aucun ne voyait encore le choix de
+    // l'autre). On verifie donc APRES avoir pose son choix : celui qui voit un autre arbitre sur son eleve retire. De
+    // deux tirages, le plus tardif voit toujours le premier : le doublon ne peut pas rester. Chacun attend un court
+    // instant, different pour chacun, avant de retirer : sinon ils se retrouveraient ensemble sur l'eleve suivant.
+    const clash = ((await db.orm.public.Observation.where({ sessionId, targetUserId: pick.userId }).all()) as ObsRow[]).some((o) => o.id !== createdId && o.evaluatorId !== evaluatorId && live(o));
+    if (!clash) break;
+    await new Promise((resolve) => setTimeout(resolve, 40 + Math.random() * 360));
+  }
+  return { ok: true, observationId: createdId! };
 }
 
 // Ce que les PROFS ont deja evalue : eleve -> exercice -> qui et quand. L'ecran du prof s'en sert pour dire « deja

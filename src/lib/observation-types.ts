@@ -1,7 +1,8 @@
 // Types et constantes de l'arbitrage du WOD Eval, partages par le serveur et les ecrans (module pur, sans base).
 
-export const OBS_MINUTES = 5; // duree d'une observation d'arbitre eleve
-export const OBS_GRACE_MS = 20_000; // la derniere serie peut etre tapee juste apres la sonnerie
+export const OBS_MINUTES = 5; // duree d'une fenetre d'observation d'arbitre eleve
+export const OBS_PREVIEW_MS = 60_000; // avant chaque fenetre : 1 minute d'ecran avec le prochain eleve a reperer
+export const OBS_GRACE_MS = 20_000; // une saisie partie juste avant la fermeture de la fenetre est encore acceptee
 export const OBS_TOLERANCE_MS = 60_000; // ecart tolere entre l'heure d'une serie et les clics du greffier
 export const OBS_STAFF_TARGET = 3; // objectif prof : chaque eleve evalue sur 3 exercices differents au moins
 export const OBS_RUN_ID = "run"; // le run entre deux stations, observable comme un exercice (les stations sont st1..stN)

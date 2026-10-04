@@ -7,11 +7,13 @@ import { refereeAccess, type RefereeAccess } from "@/lib/referee-access";
 import type { SessionPayload } from "@/lib/auth";
 import { toMs } from "@/lib/scheduling";
 import { qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
-import { OBS_GRACE_MS } from "@/lib/observation-types";
-import { activeStudentObservation, drawTarget, obsStations, participantsOf, staffObservation } from "@/lib/observations";
+import { OBS_GRACE_MS, OBS_MINUTES } from "@/lib/observation-types";
+import { currentObservation, drawTarget, obsStations, participantsOf, staffObservation, studentObservations } from "@/lib/observations";
 
-// Actions de l'arbitrage du WOD Eval (Sartay 04/10) : tirage au sort de l'eleve a suivre, series de reps horodatees,
-// appreciation sur les criteres, cloture. Rien n'est jamais efface : une serie fausse est ANNULEE (voidedAt).
+// Actions de l'arbitrage du WOD Eval (Sartay 04/10) : annonce du prochain eleve a suivre, series de reps horodatees,
+// appreciation sur les criteres. Rien n'est jamais efface : une serie fausse est ANNULEE (voidedAt).
+// Arbitre eleve : cycle automatique. Une observation = 1 minute d'annonce puis une fenetre de 5 minutes ; on n'ecrit
+// dedans que pendant la fenetre, et elle se ferme toute seule (plus de bouton « Terminer »).
 
 type Result = { error: string } | { ok: true };
 type ObsRow = { id: string; sessionId: string; evaluatorId: string; targetUserId: string; teamId: string; mode: string; startedAt: unknown; endsAt: unknown | null; endedAt: unknown | null };
@@ -29,10 +31,12 @@ async function gate(sessionId: string): Promise<{ error: string } | Gate> {
   return { user, session: { id: session.id, wodType: session.wodType, settings: session.settings }, access, staff: user.role !== "STUDENT" };
 }
 
-async function raceRunning(sessionId: string): Promise<string | null> {
+// Pourquoi on ne peut pas annoncer un nouvel eleve maintenant (null = le WOD tourne).
+async function raceBlocked(sessionId: string): Promise<string | null> {
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs?.startedAt) return "Le WOD n'est pas encore lancé.";
   if (rs.endedAt) return "Le WOD est terminé.";
+  if ((await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).some((p) => p.to == null)) return "Le WOD est en pause : le prochain élève arrive à la reprise.";
   return null;
 }
 
@@ -45,11 +49,16 @@ async function syncReps(observationId: string, exerciseId: string) {
   if (total !== ev.repsObserved) await db.orm.public.Evaluation.where({ id: ev.id }).update({ repsObserved: total });
 }
 
-// Observation sur laquelle l'arbitre ecrit : eleve = la sienne en cours ; prof = celle de l'eleve choisi (creee au besoin).
+// Observation sur laquelle l'arbitre ecrit.
+// Eleve : celle que son ecran lui a ouverte, et seulement pendant sa fenetre de 5 minutes (ni pendant l'annonce, ni
+// apres la fermeture). Prof : celle de l'eleve choisi, creee au besoin, sans limite de temps.
 async function resolveObs(g: Gate, input: { observationId?: string | null; targetUserId?: string | null }, create: boolean): Promise<{ error: string } | { obs: ObsRow }> {
   if (!g.staff) {
-    const obs = await activeStudentObservation(g.session.id, g.user.id);
-    if (!obs || (input.observationId && obs.id !== input.observationId)) return { error: "Cette observation est terminée : tire un nouvel élève." };
+    const obs = input.observationId ? (await studentObservations(g.session.id, g.user.id)).find((o) => o.id === input.observationId) : null;
+    if (!obs) return { error: "Cette observation n'existe plus : attends le prochain élève." };
+    const now = Date.now();
+    if (now < toMs(obs.startedAt)) return { error: "L'observation n'a pas encore commencé : repère d'abord ton élève." };
+    if (obs.endsAt && now > toMs(obs.endsAt) + OBS_GRACE_MS) return { error: `Les ${OBS_MINUTES} minutes sont écoulées : la fenêtre de cet élève est fermée.` };
     return { obs };
   }
   if (!input.targetUserId) return { error: "Choisis d'abord un élève." };
@@ -62,18 +71,16 @@ async function resolveObs(g: Gate, input: { observationId?: string | null; targe
   return { obs: created as ObsRow };
 }
 
-// Arbitre eleve : l'appli tire au sort l'eleve a suivre pendant 5 minutes.
-export async function obsDrawAction(sessionId: string): Promise<Result> {
+// Arbitre eleve : annonce le prochain eleve a suivre (1 minute pour le reperer, puis 5 minutes d'observation). Appelee
+// par « Commencer », puis par l'ecran a la fin de chaque fenetre. `soft` = attente normale (WOD pas lance, en pause,
+// termine) : l'ecran l'affiche comme un etat, pas comme une erreur.
+export async function obsDrawAction(sessionId: string): Promise<{ error: string; soft?: true } | { ok: true }> {
   const g = await gate(sessionId);
   if ("error" in g) return { error: g.error };
   if (g.staff) return { error: "Le tirage au sort est réservé aux élèves arbitres : un prof choisit qui il évalue." };
-  const notRunning = await raceRunning(sessionId);
-  if (notRunning) return { error: notRunning };
-  const current = await activeStudentObservation(sessionId, g.user.id);
-  if (current) {
-    if (current.endsAt && Date.now() < toMs(current.endsAt)) return { ok: true }; // deja en cours : pas de second tirage
-    return { error: "Termine d'abord ton observation précédente (appréciations), puis tire l'élève suivant." };
-  }
+  const blocked = await raceBlocked(sessionId);
+  if (blocked) return { error: blocked, soft: true };
+  if (currentObservation(await studentObservations(sessionId, g.user.id), Date.now())) return { ok: true }; // deja un eleve annonce ou en cours
   const res = await drawTarget(sessionId, g.user.id, g.access.teamId);
   return "error" in res ? res : { ok: true };
 }
@@ -86,9 +93,6 @@ export async function obsAddRepsAction(sessionId: string, input: { observationId
   if (!obsStations(g.session, "STUDENT").some((e) => e.id === input.exerciseId)) return { error: "Exercice inconnu." };
   const r = await resolveObs(g, input, true);
   if ("error" in r) return r;
-  if (!g.staff) {
-    if (r.obs.endsAt && Date.now() > toMs(r.obs.endsAt) + OBS_GRACE_MS) return { error: "Les 5 minutes sont écoulées : complète tes appréciations puis termine." };
-  }
   await db.orm.public.RepEntry.create({ observationId: r.obs.id, sessionId, evaluatorId: g.user.id, targetUserId: r.obs.targetUserId, exerciseId: input.exerciseId, reps: input.reps, at: Temporal.Now.instant() });
   await syncReps(r.obs.id, input.exerciseId);
   return { ok: true };
@@ -108,6 +112,7 @@ export async function obsVoidLastAction(sessionId: string, input: { observationI
 }
 
 // Appreciation d'un exercice observe : criteres coches (4 pour un eleve, 6 pour un prof), l'appreciation en est deduite.
+// Arbitre eleve : envoyee a chaque coche (la fenetre se ferme toute seule) ; prof : au bouton.
 export async function obsAppreciateAction(sessionId: string, input: { observationId?: string | null; targetUserId?: string | null; exerciseId: string; met: number[] }): Promise<Result> {
   const g = await gate(sessionId);
   if ("error" in g) return { error: g.error };
@@ -125,23 +130,5 @@ export async function obsAppreciateAction(sessionId: string, input: { observatio
   const existing = await db.orm.public.Evaluation.where({ observationId: r.obs.id, exerciseId: ex.id }).first();
   if (existing) await db.orm.public.Evaluation.where({ id: existing.id }).update({ note, criteria, repsObserved });
   else await db.orm.public.Evaluation.create({ sessionId, teamId: r.obs.teamId, evaluatorId: g.user.id, exerciseId: ex.id, repsObserved, note, targetUserId: r.obs.targetUserId, criteria, observationId: r.obs.id });
-  return { ok: true };
-}
-
-// Fin de l'observation d'un eleve arbitre : apres les 5 minutes, et une fois chaque exercice observe apprecie.
-export async function obsFinishAction(sessionId: string, observationId: string): Promise<Result> {
-  const g = await gate(sessionId);
-  if ("error" in g) return { error: g.error };
-  if (g.staff) return { ok: true };
-  const obs = await activeStudentObservation(sessionId, g.user.id);
-  if (!obs || obs.id !== observationId) return { ok: true }; // deja cloturee
-  const raceOver = (await raceRunning(sessionId)) !== null;
-  if (!raceOver && obs.endsAt && Date.now() < toMs(obs.endsAt)) return { error: "Les 5 minutes ne sont pas terminées : continue à suivre ton élève." };
-  const entries = (await db.orm.public.RepEntry.where({ observationId }).all()).filter((e) => e.voidedAt == null);
-  const evals = await db.orm.public.Evaluation.where({ observationId }).all();
-  const labelOf = new Map(obsStations(g.session, "STUDENT").map((e) => [e.id, e.label]));
-  const missing = [...new Set(entries.map((e) => e.exerciseId))].filter((id) => !evals.some((ev) => ev.exerciseId === id));
-  if (missing.length) return { error: `Il manque l'appréciation de : ${missing.map((id) => labelOf.get(id) ?? id).join(", ")}.` };
-  await db.orm.public.Observation.where({ id: observationId }).update({ endedAt: Temporal.Now.instant() });
   return { ok: true };
 }
