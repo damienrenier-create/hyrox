@@ -174,14 +174,15 @@ export const CRITERIA: Record<string, string[]> = {
   ],
   // SQUATS (29/09 soir, squat sans saut des parcours 1 et 2 etoiles ; reecrit le 04/10 sur le standard HYROX du squat
   // des wall balls, rulebook 26/27 § 8.8 : hanches plus bas que les genoux, depart et fin debout hanches et genoux
-  // tendus), puis la technique. Les evaluations deja rendues gardent les phrases d'avant.
+  // tendus), puis la technique. Relu par Sartay le 04/10 (genoux dans l'axe « y compris durant la flexion et
+  // l'extension », pieds largeur d'epaules, intensite en dernier). Les evaluations deja rendues gardent les phrases d'avant.
   SQUATS: [
     "Les hanches descendent plus bas que les genoux (sous la parallèle) à chaque squat.",
     "Chaque squat se termine debout : hanches et genoux complètement tendus.",
-    "Les talons restent au sol et les genoux suivent l'axe des pieds.",
-    "Le dos reste droit, poitrine haute, regard devant.",
-    "Les pieds restent écartés à la largeur des épaules et ne bougent pas pendant la série.",
-    "L'élève enchaîne les squats à un rythme régulier, sans pause.",
+    "Les talons restent au sol et les genoux restent dans l'axe des pieds, y compris durant la flexion et l'extension.",
+    "Le dos reste droit, la poitrine haute.",
+    "Les pieds sont écartés à la largeur des épaules.",
+    "L'intensité est maximale compte tenu de l'effort et de l'élève.",
   ],
   // HELICO (30/09) : criteres ecrits pour l'exercice ajoute par Sartay (3 techniques + intensite), a faire valider.
   HELICO: [
@@ -270,10 +271,10 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   TRACTIONS: ["Menton au-dessus de la barre", "Bras tendus en bas", "Sans saut ni balancier", "Descente freinée", "Prise symétrique", "Intensité"],
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
-  SQUATS: ["Hanches sous les genoux", "Debout complet en haut", "Talons au sol, genoux dans l'axe", "Dos droit, poitrine haute", "Pieds largeur d'épaules, fixes", "Rythme régulier"],
+  SQUATS: ["Hanches sous les genoux", "Debout complet en haut", "Talons au sol, genoux dans l'axe", "Dos droit, poitrine haute", "Pieds largeur d'épaules", "Intensité maximale"],
   "BURPEES BROAD JUMP": ["Poitrine au sol", "Mains juste devant les pieds", "Départ et arrivée à deux pieds", "Aucun pas en plus", "Pieds derrière les mains", "Intensité maximale"],
   "FENTES MARCHÉES": ["Genou arrière au sol", "Debout complet entre deux", "Jambes alternées", "Aucun pas entre deux fentes", "Pied avant passe la ligne", "Intensité maximale"],
-  "FARMER CARRY": ["Charge toujours portée", "Bras chargés tendus", "Charges posées sur place", "Ligne franchie avec le pied","Soulevé jambes fléchies, dos droit", "Marche rapide"],
+  "FARMER CARRY": ["Charge toujours portée", "Bras chargés tendus", "Charges posées sur place", "Ligne franchie avec le pied", "Soulevé jambes fléchies, dos droit", "Intensité maximale"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
 export const shortCriteriaFor = (label: string): string[] => {
@@ -291,12 +292,24 @@ export const GENERIC_CRITERIA = [
 ];
 
 // Anciens libelles encore figes dans des seances passees (29/09 : le tire tapis n'est plus un aller-retour).
-const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES" }; // + alias : « pompage » = pompes (station du WOD Eval)
+// + alias : « pompage » = pompes (station du WOD Eval) ; RUN = le run entre deux stations de l'Eval, juge sur les
+// criteres de l'aller-retour tant que Sartay n'en a pas ecrit d'autres (RUN_CRITERIA_KEY).
+const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES", RUN: "ALLER-RETOUR" };
+export const RUN_CRITERIA_KEY = "RUN";
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
-// Grille COMPLETE d'un exercice (les 6 criteres, du plus important au moins important) : arbitre prof du WOD Eval.
-export const fullCriteriaFor = (label: string): string[] => CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
+// Grille du PROF (WOD Eval), 6 criteres : d'abord les 4 de l'arbitre eleve, dans le meme ordre (3 techniques +
+// intensite), puis en 5 et 6 les deux criteres techniques suivants de la liste (Sartay 04/10 : « mettre ceux pour les
+// eleves en premier puis ceux pour le prof en 5 et 6 »). Dans CRITERIA, la liste reste rangee comme avant (3 techniques,
+// les 2 du prof, puis l'intensite) : seul l'ordre d'affichage change.
+export const fullCriteriaFor = (label: string): string[] => {
+  const k = keyOf(label);
+  const all = CRITERIA[k];
+  if (!all) return GENERIC_CRITERIA;
+  const four = REFEREE_CRITERIA[k];
+  return [...four, ...all.slice(TECH_CRITERIA).filter((c) => !four.includes(c)).slice(0, 2)];
+};
 
 // Emoji-resume de chaque critere de l'arbitre (Sartay 29/09 nuit : « pour que l'arbitre trouve plus vite ce qu'il doit
 // observer ; l'emoji est une sorte de resume du critere »), dans l'ordre de REFEREE_CRITERIA (3 techniques + intensite).
@@ -323,7 +336,7 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   "FENTES DISK": ["🦵", "🎯", "🧍", "⏱️"],
   TRACTIONS: ["🔝", "💪", "🚫", "🔥"],
   "BOX JUMP": ["👣", "📦", "🧍", "⏱️"],
-  SQUATS: ["⬇️", "↕️", "🦶", "⏱️"],
+  SQUATS: ["⬇️", "↕️", "🦶", "🔥"],
   HELICO: ["📏", "🔄", "💪", "⏱️"],
   "BURPEES BROAD JUMP": ["⬇️", "✋", "👣", "🔥"],
   "FENTES MARCHÉES": ["🦵", "🧍", "🔀", "🔥"],

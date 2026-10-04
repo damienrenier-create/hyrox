@@ -176,7 +176,8 @@ function StationPanel({
   const app = (obs?.apps ?? []).find((a) => a.exerciseId === exerciseId) ?? null;
   // Criteres coches : ceux deja enregistres pour cet exercice, modifiables tant que l'observation est ouverte.
   const [draft, setDraft] = useState<{ ex: string | null; met: boolean[] }>({ ex: null, met: [] });
-  const met = draft.ex === exerciseId ? draft.met : station ? station.criteria.map((_, i) => app?.met[i] ?? false) : [];
+  // Retrouves par leur PHRASE, pas par leur rang : l'ordre de la grille peut changer (prof : les 4 de l'eleve d'abord).
+  const met = draft.ex === exerciseId ? draft.met : station ? station.criteria.map((label) => { const k = app ? app.labels.indexOf(label) : -1; return k >= 0 && !!app?.met[k]; }) : [];
   const dirty = draft.ex === exerciseId;
   const totals = useMemo(() => {
     const m = new Map<string, number>();

@@ -3,12 +3,12 @@ import { toMs } from "@/lib/scheduling";
 import { STAFF_ROLES, memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
 import { exercisesFor } from "@/lib/session-exercises";
-import { criteriaFor, fullCriteriaFor, readCriteria } from "@/lib/level-criteria";
+import { RUN_CRITERIA_KEY, criteriaFor, fullCriteriaFor, readCriteria } from "@/lib/level-criteria";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
-import { clockText, fmt, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
-import { OBS_MINUTES, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
+import { clockText, fmt, readHXSettings, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
+import { OBS_MINUTES, OBS_RUN_ID, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
 
 // Arbitrage du WOD Eval (Sartay 04/10).
 // - Arbitre ELEVE : l'appli lui tire un eleve au sort, il le suit 5 minutes chrono, consigne chaque serie de reps
@@ -20,9 +20,14 @@ import { OBS_MINUTES, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type Obs
 const TZ = "Europe/Brussels";
 const clock = (ms: number) => new Date(ms).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ });
 
-// Stations de la seance avec la grille de l'arbitre : 4 criteres (eleve) ou les 6 (prof).
+// Ce que l'arbitre peut observer, avec sa grille : 4 criteres (eleve) ou 6 (prof : les 4 de l'eleve puis 2 de plus).
+// Les stations de la seance, puis le RUN (Sartay 04/10 : « les criteres de tous les exercices de l'eval, run compris ») :
+// un seul exercice « run » pour tous les runs du parcours, ses series se comptent en allers-retours.
 export function obsStations(session: { wodType: string; settings?: unknown }, mode: ObsMode): ObsStation[] {
-  return exercisesFor(session).map((e) => ({ id: e.id, label: e.label, criteria: mode === "STAFF" ? fullCriteriaFor(e.label) : criteriaFor(e.label) }));
+  const grid = (label: string) => (mode === "STAFF" ? fullCriteriaFor(label) : criteriaFor(label));
+  const out = exercisesFor(session).map((e) => ({ id: e.id, label: e.label, criteria: grid(e.label) }));
+  if (session.wodType === "HYROX") out.push({ id: OBS_RUN_ID, label: readHXSettings(session.settings).runLabel, criteria: grid(RUN_CRITERIA_KEY) });
+  return out;
 }
 
 // Les eleves qui jouent : membres des equipes de la seance (identifiants permanents), tries par equipe puis nom.
@@ -141,8 +146,10 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
   const teacherName = obs.some((o) => o.mode === "STAFF") ? await teacherNameById() : new Map<string, string>();
   const evalById = new Map(evaluators.map((u) => [u.id, u]));
   const partById = new Map(parts.map((p) => [p.userId, p]));
-  const labelOf = new Map(exercisesFor(session).map((e) => [e.id, e.label]));
+  const labelOf = new Map(obsStations(session, "STUDENT").map((e) => [e.id, e.label]));
   const stateByTeam = new Map(b.ctx.teams.map((t) => [t.id, teamState(b.ctx, t)]));
+  // Le segment du greffier qui correspond a l'exercice observe : la station, ou n'importe quel run pour « run ».
+  const sameExercise = (seg: { kind: "station" | "run"; station: { id: string } | null }, exerciseId: string) => (exerciseId === OBS_RUN_ID ? seg.kind === "run" : seg.kind === "station" && seg.station?.id === exerciseId);
 
   const locate = (teamId: string, exerciseId: string, atAbs: number): { match: ReportEntry["match"]; where: string | null; raceAt: string | null } => {
     if (b.startedAtMs === null) return { match: "na", where: null, raceAt: null };
@@ -154,7 +161,7 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
       if (i > st.done) return [];
       return [{ seg, from: i ? st.times[i - 1] : 0, to: i < st.done ? st.times[i] : Infinity }];
     });
-    const ok = ivs.some((v) => v.seg.kind === "station" && v.seg.station?.id === exerciseId && t >= v.from - OBS_TOLERANCE_MS && t <= v.to + OBS_TOLERANCE_MS);
+    const ok = ivs.some((v) => sameExercise(v.seg, exerciseId) && t >= v.from - OBS_TOLERANCE_MS && t <= v.to + OBS_TOLERANCE_MS);
     if (ok) return { match: "ok", where: null, raceAt: fmt(t) };
     const cur = ivs.find((v) => t >= v.from && t <= v.to);
     const where = t < 0 ? "avant le départ" : cur ? cur.seg.label : st.finishedMs !== null ? "arrivée (parcours terminé)" : null;
@@ -162,13 +169,18 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
   };
 
   // Passages de l'equipe a une station, en heures d'horloge : ce que le greffier a clique (a mettre en face des series).
-  const passes = (teamId: string, exerciseId: string): GreffierPass[] => {
+  // Un parcours compte beaucoup de runs : pour « run », on ne garde que ceux qui encadrent une serie de l'arbitre.
+  const passes = (teamId: string, exerciseId: string, entryAbs: number[]): GreffierPass[] => {
     const st = stateByTeam.get(teamId);
-    if (!st || b.startedAtMs === null) return [];
+    const startAbs = b.startedAtMs;
+    if (!st || startAbs === null) return [];
+    const isRun = exerciseId === OBS_RUN_ID;
     return st.segments.flatMap((seg, i) => {
-      if (i > st.done || seg.kind !== "station" || seg.station?.id !== exerciseId) return [];
-      const from = clockText(i ? st.clocks[i - 1] : b.startedAtMs) || null;
-      return [{ lap: seg.lap, from, to: i < st.done ? clockText(st.clocks[i]) || null : null }];
+      if (i > st.done || !sameExercise(seg, exerciseId)) return [];
+      const fromAbs = i ? st.clocks[i - 1] : startAbs;
+      const toAbs = i < st.done ? st.clocks[i] : null;
+      if (isRun && !entryAbs.some((t) => (fromAbs == null || t >= fromAbs - OBS_TOLERANCE_MS) && (toAbs == null || t <= toAbs + OBS_TOLERANCE_MS))) return [];
+      return [{ lap: seg.lap, label: isRun ? seg.label : null, from: clockText(fromAbs) || null, to: clockText(toAbs) || null }];
     });
   };
 
@@ -192,7 +204,7 @@ export async function buildObsReport(sessionId: string): Promise<ObsReport> {
           label: labelOf.get(exerciseId) ?? exerciseId,
           entries: list,
           total: list.filter((e) => !e.voided).reduce((n, e) => n + e.reps, 0),
-          greffier: passes(o.teamId, exerciseId),
+          greffier: passes(o.teamId, exerciseId, list.filter((e) => !e.voided).map((e) => e.atMs)),
           app: a ? { code: qualityCodeFromValue(a.note), met: c.filter((x) => x.met).length, total: c.length, unmet: c.filter((x) => !x.met).map((x) => x.label) } : null,
         };
       });

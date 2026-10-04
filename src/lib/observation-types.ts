@@ -4,6 +4,7 @@ export const OBS_MINUTES = 5; // duree d'une observation d'arbitre eleve
 export const OBS_GRACE_MS = 20_000; // la derniere serie peut etre tapee juste apres la sonnerie
 export const OBS_TOLERANCE_MS = 60_000; // ecart tolere entre l'heure d'une serie et les clics du greffier
 export const OBS_STAFF_TARGET = 3; // objectif prof : chaque eleve evalue sur 3 exercices differents au moins
+export const OBS_RUN_ID = "run"; // le run entre deux stations, observable comme un exercice (les stations sont st1..stN)
 export type ObsMode = "STUDENT" | "STAFF";
 
 export type ObsStation = { id: string; label: string; criteria: string[] };
@@ -36,8 +37,9 @@ export type ReportEntry = {
   where: string | null; // si ca ne concorde pas : ou le greffier situait l'equipe a cette heure
 };
 // Passage de l'equipe a une station d'apres les clics du greffier : de la validation precedente (from) a celle de la
-// station (to ; null = station en cours, pas encore validee). Heures de Bruxelles HH:MM:SS.
-export type GreffierPass = { lap: number; from: string | null; to: string | null };
+// station (to ; null = station en cours, pas encore validee). Heures de Bruxelles HH:MM:SS. `label` = le nom du run
+// (« RUN 7 ») quand l'exercice observe est le run ; null pour une station (on affiche alors le tour).
+export type GreffierPass = { lap: number; label: string | null; from: string | null; to: string | null };
 export type ReportGroup = { exerciseId: string; label: string; entries: ReportEntry[]; total: number; greffier: GreffierPass[]; app: { code: string | null; met: number; total: number; unmet: string[] } | null };
 export type ReportObs = {
   id: string;
@@ -63,7 +65,7 @@ export type ObsReport = {
 
 // « tour 1 : 09:12:05 → 09:15:40 · tour 2 : en cours depuis 09:31:02 » : la station vue par le greffier.
 export const greffierText = (passes: GreffierPass[]): string =>
-  passes.map((p) => `tour ${p.lap} : ${p.to ? `${p.from ?? "?"} → ${p.to}` : `en cours depuis ${p.from ?? "?"}`}`).join(" · ");
+  passes.map((p) => `${p.label ?? `tour ${p.lap}`} : ${p.to ? `${p.from ?? "?"} → ${p.to}` : `en cours depuis ${p.from ?? "?"}`}`).join(" · ");
 
 // Export CSV du compte rendu : une ligne par serie, avec son heure et sa concordance.
 export function obsCsv(r: ObsReport): string {

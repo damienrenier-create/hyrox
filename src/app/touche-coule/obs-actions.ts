@@ -6,10 +6,9 @@ import { getSession } from "@/lib/session-server";
 import { refereeAccess, type RefereeAccess } from "@/lib/referee-access";
 import type { SessionPayload } from "@/lib/auth";
 import { toMs } from "@/lib/scheduling";
-import { exercisesFor } from "@/lib/session-exercises";
-import { criteriaFor, fullCriteriaFor, qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
+import { qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
 import { OBS_GRACE_MS } from "@/lib/observation-types";
-import { activeStudentObservation, drawTarget, participantsOf, staffObservation } from "@/lib/observations";
+import { activeStudentObservation, drawTarget, obsStations, participantsOf, staffObservation } from "@/lib/observations";
 
 // Actions de l'arbitrage du WOD Eval (Sartay 04/10) : tirage au sort de l'eleve a suivre, series de reps horodatees,
 // appreciation sur les criteres, cloture. Rien n'est jamais efface : une serie fausse est ANNULEE (voidedAt).
@@ -84,7 +83,7 @@ export async function obsAddRepsAction(sessionId: string, input: { observationId
   const g = await gate(sessionId);
   if ("error" in g) return { error: g.error };
   if (!Number.isInteger(input.reps) || input.reps < 1 || input.reps > 999) return { error: "Nombre de répétitions invalide (1 à 999)." };
-  if (!exercisesFor(g.session).some((e) => e.id === input.exerciseId)) return { error: "Exercice inconnu." };
+  if (!obsStations(g.session, "STUDENT").some((e) => e.id === input.exerciseId)) return { error: "Exercice inconnu." };
   const r = await resolveObs(g, input, true);
   if ("error" in r) return r;
   if (!g.staff) {
@@ -112,13 +111,13 @@ export async function obsVoidLastAction(sessionId: string, input: { observationI
 export async function obsAppreciateAction(sessionId: string, input: { observationId?: string | null; targetUserId?: string | null; exerciseId: string; met: number[] }): Promise<Result> {
   const g = await gate(sessionId);
   if ("error" in g) return { error: g.error };
-  const ex = exercisesFor(g.session).find((e) => e.id === input.exerciseId);
+  // La grille est celle que l'ecran a montree : stations et run, 4 criteres (eleve) ou 6 (prof).
+  const ex = obsStations(g.session, g.staff ? "STAFF" : "STUDENT").find((e) => e.id === input.exerciseId);
   if (!ex) return { error: "Exercice inconnu." };
   if (!Array.isArray(input.met) || input.met.some((i) => !Number.isInteger(i) || i < 0 || i > 20)) return { error: "Critères invalides." };
   const r = await resolveObs(g, input, true);
   if ("error" in r) return r;
-  const labels = g.staff ? fullCriteriaFor(ex.label) : criteriaFor(ex.label);
-  const checks: CriterionCheck[] = labels.map((label, i) => ({ label, met: input.met.includes(i) }));
+  const checks: CriterionCheck[] = ex.criteria.map((label, i) => ({ label, met: input.met.includes(i) }));
   const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
   const entries = await db.orm.public.RepEntry.where({ observationId: r.obs.id, exerciseId: ex.id }).all();
   const repsObserved = entries.filter((e) => e.voidedAt == null).reduce((n, e) => n + e.reps, 0);
@@ -140,7 +139,7 @@ export async function obsFinishAction(sessionId: string, observationId: string):
   if (!raceOver && obs.endsAt && Date.now() < toMs(obs.endsAt)) return { error: "Les 5 minutes ne sont pas terminées : continue à suivre ton élève." };
   const entries = (await db.orm.public.RepEntry.where({ observationId }).all()).filter((e) => e.voidedAt == null);
   const evals = await db.orm.public.Evaluation.where({ observationId }).all();
-  const labelOf = new Map(exercisesFor(g.session).map((e) => [e.id, e.label]));
+  const labelOf = new Map(obsStations(g.session, "STUDENT").map((e) => [e.id, e.label]));
   const missing = [...new Set(entries.map((e) => e.exerciseId))].filter((id) => !evals.some((ev) => ev.exerciseId === id));
   if (missing.length) return { error: `Il manque l'appréciation de : ${missing.map((id) => labelOf.get(id) ?? id).join(", ")}.` };
   await db.orm.public.Observation.where({ id: observationId }).update({ endedAt: Temporal.Now.instant() });

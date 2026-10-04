@@ -12,6 +12,8 @@ import { readQuizOpen } from "@/lib/session-roles";
 import { combinedTwinStandings } from "@/lib/level-combined";
 import { listExercises } from "@/lib/level";
 import { criteriaComment, isLiked, readCriteria } from "@/lib/level-criteria";
+import { OBS_RUN_ID } from "@/lib/observation-types";
+import { readHXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
 import { WodView, type ResultRow, type RefereeEvalRow } from "./WodView";
 import { TopBar } from "../../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
@@ -53,6 +55,8 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
     exerciseLabels[e.id] = e.label;
   }
   if (session.wodType === "LEVEL") for (const e of await listExercises()) { exerciseNumber[e.id] = 0; exerciseLabels[e.id] = e.label; }
+  // WOD Eval : le run s'observe aussi (apres les stations dans la liste).
+  if (session.wodType === "HYROX") { exerciseNumber[OBS_RUN_ID] = exercises.length + 1; exerciseLabels[OBS_RUN_ID] = readHXSettings(session.settings).runLabel; }
   const evals = session.wodType === "LEVEL" || session.wodType === "HYROX"
     ? await db.orm.public.Evaluation.where({ sessionId, targetUserId: user.id }).all()
     : await db.orm.public.Evaluation.where({ sessionId, teamId: myTeam.id }).all();
