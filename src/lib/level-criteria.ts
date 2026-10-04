@@ -201,7 +201,7 @@ export const CRITERIA: Record<string, string[]> = {
     "Le saut part des deux pieds en même temps et se réceptionne sur les deux pieds en même temps (pieds à la même hauteur).",
     "Aucun pas ni petit sursaut en plus : ni avant le saut, ni entre la réception et le burpee suivant.",
     "En se relevant du burpee, les pieds reviennent derrière les mains (ils ne dépassent pas le bout des doigts).",
-    "L'élève enchaîne burpee et saut à un rythme soutenu, sans pause.",
+    "L'élève travaille à une intensité qui lui est maximale.", // Sartay 04/10 : remplace « rythme soutenu, sans pause »
   ],
   "FENTES MARCHÉES": [
     "Le genou arrière touche clairement le sol à chaque fente (posé en douceur, sans le cogner).",
@@ -209,7 +209,7 @@ export const CRITERIA: Record<string, string[]> = {
     "Les jambes alternent : c'est un genou différent qui touche le sol à chaque fente.",
     "Aucun pas ni petit pas d'ajustement entre deux fentes (on enchaîne, ou on s'arrête pieds parallèles).",
     "À chaque extrémité, le pied avant franchit complètement la ligne ; on repart debout, les deux pieds derrière la ligne.",
-    "L'élève avance à un rythme soutenu, sans s'arrêter entre les fentes.",
+    "L'élève travaille à une intensité qui lui est maximale.", // Sartay 04/10 : remplace « rythme soutenu »
   ],
   "FARMER CARRY": [
     "Les deux charges sont portées pendant tout le déplacement : on n'avance jamais avec une seule charge.",
@@ -269,8 +269,8 @@ export const SHORT_CRITERIA: Record<string, string[]> = {
   "BOX JUMP": ["Pieds joints", "Arrivée à deux pieds", "Debout sur la box", "Réception amortie", "Descente contrôlée", "Rythme continu"],
   HELICO: ["Allongé, corps aligné", "Passage dans le dos", "Bras tendus devant", "Rythme régulier"],
   SQUATS: ["Hanches sous les genoux", "Debout complet en haut", "Talons au sol, genoux dans l'axe", "Dos droit, poitrine haute", "Pieds largeur d'épaules, fixes", "Rythme régulier"],
-  "BURPEES BROAD JUMP": ["Poitrine au sol", "Mains juste devant les pieds", "Départ et arrivée à deux pieds", "Aucun pas en plus", "Pieds derrière les mains", "Rythme soutenu"],
-  "FENTES MARCHÉES": ["Genou arrière au sol", "Debout complet entre deux", "Jambes alternées", "Aucun pas entre deux fentes", "Pied avant passe la ligne", "Rythme soutenu"],
+  "BURPEES BROAD JUMP": ["Poitrine au sol", "Mains juste devant les pieds", "Départ et arrivée à deux pieds", "Aucun pas en plus", "Pieds derrière les mains", "Intensité maximale"],
+  "FENTES MARCHÉES": ["Genou arrière au sol", "Debout complet entre deux", "Jambes alternées", "Aucun pas entre deux fentes", "Pied avant passe la ligne", "Intensité maximale"],
   "FARMER CARRY": ["Toujours les deux charges", "Bras tendus le long du corps", "Charges posées sur place", "Ligne franchie, charges rangées", "Soulevé jambes fléchies, dos droit", "Marche rapide"],
   "TOUR DE POUTRE": ["Passages contrôlés", "Assez haut au-dessus", "Maîtrisé en dessous", "Retournement coordonné", "Transitions immédiates", "À fond"],
 };
@@ -324,7 +324,7 @@ export const CRITERIA_EMOJI: Record<string, string[]> = {
   SQUATS: ["⬇️", "↕️", "🦶", "⏱️"],
   HELICO: ["📏", "🔄", "💪", "⏱️"],
   "BURPEES BROAD JUMP": ["⬇️", "✋", "👣", "🔥"],
-  "FENTES MARCHÉES": ["🦵", "🧍", "🔀", "⏱️"],
+  "FENTES MARCHÉES": ["🦵", "🧍", "🔀", "🔥"],
   "FARMER CARRY": ["🏋️", "💪", "📍", "⏱️"],
   "TOUR DE POUTRE": ["🛡️", "⬆️", "⬇️", "🔥"],
 };
