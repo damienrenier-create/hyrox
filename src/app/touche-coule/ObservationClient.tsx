@@ -84,6 +84,7 @@ export function ObservationClient({
   const wantNext = !staff && race === "run" && !paused && (phase === "over" || (phase === "idle" && cycleStarted));
   const cycleKey = obs?.id ?? "start";
   const [retry, setRetry] = useState(0);
+  const [waitMsg, setWaitMsg] = useState(""); // attente normale dite par le serveur (plus personne a observer…)
   const asked = useRef<string | null>(null);
   useEffect(() => {
     if (!wantNext) {
@@ -97,8 +98,12 @@ export function ObservationClient({
     obsDrawAction(sessionId).then((res) => {
       if ("error" in res) {
         setError(res.soft ? "" : res.error);
+        setWaitMsg(res.soft ? res.error : "");
         timer = setTimeout(() => setRetry((n) => n + 1), 10_000);
-      } else setError("");
+      } else {
+        setError("");
+        setWaitMsg("");
+      }
       router.refresh(); // nouvel eleve annonce, ou etat du WOD a jour (pause, fin)
     });
     return () => { if (timer) clearTimeout(timer); };
@@ -184,7 +189,7 @@ export function ObservationClient({
               <>
                 <div className="text-5xl mb-2">🎲</div>
                 <h1 className={`${ui.h2} mb-1`}>Prochain élève…</h1>
-                <p className={ui.muted}>La fenêtre est fermée : l&apos;appli choisit ton prochain élève.</p>
+                <p className={ui.muted}>{waitMsg || "La fenêtre est fermée : l'appli choisit ton prochain élève."}</p>
                 {error && <button onClick={() => run(() => obsDrawAction(sessionId))} disabled={pending} className={`${btn.primary} mt-3`}>Réessayer</button>}
               </>
             )}

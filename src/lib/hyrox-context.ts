@@ -23,6 +23,26 @@ export async function freezeHXCourse(session: { id: string; settings: unknown })
   return true;
 }
 
+// Limite de temps du WOD (Sartay 05/10 : « le wod dure 50 minutes pour tout le monde »). A capMin de course (pauses
+// deduites), plus aucune validation n'est acceptee et la course se termine toute seule, comme avec « Fin de course »,
+// datee de l'instant exact de la limite. Une equipe arrivee avant n'arrete rien : les autres continuent jusqu'au bout.
+export type HXCap = { started: boolean; ended: boolean; paused: boolean; elapsedMs: number; capMs: number; capMin: number; reached: boolean; capAtMs: number | null };
+export async function hxCapState(sessionId: string): Promise<HXCap | null> {
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session || session.wodType !== "HYROX") return null;
+  const capMin = readHXSettings(session.settings).capMin;
+  const capMs = capMin * 60_000;
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (!rs?.startedAt) return { started: false, ended: false, paused: false, elapsedMs: 0, capMs, capMin, reached: false, capAtMs: null };
+  const startedAtMs = toMs(rs.startedAt);
+  const pauses = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
+  const now = Date.now();
+  const elapsedMs = elapsed(startedAtMs, pauses, rs.endedAt ? toMs(rs.endedAt) : now) ?? 0;
+  const reached = elapsedMs >= capMs;
+  // Instant ou le chrono de course a atteint la limite (le chrono ne tourne pas pendant une pause).
+  return { started: true, ended: !!rs.endedAt, paused: pauses.some((p) => p.to === null), elapsedMs, capMs, capMin, reached, capAtMs: reached && !rs.endedAt ? now - (elapsedMs - capMs) : null };
+}
+
 // Contexte pur du moteur Hyrox a partir de Postgres : equipes + membres (identifiants permanents), pointages et cartes
 // jaunes en ms ecoulees (pauses deduites via RaceState/RacePause), reglages de la seance. Requetes groupees : la page
 // greffier est re-rendue a chaque rafraichissement.

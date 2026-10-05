@@ -7,7 +7,7 @@ import { RUN_CRITERIA_KEY, evalCriteriaFor, readCriteria } from "@/lib/level-cri
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
-import { clockText, fmt, readHXSettings, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
+import { CINDY_KEY, clockText, fmt, readHXSettings, segmentsFor, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
 import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_RUN_ID, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
 
 // Arbitrage du WOD Eval (Sartay 04/10).
@@ -106,9 +106,16 @@ export async function loadObsView(o: ObsRow, parts?: ObsParticipant[]): Promise<
 // fenetre fermee VIDE (arbitre absent, eleve introuvable) : cet eleve repasse avant ceux qui ont vraiment ete evalues,
 // mais pas indefiniment. L'observation commence dans OBS_PREVIEW_MS (le temps de reperer l'eleve) et dure OBS_MINUTES.
 const DRAW_ATTEMPTS = 8; // tirages successifs au plus quand plusieurs arbitres visent le meme eleve au meme instant
-export async function drawTarget(sessionId: string, evaluatorId: string, ownTeamId: string | null): Promise<{ error: string } | { ok: true; observationId: string }> {
+export async function drawTarget(sessionId: string, evaluatorId: string, ownTeamId: string | null): Promise<{ error: string; soft?: true } | { ok: true; observationId: string }> {
   const parts = await participantsOf(sessionId);
-  const others = parts.filter((p) => p.userId !== evaluatorId && p.teamId !== ownTeamId);
+  // Une equipe ARRIVEE (parcours boucle) n'a plus rien a montrer : ses eleves ne sont plus tires (Sartay 05/10).
+  const [session, events] = await Promise.all([db.orm.public.Session.where({ id: sessionId }).first(), db.orm.public.StationEvent.where({ sessionId }).all()]);
+  const total = segmentsFor(readHXSettings(session?.settings), 0).length;
+  const validated = new Map<string, number>();
+  for (const e of events) if (e.stationId !== CINDY_KEY) validated.set(e.teamId, (validated.get(e.teamId) ?? 0) + 1);
+  const racing = parts.filter((p) => (validated.get(p.teamId) ?? 0) < total);
+  if (parts.length && !racing.length) return { error: "Toutes les équipes sont arrivées : il n'y a plus personne à observer.", soft: true };
+  const others = racing.filter((p) => p.userId !== evaluatorId && p.teamId !== ownTeamId);
   if (!others.length) return { error: "Aucun élève à suivre : les équipes ne sont pas encore encodées." };
   const now = Date.now();
   const startMs = now + OBS_PREVIEW_MS;

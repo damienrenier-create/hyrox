@@ -11,7 +11,7 @@ import type { HXBundle } from "@/lib/hyrox-context";
 import type { BoardData } from "@/lib/referee-board";
 import { resetSessionAction, startRaceAction, togglePauseAction } from "./race-actions";
 import { finishRaceAction } from "./actions";
-import { hxCardAction, hxSetStartAction, hxSettingsAction, hxTapAction, hxUndoAction, hxUndoTeamAction, type HXSettingsInput } from "./hx-actions";
+import { hxCapFinishAction, hxCardAction, hxSetStartAction, hxSettingsAction, hxTapAction, hxUndoAction, hxUndoTeamAction, type HXSettingsInput } from "./hx-actions";
 import { setTeamCountAction } from "./settings-actions";
 import { setRaceStatus } from "@/lib/firebase/firebase-sync";
 import { greffierPulseAction } from "@/lib/pulse";
@@ -104,6 +104,21 @@ export function HyroxClient({
   }, [phase, startedAtMs, endedAtMs, pauses, now]);
   const capMs = ctx.settings.capMin * 60_000;
   const remainMs = capMs - liveMs;
+  // Limite de temps (Sartay 05/10 : « le wod dure 50 minutes pour tout le monde ») : a 0:00 la course s'arrete toute
+  // seule. Le serveur reverifie avec son horloge ; s'il dit « pas encore » (PC en avance), on redemande 2 s plus tard.
+  const capReached = phase === "run" && !isPaused && remainMs <= 0;
+  const [capTry, setCapTry] = useState(0);
+  const capAsked = useRef(-1);
+  useEffect(() => {
+    if (!capReached || capAsked.current === capTry) return;
+    capAsked.current = capTry;
+    hxCapFinishAction(sessionId).then((res) => {
+      if ("error" in res) { setError(res.error); return; }
+      if (!res.ended) { setTimeout(() => setCapTry((n) => n + 1), 2000); return; }
+      void setRaceStatus(sessionId, "TERMINATED");
+      router.refresh();
+    });
+  }, [capReached, capTry, sessionId, router]);
 
   // Validation OPTIMISTE : au clic, la fiche passe tout de suite a l'exercice suivant et son chrono repart de l'instant
   // du clic ; le serveur confirme ensuite. Pour chaque equipe on retient le NOMBRE de validations attendu et l'heure de
@@ -168,6 +183,7 @@ export function HyroxClient({
   function validate(teamId: string) {
     setError("");
     if (states.get(teamId)?.finishedMs != null) { setOpenTeamId(teamId); return; }
+    if (capReached) { setError(`Temps limite atteint (${ctx.settings.capMin} min) : le WOD est terminé pour tout le monde.`); return; }
     const at = liveMs;
     const serverCount = eventCounts(ctx.events).get(teamId) ?? 0;
     setLocal((l) => ({ ...l, [teamId]: { count: Math.max(l[teamId]?.count ?? 0, serverCount) + 1, ats: [...(l[teamId]?.ats ?? []), at] } }));

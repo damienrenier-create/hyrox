@@ -9,6 +9,7 @@ import { toMs } from "@/lib/scheduling";
 import { qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
 import { OBS_GRACE_MS, OBS_MINUTES } from "@/lib/observation-types";
 import { currentObservation, drawTarget, obsStations, participantsOf, staffObservation, studentObservations } from "@/lib/observations";
+import { hxCapState } from "@/lib/hyrox-context";
 
 // Actions de l'arbitrage du WOD Eval (Sartay 04/10) : annonce du prochain eleve a suivre, series de reps horodatees,
 // appreciation sur les criteres. Rien n'est jamais efface : une serie fausse est ANNULEE (voidedAt).
@@ -37,6 +38,8 @@ async function raceBlocked(sessionId: string): Promise<string | null> {
   if (!rs?.startedAt) return "Le WOD n'est pas encore lancé.";
   if (rs.endedAt) return "Le WOD est terminé.";
   if ((await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).some((p) => p.to == null)) return "Le WOD est en pause : le prochain élève arrive à la reprise.";
+  // Limite de temps atteinte : plus de nouvel eleve, meme si l'ecran du greffier n'a pas encore clos la course.
+  if ((await hxCapState(sessionId))?.reached) return "Le WOD est terminé.";
   return null;
 }
 

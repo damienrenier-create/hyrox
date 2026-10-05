@@ -3,7 +3,8 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, readHXSettings, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
-import { freezeHXCourse } from "@/lib/hyrox-context";
+import { freezeHXCourse, hxCapState } from "@/lib/hyrox-context";
+import { finishRaceAction } from "./actions";
 
 // Actions du greffier Hyrox (Sartay 01/10). Les profs (ADMIN) tiennent aussi ce greffier : leurs seances s'ouvrent
 // desormais depuis leur propre journal de classe.
@@ -39,6 +40,9 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   if (!team) return { error: "Équipe introuvable." };
   const run = await requireRunning(sessionId);
   if ("error" in run) return run;
+  // Limite de temps atteinte : le WOD est fini pour tout le monde, plus aucune validation.
+  const cap = await hxCapState(sessionId);
+  if (cap?.reached) return { error: `Temps limite atteint (${cap.capMin} min) : le WOD est terminé pour tout le monde, plus aucune validation.` };
 
   const settings = readHXSettings(session.settings);
   // Meme regle que l'ecran (station choisie, sinon round-robin sur le numero d'equipe) : la cle enregistree doit etre
@@ -55,6 +59,23 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   await freezeHXCourse(session);
   await db.orm.public.StationEvent.create({ sessionId, teamId, stationId: key, at: Temporal.Now.instant() });
   return { ok: true, key };
+}
+
+// Arret automatique a la limite de temps : appele par l'ecran du greffier quand son chrono atteint capMin. Le serveur
+// reverifie (son horloge fait foi) ; la course est terminee comme avec « Fin de course », datee de l'instant de la limite.
+// `ended: false` = pas encore atteinte (horloge du PC en avance, pause) : l'ecran redemandera.
+export async function hxCapFinishAction(sessionId: string): Promise<{ error: string } | { ok: true; ended: boolean }> {
+  await requireGreffier();
+  const cap = await hxCapState(sessionId);
+  if (!cap) return { error: "Séance introuvable." };
+  if (cap.ended) return { ok: true, ended: true };
+  if (!cap.started || !cap.reached || cap.capAtMs === null) return { ok: true, ended: false };
+  await finishRaceAction(sessionId);
+  const at = Temporal.Instant.fromEpochMilliseconds(Math.round(cap.capAtMs));
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (rs) await db.orm.public.RaceState.where({ id: rs.id }).update({ endedAt: at });
+  await db.orm.public.Session.where({ id: sessionId }).update({ raceEndedAt: at });
+  return { ok: true, ended: true };
 }
 
 // Annule la derniere validation de CETTE equipe (station ou run).
