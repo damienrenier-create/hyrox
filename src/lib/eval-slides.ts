@@ -11,7 +11,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // Trait d'union insecable : « allers-retours » ne se coupe pas en fin de ligne sur une dia.
 const nb = (s: string) => esc(s).replace(/-/g, "&#8209;");
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
-// « 3 allers-retours », « 60 répétitions » : la consigne en toutes lettres.
+// « 2 allers-retours », « 60 répétitions » : la consigne en toutes lettres.
 const amount = (reps: number, unit: string) => (unit === "A/R" ? plural(reps, "aller-retour", "allers-retours") : unit === "rép." ? plural(reps, "répétition", "répétitions") : `${reps} ${unit}`);
 const minutes = (sec: number) => (sec % 60 === 0 ? plural(sec / 60, "minute", "minutes") : `${sec} secondes`);
 

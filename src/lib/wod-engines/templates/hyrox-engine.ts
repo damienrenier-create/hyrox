@@ -14,10 +14,12 @@ export const HX_UNITS = ["rép.", "A/R", "m", "s"] as const;
 // EMPLACEMENTS st1..stN (Team.startExerciseId, colonnes du Touche-Coule) ; libelles, reps et nombre se reglent avant le depart.
 // 04/10 (Sartay) : le break dance remplace le one rep en station 4. Une seance deja jouee garde SON parcours : il est
 // fige dans ses reglages a la premiere validation (freezeHXCourse, hyrox-context.ts).
+// 05/10 (Sartay, apres les trois premieres seances reelles) : burpees, fentes et farmer passent de 3 a 2 allers-retours.
+// Les seances jouees a 3 allers-retours les gardent (parcours fige).
 export const HX_DEFAULT_STATIONS: HXStation[] = [
-  { id: "st1", label: "Burpees broad jump", reps: 3, unit: "A/R" },
-  { id: "st2", label: "Fentes marchées", reps: 3, unit: "A/R" },
-  { id: "st3", label: "Farmer carry", reps: 3, unit: "A/R" },
+  { id: "st1", label: "Burpees broad jump", reps: 2, unit: "A/R" },
+  { id: "st2", label: "Fentes marchées", reps: 2, unit: "A/R" },
+  { id: "st3", label: "Farmer carry", reps: 2, unit: "A/R" },
   { id: "st4", label: "Break dance", reps: 60, unit: "rép." },
   { id: "st5", label: "Squats", reps: 60, unit: "rép." },
   { id: "st6", label: "Pompage", reps: 60, unit: "rép." },
@@ -100,7 +102,7 @@ export function fmt(ms: number | null | undefined): string {
   return (neg ? "−" : "") + m + ":" + (r < 10 ? "0" : "") + r;
 }
 
-// « 3 allers-retours », « 60 rép. », « 50 m » : la consigne d'une station telle que l'eleve la lit.
+// « 2 allers-retours », « 60 rép. », « 50 m » : la consigne d'une station telle que l'eleve la lit.
 export function amountText(reps: number, unit: string): string {
   if (unit === "A/R") return `${reps} aller${reps > 1 ? "s" : ""}-retour${reps > 1 ? "s" : ""}`;
   return `${reps} ${unit}`;
