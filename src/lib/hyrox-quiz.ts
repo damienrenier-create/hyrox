@@ -124,6 +124,8 @@ export const DISTRACTORS: Record<string, string[]> = {
     "L'élève se redresse en appui sur les coudes pour faire passer le poids.",
     "Le poids passe devant le ventre, jamais dans le dos.",
     "Les mains se posent au sol entre deux tours.",
+    "Pour aller plus vite, le poids peut être lancé d'une main à l'autre.",
+    "Les coudes peuvent se poser au sol pour souffler entre deux passages.",
   ],
   // Stations du WOD Eval (04/10) : le contraire des standards HYROX retenus dans level-criteria.ts.
   "BURPEES BROAD JUMP": [

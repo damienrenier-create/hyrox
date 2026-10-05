@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CriteriaChecklist } from "../_components/CriteriaChecklist";
 import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_STAFF_TARGET, type ObsMode, type ObsParticipant, type ObsStation, type ObsView } from "@/lib/observation-types";
 import { obsAddRepsAction, obsAppreciateAction, obsDrawAction, obsVoidLastAction } from "./obs-actions";
-import { qualityFromCriteria } from "@/lib/level-criteria";
+import { evalTechQuality } from "@/lib/level-criteria";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -393,7 +393,7 @@ function StationPanel({
             {autoSave ? (
               <p className={cx("text-xs mt-2", !touched && live.length > 0 ? "text-warn-ink font-bold" : "text-ink-3")}>
                 {touched
-                  ? `✓ Enregistré : ${nMet === 0 ? "aucun critère respecté" : `${nMet}/${met.length} critères`} · ${qualityCodeFromValue(qualityFromCriteria(nMet, met.length)) ?? "?"}`
+                  ? `✓ Enregistré : ${nMet === 0 ? "aucun critère respecté" : `${nMet}/${met.length} critères`} · ${qualityCodeFromValue(evalTechQuality(station.criteria, met)) ?? "?"}`
                   : live.length > 0
                     ? "⚠ Pas encore d'appréciation : coche ce que tu as vu, ou « Aucun critère n'est respecté »."
                     : "Chaque coche est enregistrée tout de suite."}

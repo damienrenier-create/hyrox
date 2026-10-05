@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, isHXStars, readHXSettings, readHXStarLog, readHXStars, segmentsFor, startIndexOf, type HXSettings, type HXStarChange } from "@/lib/wod-engines/templates/hyrox-engine";
-import { buildHXBundle, freezeHXCourse, hxCapState } from "@/lib/hyrox-context";
+import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, isHXStars, readHXSettings, readHXStars, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
+import { freezeHXCourse, hxCapState } from "@/lib/hyrox-context";
 import { finishRaceAction } from "./actions";
 
 // Actions du greffier Hyrox (Sartay 01/10). Les profs (ADMIN) tiennent aussi ce greffier : leurs seances s'ouvrent
@@ -127,29 +127,20 @@ export async function hxSetStartAction(sessionId: string, teamId: string, statio
   return { ok: true };
 }
 
-// Niveau « etoiles » d'une equipe (Sartay 05/10 : « les eleves peuvent choisir leur niveau »). Avant sa premiere
-// validation, c'est un simple choix. Ensuite le changement reste possible (une equipe qui descend d'un niveau, une
-// erreur d'encodage), mais il est NOTE avec l'heure dans settings.hxStarLog : regle d'or, on n'efface rien.
+// Parcours (niveau « etoiles ») d'une equipe (Sartay 05/10 : « les eleves, a la creation des equipes, doivent pouvoir
+// demander de monter ou de descendre d'etoiles », « pas de changement de niveau »). Il se choisit avant le depart et
+// se fige a la premiere validation de l'equipe, comme sa station de depart (et le parcours d'une equipe du WOD Level).
 export async function hxSetLevelAction(sessionId: string, teamId: string, stars: number): Promise<Result> {
   await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session) return { error: "Séance introuvable." };
-  if (!readHXSettings(session.settings).levels) return { error: "Cette séance se joue sans niveaux." };
-  if (!isHXStars(stars)) return { error: "Niveau inconnu." };
+  if (!readHXSettings(session.settings).levels) return { error: "Cette séance se joue sans parcours étoilés." };
+  if (!isHXStars(stars)) return { error: "Parcours inconnu." };
   const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
   if (!team) return { error: "Équipe introuvable." };
+  if (await db.orm.public.StationEvent.where({ sessionId, teamId }).first()) return { error: `${team.name} a déjà validé un segment : son parcours ne change plus.` };
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  const chosen = readHXStars(prev);
-  const next: Record<string, unknown> = { ...prev, hxStars: { ...chosen, [teamId]: stars } };
-  // Deja en course : on garde la trace du changement (niveau quitte, niveau pris, temps de course, heure).
-  if (await db.orm.public.StationEvent.where({ sessionId, teamId }).first()) {
-    const from = (await buildHXBundle(sessionId)).ctx.teams.find((t) => t.id === teamId)?.stars ?? null;
-    if (from === stars) return { ok: true };
-    const cap = await hxCapState(sessionId);
-    const change: HXStarChange = { teamId, from: isHXStars(from) ? from : stars, to: stars, at: Math.round(cap?.elapsedMs ?? 0), clock: Date.now() };
-    next.hxStarLog = [...readHXStarLog(prev), change];
-  }
-  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(next)) });
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, hxStars: { ...readHXStars(prev), [teamId]: stars } })) });
   return { ok: true };
 }
 

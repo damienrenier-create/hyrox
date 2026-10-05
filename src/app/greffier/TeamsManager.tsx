@@ -43,6 +43,8 @@ type Props = {
   onCreateStar?: (stars: Stars) => void;
   onNumber?: () => void;
   onSetStars?: (teamId: string, stars: Stars) => void; // changer le parcours d'une equipe en un clic
+  starsLockedOf?: (teamId: string) => boolean; // WOD Eval : parcours fige (l'equipe a deja valide un segment)
+  starsHint?: (stars: Stars) => string; // WOD Eval : repetitions du parcours, sous les etoiles
   winterArc?: boolean; // saison winter arc (WOD Level) : interrupteur ❄️ a cote de chaque eleve de l'equipe
 };
 
@@ -51,7 +53,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars, winterArc = false }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars, starsLockedOf, starsHint, winterArc = false }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -237,10 +239,11 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
               className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card cursor-pointer", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
               {starsOf && onSetStars && (
-                <div className={`${ui.segmented} flex w-full mb-2`} onClick={(e) => e.stopPropagation()} title="Parcours de l'équipe (modifiable tant qu'elle n'a rien coché)">
+                <div className={`${ui.segmented} flex w-full mb-2`} onClick={(e) => e.stopPropagation()} title={starsLockedOf?.(team.id) ? "Parcours figé : l'équipe a commencé" : "Parcours de l'équipe (modifiable tant qu'elle n'a rien coché ni validé)"}>
                   {STARS.map((st) => (
-                    <button key={st} type="button" disabled={pending || starsOf(team.id) === st} onClick={() => onSetStars(team.id, st as Stars)} className={cx("flex-1 px-2 py-1.5 rounded-lg text-sm font-bold", starsOf(team.id) === st ? ui.segOn : ui.segOff)}>
+                    <button key={st} type="button" disabled={pending || starsOf(team.id) === st || !!starsLockedOf?.(team.id)} onClick={() => onSetStars(team.id, st as Stars)} className={cx("flex-1 px-2 py-1.5 rounded-lg text-sm font-bold leading-tight", starsOf(team.id) === st ? ui.segOn : cx(ui.segOff, "disabled:opacity-40"))}>
                       {starsLabel(st as Stars)}
+                      {starsHint && <span className="block text-[11px] font-semibold opacity-80">{starsHint(st as Stars)}</span>}
                     </button>
                   ))}
                 </div>

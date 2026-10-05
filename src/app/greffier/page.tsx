@@ -8,7 +8,7 @@ import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { HyroxClient } from "./hyrox-client";
-import { buildHXBundle } from "@/lib/hyrox-context";
+import { buildHXBundle, buildHXRecords } from "@/lib/hyrox-context";
 import { LevelClient } from "./level-client";
 import { buildLevelBundle, readChild } from "@/lib/level-context";
 import { combinedTwinStandings } from "@/lib/level-combined";
@@ -168,6 +168,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   }
   if (session.wodType === "HYROX") {
     const hxBundle = await buildHXBundle(session.id);
+    // Avant le depart : records des classes precedentes par station et parcours (colonne de droite du greffier).
+    const hxRecords = hxBundle.startedAtMs === null && hxBundle.ctx.settings.levels ? await buildHXRecords(session.id) : null;
     // Arbitrage de l'Eval : deux compteurs suffisent ici (le compte rendu complet a sa page).
     const obsCounts = session.refereeMode
       ? { observations: (await db.orm.public.Observation.where({ sessionId: session.id }).all()).length, entries: (await db.orm.public.RepEntry.where({ sessionId: session.id }).all()).filter((e) => e.voidedAt == null).length }
@@ -182,6 +184,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         olderSession={olderSession}
         newerSession={newerSession}
         bundle={hxBundle}
+        records={hxRecords}
         obsCounts={obsCounts}
         teamsWithMembers={teamsWithMembers}
         classes={classes}

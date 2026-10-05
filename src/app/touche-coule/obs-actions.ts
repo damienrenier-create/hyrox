@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { refereeAccess, type RefereeAccess } from "@/lib/referee-access";
 import type { SessionPayload } from "@/lib/auth";
 import { toMs } from "@/lib/scheduling";
-import { qualityFromCriteria, type CriterionCheck } from "@/lib/level-criteria";
+import { qualityFromCriteria, type CriterionCheck, evalTechChecks } from "@/lib/level-criteria";
 import { OBS_GRACE_MS, OBS_MINUTES } from "@/lib/observation-types";
 import { currentObservation, drawTarget, obsStations, participantsOf, staffObservation, studentObservations } from "@/lib/observations";
 import { hxCapState } from "@/lib/hyrox-context";
@@ -126,7 +126,9 @@ export async function obsAppreciateAction(sessionId: string, input: { observatio
   const r = await resolveObs(g, input, true);
   if ("error" in r) return r;
   const checks: CriterionCheck[] = ex.criteria.map((label, i) => ({ label, met: input.met.includes(i) }));
-  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length);
+  // La ligne « implication de l'equipe » du prof est enregistree, mais la note de technique se calcule sans elle.
+  const tech = evalTechChecks(checks);
+  const note = qualityFromCriteria(tech.filter((c) => c.met).length, tech.length);
   const entries = await db.orm.public.RepEntry.where({ observationId: r.obs.id, exerciseId: ex.id }).all();
   const repsObserved = entries.filter((e) => e.voidedAt == null).reduce((n, e) => n + e.reps, 0);
   const criteria = JSON.parse(JSON.stringify(checks));

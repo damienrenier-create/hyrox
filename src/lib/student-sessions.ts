@@ -10,7 +10,7 @@ export const WOD_LABELS: Record<string, string> = {
   TOUCHE_COULE_HYROX: "Touché-Coulé",
   FETE_FORAINE: "WOD Fête Foraine",
   LEVEL: "WOD Level",
-  HYROX: "WOD Eval",
+  HYROX: "WOD Eval S.O.R.O", // Sartay 05/10 : « son nom = EVAL S.O.R.O » (station - ordi - run - ordi)
 };
 
 export function wodLabel(wodType: string): string {

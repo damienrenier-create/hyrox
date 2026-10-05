@@ -381,17 +381,17 @@ export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
     { text: "L'élève maintient un rythme régulier et fait de son mieux.", short: "Rythme régulier", emoji: "⏱️", noQuiz: true },
     { text: "La descente est contrôlée (l'élève ne se laisse pas tomber).", short: "Descente contrôlée", emoji: "🎛️" },
   ],
-  // Station 7 de l'Eval depuis le 05/10 (Sartay : « rajouter une dixieme station (Helico) (…) tu peux retrouver les
-  // criteres dans le wod levels »). Les 4 criteres du Level pour l'arbitre eleve, dans le meme ordre (3 techniques + le
-  // rythme) ; les 5e et 6e, pour le prof, sont une PROPOSITION a faire relire par Sartay comme les autres exercices :
-  // tant qu'ils ne sont pas relus, ils restent hors du QCM. « Hélico » sur la fiche de l'Eval (alias LEGACY_LABELS).
+  // Station 7 de l'Eval depuis le 05/10. Criteres donnes par Sartay le 05/10 au soir : « faire passer le poids d'une main
+  // a l'autre sans le lancer ; les mains et les coudes ne touchent pas le sol ; le geste est fluide et sans a-coups ; le
+  // visage est decolle du sol ; pour les profs en + : le poids ne tombe pas ; le regard est oriente vers le sol ».
+  // La grille HELICO du WOD Level (CRITERIA, plus haut) ne change pas. « Hélico » sur la fiche de l'Eval (LEGACY_LABELS).
   HELICO: [
-    { text: "L'élève reste allongé sur le ventre, jambes au sol, le corps aligné (il ne se redresse pas en appui).", short: "Allongé, corps aligné", emoji: "📏" },
-    { text: "Le poids passe bien dans le dos, de la main droite à la main gauche, sans tomber.", short: "Passage dans le dos", emoji: "🔄" },
-    { text: "Les bras sont tendus quand le poids repasse devant, sans que les mains se posent au sol.", short: "Bras tendus devant", emoji: "💪" },
-    { text: "L'élève enchaîne les tours à un rythme régulier, sans pause.", short: "Rythme régulier", emoji: "⏱️", noQuiz: true },
-    { text: "La tête reste dans l'axe du dos, le regard vers le sol (la nuque ne se casse pas vers l'arrière).", short: "Tête dans l'axe, regard au sol", emoji: "🧍", noQuiz: true },
-    { text: "Les pieds restent au sol et le bassin ne roule pas d'un côté à l'autre pendant le passage du poids.", short: "Pieds au sol, bassin fixe", emoji: "🧱", noQuiz: true },
+    { text: "Le poids passe d'une main à l'autre sans être lancé.", short: "Poids passé, pas lancé", emoji: "🔄" },
+    { text: "Les mains et les coudes ne touchent pas le sol.", short: "Mains et coudes hors du sol", emoji: "🖐️" },
+    { text: "Le geste est fluide et sans à-coups.", short: "Geste fluide, sans à-coups", emoji: "〰️", noQuiz: true },
+    { text: "Le visage est décollé du sol.", short: "Visage décollé du sol", emoji: "🙂" },
+    { text: "Le poids ne tombe pas.", short: "Le poids ne tombe pas", emoji: "🤲" },
+    { text: "Le regard est orienté vers le sol.", short: "Regard vers le sol", emoji: "👀" },
   ],
   CORDE: [
     { text: "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).", short: "Sauts souples, amortis", emoji: "🪶" },
@@ -431,19 +431,31 @@ export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
     { text: "Technique de course : les bras fléchis accompagnent la foulée, les appuis sont légers et dynamiques (l'élève ne traîne pas les pieds).", short: "Bras et appuis dynamiques", emoji: "🏃" },
   ],
 };
-// Grille d'un exercice de l'Eval : 4 criteres pour l'arbitre eleve, 6 pour le prof. Sans grille Eval (station ajoutee
+// Implication de l'equipe (Sartay 05/10 : « 10 % l'implication de l'equipe : gestion des transitions, suivi des
+// coequipiers, engagement intra et inter stations » et « rajouter un critere chez les arbitres admin pour l'implication
+// inter et intra station ») : une ligne de plus pour le PROF, sur chaque exercice de l'Eval. Elle est enregistree avec
+// l'appreciation mais ne compte pas dans la note de technique, qui reste calculee sur les 6 autres (evalTechChecks).
+export const EVAL_IMPLICATION: EvalCriterion = { text: "Implication de l'équipe : transitions rapides au sein de la station et entre les stations, les coéquipiers se suivent et s'encouragent.", short: "Implication intra / inter station", emoji: "🤝", noQuiz: true };
+export const isImplicationCheck = (label: string) => label === EVAL_IMPLICATION.text;
+export const evalTechChecks = <T extends { label: string }>(checks: T[]): T[] => checks.filter((c) => !isImplicationCheck(c.label));
+// Appreciation de technique d'une grille cochee (libelles et coches dans le meme ordre), sans la ligne d'implication.
+export function evalTechQuality(labels: string[], met: boolean[]): number {
+  const tech = evalTechChecks(labels.map((label, i) => ({ label, met: !!met[i] })));
+  return qualityFromCriteria(tech.filter((c) => c.met).length, tech.length);
+}
+// Grille d'un exercice de l'Eval : 4 criteres pour l'arbitre eleve, 6 pour le prof (+ l'implication). Sans grille Eval (station ajoutee
 // a la main), on retombe sur les criteres generaux de l'exercice.
 export function evalCriteriaFor(label: string, mode: "STUDENT" | "STAFF"): string[] {
   const grid = EVAL_CRITERIA[keyOf(label)];
-  if (!grid) return mode === "STAFF" ? fullCriteriaFor(label) : criteriaFor(label);
+  if (!grid) return mode === "STAFF" ? [...fullCriteriaFor(label), EVAL_IMPLICATION.text] : criteriaFor(label);
   const texts = grid.map((c) => c.text);
-  return mode === "STAFF" ? texts : texts.slice(0, EVAL_STUDENT_CRITERIA);
+  return mode === "STAFF" ? [...texts, EVAL_IMPLICATION.text] : texts.slice(0, EVAL_STUDENT_CRITERIA);
 }
 // Grille d'un exercice de l'Eval pour une dia : emoji + version courte de chaque critere (4 pour l'arbitre eleve, 6
 // pour le prof). Sans grille Eval, les criteres generaux de l'exercice, en version courte quand elle existe.
 export function evalShortFor(label: string, mode: "STUDENT" | "STAFF"): { emoji: string | null; short: string }[] {
   const grid = EVAL_CRITERIA[keyOf(label)];
-  if (grid) return (mode === "STAFF" ? grid : grid.slice(0, EVAL_STUDENT_CRITERIA)).map((c) => ({ emoji: c.emoji, short: c.short }));
+  if (grid) return (mode === "STAFF" ? [...grid, EVAL_IMPLICATION] : grid.slice(0, EVAL_STUDENT_CRITERIA)).map((c) => ({ emoji: c.emoji, short: c.short }));
   const full = criteriaFor(label);
   const short = shortCriteriaFor(label);
   return full.map((sentence, i) => ({ emoji: criterionEmoji(sentence), short: short[i] ?? sentence }));
@@ -491,6 +503,7 @@ const EMOJI_BY_SENTENCE = new Map<string, string>([
   ...GENERIC_CRITERIA.map((sentence, i) => [sentence, GENERIC_EMOJI[i]] as [string, string]),
   // Grilles de l'Eval : chaque critere porte son emoji (les phrases communes avec le Level gardent le meme).
   ...Object.values(EVAL_CRITERIA).flatMap((list) => list.map((c) => [c.text, c.emoji] as [string, string])),
+  [EVAL_IMPLICATION.text, EVAL_IMPLICATION.emoji],
 ]);
 export const criterionEmoji = (sentence: string): string | null => EMOJI_BY_SENTENCE.get(sentence) ?? null;
 

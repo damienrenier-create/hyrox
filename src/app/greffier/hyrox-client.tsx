@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
-  HX_LEVELS, HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, clockText, fmt, hxCsv, hxIntensity, segmentLabel, segmentStats, starsText, teamState, timeRows,
+  HX_LEVELS, HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, clockText, fmt, hxCsv, hxIntensity, hxLevelReps, hxStationKey, hxStationReps, parcoursTops, segmentLabel, segmentStats, teamState, timeRows,
   type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
 } from "@/lib/wod-engines/templates/hyrox-engine";
-import type { HXBundle } from "@/lib/hyrox-context";
+import type { HXBundle, HXRecord } from "@/lib/hyrox-context";
 import type { BoardData } from "@/lib/referee-board";
 import { resetSessionAction, startRaceAction, togglePauseAction } from "./race-actions";
 import { finishRaceAction } from "./actions";
@@ -18,7 +18,9 @@ import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
 import { Snowfall } from "../_components/Snowfall";
 import { EvalBaremeTable } from "../_components/EvalBareme";
-import { noteText } from "@/lib/eval-bareme";
+import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, evalNote, isEvalGroup, noteText, starsText } from "@/lib/eval-bareme";
+import { evalExpectedMs } from "@/lib/eval-reference";
+import type { Stars } from "@/lib/wod-engines/templates/level-engine";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
 import { ArbitrageTab } from "./ArbitrageTab";
@@ -53,10 +55,11 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 // l'exercice suivant s'affiche aussitot ; « ⋯ » ouvre le detail. A droite : le top 3 de chaque station. Onglets cartes
 // jaunes, classement au temps, statistiques. Ecran PC projete.
 export function HyroxClient({
-  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, obsCounts = null, picker, showConsole = false, winter = false,
+  sessionId, sessionLabel, sessionOptions, olderSession, newerSession, bundle, teamsWithMembers, classes, allClasses, referees, pendingRequests, board, obsCounts = null, picker, showConsole = false, winter = false, records = null,
 }: {
   showConsole?: boolean;
   winter?: boolean; // saison winter arc : flocons
+  records?: Record<string, Record<number, HXRecord>> | null; // avant le depart : records des classes precedentes (station, parcours)
   sessionId: string;
   sessionLabel: string;
   sessionOptions: SessionOption[];
@@ -277,7 +280,7 @@ export function HyroxClient({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <div className="flex items-center gap-4 min-w-0">
             <div className="min-w-0">
-              <span className={ui.eyebrow}>Greffier · Eval</span>
+              <span className={ui.eyebrow}>Greffier · Eval S.O.R.O</span>
               <div className="flex items-center gap-1.5 min-w-0">
                 <SessionStep to={olderSession} dir="older" />
                 {sessionOptions.length > 1 ? (
@@ -388,7 +391,7 @@ export function HyroxClient({
                   />
                 ))}
               </div>
-              <TopsColumn stations={stats.stations} tops={stats.tops} />
+              {ctx.settings.levels ? <ParcoursColumn ctx={ctx} phase={phase} records={records} /> : <TopsColumn stations={stats.stations} tops={stats.tops} />}
             </div>
           )
         )}
@@ -396,13 +399,31 @@ export function HyroxClient({
         {view === "results" && <ResultsView ctx={liveCtx} hasData={phase !== "pre" || ctx.events.length > 0} />}
         {view === "stats" && <StatsView ctx={liveCtx} />}
         {view === "levels" && <LevelsView states={states} teams={teams} settings={ctx.settings} sessionId={sessionId} onRun={run} pending={pending} />}
-        {view === "teams" && <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} picker={picker} winterArc={winter} />}
+        {view === "teams" && (
+          <TeamsManager
+            sessionId={sessionId}
+            teams={teamsWithMembers}
+            classes={classes}
+            allClasses={allClasses}
+            referees={referees}
+            phase={phase}
+            startByTeam={startByTeam}
+            picker={picker}
+            winterArc={winter}
+            // Parcours de chaque equipe a la creation des equipes (Sartay 05/10 : « les eleves doivent pouvoir demander de
+            // monter ou de descendre d'etoiles ») : fige a sa premiere validation.
+            starsOf={ctx.settings.levels ? (id) => (states.get(id)?.stars ?? EVAL_DEFAULT_STARS) as Stars : undefined}
+            onSetStars={ctx.settings.levels ? (id, s) => run(() => hxSetLevelAction(sessionId, id, s)) : undefined}
+            starsLockedOf={(id) => (states.get(id)?.done ?? 0) > 0}
+            starsHint={(s) => `${hxLevelReps(s)} rép.`}
+          />
+        )}
         {view === "arbitrage" && board && <ArbitrageTab board={board} />}
         {view === "arbitrage" && obsCounts && (
           <div className={`${ui.cardPad} max-w-xl space-y-3`}>
             <h3 className={ui.h3}>👁 Arbitres de l&apos;Eval</h3>
             <p className={ui.muted}><b>{obsCounts.observations}</b> observation{obsCounts.observations > 1 ? "s" : ""} · <b>{obsCounts.entries}</b> série{obsCounts.entries > 1 ? "s" : ""} de reps horodatée{obsCounts.entries > 1 ? "s" : ""}.</p>
-            <p className={ui.hint}>Élèves arbitres : un élève tiré au sort, suivi 5 minutes, 4 critères. Profs : qui ils veulent, 6 critères, objectif 3 exercices par élève. Le compte rendu compare l&apos;heure de chaque série aux clics de cet écran.</p>
+            <p className={ui.hint}>Élèves arbitres : un élève tiré au sort, suivi 5 minutes, 4 critères. Profs : qui ils veulent, 6 critères + l&apos;implication de l&apos;équipe, objectif 3 exercices par élève. Le compte rendu compare l&apos;heure de chaque série aux clics de cet écran.</p>
             <div className="flex flex-wrap gap-2">
               <a href={`/admin/observations?session=${sessionId}`} target="_blank" rel="noopener" className={btn.primary}>📋 Compte rendu des arbitres ↗</a>
               <a href={`/touche-coule?session=${sessionId}`} target="_blank" rel="noopener" className={btn.sea}>👁 Arbitrer (prof) ↗</a>
@@ -449,8 +470,8 @@ function TeamTile({ st, phase, laps, liveMs, compact, flashing, disabled, onClic
       >
         <span className="flex items-center gap-1.5 pr-7 min-w-0">
           <span className={cx("font-team leading-[0.9] uppercase tracking-wide whitespace-nowrap", compact ? "text-[25px]" : "text-[33px]")}>Équipe {team.order}</span>
-          {st.stars !== null && <span className="text-[11px] font-extrabold bg-black/15 rounded-md px-1 py-0.5 leading-none whitespace-nowrap" title={`Niveau ${st.stars} étoile${st.stars > 1 ? "s" : ""} : ${st.levelReps} répétitions par station`}>{st.stars}★ {st.levelReps}</span>}
           {cards > 0 && <span className="text-[10px] font-extrabold bg-yellow-300 text-yellow-900 rounded-md px-1 py-0.5 leading-none whitespace-nowrap">🟨 ×{cards}</span>}
+          {st.stars !== null && <span className={cx("ml-auto shrink-0 leading-none whitespace-nowrap tracking-[-0.08em]", compact ? "text-[14px]" : "text-[19px]", phase === "pre" ? "text-amber-500" : "text-yellow-300 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]")} title={`Parcours ${st.stars} étoile${st.stars > 1 ? "s" : ""} : ${st.levelReps} répétitions par station`}>{starsText(st.stars)}</span>}
         </span>
         <span className="flex items-center gap-1.5 min-w-0">
           <span className="flex-1 min-w-0 text-[11px] opacity-80 truncate leading-tight">{team.members.map((m) => m.name).join(" · ") || "—"}</span>
@@ -504,6 +525,45 @@ function TopsColumn({ stations, tops }: { stations: HXStat[]; tops: Record<strin
   );
 }
 
+// Colonne de droite avec les parcours (Sartay 05/10 : « a droite on ne garde que le top 1 de chaque parcours ; avant de
+// commencer le cours, on affiche les tops deja joues ; s'il n'y en a pas encore, des temps calcules sur base de ce que
+// les eleves devraient faire ; une fois le start lance, les temps de la classe : on les remet a zero, ils sont a
+// gagner »). Pour chaque station, une case par parcours en jeu (ceux des equipes de la seance).
+function ParcoursColumn({ ctx, phase, records }: { ctx: HXContext; phase: Phase; records: Record<string, Record<number, HXRecord>> | null }) {
+  const { stars, tops } = useMemo(() => parcoursTops(ctx), [ctx]);
+  const pre = phase === "pre";
+  return (
+    <aside className="hidden lg:flex w-[250px] shrink-0 flex-col rounded-2xl border border-line bg-card overflow-hidden">
+      <p className="px-2.5 pt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-ink-2">🏆 Top 1 par parcours</p>
+      <p className="px-2.5 pb-1.5 text-[10.5px] leading-snug text-ink-3 border-b border-line">{pre ? "Avant le départ : 🏆 record des classes précédentes, sinon ≈ temps attendu." : "Les temps de la classe : à gagner !"}</p>
+      <ul className="flex-1 min-h-0 overflow-auto divide-y divide-line">
+        {ctx.settings.stations.map((s) => (
+          <li key={s.id} className="px-2.5 py-1">
+            <p className="font-display font-extrabold text-[12.5px] leading-tight truncate">{s.label}</p>
+            <p className="flex flex-wrap gap-x-2.5 text-[11.5px] tabular-nums leading-snug">
+              {stars.map((n) => {
+                const tag = <b className="text-accent-ink">{n}★</b>;
+                if (pre) {
+                  const rec = records?.[hxStationKey(s)]?.[n];
+                  if (rec) return <span key={n} title={`Record : ${rec.teamName} · ${rec.classes}`}>{tag} 🏆 {fmt(rec.ms)}</span>;
+                  const exp = evalExpectedMs(s.label, s.unit, hxStationReps(s, n));
+                  return <span key={n} className="text-ink-2" title="Temps attendu : moyenne des équipes de 3 des séances du lundi 5 octobre">{tag} ≈ {exp !== null ? fmt(exp) : "—"}</span>;
+                }
+                const top = tops[`st:${s.id}`]?.[n];
+                return top ? (
+                  <span key={n} title={`${top.name} : ${fmt(top.ms)}`}>{tag} 🥇<b className="font-team text-[15px] tracking-wide"> É{top.order}</b> {fmt(top.ms)}</span>
+                ) : (
+                  <span key={n} className="text-ink-3">{tag} à gagner</span>
+                );
+              })}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
 // Detail d'une equipe : progression, gros bouton Valider (segment en cours), retour arriere,
 // cartes jaunes, station de depart avant la course.
 function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, onClose }: { ctx: HXContext; st: HXTeamState; sessionId: string; phase: Phase; isPaused: boolean; liveMs: number; onValidate: () => void; onClose: () => void }) {
@@ -529,9 +589,10 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
     });
   }
   const intensity = hxIntensity(st);
+  const group = isEvalGroup(team.group) ? team.group : EVAL_BASE_GROUP;
+  // « Pas de changement de niveau » : le parcours se choisit avant la premiere validation de l'equipe, ensuite il est fige.
   function setLevel(stars: number) {
-    if (stars === st.stars) return;
-    if (done > 0 && !confirm(`${team.name} a déjà validé ${done} segment${done > 1 ? "s" : ""} : passer de ${st.stars} à ${stars} étoile${stars > 1 ? "s" : ""} ? Le changement est noté avec l'heure.`)) return;
+    if (stars === st.stars || done > 0) return;
     act(() => hxSetLevelAction(sessionId, team.id, stars));
   }
   function undo() {
@@ -572,21 +633,19 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
 
         {st.stars !== null && (
           <div className={`${ui.cardPad} mb-3`}>
-            <p className="text-sm font-bold mb-1">⭐ Niveau de l&apos;équipe{intensity && <span className="font-normal text-ink-2"> · {intensity.group}</span>}</p>
-            <div className="grid grid-cols-6 gap-1.5">
+            <p className="text-sm font-bold mb-1">⭐ Parcours de l&apos;équipe{intensity && <span className="font-normal text-ink-2"> · {intensity.group}</span>}</p>
+            <div className="grid grid-cols-5 gap-1.5">
               {HX_LEVELS.map((l) => (
-                <button key={l.stars} type="button" disabled={pending} onClick={() => setLevel(l.stars)} className={cx("rounded-xl px-1 py-2 text-xs font-bold border transition text-center", st.stars === l.stars ? "bg-accent text-ink border-accent" : "bg-card border-line hover:border-accent")}>
-                  <span className="block font-display text-lg font-extrabold leading-none mb-0.5">{l.stars}★</span>{l.reps} rép.
+                <button key={l.stars} type="button" disabled={pending || done > 0} onClick={() => setLevel(l.stars)} className={cx("rounded-xl px-1 py-2 text-xs font-bold border transition text-center", st.stars === l.stars ? "bg-accent text-ink border-accent" : "bg-card border-line hover:border-accent disabled:opacity-40")}>
+                  <span className="block font-display text-lg font-extrabold leading-none mb-0.5">{l.stars}★</span>
+                  {l.reps} rép. · {evalNote(group, l.stars)}/20
                 </button>
               ))}
             </div>
             <p className={`${ui.hint} mt-2`}>
-              Le niveau fixe les répétitions de chaque station ; les allers-retours ne changent pas.
-              {intensity && <> Intensité : <b>{noteText(intensity.max)}/20</b> si le WOD est bouclé avant la fin officielle ({ctx.settings.capMin}:00).</>}
+              {done > 0 ? "🔒 Parcours figé : l'équipe a commencé. " : `Sans choix : ${EVAL_DEFAULT_STARS}★. Il se choisit avant le départ : à la première validation, il ne change plus. `}
+              Le parcours fixe les répétitions de chaque station (les allers-retours ne changent pas) ; les points de la perf, si le WOD est bouclé avant {ctx.settings.capMin}:00, dépendent aussi des années et du sexe.
             </p>
-            {(team.starLog ?? []).map((c, i) => (
-              <p key={i} className="text-xs text-warn-ink mt-1">↕ Niveau changé en cours de WOD : {c.from}★ → {c.to}★ à {fmt(c.at)} ({clockText(c.clock)}).</p>
-            ))}
           </div>
         )}
 
@@ -667,26 +726,24 @@ function CardsView({ states, teams, sessionId, phase, penSec, onRun, pending }: 
 }
 
 // Onglet « Niveaux & bareme » (Sartay 05/10 : « les eleves peuvent choisir leur niveau », « ajouter un onglet dans
-// l'app pour expliquer les baremes ») : le niveau de chaque equipe en un clic, et le bareme de l'intensite a montrer a
-// la classe. Un changement fait apres la premiere validation d'une equipe est confirme, puis note avec l'heure.
+// l'app pour expliquer les baremes », puis « seulement des parcours a 40-45-50-55-60, le niveau de base a 3 etoiles pour
+// tout le monde, max 5 etoiles, mais les etoiles ne valent pas les memes points en fonction des annees et des sexes ») :
+// le parcours de chaque equipe en un clic avant son depart (fige a sa premiere validation), et le bareme a montrer.
 function LevelsView({ states, teams, settings, sessionId, onRun, pending }: { states: Map<string, HXTeamState>; teams: HXContext["teams"]; settings: HXSettings; sessionId: string; onRun: (a: () => Promise<ActionResult>) => void; pending: boolean }) {
-  function pick(st: HXTeamState, stars: number) {
-    if (st.stars === stars) return;
-    if (st.done > 0 && !confirm(`${st.team.name} a déjà validé ${st.done} segment${st.done > 1 ? "s" : ""} : passer de ${st.stars} à ${stars} étoile${stars > 1 ? "s" : ""} ? Le changement est noté avec l'heure.`)) return;
-    onRun(() => hxSetLevelAction(sessionId, st.team.id, stars));
-  }
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,560px)] items-start">
       <div>
-        <h3 className={`${ui.h3} mb-1.5`}>⭐ Le niveau de chaque équipe</h3>
-        <p className={`${ui.hint} mb-2`}>Un clic = le niveau de l&apos;équipe, c&apos;est-à-dire le nombre de répétitions de chacune de ses stations (les allers-retours ne changent pas). Sans choix : 5★ en 5e – 6e, 3★ en 3e – 4e.</p>
+        <h3 className={`${ui.h3} mb-1.5`}>⭐ Le parcours de chaque équipe</h3>
+        <p className={`${ui.hint} mb-2`}>Un clic = le parcours de l&apos;équipe, avant son départ : ses répétitions à chaque station (les allers-retours ne changent pas). Sans choix : {EVAL_DEFAULT_STARS}★. Figé dès sa première validation. Ses points dépendent aussi de son groupe.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[13px] border-collapse whitespace-nowrap">
-            <thead><tr><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves · groupe</th><th className={ui.th}>Niveau · répétitions</th><th className={`${ui.th} text-right`} title="Note d'intensité si le WOD est bouclé avant la fin officielle">Si bouclé</th></tr></thead>
+            <thead><tr><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves · groupe</th><th className={ui.th}>Parcours · répétitions</th><th className={`${ui.th} text-right`} title="Points de la perf si le WOD est bouclé avant la fin officielle">Si bouclé</th></tr></thead>
             <tbody>
               {teams.map((team) => {
                 const st = states.get(team.id)!;
                 const it = hxIntensity(st);
+                const group = isEvalGroup(team.group) ? team.group : EVAL_BASE_GROUP;
+                const locked = st.done > 0;
                 return (
                   <tr key={team.id} className={ui.tr}>
                     <td className="p-2 font-team text-[22px] leading-none uppercase tracking-wide">Équipe {team.order}</td>
@@ -695,13 +752,13 @@ function LevelsView({ states, teams, settings, sessionId, onRun, pending }: { st
                       <span className="block truncate text-[11px] text-ink-3">{it?.group ?? ""}</span>
                     </td>
                     <td className="p-2">
-                      <span className="flex gap-1">
+                      <span className="flex gap-1 items-center">
                         {HX_LEVELS.map((l) => (
-                          <button key={l.stars} type="button" disabled={pending} onClick={() => pick(st, l.stars)} title={`${starsText(l.stars)} : ${l.reps} répétitions`} className={cx("rounded-lg px-2 py-1 text-xs font-bold border transition tabular-nums", st.stars === l.stars ? "bg-accent text-ink border-accent" : "bg-card border-line text-ink-2 hover:border-accent")}>
+                          <button key={l.stars} type="button" disabled={pending || locked} onClick={() => { if (st.stars !== l.stars) onRun(() => hxSetLevelAction(sessionId, team.id, l.stars)); }} title={`${starsText(l.stars)} : ${l.reps} répétitions, ${evalNote(group, l.stars)}/20 si le WOD est bouclé`} className={cx("rounded-lg px-2 py-1 text-xs font-bold border transition tabular-nums", st.stars === l.stars ? "bg-accent text-ink border-accent" : "bg-card border-line text-ink-2 hover:border-accent disabled:opacity-40")}>
                             <b className="font-display text-sm font-extrabold">{l.stars}★</b> {l.reps}
                           </button>
                         ))}
-                        {(team.starLog ?? []).length > 0 && <span className="self-center text-warn-ink text-xs font-bold" title={(team.starLog ?? []).map((c) => `${c.from}★ → ${c.to}★ à ${fmt(c.at)}`).join(" ; ")}>↕ changé</span>}
+                        {locked && <span className="ml-1 text-[11px] text-ink-3" title="L'équipe a validé un segment : son parcours ne change plus">🔒 figé</span>}
                       </span>
                     </td>
                     <td className="p-2 text-right font-display font-extrabold tabular-nums">{it ? `${noteText(it.max)}/20` : ""}</td>
@@ -713,15 +770,15 @@ function LevelsView({ states, teams, settings, sessionId, onRun, pending }: { st
         </div>
       </div>
       <div>
-        <h3 className={`${ui.h3} mb-1.5`}>🎯 Le barème de l&apos;intensité</h3>
-        <p className={`${ui.hint} mb-2`}>La note de l&apos;équipe qui boucle le WOD ({settings.laps} tour{settings.laps > 1 ? "s" : ""}) avant la fin officielle ({settings.capMin}:00), selon son niveau et son groupe.</p>
+        <h3 className={`${ui.h3} mb-1.5`}>🎯 Les points de la perf</h3>
+        <p className={`${ui.hint} mb-2`}>Note de l&apos;équipe qui boucle le WOD ({settings.laps} tour{settings.laps > 1 ? "s" : ""}) avant la fin officielle ({settings.capMin}:00) : le même parcours pour tous, mais pas les mêmes points selon les années et le sexe.</p>
         <EvalBaremeTable big />
         <ul className="mt-3 space-y-1.5 text-sm text-ink-2 list-disc pl-5">
-          <li>Un niveau de plus = 5 répétitions de plus à chaque station = 1 point de plus.</li>
-          <li>Une équipe mixte suit le barème « garçons ou mixte » ; « filles » = une équipe de filles uniquement.</li>
+          <li>Tout le monde part à {EVAL_DEFAULT_STARS}★ ; une équipe peut demander de monter ou de descendre à la création des équipes. Ensuite, le parcours ne change plus.</li>
+          <li>Une équipe mixte lit la colonne « garçons ou mixte » ; « filles » = une équipe de filles uniquement.</li>
           <li>WOD pas bouclé à {settings.capMin}:00 : la note part de ce maximum et baisse selon ce qu&apos;il restait à faire.</li>
           {settings.extraMin > 0 && <li>De {settings.capMin}:00 à {settings.capMin + settings.extraMin}:00, le chrono continue pour finir son parcours : c&apos;est affiché, mais hors classement.</li>}
-          <li>La technique est notée à part, par les arbitres et les profs.</li>
+          <li>La perf compte pour la moitié de l&apos;éval du jour ; la technique (arbitres et profs) et l&apos;implication de l&apos;équipe font le reste.</li>
         </ul>
       </div>
     </div>
@@ -743,7 +800,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
         <p className={`${ui.hint} mb-2`}>Temps au dernier segment ({ctx.settings.laps} tour{ctx.settings.laps > 1 ? "s" : ""}), + {ctx.settings.penSec} s par carte jaune. Les équipes non arrivées suivent, classées par segments faits{extraMin > 0 ? ` à la fin officielle (${capMin}:00) : ce qui est validé en prolongation est affiché, mais ne compte ni pour le classement ni pour la note` : ""}.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[13px] border-collapse whitespace-nowrap">
-            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves</th>{levels && <th className={thR} title="Niveau de l'équipe : étoiles et répétitions par station">Niveau</th>}<th className={thR}>Départ</th><th className={thR}>Stations</th><th className={thR}>Runs</th><th className={thR}>Temps</th><th className={thR}>🟨</th><th className={thR}>Score</th>{levels && <th className={thR} title="Note d'intensité : celle du niveau si le WOD est bouclé avant la fin officielle ; sinon la part du WOD faite à cet instant et la note maximale du niveau">🎯 Intensité</th>}<th className={thR} title="QCM bonus : points des élèves ayant répondu (barème à fixer)">📝 QCM</th></tr></thead>
+            <thead><tr><th className={ui.th}>#</th><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves</th>{levels && <th className={thR} title="Parcours de l'équipe : étoiles et répétitions par station">Parcours</th>}<th className={thR}>Départ</th><th className={thR}>Stations</th><th className={thR}>Runs</th><th className={thR}>Temps</th><th className={thR}>🟨</th><th className={thR}>Score</th>{levels && <th className={thR} title="Points de la perf : ceux du parcours, pour le groupe de l'équipe, si le WOD est bouclé avant la fin officielle ; sinon la part du WOD faite à cet instant et les points maximum du parcours">🎯 Perf</th>}<th className={thR} title="QCM bonus : points des élèves ayant répondu (barème à fixer)">📝 QCM</th></tr></thead>
             <tbody>
               {timeRows(ctx).map((st) => {
                 if (st.inTime) rank++;
@@ -753,7 +810,7 @@ function ResultsView({ ctx, hasData }: { ctx: HXContext; hasData: boolean }) {
                     <td className="p-2 text-left font-display font-extrabold">{st.inTime ? rank : "—"}</td>
                     <td className="p-2 text-left font-bold">{st.team.name}</td>
                     <td className="p-2 text-left text-ink-2">{members(st.team) || "—"}</td>
-                    {levels && <td className="p-2" title={it?.group}>{st.stars !== null ? <><b className="text-accent-ink">{st.stars}★</b> {st.levelReps}{(st.team.starLog ?? []).length > 0 && <span className="text-warn-ink" title="Niveau changé en cours de WOD"> ↕</span>}</> : ""}</td>}
+                    {levels && <td className="p-2" title={it?.group}>{st.stars !== null ? <><b className="text-accent-ink">{st.stars}★</b> {st.levelReps}</> : ""}</td>}
                     <td className="p-2">{st.startIndex + 1}</td>
                     <td className="p-2">{st.stationsDone}/{stationTotal}</td>
                     <td className="p-2">{st.runsDone}</td>
@@ -926,7 +983,7 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
           <label className="text-xs"><span className={ui.label}>Carte jaune (s)</span><input type="number" min={0} max={600} value={form.penSec} onChange={(e) => setForm({ ...form, penSec: parseInt(e.target.value, 10) || 0 })} className={ui.input} /></label>
         </div>
         <p className={`${ui.hint} mb-3`}>Le classement et les notes s&apos;arrêtent à la fin officielle ; pendant la prolongation, les équipes peuvent encore valider pour finir leur parcours. À la fin de la prolongation, la course s&apos;arrête toute seule (0 = pas de prolongation).</p>
-        <label className="flex items-start gap-2 text-sm mb-4"><input type="checkbox" checked={form.levels} disabled={locked} onChange={(e) => setForm({ ...form, levels: e.target.checked })} className={`${ui.check} mt-0.5`} /><span>Niveaux étoiles : chaque équipe choisit son nombre de répétitions ({HX_LEVELS.map((l) => `${l.stars}★ = ${l.reps}`).join(", ")}). Les quantités ci-dessus sont celles du niveau 5★ ; les allers-retours ne changent pas.</span></label>
+        <label className="flex items-start gap-2 text-sm mb-4"><input type="checkbox" checked={form.levels} disabled={locked} onChange={(e) => setForm({ ...form, levels: e.target.checked })} className={`${ui.check} mt-0.5`} /><span>Parcours étoilés : chaque équipe choisit son parcours avant le départ, de 1★ = 40 à 5★ = 60 répétitions par station ({EVAL_DEFAULT_STARS}★ par défaut) ; ses points dépendent aussi des années et du sexe (onglet Niveaux &amp; barème). Les quantités ci-dessus sont celles du 5★ ; les allers-retours ne changent pas.</span></label>
         <label className="text-xs block mb-4"><span className={ui.label}>Nombre d&apos;équipes {canResize ? "" : "(figé : course lancée)"}</span><input type="number" min={1} max={50} value={teams} disabled={!canResize} onChange={(e) => setTeams(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)))} className={`${ui.input} w-28`} /></label>
 
         <div className="flex justify-end gap-2">

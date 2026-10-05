@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { QUALITY_VALUES } from "@/lib/wod-engines/core/quality";
-import { qualityFromCriteria, readCriteria } from "@/lib/level-criteria";
+import { evalTechChecks, qualityFromCriteria, readCriteria } from "@/lib/level-criteria";
 
 // Correction d'une evaluation a criteres (demineur) par le pupitre : on re-coche, l'appreciation suit.
 export async function updateEvaluationCriteriaAction(evaluationId: string, reps: number, met: number[], liked = false): Promise<{ error: string } | { ok: true }> {
@@ -15,7 +15,8 @@ export async function updateEvaluationCriteriaAction(evaluationId: string, reps:
   const old = readCriteria((ev as { criteria?: unknown }).criteria);
   if (!old) return { error: "Cette évaluation n'a pas de critères." };
   const checks = old.map((c, i) => ({ label: c.label, met: met.includes(i) }));
-  const note = qualityFromCriteria(checks.filter((c) => c.met).length, checks.length, liked === true);
+  const tech = evalTechChecks(checks); // sans la ligne « implication de l'equipe » du prof (Eval)
+  const note = qualityFromCriteria(tech.filter((c) => c.met).length, tech.length, liked === true);
   await db.orm.public.Evaluation.where({ id: ev.id }).update({ repsObserved: reps, note, criteria: JSON.parse(JSON.stringify(checks)) });
   return { ok: true };
 }

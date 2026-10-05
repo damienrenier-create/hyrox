@@ -2,9 +2,9 @@ import { db } from "@/lib/db";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { memberNames } from "@/lib/staff-names";
-import { readSessionClasses } from "@/lib/session-roles";
-import { evalDefaultStars, evalGroupOf } from "@/lib/eval-bareme";
-import { CINDY_KEY, readHXSettings, readHXStarLog, readHXStars, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
+import { isDeletedSession, isTestClass, readSessionClasses } from "@/lib/session-roles";
+import { evalGroupOf } from "@/lib/eval-bareme";
+import { CINDY_KEY, HX_DEFAULT_STARS, hxStationKey, parcoursTops, readHXSettings, readHXStars, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
 
 export type HXBundle = {
   ctx: HXContext;
@@ -63,10 +63,9 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   const userById = new Map(users.map((u) => [u.id, u]));
   // QCM bonus : score de chaque eleve ayant repondu.
   const quizBy = new Map((await db.orm.public.QuizAnswer.where({ sessionId }).all()).map((q) => [q.studentId, q.score]));
-  // Niveau « etoiles » de chaque equipe : celui qu'elle a choisi, sinon celui de son groupe (5 etoiles en 5e-6e,
-  // 3 etoiles en 3e-4e). Le groupe (annees, filles / garcons ou mixte) se lit sur ses eleves ; il fixe son bareme.
+  // Parcours de chaque equipe : celui qu'elle a choisi, sinon 3 etoiles (Sartay : « le niveau de base est a 3 etoiles
+  // pour tout le monde »). Son groupe (annees, filles / garcons ou mixte), lu sur ses eleves, fixe ses points.
   const chosenStars = readHXStars(session.settings);
-  const starLog = readHXStarLog(session.settings);
   const sessionClasses = readSessionClasses(session.settings);
   const groupOf = (teamId: string) =>
     evalGroupOf(members.filter((m) => m.teamId === teamId).flatMap((m) => { const u = userById.get(m.userId); return u && u.role === "STUDENT" ? [{ className: u.className ?? null, sex: u.sex ?? null }] : []; }), sessionClasses);
@@ -76,8 +75,7 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
     name: t.name,
     startStationId: t.startExerciseId ?? null,
     group: groupOf(t.id),
-    stars: chosenStars[t.id] ?? evalDefaultStars(groupOf(t.id)),
-    starLog: starLog.filter((c) => c.teamId === t.id),
+    stars: chosenStars[t.id] ?? HX_DEFAULT_STARS,
     members: members
       .filter((m) => m.teamId === t.id)
       .flatMap((m) => {
@@ -108,4 +106,50 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
     if (last) finishedAbsMs[t.id] = toMs(last.at);
   }
   return { ctx, startedAtMs, endedAtMs, pauses, finishedAbsMs, locked: rawEvents.length > 0 };
+}
+
+// Records des classes precedentes, par station et par parcours (Sartay 05/10 : « avant de commencer le cours, on
+// affiche dans la colonne top les tops deja joues »). Seances Eval jouees AVEC les parcours, hors corbeille, hors classe
+// de test, hors la seance elle-meme ; une station se reconnait a son libelle, son unite et sa quantite de base
+// (hxStationKey : son emplacement peut changer). Requetes groupees ; la page ne l'appelle qu'avant le depart.
+export type HXRecord = { ms: number; teamName: string; classes: string; dateMs: number };
+export async function buildHXRecords(sessionId: string): Promise<Record<string, Record<number, HXRecord>>> {
+  const sessions = (await db.orm.public.Session.where({ wodType: "HYROX" }).all()).filter((s) => {
+    const h = (s.settings as { hyrox?: { levels?: unknown } } | null)?.hyrox;
+    return s.id !== sessionId && !isDeletedSession(s) && h?.levels === true && !readSessionClasses(s.settings).some(isTestClass);
+  });
+  const out: Record<string, Record<number, HXRecord>> = {};
+  if (!sessions.length) return out;
+  const ids = sessions.map((s) => s.id);
+  const [teams, events, states] = await Promise.all([
+    db.orm.public.Team.where((t) => t.sessionId.in(ids)).all(),
+    db.orm.public.StationEvent.where((e) => e.sessionId.in(ids)).all(),
+    db.orm.public.RaceState.where((r) => r.sessionId.in(ids)).all(),
+  ]);
+  const pausesRaw = states.length ? await db.orm.public.RacePause.where((p) => p.raceStateId.in(states.map((r) => r.id))).all() : [];
+  for (const s of sessions) {
+    const rs = states.find((r) => r.sessionId === s.id);
+    if (!rs?.startedAt) continue;
+    const startedAtMs = toMs(rs.startedAt);
+    const pauses = pausesRaw.filter((p) => p.raceStateId === rs.id).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
+    const settings = readHXSettings(s.settings);
+    const chosen = readHXStars(s.settings);
+    const ctx: HXContext = {
+      settings,
+      teams: teams.filter((t) => t.sessionId === s.id).map((t) => ({ id: t.id, order: t.order ?? 0, name: t.name, startStationId: t.startExerciseId ?? null, members: [], stars: chosen[t.id] ?? HX_DEFAULT_STARS })),
+      events: events.filter((e) => e.sessionId === s.id).map((e) => ({ id: e.id, teamId: e.teamId, key: e.stationId, at: elapsed(startedAtMs, pauses, toMs(e.at)) ?? 0, abs: toMs(e.at) })),
+      cards: [],
+    };
+    const { tops } = parcoursTops(ctx);
+    const classes = readSessionClasses(s.settings).join("+");
+    for (const st of settings.stations) {
+      const key = hxStationKey(st);
+      for (const [stars, top] of Object.entries(tops[`st:${st.id}`] ?? {})) {
+        const n = Number(stars);
+        const cur = out[key]?.[n];
+        if (!cur || top.ms < cur.ms) out[key] = { ...(out[key] ?? {}), [n]: { ms: top.ms, teamName: top.name, classes, dateMs: startedAtMs } };
+      }
+    }
+  }
+  return out;
 }
