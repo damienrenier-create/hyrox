@@ -416,6 +416,7 @@ export function HyroxClient({
             onSetStars={ctx.settings.levels ? (id, s) => run(() => hxSetLevelAction(sessionId, id, s)) : undefined}
             starsLockedOf={(id) => (states.get(id)?.done ?? 0) > 0}
             starsHint={(s) => `${hxLevelReps(s)} rép.`}
+            starsStepper
           />
         )}
         {view === "arbitrage" && board && <ArbitrageTab board={board} />}

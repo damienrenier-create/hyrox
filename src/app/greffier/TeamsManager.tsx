@@ -45,6 +45,7 @@ type Props = {
   onSetStars?: (teamId: string, stars: Stars) => void; // changer le parcours d'une equipe en un clic
   starsLockedOf?: (teamId: string) => boolean; // WOD Eval : parcours fige (l'equipe a deja valide un segment)
   starsHint?: (stars: Stars) => string; // WOD Eval : repetitions du parcours, sous les etoiles
+  starsStepper?: boolean; // WOD Eval : − / + au lieu des 5 boutons (plus simple a la creation des equipes)
   winterArc?: boolean; // saison winter arc (WOD Level) : interrupteur ❄️ a cote de chaque eleve de l'equipe
 };
 
@@ -53,7 +54,7 @@ type Props = {
 // le WOD. Tout est persiste par identifiant permanent, jamais par nom.
 const byLastName = (a: TeamMemberView, b: TeamMemberView) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
 
-export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars, starsLockedOf, starsHint, winterArc = false }: Props) {
+export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses, referees: propReferees, phase, startByTeam, picker, starsOf, onCreateStar, onNumber, onSetStars, starsLockedOf, starsHint, starsStepper = false, winterArc = false }: Props) {
   const router = useRouter();
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [refereeOpen, setRefereeOpen] = useState(false);
@@ -238,7 +239,10 @@ export function TeamsManager({ sessionId, teams: propTeams, classes, allClasses,
               onKeyDown={(e) => { if (e.key === "Enter") { setActiveTeamId(team.id); setError(""); } }}
               className={cx("text-left bg-card rounded-2xl border p-3 transition shadow-card cursor-pointer", activeTeamId === team.id ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-brand/60")}
             >
-              {starsOf && onSetStars && (
+              {starsOf && onSetStars && starsStepper && (
+                <StarsStepper stars={starsOf(team.id)} hint={starsHint?.(starsOf(team.id))} locked={!!starsLockedOf?.(team.id)} pending={pending} onSet={(st) => onSetStars(team.id, st)} />
+              )}
+              {starsOf && onSetStars && !starsStepper && (
                 <div className={`${ui.segmented} flex w-full mb-2`} onClick={(e) => e.stopPropagation()} title={starsLockedOf?.(team.id) ? "Parcours figé : l'équipe a commencé" : "Parcours de l'équipe (modifiable tant qu'elle n'a rien coché ni validé)"}>
                   {STARS.map((st) => (
                     <button key={st} type="button" disabled={pending || starsOf(team.id) === st || !!starsLockedOf?.(team.id)} onClick={() => onSetStars(team.id, st as Stars)} className={cx("flex-1 px-2 py-1.5 rounded-lg text-sm font-bold leading-tight", starsOf(team.id) === st ? ui.segOn : cx(ui.segOff, "disabled:opacity-40"))}>
@@ -670,6 +674,24 @@ function StudentPicker({
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+// WOD Eval : le parcours d'une equipe en − / + (Sartay 05/10 : les 5 boutons d'etoiles etaient « trop compliques » a
+// la creation des equipes ; les eleves demandent de « monter ou de descendre d'etoiles »). Fige des sa 1re validation.
+function StarsStepper({ stars, hint, locked, pending, onSet }: { stars: Stars; hint?: string; locked: boolean; pending: boolean; onSet: (s: Stars) => void }) {
+  const lo = STARS[0];
+  const hi = STARS[STARS.length - 1];
+  const step = "w-11 h-11 shrink-0 rounded-xl border border-line-2 bg-card text-2xl font-extrabold leading-none transition hover:border-accent disabled:opacity-30 disabled:hover:border-line-2";
+  return (
+    <div className="flex items-center gap-2 mb-2" onClick={(e) => e.stopPropagation()} title={locked ? "Parcours figé : l'équipe a commencé" : "Parcours de l'équipe : − pour descendre, + pour monter"}>
+      <button type="button" aria-label="Descendre d'une étoile" disabled={pending || locked || stars <= lo} onClick={() => onSet((stars - 1) as Stars)} className={step}>−</button>
+      <div className="flex-1 min-w-0 text-center rounded-xl bg-accent-soft/60 py-1 leading-tight">
+        <span className="block text-lg text-accent-ink whitespace-nowrap">{starsLabel(stars)}</span>
+        <span className="block text-xs font-bold text-ink-2">{hint}{locked ? " · 🔒 figé" : ""}</span>
+      </div>
+      <button type="button" aria-label="Monter d'une étoile" disabled={pending || locked || stars >= hi} onClick={() => onSet((stars + 1) as Stars)} className={step}>+</button>
     </div>
   );
 }
