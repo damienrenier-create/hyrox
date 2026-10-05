@@ -1,9 +1,12 @@
-// Moteur « Eval » (ex-« Hyrox », Sartay 01-03/10 ; identifiant de WOD inchange : HYROX). Equipes de 3, 9 stations,
+// Moteur « Eval » (ex-« Hyrox », Sartay 01-03/10 ; identifiant de WOD inchange : HYROX). Equipes de 3, 10 stations,
 // un run APRES chaque station, le circuit se fait 2 FOIS (2 tours), depart decale (chaque equipe commence a SA station
-// et tourne), temps limite 50 min (la Cindy de fin de parcours a ete abandonnee le 03/10). Chaque station et chaque run
-// sont valides a l'ordi : un pointage date par segment -> temps par station, par run, total ; un classement au temps
-// (+ penalites des cartes jaunes). Tout est reglable par seance (stations, reps, parties d'un run, nombre de tours).
+// et tourne), fin officielle a 55 min puis 5 min de prolongation (la Cindy de fin de parcours a ete abandonnee le
+// 03/10). Chaque station et chaque run sont valides a l'ordi : un pointage date par segment -> temps par station, par
+// run, total ; un classement au temps (+ penalites des cartes jaunes). Chaque equipe choisit son niveau « etoiles »
+// (40 a 65 repetitions). Tout est reglable par seance (stations, reps, parties d'un run, nombre de tours).
 // Module PUR : temps en ms ECOULEES de course (pauses deduites), comme la Fete Foraine.
+
+import { evalGroupLabel, evalMaxNote, isEvalGroup, noteText } from "@/lib/eval-bareme";
 
 export const HX_MIN_STATIONS = 2;
 export const HX_MAX_STATIONS = 12;
@@ -16,6 +19,9 @@ export const HX_UNITS = ["rép.", "A/R", "m", "s"] as const;
 // fige dans ses reglages a la premiere validation (freezeHXCourse, hyrox-context.ts).
 // 05/10 (Sartay, apres les trois premieres seances reelles) : burpees, fentes et farmer passent de 3 a 2 allers-retours.
 // Les seances jouees a 3 allers-retours les gardent (parcours fige).
+// 05/10 au soir (Sartay) : « rajouter une dixieme station (Helico) », et un nouvel ordre : « apres les pompages on met
+// les helicos, puis les wall ball shot, puis les KB swing, puis la corde ». Les seances deja jouees gardent leurs
+// 9 stations dans leur ordre (parcours fige).
 export const HX_DEFAULT_STATIONS: HXStation[] = [
   { id: "st1", label: "Burpees broad jump", reps: 2, unit: "A/R" },
   { id: "st2", label: "Fentes marchées", reps: 2, unit: "A/R" },
@@ -23,10 +29,31 @@ export const HX_DEFAULT_STATIONS: HXStation[] = [
   { id: "st4", label: "Break dance", reps: 60, unit: "rép." },
   { id: "st5", label: "Squats", reps: 60, unit: "rép." },
   { id: "st6", label: "Pompage", reps: 60, unit: "rép." },
-  { id: "st7", label: "Corde", reps: 60, unit: "rép." },
-  { id: "st8", label: "KB swing", reps: 60, unit: "rép." },
-  { id: "st9", label: "Wall ball shot", reps: 60, unit: "rép." },
+  { id: "st7", label: "Hélico", reps: 60, unit: "rép." },
+  { id: "st8", label: "Wall ball shot", reps: 60, unit: "rép." },
+  { id: "st9", label: "KB swing", reps: 60, unit: "rép." },
+  { id: "st10", label: "Corde", reps: 60, unit: "rép." },
 ];
+
+// Niveaux « etoiles » (Sartay 05/10 : « les eleves peuvent choisir leur niveau : 3 etoiles = 50 reps, 4 = 55, 5 = 60,
+// 2 = 45, 1 = 40 », « comme ca on peut prendre les stats en fonction des parcours »). Le niveau d'une equipe fixe le
+// nombre de repetitions des stations comptees en repetitions ; les allers-retours ne changent pas. Le 6e niveau
+// (65 repetitions) est celui de son exemple de bareme : « si les 5-6 garcons terminent le wod en faisant 65 reps ».
+export const HX_LEVELS = [
+  { stars: 1, reps: 40 },
+  { stars: 2, reps: 45 },
+  { stars: 3, reps: 50 },
+  { stars: 4, reps: 55 },
+  { stars: 5, reps: 60 },
+  { stars: 6, reps: 65 },
+] as const;
+export const HX_LEVEL_BASE = 60; // les quantites des stations sont ecrites pour 60 repetitions (5 etoiles)
+export const HX_BASE_STARS = 5;
+export const isHXStars = (v: unknown): v is number => HX_LEVELS.some((l) => l.stars === v);
+export const hxLevelReps = (stars: number | null | undefined): number => HX_LEVELS.find((l) => l.stars === stars)?.reps ?? HX_LEVEL_BASE;
+export const starsText = (stars: number) => "★".repeat(Math.max(1, stars));
+// Quantite d'une station au niveau d'une equipe : seules les stations en repetitions suivent le niveau.
+export const hxStationReps = (st: HXStation, stars: number | null | undefined): number => (stars == null || st.unit !== "rép." ? st.reps : Math.round((st.reps * hxLevelReps(stars)) / HX_LEVEL_BASE));
 
 export type HXSettings = {
   stations: HXStation[];
@@ -36,7 +63,11 @@ export type HXSettings = {
   runParts: string[];
   runAfterLast: boolean; // un run apres la toute derniere station aussi (Eval : oui, « apres CHAQUE station »)
   laps: number; // nombre de tours du circuit (Eval : 2)
-  capMin: number; // temps limite du WOD
+  capMin: number; // fin OFFICIELLE du WOD : le classement et les notes s'arretent la
+  // Prolongation (Sartay 05/10 : « fin du wod officiel a 55 min, mais le chrono va jusqu'a 60 si jamais on a le temps ») :
+  // minutes pendant lesquelles on valide encore apres la fin officielle ; a capMin + extraMin la course s'arrete seule.
+  extraMin: number;
+  levels: boolean; // niveaux « etoiles » : chaque equipe choisit son nombre de repetitions
   penSec: number; // secondes ajoutees au temps par carte jaune
 };
 export const HX_MAX_RUN_PARTS = 4;
@@ -47,7 +78,9 @@ export const HX_DEFAULTS: HXSettings = {
   runParts: ["2 allers-retours"],
   runAfterLast: true,
   laps: 2,
-  capMin: 50,
+  capMin: 55,
+  extraMin: 5,
+  levels: true,
   penSec: 60,
 };
 
@@ -55,7 +88,8 @@ const str = (v: unknown, d: string) => (typeof v === "string" && v.trim() ? v.tr
 const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d);
 
 // Reglages de la seance (Session.settings.hyrox) par-dessus les valeurs par defaut, bornes comprises. Une seance
-// enregistree AVANT les tours (pas de `laps`) reste a 1 tour : son parcours ne change pas apres coup.
+// enregistree AVANT les tours (pas de `laps`) reste a 1 tour : son parcours ne change pas apres coup. De meme, une
+// seance enregistree avant la prolongation et les niveaux (05/10) reste sans prolongation et sans niveaux.
 export function readHXSettings(settings: unknown): HXSettings {
   const h = (settings as { hyrox?: Partial<HXSettings> } | null)?.hyrox;
   const raw = Array.isArray(h?.stations) ? (h!.stations as Partial<HXStation>[]) : null;
@@ -73,12 +107,33 @@ export function readHXSettings(settings: unknown): HXSettings {
     runAfterLast: h ? h.runAfterLast === true : HX_DEFAULTS.runAfterLast,
     laps: num(h?.laps, h ? 1 : HX_DEFAULTS.laps, 1, HX_MAX_LAPS),
     capMin: num(h?.capMin, HX_DEFAULTS.capMin, 5, 180),
+    extraMin: num(h?.extraMin, h ? 0 : HX_DEFAULTS.extraMin, 0, 60),
+    levels: h ? h.levels === true : HX_DEFAULTS.levels,
     penSec: num(h?.penSec, HX_DEFAULTS.penSec, 0, 600),
   };
 }
 
+// Niveau choisi par chaque equipe (Session.settings.hxStars = { [teamId]: etoiles }) et journal des changements faits
+// APRES la premiere validation de l'equipe (settings.hxStarLog). Regle d'or : une equipe qui descend d'un niveau en
+// cours de WOD, c'est note avec l'heure, rien n'est efface. `at` = ms ecoulees de course, `clock` = heure du changement.
+export type HXStarChange = { teamId: string; from: number; to: number; at: number; clock: number };
+export function readHXStars(settings: unknown): Record<string, number> {
+  const raw = (settings as { hxStars?: unknown } | null)?.hxStars;
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (isHXStars(v)) out[k] = v;
+  return out;
+}
+export function readHXStarLog(settings: unknown): HXStarChange[] {
+  const raw = (settings as { hxStarLog?: unknown } | null)?.hxStarLog;
+  if (!Array.isArray(raw)) return [];
+  return (raw as Partial<HXStarChange>[]).filter((c): c is HXStarChange => !!c && typeof c.teamId === "string" && isHXStars(c.from) && isHXStars(c.to) && typeof c.at === "number" && typeof c.clock === "number");
+}
+
 export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
-export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[] };
+// `stars` = niveau de l'equipe (choisi, sinon celui de son groupe) ; `starLog` = ses changements de niveau en cours de
+// WOD ; `group` = son groupe pour le bareme (annees + filles / garcons ou mixte, voir eval-bareme.ts).
+export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[]; stars?: number | null; starLog?: HXStarChange[]; group?: string | null };
 // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees de course ; abs = heure d'horloge du clic (ms epoch,
 // null pour un clic local pas encore confirme par le serveur) : c'est elle qu'on compare a l'heure des arbitres.
 export type HXEvent = { id: string; teamId: string; key: string; at: number; abs: number | null };
@@ -113,7 +168,8 @@ export function amountText(reps: number, unit: string): string {
 // du run (continu sur tous les tours) et de sa partie. `label` = ce que lit l'eleve sur la fiche (nom de l'exo, sans numero).
 export type HXSegment = { key: string; kind: "station" | "run"; n: number; lap: number; station: HXStation | null; stationNo: number; run: number; part: number; label: string; short: string; detail: string };
 
-export function segmentsFor(s: HXSettings, startIndex: number): HXSegment[] {
+// `stars` = niveau de l'equipe (null ou absent : les quantites des reglages, telles quelles).
+export function segmentsFor(s: HXSettings, startIndex: number, stars: number | null = null): HXSegment[] {
   const out: HXSegment[] = [];
   const N = s.stations.length;
   const laps = Math.max(1, s.laps);
@@ -122,7 +178,7 @@ export function segmentsFor(s: HXSettings, startIndex: number): HXSegment[] {
     for (let i = 0; i < N; i++) {
       const idx = (startIndex + i) % N;
       const st = s.stations[idx];
-      out.push({ key: `st:${st.id}${lap > 1 ? `:${lap}` : ""}`, kind: "station", n: out.length + 1, lap, station: st, stationNo: idx + 1, run: 0, part: 0, label: st.label, short: st.label, detail: amountText(st.reps, st.unit) });
+      out.push({ key: `st:${st.id}${lap > 1 ? `:${lap}` : ""}`, kind: "station", n: out.length + 1, lap, station: st, stationNo: idx + 1, run: 0, part: 0, label: st.label, short: st.label, detail: amountText(hxStationReps(st, stars), st.unit) });
       const last = lap === laps && i === N - 1; // toute derniere station du parcours
       if (last && !s.runAfterLast) continue;
       const runNo = (lap - 1) * N + i + 1;
@@ -154,7 +210,15 @@ export type HXTeamState = {
   done: number;
   current: HXSegment | null; // segment en cours (null = parcours fini)
   lap: number; // tour en cours (le dernier une fois fini)
-  finishedMs: number | null; // temps du WOD (dernier segment)
+  finishedMs: number | null; // temps du WOD (dernier segment), prolongation comprise
+  // Fin officielle (capMin) : `inTime` = parcours boucle avant ; `doneAtCap` = segments valides a cet instant (les
+  // validations de la prolongation ne comptent ni pour le classement ni pour la note) ; `capLastMs` = derniere
+  // validation comptee. Seance sans prolongation : la fin officielle est la fin de course, doneAtCap = done.
+  inTime: boolean;
+  doneAtCap: number;
+  capLastMs: number | null;
+  stars: number | null; // niveau de l'equipe (null : seance sans niveaux)
+  levelReps: number | null; // repetitions par station a ce niveau
   cards: number;
   penMs: number;
   scoreMs: number | null; // temps + penalites
@@ -166,7 +230,8 @@ export type HXTeamState = {
 
 export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
   const startIndex = startIndexOf(ctx, team);
-  const segments = segmentsFor(ctx.settings, startIndex);
+  const stars = ctx.settings.levels ? (isHXStars(team.stars) ? team.stars : HX_BASE_STARS) : null;
+  const segments = segmentsFor(ctx.settings, startIndex, stars);
   const ev = ctx.events.filter((e) => e.teamId === team.id).sort((a, b) => a.at - b.at);
   const times: number[] = [];
   const clocks: (number | null)[] = [];
@@ -185,6 +250,8 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
   const lastMs = done ? times[done - 1] : null;
   const current = finishedMs === null ? segments[done] : null;
   const nParts = ctx.settings.runParts.length || 1;
+  const officialMs = ctx.settings.extraMin > 0 ? ctx.settings.capMin * 60_000 : Infinity;
+  const doneAtCap = times.filter((t) => t <= officialMs).length;
   return {
     team,
     startIndex,
@@ -196,6 +263,11 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
     current,
     lap: current?.lap ?? Math.max(1, ctx.settings.laps),
     finishedMs,
+    inTime: finishedMs !== null && finishedMs <= officialMs,
+    doneAtCap,
+    capLastMs: doneAtCap ? times[doneAtCap - 1] : null,
+    stars,
+    levelReps: stars === null ? null : hxLevelReps(stars),
     cards,
     penMs,
     scoreMs: finishedMs === null ? null : finishedMs + penMs,
@@ -207,19 +279,30 @@ export function teamState(ctx: HXContext, team: HXTeam): HXTeamState {
   };
 }
 
-// Classement au temps : equipes arrivees par temps + penalites, puis les autres par segments faits (la plus avancee
-// d'abord, a egalite la plus rapide).
+// Classement au temps, arrete a la FIN OFFICIELLE : equipes arrivees avant par temps + penalites, puis les autres par
+// segments faits a cet instant (la plus avancee d'abord, a egalite la plus rapide). Ce qui est valide en prolongation
+// ne fait que departager deux equipes a egalite parfaite.
 export function timeRows(ctx: HXContext): HXTeamState[] {
   const out = ctx.teams.map((t) => teamState(ctx, t));
   out.sort((a, b) => {
-    if (a.scoreMs !== null && b.scoreMs !== null) return a.scoreMs - b.scoreMs || a.team.order - b.team.order;
-    if (a.scoreMs !== null) return -1;
-    if (b.scoreMs !== null) return 1;
+    if (a.inTime && b.inTime) return a.scoreMs! - b.scoreMs! || a.team.order - b.team.order;
+    if (a.inTime) return -1;
+    if (b.inTime) return 1;
+    if (a.doneAtCap !== b.doneAtCap) return b.doneAtCap - a.doneAtCap;
+    if (a.capLastMs !== null && b.capLastMs !== null && a.capLastMs !== b.capLastMs) return a.capLastMs - b.capLastMs;
     if (a.done !== b.done) return b.done - a.done;
-    if (a.lastMs !== null && b.lastMs !== null && a.lastMs !== b.lastMs) return a.lastMs - b.lastMs;
     return a.team.order - b.team.order;
   });
   return out;
+}
+
+// Note d'intensite d'une equipe (bareme de eval-bareme.ts) : la note de son niveau si elle a boucle le WOD avant la
+// fin officielle. `max` = cette note maximale, `note` = la note acquise (null tant que le WOD n'est pas boucle a temps :
+// la regle pour un WOD inacheve n'est pas fixee), `share` = part du WOD faite a la fin officielle.
+export function hxIntensity(st: HXTeamState): { group: string; max: number; note: number | null; share: number } | null {
+  if (st.stars === null || st.levelReps === null || !isEvalGroup(st.team.group)) return null;
+  const max = evalMaxNote(st.team.group, st.levelReps);
+  return { group: evalGroupLabel(st.team.group), max, note: st.inTime ? max : null, share: st.segments.length ? st.doneAtCap / st.segments.length : 0 };
 }
 
 export type HXStat = { key: string; label: string; n: number; best: number | null; avg: number | null };
@@ -294,12 +377,21 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   const L: string[] = [];
   const members = (t: HXTeam) => t.members.map((m) => m.name).join(" / ");
   L.push("Classement au temps");
-  L.push(["Rang", "Equipe", "Eleves", "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", "QCM (points)", "QCM (reponses)"].join(";"));
+  const lv = ctx.settings.levels;
+  L.push(["Rang", "Equipe", "Eleves", ...(lv ? ["Niveau (etoiles)", "Repetitions", "Groupe"] : []), "Depart", "Stations", "Runs", "Temps WOD", "Cartes jaunes", "Penalites", "Score", ...(lv ? ["Segments a la fin officielle", "Part du WOD (%)", "Note max intensite /20", "Note intensite /20"] : []), "QCM (points)", "QCM (reponses)"].join(";"));
   let rank = 0;
   timeRows(ctx).forEach((st) => {
-    if (st.scoreMs !== null) rank++;
-    L.push([st.scoreMs !== null ? rank : "", st.team.name, members(st.team), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? fmt(st.finishedMs) : "", st.cards, st.cards ? fmt(st.penMs) : "", st.scoreMs !== null ? fmt(st.scoreMs) : "", st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
+    if (st.inTime) rank++;
+    const it = hxIntensity(st);
+    L.push([st.inTime ? rank : "", st.team.name, members(st.team), ...(lv ? [st.stars ?? "", st.levelReps ?? "", it?.group ?? ""] : []), st.startIndex + 1, st.stationsDone, st.runsDone, st.finishedMs !== null ? `${fmt(st.finishedMs)}${st.inTime ? "" : " (prolongation)"}` : "", st.cards, st.cards ? fmt(st.penMs) : "", st.inTime ? fmt(st.scoreMs) : "", ...(lv ? [`${st.doneAtCap}/${st.segments.length}`, it ? Math.round(it.share * 100) : "", it ? noteText(it.max) : "", it?.note != null ? noteText(it.note) : ""] : []), st.quiz.done ? st.quiz.score : "", st.quiz.done].join(";"));
   });
+  const changes = ctx.teams.flatMap((t) => (t.starLog ?? []).map((c) => ({ ...c, name: t.name }))).sort((a, b) => a.at - b.at);
+  if (changes.length) {
+    L.push("");
+    L.push("Changements de niveau en cours de WOD");
+    L.push(["Heure", "Temps de course", "Equipe", "De (etoiles)", "A (etoiles)"].join(";"));
+    changes.forEach((c) => L.push([clockText(c.clock), fmt(c.at), c.name, c.from, c.to].join(";")));
+  }
   L.push("");
   L.push("Detail par equipe (heure du clic, temps ecoule a la validation ; entre parentheses : duree du segment)");
   ctx.teams.forEach((t) => {
@@ -319,10 +411,12 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   [...ctx.events].sort((a, b) => a.at - b.at).forEach((e) => L.push([clockText(e.abs), fmt(e.at), teamName.get(e.teamId) ?? e.teamId, segmentLabel(ctx, e.teamId, e.key)].join(";")));
   L.push("");
   L.push("Reglages");
-  ctx.settings.stations.forEach((s, i) => L.push([`Station ${i + 1}`, s.label, amountText(s.reps, s.unit)].join(";")));
+  ctx.settings.stations.forEach((s, i) => L.push([`Station ${i + 1}`, s.label, `${amountText(s.reps, s.unit)}${ctx.settings.levels && s.unit === "rép." ? " (au niveau 5 etoiles)" : ""}`].join(";")));
   L.push(["Run", ctx.settings.runLabel, ctx.settings.runParts.join(" / ")].join(";"));
   L.push(["Tours", ctx.settings.laps].join(";"));
-  L.push(["Temps limite (min)", ctx.settings.capMin].join(";"));
+  L.push([ctx.settings.extraMin > 0 ? "Fin officielle (min)" : "Temps limite (min)", ctx.settings.capMin].join(";"));
+  if (ctx.settings.extraMin > 0) L.push(["Prolongation (min)", ctx.settings.extraMin].join(";"));
+  if (lv) L.push(["Niveaux (etoiles = repetitions)", HX_LEVELS.map((l) => `${l.stars} = ${l.reps}`).join(" / ")].join(";"));
   L.push(["Carte jaune (s)", ctx.settings.penSec].join(";"));
   L.push(["Temps ecoule", fmt(liveMs)].join(";"));
   L.push(["Etat", state].join(";"));

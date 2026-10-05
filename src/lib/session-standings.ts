@@ -66,14 +66,15 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
       teamName: st.team.name,
       laps: st.stationsDone,
       lapsTotal: b.ctx.settings.stations.length * b.ctx.settings.laps,
-      time: st.scoreMs !== null ? hxFmt(st.scoreMs) : st.lastMs !== null ? hxFmt(st.lastMs) : null,
+      // Parcours boucle apres la fin officielle : le temps est montre, mais c'est de la prolongation (hors classement).
+      time: st.inTime ? hxFmt(st.scoreMs) : st.finishedMs !== null ? `${hxFmt(st.finishedMs)} (prolongation)` : st.lastMs !== null ? hxFmt(st.lastMs) : null,
       late: null,
-      start: `${st.startIndex + 1} · ${b.ctx.settings.stations[st.startIndex]?.label ?? ""}`,
+      start: `${st.stars !== null ? `${st.stars}★ ${st.levelReps} rép. · ` : ""}${st.startIndex + 1} · ${b.ctx.settings.stations[st.startIndex]?.label ?? ""}`,
       reps: st.runsDone,
       cards: st.cards,
       done: st.finishedMs !== null,
     }));
-    return { columns: { laps: "Stations", time: "Temps", reps: "Runs", cards: "🟨", start: "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
+    return { columns: { laps: "Stations", time: "Temps", reps: "Runs", cards: "🟨", start: b.ctx.settings.levels ? "Niveau · départ" : "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
   }
   if (session.wodType === "FETE_FORAINE") {
     const b = await buildFFBundle(session.id);

@@ -60,6 +60,17 @@ export async function resetRace(sessionId: string, opts: ResetOptions = {}): Pro
     }
   }
 
+  // WOD Eval : le journal des changements de niveau appartient a la course effacee ; les niveaux choisis restent,
+  // comme les equipes.
+  if (session.wodType === "HYROX") {
+    const prev = (session.settings as Record<string, unknown> | null) ?? {};
+    if ("hxStarLog" in prev) {
+      const rest = { ...prev };
+      delete rest.hxStarLog;
+      await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(rest)) });
+    }
+  }
+
   if (opts.clearReferees) {
     // Ordre impose par les cles etrangeres : Shot -> Evaluation, puis les flottes (cascade navires + cases).
     deleted.shots = await deleteAll(await db.orm.public.Shot.where({ sessionId }).all(), (id) => db.orm.public.Shot.where({ id }).delete());

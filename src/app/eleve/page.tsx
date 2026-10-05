@@ -9,6 +9,7 @@ import { LogoutButton } from "../_components/LogoutButton";
 import { RefereeRequest } from "./RefereeRequest";
 import { EleveTabs } from "./EleveTabs";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
+import { evalBaremeVisible } from "@/lib/eval-bareme-server";
 import { TopBar } from "../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
 import { isBirthdayToday } from "@/lib/birthday";
@@ -33,6 +34,8 @@ export default async function ElevePage() {
   const history = mine.filter((r) => !openIds.has(r.sessionId) && r.recorded);
   const byCycle = groupHistory(history);
   const { todo } = await loadSelfEvalHistory(user.id, mine);
+  // Onglet « Baremes » : pour les classes qui font le WOD Eval (05/10).
+  const bareme = await evalBaremeVisible(user.className, [...openSessions, ...mine].some((s) => s.wodType === "HYROX"));
   // QCM bonus du Hyrox (01/10) : ouvert par le prof, une reponse par eleve.
   const quizDone = new Set((await db.orm.public.QuizAnswer.where({ studentId: user.id }).all()).map((a) => a.sessionId));
   const hyroxIds = [...new Set([...openSessions, ...history.map((r) => ({ id: r.sessionId, wodType: r.wodType }))].filter((s) => s.wodType === "HYROX").map((s) => s.id))];
@@ -52,7 +55,7 @@ export default async function ElevePage() {
       <TopBar title={birthday ? `${user.name} 🎂` : user.name} subtitle={`${birthday ? `${user.className ?? ""} · joyeux anniversaire !` : (user.className ?? "")}${winterArc ? " · ❄️ winter arc jusqu'au 30 décembre" : ""}`} right={<LogoutButton />} />
 
       <main className="max-w-2xl mx-auto p-4 space-y-6">
-        <EleveTabs active="wods" todo={todo.length} />
+        <EleveTabs active="wods" todo={todo.length} bareme={bareme} />
 
         <section>
           <h2 className={`${ui.eyebrow} mb-2`}>WOD en cours</h2>

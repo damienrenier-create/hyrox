@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { fmtDate } from "@/lib/student-sessions";
 import { loadSelfEvalHistory, SELF_EVAL_SHORT } from "@/lib/student-self-evals";
+import { evalBaremeVisible } from "@/lib/eval-bareme-server";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { TopBar } from "../../_components/TopBar";
@@ -21,13 +22,14 @@ export default async function MesAutoEvaluationsPage() {
   if (!user) redirect("/");
   if (user.role !== "STUDENT") redirect("/eleve");
   const { evals, todo } = await loadSelfEvalHistory(user.id);
+  const bareme = await evalBaremeVisible(user.className, todo.some((r) => r.wodType === "HYROX"));
   const newest = [...evals].reverse();
 
   return (
     <div className={ui.page}>
       <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
       <main className="max-w-2xl mx-auto p-4 space-y-4">
-        <EleveTabs active="selfevals" todo={todo.length} />
+        <EleveTabs active="selfevals" todo={todo.length} bareme={bareme} />
 
         {todo.map((r) => (
           <Link key={r.sessionId} href={`/eleve/${r.sessionId}`} className={`block ${ui.card} border-accent bg-accent-soft/40 p-3`}>

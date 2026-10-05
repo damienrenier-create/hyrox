@@ -293,7 +293,7 @@ export const GENERIC_CRITERIA = [
 
 // Anciens libelles encore figes dans des seances passees (29/09 : le tire tapis n'est plus un aller-retour).
 // + alias : « pompage » = pompes (station du WOD Eval).
-const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES" };
+const LEGACY_LABELS: Record<string, string> = { "TIRE TAPIS AR": "TIRE TAPIS", POMPAGE: "POMPES", POMPAGES: "POMPES", "HÉLICO": "HELICO", "HÉLICOS": "HELICO", HELICOS: "HELICO" };
 const keyOf = (label: string) => { const k = label.trim().toUpperCase(); return LEGACY_LABELS[k] ?? k; };
 // Grille de l'arbitre pour un exercice : 4 criteres (3 techniques + intensite).
 export const criteriaFor = (label: string): string[] => REFEREE_CRITERIA[keyOf(label)] ?? GENERIC_CRITERIA;
@@ -380,6 +380,18 @@ export const EVAL_CRITERIA: Record<string, EvalCriterion[]> = {
     { text: "Le bassin ne s'affaisse pas et ne se lève pas pendant le mouvement.", short: "Bassin fixe", emoji: "🧱" },
     { text: "L'élève maintient un rythme régulier et fait de son mieux.", short: "Rythme régulier", emoji: "⏱️", noQuiz: true },
     { text: "La descente est contrôlée (l'élève ne se laisse pas tomber).", short: "Descente contrôlée", emoji: "🎛️" },
+  ],
+  // Station 7 de l'Eval depuis le 05/10 (Sartay : « rajouter une dixieme station (Helico) (…) tu peux retrouver les
+  // criteres dans le wod levels »). Les 4 criteres du Level pour l'arbitre eleve, dans le meme ordre (3 techniques + le
+  // rythme) ; les 5e et 6e, pour le prof, sont une PROPOSITION a faire relire par Sartay comme les autres exercices :
+  // tant qu'ils ne sont pas relus, ils restent hors du QCM. « Hélico » sur la fiche de l'Eval (alias LEGACY_LABELS).
+  HELICO: [
+    { text: "L'élève reste allongé sur le ventre, jambes au sol, le corps aligné (il ne se redresse pas en appui).", short: "Allongé, corps aligné", emoji: "📏" },
+    { text: "Le poids passe bien dans le dos, de la main droite à la main gauche, sans tomber.", short: "Passage dans le dos", emoji: "🔄" },
+    { text: "Les bras sont tendus quand le poids repasse devant, sans que les mains se posent au sol.", short: "Bras tendus devant", emoji: "💪" },
+    { text: "L'élève enchaîne les tours à un rythme régulier, sans pause.", short: "Rythme régulier", emoji: "⏱️", noQuiz: true },
+    { text: "La tête reste dans l'axe du dos, le regard vers le sol (la nuque ne se casse pas vers l'arrière).", short: "Tête dans l'axe, regard au sol", emoji: "🧍", noQuiz: true },
+    { text: "Les pieds restent au sol et le bassin ne roule pas d'un côté à l'autre pendant le passage du poids.", short: "Pieds au sol, bassin fixe", emoji: "🧱", noQuiz: true },
   ],
   CORDE: [
     { text: "L'atterrissage et les sauts se font de manière souple (amorti sur l'avant du pied, genoux fléchis).", short: "Sauts souples, amortis", emoji: "🪶" },

@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, readHXSettings, segmentsFor, startIndexOf, type HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
-import { freezeHXCourse, hxCapState } from "@/lib/hyrox-context";
+import { CINDY_KEY, HX_MAX_STATIONS, HX_MIN_STATIONS, isHXStars, readHXSettings, readHXStarLog, readHXStars, segmentsFor, startIndexOf, type HXSettings, type HXStarChange } from "@/lib/wod-engines/templates/hyrox-engine";
+import { buildHXBundle, freezeHXCourse, hxCapState } from "@/lib/hyrox-context";
 import { finishRaceAction } from "./actions";
 
 // Actions du greffier Hyrox (Sartay 01/10). Les profs (ADMIN) tiennent aussi ce greffier : leurs seances s'ouvrent
@@ -40,7 +40,7 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   if (!team) return { error: "Équipe introuvable." };
   const run = await requireRunning(sessionId);
   if ("error" in run) return run;
-  // Limite de temps atteinte : le WOD est fini pour tout le monde, plus aucune validation.
+  // Limite de temps atteinte (fin officielle + prolongation) : le WOD est fini pour tout le monde, plus aucune validation.
   const cap = await hxCapState(sessionId);
   if (cap?.reached) return { error: `Temps limite atteint (${cap.capMin} min) : le WOD est terminé pour tout le monde, plus aucune validation.` };
 
@@ -61,7 +61,8 @@ export async function hxTapAction(sessionId: string, teamId: string): Promise<{ 
   return { ok: true, key };
 }
 
-// Arret automatique a la limite de temps : appele par l'ecran du greffier quand son chrono atteint capMin. Le serveur
+// Arret automatique a la limite de temps : appele par l'ecran du greffier quand son chrono atteint la limite dure
+// (fin officielle + prolongation). Le serveur
 // reverifie (son horloge fait foi) ; la course est terminee comme avec « Fin de course », datee de l'instant de la limite.
 // `ended: false` = pas encore atteinte (horloge du PC en avance, pause) : l'ecran redemandera.
 export async function hxCapFinishAction(sessionId: string): Promise<{ error: string } | { ok: true; ended: boolean }> {
@@ -126,6 +127,32 @@ export async function hxSetStartAction(sessionId: string, teamId: string, statio
   return { ok: true };
 }
 
+// Niveau « etoiles » d'une equipe (Sartay 05/10 : « les eleves peuvent choisir leur niveau »). Avant sa premiere
+// validation, c'est un simple choix. Ensuite le changement reste possible (une equipe qui descend d'un niveau, une
+// erreur d'encodage), mais il est NOTE avec l'heure dans settings.hxStarLog : regle d'or, on n'efface rien.
+export async function hxSetLevelAction(sessionId: string, teamId: string, stars: number): Promise<Result> {
+  await requireGreffier();
+  const session = await db.orm.public.Session.where({ id: sessionId }).first();
+  if (!session) return { error: "Séance introuvable." };
+  if (!readHXSettings(session.settings).levels) return { error: "Cette séance se joue sans niveaux." };
+  if (!isHXStars(stars)) return { error: "Niveau inconnu." };
+  const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
+  if (!team) return { error: "Équipe introuvable." };
+  const prev = (session.settings as Record<string, unknown> | null) ?? {};
+  const chosen = readHXStars(prev);
+  const next: Record<string, unknown> = { ...prev, hxStars: { ...chosen, [teamId]: stars } };
+  // Deja en course : on garde la trace du changement (niveau quitte, niveau pris, temps de course, heure).
+  if (await db.orm.public.StationEvent.where({ sessionId, teamId }).first()) {
+    const from = (await buildHXBundle(sessionId)).ctx.teams.find((t) => t.id === teamId)?.stars ?? null;
+    if (from === stars) return { ok: true };
+    const cap = await hxCapState(sessionId);
+    const change: HXStarChange = { teamId, from: isHXStars(from) ? from : stars, to: stars, at: Math.round(cap?.elapsedMs ?? 0), clock: Date.now() };
+    next.hxStarLog = [...readHXStarLog(prev), change];
+  }
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify(next)) });
+  return { ok: true };
+}
+
 export type HXSettingsInput = {
   stations: { label: string; reps: number; unit: string }[];
   runLabel: string;
@@ -133,11 +160,13 @@ export type HXSettingsInput = {
   runAfterLast: boolean;
   laps: number;
   capMin: number;
+  extraMin: number;
+  levels: boolean;
   penSec: number;
 };
 
-// Reglages de la seance (Session.settings.hyrox). Des qu'un pointage existe, stations et runs sont figes (le parcours
-// de chaque equipe en depend) ; temps limite et penalite restent modifiables.
+// Reglages de la seance (Session.settings.hyrox). Des qu'un pointage existe, stations, runs et niveaux sont figes (le
+// parcours de chaque equipe en depend) ; fin officielle, prolongation et penalite restent modifiables.
 export async function hxSettingsAction(sessionId: string, input: HXSettingsInput): Promise<Result> {
   await requireGreffier();
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
@@ -149,10 +178,11 @@ export async function hxSettingsAction(sessionId: string, input: HXSettingsInput
   const courseChanged =
     next.runAfterLast !== current.runAfterLast ||
     next.laps !== current.laps ||
+    next.levels !== current.levels ||
     next.runParts.join("|") !== current.runParts.join("|") ||
     next.stations.length !== current.stations.length ||
     next.stations.some((s, i) => s.label !== current.stations[i].label || s.reps !== current.stations[i].reps || s.unit !== current.stations[i].unit);
-  if (locked && courseChanged) return { error: "Des validations existent déjà : les stations, les runs et les tours ne se modifient plus (« Remettre à zéro » pour repartir)." };
+  if (locked && courseChanged) return { error: "Des validations existent déjà : les stations, les runs, les tours et les niveaux ne se modifient plus (« Remettre à zéro » pour repartir)." };
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
   // Une station de depart qui n'existe plus (moins de stations) retombe sur le round-robin.
   if (next.stations.length < current.stations.length) {

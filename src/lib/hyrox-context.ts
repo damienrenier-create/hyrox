@@ -2,7 +2,9 @@ import { db } from "@/lib/db";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { memberNames } from "@/lib/staff-names";
-import { CINDY_KEY, readHXSettings, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
+import { readSessionClasses } from "@/lib/session-roles";
+import { evalDefaultStars, evalGroupOf } from "@/lib/eval-bareme";
+import { CINDY_KEY, readHXSettings, readHXStarLog, readHXStars, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
 
 export type HXBundle = {
   ctx: HXContext;
@@ -23,24 +25,28 @@ export async function freezeHXCourse(session: { id: string; settings: unknown })
   return true;
 }
 
-// Limite de temps du WOD (Sartay 05/10 : « le wod dure 50 minutes pour tout le monde »). A capMin de course (pauses
-// deduites), plus aucune validation n'est acceptee et la course se termine toute seule, comme avec « Fin de course »,
-// datee de l'instant exact de la limite. Une equipe arrivee avant n'arrete rien : les autres continuent jusqu'au bout.
-export type HXCap = { started: boolean; ended: boolean; paused: boolean; elapsedMs: number; capMs: number; capMin: number; reached: boolean; capAtMs: number | null };
+// Limite de temps du WOD (Sartay 05/10 : « le wod dure 50 minutes pour tout le monde », puis le soir : « fin du wod
+// officiel a 55 min, mais le chrono va jusqu'a 60 si jamais on a le temps »). La limite DURE est la fin officielle plus
+// la prolongation : a cet instant de course (pauses deduites), plus aucune validation n'est acceptee et la course se
+// termine toute seule, comme avec « Fin de course », datee de l'instant exact de la limite. Une equipe arrivee avant
+// n'arrete rien : les autres continuent jusqu'au bout. `capMin` = limite dure en minutes, `officialMin` = fin officielle.
+export type HXCap = { started: boolean; ended: boolean; paused: boolean; elapsedMs: number; capMs: number; capMin: number; officialMin: number; reached: boolean; capAtMs: number | null };
 export async function hxCapState(sessionId: string): Promise<HXCap | null> {
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session || session.wodType !== "HYROX") return null;
-  const capMin = readHXSettings(session.settings).capMin;
+  const settings = readHXSettings(session.settings);
+  const officialMin = settings.capMin;
+  const capMin = settings.capMin + settings.extraMin;
   const capMs = capMin * 60_000;
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
-  if (!rs?.startedAt) return { started: false, ended: false, paused: false, elapsedMs: 0, capMs, capMin, reached: false, capAtMs: null };
+  if (!rs?.startedAt) return { started: false, ended: false, paused: false, elapsedMs: 0, capMs, capMin, officialMin, reached: false, capAtMs: null };
   const startedAtMs = toMs(rs.startedAt);
   const pauses = (await db.orm.public.RacePause.where({ raceStateId: rs.id }).all()).map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
   const now = Date.now();
   const elapsedMs = elapsed(startedAtMs, pauses, rs.endedAt ? toMs(rs.endedAt) : now) ?? 0;
   const reached = elapsedMs >= capMs;
   // Instant ou le chrono de course a atteint la limite (le chrono ne tourne pas pendant une pause).
-  return { started: true, ended: !!rs.endedAt, paused: pauses.some((p) => p.to === null), elapsedMs, capMs, capMin, reached, capAtMs: reached && !rs.endedAt ? now - (elapsedMs - capMs) : null };
+  return { started: true, ended: !!rs.endedAt, paused: pauses.some((p) => p.to === null), elapsedMs, capMs, capMin, officialMin, reached, capAtMs: reached && !rs.endedAt ? now - (elapsedMs - capMs) : null };
 }
 
 // Contexte pur du moteur Hyrox a partir de Postgres : equipes + membres (identifiants permanents), pointages et cartes
@@ -57,11 +63,21 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   const userById = new Map(users.map((u) => [u.id, u]));
   // QCM bonus : score de chaque eleve ayant repondu.
   const quizBy = new Map((await db.orm.public.QuizAnswer.where({ sessionId }).all()).map((q) => [q.studentId, q.score]));
+  // Niveau « etoiles » de chaque equipe : celui qu'elle a choisi, sinon celui de son groupe (5 etoiles en 5e-6e,
+  // 3 etoiles en 3e-4e). Le groupe (annees, filles / garcons ou mixte) se lit sur ses eleves ; il fixe son bareme.
+  const chosenStars = readHXStars(session.settings);
+  const starLog = readHXStarLog(session.settings);
+  const sessionClasses = readSessionClasses(session.settings);
+  const groupOf = (teamId: string) =>
+    evalGroupOf(members.filter((m) => m.teamId === teamId).flatMap((m) => { const u = userById.get(m.userId); return u && u.role === "STUDENT" ? [{ className: u.className ?? null, sex: u.sex ?? null }] : []; }), sessionClasses);
   const teams: HXTeam[] = rawTeams.map((t) => ({
     id: t.id,
     order: t.order ?? 0,
     name: t.name,
     startStationId: t.startExerciseId ?? null,
+    group: groupOf(t.id),
+    stars: chosenStars[t.id] ?? evalDefaultStars(groupOf(t.id)),
+    starLog: starLog.filter((c) => c.teamId === t.id),
     members: members
       .filter((m) => m.teamId === t.id)
       .flatMap((m) => {
