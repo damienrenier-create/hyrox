@@ -95,7 +95,15 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   ]);
   const pauses = pausesRaw.map((p) => ({ from: toMs(p.from), to: p.to ? toMs(p.to) : null }));
   const events = rawEvents.map((e) => ({ id: e.id, teamId: e.teamId, key: e.stationId, at: elapsed(startedAtMs, pauses, toMs(e.at)) ?? 0, abs: toMs(e.at) }));
-  const cards = cardsRaw.map((c) => ({ id: c.id, teamId: c.teamId, at: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0 }));
+  // Auteur de chaque carte (greffier, prof ou arbitre eleve) : « Léa M. · arbitre ».
+  const giverIds = [...new Set(cardsRaw.map((c) => c.givenById).filter((id): id is string => !!id))];
+  const givers = giverIds.length ? await db.orm.public.User.where((u) => u.id.in(giverIds)).all() : [];
+  const giverName = new Map(givers.map((u) => {
+    const n = memberNames(u);
+    const who = `${n.firstName || u.name}${n.lastName ? ` ${n.lastName[0]}.` : ""}`;
+    return [u.id, `${who} · ${u.role === "STUDENT" ? "arbitre" : u.role === "GREFFIER" ? "greffier" : "prof"}`];
+  }));
+  const cards = cardsRaw.map((c) => ({ id: c.id, teamId: c.teamId, at: elapsed(startedAtMs, pauses, toMs(c.at)) ?? 0, by: c.givenById ? giverName.get(c.givenById) ?? null : null, reason: c.reason ?? null }));
 
   const ctx: HXContext = { teams, settings: readHXSettings(session.settings), events, cards };
   const finishedAbsMs: Record<string, number> = {};

@@ -28,3 +28,12 @@ export function evalExpectedMs(label: string, unit: string, qty: number): number
   if (unit === "rép." && r.per60) return Math.round((r.per60 / 60) * qty * 1000);
   return null;
 }
+
+// Un run (« 2 allers-retours ») de l'equipe moyenne : moyenne des deux seances auditees du 05/10 (53 s et 47 s).
+export const EVAL_RUN_MS = 50_000;
+// Station sans reference (ajoutee a la main) : 2,5 s par repetition, 66 s par aller-retour (moyennes des stations connues).
+const FALLBACK = { perRep: 2500, perAR: 66_000 };
+// Temps de reference d'une station a `qty`, jamais null (sert a peser le travail fait dans la note de perf).
+export function evalWorkMs(label: string, unit: string, qty: number): number {
+  return evalExpectedMs(label, unit, qty) ?? Math.round(qty * (unit === "A/R" ? FALLBACK.perAR : FALLBACK.perRep));
+}

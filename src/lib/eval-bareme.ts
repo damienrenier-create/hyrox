@@ -29,6 +29,18 @@ export const EVAL_BASE_GROUP: EvalGroup = "34M"; // equipe dont le groupe est in
 // 15 % l'evaluation de l'equipe, 10 % l'implication de l'equipe (transitions, suivi des coequipiers, engagement).
 export const EVAL_WEIGHTS = { previous: 50, today: 50, perf: 50, personal: 25, team: 15, involvement: 10 } as const;
 
+// Note /20 de l'eval du jour (Sartay 06/10, eval-grades.ts) :
+// - perf : 0/20 tant que l'equipe n'a pas fait 60 % du WOD de base (le parcours 3 etoiles), le meme seuil pour tous les
+//   parcours ; au-dela, les points montent regulierement jusqu'a la note de son parcours (années, filles / garcons),
+//   atteinte quand le parcours est boucle avant la fin officielle ;
+// - technique : TI 0 · I 1 · S 2,5 · B 3 · TB 4 · E 5, sur 5 (une appreciation d'un prof l'emporte sur celle d'un
+//   arbitre eleve pour le meme exercice) ;
+// - une carte jaune de l'equipe : -1 point.
+export const EVAL_PERF_FLOOR = 0.6;
+export const EVAL_TECH_POINTS: Record<"TI" | "I" | "S" | "B" | "TB" | "E", number> = { TI: 0, I: 1, S: 2.5, B: 3, TB: 4, E: 5 };
+export const EVAL_TECH_MAX = 5;
+export const EVAL_CARD_PENALTY = 1;
+
 export const isEvalStars = (v: unknown): v is number => typeof v === "number" && EVAL_LEVELS.some((l) => l.stars === v);
 export const isEvalGroup = (v: unknown): v is EvalGroup => EVAL_GROUPS.some((g) => g.key === v);
 export const evalGroup = (key: EvalGroup) => EVAL_GROUPS.find((g) => g.key === key) ?? EVAL_GROUPS.find((g) => g.key === EVAL_BASE_GROUP)!;

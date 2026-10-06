@@ -98,14 +98,14 @@ export async function hxUndoAction(sessionId: string): Promise<Result> {
 }
 
 // Carte jaune : +1 (course lancee ou terminee), -1 retire la derniere de l'equipe.
-export async function hxCardAction(sessionId: string, teamId: string, delta: 1 | -1): Promise<Result> {
-  await requireGreffier();
+export async function hxCardAction(sessionId: string, teamId: string, delta: 1 | -1, reason: string | null = null): Promise<Result> {
+  const user = await requireGreffier();
   const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   if (!rs || !rs.startedAt) return { error: "Lance d'abord la course." };
   const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
   if (!team) return { error: "Équipe introuvable." };
   if (delta > 0) {
-    await db.orm.public.YellowCard.create({ raceStateId: rs.id, teamId, at: Temporal.Now.instant() });
+    await db.orm.public.YellowCard.create({ raceStateId: rs.id, teamId, at: Temporal.Now.instant(), givenById: user.id, reason: reason?.trim().slice(0, 120) || null });
     return { ok: true };
   }
   const last = await db.orm.public.YellowCard.where({ raceStateId: rs.id, teamId }).orderBy((c) => c.at.desc()).first();

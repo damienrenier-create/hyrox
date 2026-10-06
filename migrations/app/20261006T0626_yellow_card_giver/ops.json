@@ -1,0 +1,86 @@
+[
+  {
+    "id": "column.public.yellowCard.givenById",
+    "label": "Add column \"givenById\" to \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "givenById",
+        "table": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"givenById\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "yellowCard",
+          "givenById"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"givenById\"",
+        "sql": "ALTER TABLE \"public\".\"yellowCard\" ADD COLUMN \"givenById\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"givenById\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "yellowCard",
+          "givenById"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.yellowCard.reason",
+    "label": "Add column \"reason\" to \"yellowCard\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "reason",
+        "table": "yellowCard"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"reason\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "yellowCard",
+          "reason"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"reason\"",
+        "sql": "ALTER TABLE \"public\".\"yellowCard\" ADD COLUMN \"reason\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"reason\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "yellowCard",
+          "reason"
+        ]
+      }
+    ]
+  }
+]

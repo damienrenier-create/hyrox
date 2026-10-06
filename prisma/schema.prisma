@@ -442,6 +442,10 @@ model YellowCard {
   raceStateId String
   teamId      String
   at          DateTime  @default(now())
+  // Qui l'a donnee (greffier, prof ou arbitre eleve depuis son ecran d'observation) et pourquoi (Sartay 06/10 : « rendre
+  // l'acces aux cartes jaunes plus facile pour le greffier et les arbitres » ; une carte coute 1 point sur 20). Null avant.
+  givenById   String?
+  reason      String?
 
   @@index([raceStateId, teamId])
 }

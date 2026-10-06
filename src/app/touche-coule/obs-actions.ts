@@ -7,7 +7,7 @@ import { refereeAccess, type RefereeAccess } from "@/lib/referee-access";
 import type { SessionPayload } from "@/lib/auth";
 import { toMs } from "@/lib/scheduling";
 import { qualityFromCriteria, type CriterionCheck, evalTechChecks } from "@/lib/level-criteria";
-import { OBS_GRACE_MS, OBS_MINUTES } from "@/lib/observation-types";
+import { CARD_REASONS, OBS_GRACE_MS, OBS_MINUTES } from "@/lib/observation-types";
 import { currentObservation, drawTarget, obsStations, participantsOf, staffObservation, studentObservations } from "@/lib/observations";
 import { hxCapState } from "@/lib/hyrox-context";
 
@@ -136,4 +136,33 @@ export async function obsAppreciateAction(sessionId: string, input: { observatio
   if (existing) await db.orm.public.Evaluation.where({ id: existing.id }).update({ note, criteria, repsObserved });
   else await db.orm.public.Evaluation.create({ sessionId, teamId: r.obs.teamId, evaluatorId: g.user.id, exerciseId: ex.id, repsObserved, note, targetUserId: r.obs.targetUserId, criteria, observationId: r.obs.id });
   return { ok: true };
+}
+
+// Carte jaune donnee par un arbitre a l'equipe de l'eleve qu'il suit (Sartay 06/10 : « rendre l'acces aux cartes jaunes
+// plus facile pour le greffier et les arbitres »). Eleve : seulement pendant sa fenetre d'observation ; prof : l'eleve
+// choisi. Qui l'a donnee et pourquoi sont enregistres ; le greffier la voit et peut la retirer.
+export async function obsCardAction(sessionId: string, input: { observationId?: string | null; targetUserId?: string | null; reason: string }): Promise<{ error: string } | { ok: true; teamName: string }> {
+  const g = await gate(sessionId);
+  if ("error" in g) return g;
+  if (!(CARD_REASONS as readonly string[]).includes(input.reason)) return { error: "Choisis un motif." };
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  if (!rs?.startedAt) return { error: "Le WOD n'est pas encore lancé." };
+  if (rs.endedAt) return { error: "Le WOD est terminé." };
+  let teamId: string | null;
+  if (g.staff) {
+    if (!input.targetUserId) return { error: "Choisis d'abord un élève." };
+    teamId = (await participantsOf(sessionId)).find((p) => p.userId === input.targetUserId)?.teamId ?? null;
+  } else {
+    const r = await resolveObs(g, input, false);
+    if ("error" in r) return r;
+    teamId = r.obs.teamId;
+  }
+  if (!teamId) return { error: "Cet élève n'est dans aucune équipe de cette séance." };
+  const team = await db.orm.public.Team.where({ id: teamId, sessionId }).first();
+  if (!team) return { error: "Équipe introuvable." };
+  // Double appui : une seule carte du meme arbitre a la meme equipe en 30 s.
+  const mine = await db.orm.public.YellowCard.where({ raceStateId: rs.id, teamId }).all();
+  if (mine.some((c) => c.givenById === g.user.id && Date.now() - toMs(c.at) < 30_000)) return { error: "Tu viens déjà de donner une carte à cette équipe." };
+  await db.orm.public.YellowCard.create({ raceStateId: rs.id, teamId, at: Temporal.Now.instant(), givenById: g.user.id, reason: input.reason });
+  return { ok: true, teamName: team.name };
 }

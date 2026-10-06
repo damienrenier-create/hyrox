@@ -211,6 +211,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       {/* Un deuxieme prof arbitre pendant que le premier tient le greffier : chacun son ecran. */}
                       {s.refereeMode && <Link href={`/touche-coule?session=${s.id}`} className={btn.smSea}>{s.wodType === "LEVEL" ? "💣 Arbitrer" : s.wodType === "HYROX" ? "👁 Arbitrer" : "🏴‍☠️ Arbitrer"}</Link>}
                       {s.wodType === "HYROX" && <Link href={`/admin/observations?session=${s.id}`} className={btn.smGhost}>📋 Compte rendu arbitres</Link>}
+                      {s.wodType === "HYROX" && <Link href={`/admin/eval/notes?session=${s.id}`} className={btn.smGhost}>🎯 Notes /20</Link>}
                       {s.refereeMode && s.wodType !== "LEVEL" && s.wodType !== "HYROX" && (
                         <form action={runGenerateGhostFleets.bind(null, s.id)}>
                           <button type="submit" className={btn.smGhost} title="2 flottes verrouillées portées par Damien Renier">🏴‍☠️ Fantômes</button>
@@ -266,6 +267,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                       <Link href={`/admin/auto-evaluations?session=${s.id}`} className={btn.smGhost}>Auto-évals</Link>
                       {s.refereeMode && s.wodType !== "LEVEL" && s.wodType !== "HYROX" && <Link href={`/admin/carte?session=${s.id}`} className={btn.smGhost}>Carte 🏴‍☠️</Link>}
                       {s.wodType === "HYROX" && <Link href={`/admin/observations?session=${s.id}`} className={btn.smGhost}>📋 Compte rendu arbitres</Link>}
+                      {s.wodType === "HYROX" && <Link href={`/admin/eval/notes?session=${s.id}`} className={btn.smGhost}>🎯 Notes /20</Link>}
                       {quizToggle(s)}
                       {!s.isActive && (!s.closesAt || toMs(s.closesAt) > Date.now()) && (
                         <form action={reopenSessionAction}>

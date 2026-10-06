@@ -5,6 +5,15 @@ export const OBS_PREVIEW_MS = 60_000; // avant chaque fenetre : 1 minute d'ecran
 export const OBS_GRACE_MS = 20_000; // une saisie partie juste avant la fermeture de la fenetre est encore acceptee
 export const OBS_TOLERANCE_MS = 60_000; // ecart tolere entre l'heure d'une serie et les clics du greffier
 export const OBS_STAFF_TARGET = 3; // objectif prof : chaque eleve evalue sur 3 exercices differents au moins
+// Motifs d'une carte jaune donnee depuis l'ecran d'un arbitre (Sartay 06/10). Une carte coute du temps a l'equipe et
+// 1 point sur 20 a chacun de ses eleves.
+export const CARD_REASONS = [
+  "Répétitions bâclées ou pas comptées",
+  "Run raccourci ou pas couru",
+  "Départ avant que l'équipe soit complète",
+  "Fair-play, comportement",
+  "Autre",
+] as const;
 export const OBS_RUN_ID = "run"; // le run entre deux stations, observable comme un exercice (les stations sont st1..stN)
 export type ObsMode = "STUDENT" | "STAFF";
 

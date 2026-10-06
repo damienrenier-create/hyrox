@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CriteriaChecklist } from "../_components/CriteriaChecklist";
-import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_STAFF_TARGET, type ObsMode, type ObsParticipant, type ObsStation, type ObsView } from "@/lib/observation-types";
-import { obsAddRepsAction, obsAppreciateAction, obsDrawAction, obsVoidLastAction } from "./obs-actions";
+import { CARD_REASONS, OBS_MINUTES, OBS_PREVIEW_MS, OBS_STAFF_TARGET, type ObsMode, type ObsParticipant, type ObsStation, type ObsView } from "@/lib/observation-types";
+import { obsAddRepsAction, obsAppreciateAction, obsCardAction, obsDrawAction, obsVoidLastAction } from "./obs-actions";
 import { evalTechQuality } from "@/lib/level-criteria";
 import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { btn, cx, ui } from "@/lib/ui";
@@ -78,6 +78,27 @@ export function ObservationClient({
     });
   }
   const ref = { observationId: obs?.id ?? null, targetUserId: target?.id ?? null };
+
+  // Carte jaune a l'equipe de l'eleve suivi (Sartay 06/10) : motif obligatoire, confirmation, message de retour.
+  const [cardOpen, setCardOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [cardFor, setCardFor] = useState<string | null>(target?.id ?? null);
+  if ((target?.id ?? null) !== cardFor) {
+    setCardFor(target?.id ?? null);
+    setCardOpen(false);
+    setNotice("");
+  }
+  function giveCard(reason: string) {
+    setError("");
+    startTransition(async () => {
+      const res = await obsCardAction(sessionId, { ...ref, reason });
+      if ("error" in res) { setError(res.error); return; }
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([40, 60, 40]);
+      setCardOpen(false);
+      setNotice(`🟨 Carte donnée à ${res.teamName} (${reason.toLowerCase()}).`);
+      router.refresh();
+    });
+  }
 
   // Fin d'une fenetre (ou retour sur la page apres une fenetre fermee) : l'ecran demande tout seul le prochain eleve.
   // Tant que le serveur ne peut pas en annoncer un (pause, WOD fini, personne a suivre), on redemande toutes les 10 s.
@@ -226,6 +247,25 @@ export function ObservationClient({
               <div className="mt-2 h-2 rounded-full bg-black/20 overflow-hidden"><div className="h-full bg-white/90 transition-all" style={{ width: `${Math.min(100, Math.max(0, 100 - (remaining / (OBS_MINUTES * 60_000)) * 100))}%` }} /></div>
             )}
             {remaining !== null && <p className="text-xs opacity-90 mt-2">À 0:00 l&apos;écran se ferme tout seul : note les séries et coche les critères au fur et à mesure.</p>}
+            {race === "run" && (
+              <div className="mt-3">
+                {!cardOpen ? (
+                  <button onClick={() => { setCardOpen(true); setNotice(""); }} disabled={pending} className="w-full rounded-xl bg-yellow-300 text-yellow-950 font-extrabold py-2.5 text-sm shadow-sm active:scale-[0.99]">🟨 Carte jaune à {target.teamName}</button>
+                ) : (
+                  <div className="rounded-xl bg-white text-ink p-3 space-y-2">
+                    <p className="text-sm font-bold">🟨 Carte jaune à {target.teamName} : pourquoi ?</p>
+                    <p className="text-xs text-ink-3">Elle ajoute du temps à l&apos;équipe et coûte 1 point sur 20 à chacun de ses élèves. Le greffier voit ton nom et le motif.</p>
+                    <div className="grid gap-1.5">
+                      {CARD_REASONS.map((r) => (
+                        <button key={r} disabled={pending} onClick={() => { if (confirm(`Carte jaune à ${target.teamName} : « ${r} » ?`)) giveCard(r); }} className="text-left rounded-lg border border-line-2 px-3 py-2 text-sm font-semibold hover:border-yellow-500 hover:bg-yellow-50 disabled:opacity-50">{r}</button>
+                      ))}
+                    </div>
+                    <button onClick={() => setCardOpen(false)} className={`${btn.smGhost} w-full`}>Annuler</button>
+                  </div>
+                )}
+                {notice && <p className="mt-2 rounded-lg bg-yellow-200 text-yellow-950 text-sm font-bold px-3 py-2">{notice}</p>}
+              </div>
+            )}
           </section>
         )}
 

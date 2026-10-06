@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import {
   HX_LEVELS, HX_MAX_LAPS, HX_MAX_RUN_PARTS, HX_MAX_STATIONS, HX_MIN_STATIONS, HX_UNITS, amountText, clockText, fmt, hxCsv, hxIntensity, hxLevelReps, hxStationKey, hxStationReps, parcoursTops, segmentLabel, segmentStats, teamState, timeRows,
-  type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
+  type HXCard, type HXContext, type HXEvent, type HXSettings, type HXStat, type HXTeamState, type HXTop,
 } from "@/lib/wod-engines/templates/hyrox-engine";
 import type { HXBundle, HXRecord } from "@/lib/hyrox-context";
 import type { BoardData } from "@/lib/referee-board";
@@ -20,6 +20,7 @@ import { Snowfall } from "../_components/Snowfall";
 import { EvalBaremeTable } from "../_components/EvalBareme";
 import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, evalNote, isEvalGroup, noteText, starsText } from "@/lib/eval-bareme";
 import { evalExpectedMs } from "@/lib/eval-reference";
+import { CARD_REASONS } from "@/lib/observation-types";
 import type { Stars } from "@/lib/wod-engines/templates/level-engine";
 import { TeamsManager, type TeamWithMembers, type RefereeView, type PickerData } from "./TeamsManager";
 import { RefereeRequestsPopup } from "./RefereeRequestsPopup";
@@ -82,6 +83,7 @@ export function HyroxClient({
   const [error, setError] = useState("");
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cardSheet, setCardSheet] = useState(false); // 🟨 carte en un geste, sans quitter la course
   const [flash, setFlash] = useState<string | null>(null); // fiche qui vient d'etre validee (animation)
   const memberCount = useMemo(() => teamsWithMembers.reduce((n, t) => n + t.members.length, 0), [teamsWithMembers]);
   const isPaused = pauses.some((p) => p.to === null);
@@ -166,6 +168,7 @@ export function HyroxClient({
   // Station de depart annoncee aux eleves pendant l'encodage (onglet Equipes & arbitres, ecran projete).
   const startByTeam = useMemo(() => Object.fromEntries(teams.map((t) => { const s0 = states.get(t.id)!.segments[0]; return [t.id, { number: s0.stationNo, label: s0.short }]; })), [teams, states]);
   const totalCards = ctx.cards.length;
+  const lastCard = totalCards ? ctx.cards.reduce((a, c) => (c.at > a.at ? c : a)) : null;
 
   function refresh() {
     router.refresh();
@@ -316,6 +319,7 @@ export function HyroxClient({
             )}
             {phase === "run" && (
               <>
+                <button onClick={() => setCardSheet(true)} disabled={pending} className={`${ui.btnSm} bg-yellow-300 text-yellow-950 hover:bg-yellow-400 shadow-sm`} title="Donner une carte jaune à une équipe">🟨 Carte</button>
                 <button onClick={() => run(() => togglePauseAction(sessionId))} disabled={pending} className={isPaused ? btn.smSuccess : btn.accent}>{isPaused ? "Reprendre" : "Pause"}</button>
                 <button onClick={handleUndo} disabled={pending || ctx.events.length === 0} className={btn.smGhost} title="Annuler la toute dernière validation (quelle que soit l'équipe)">↶ Annuler</button>
                 <button onClick={() => setSettingsOpen(true)} disabled={pending} className={btn.smGhost}>⚙️</button>
@@ -357,6 +361,11 @@ export function HyroxClient({
             )}
           </div>
           {/* Legende des tours : une couleur par tour (station), le run en plus fonce. */}
+          {view === "race" && lastCard && (
+            <button onClick={() => setView("cards")} className="text-[11px] font-bold text-yellow-950 bg-yellow-200 rounded-md px-2 py-0.5" title="Voir toutes les cartes">
+              🟨 {ctx.teams.find((t) => t.id === lastCard.teamId)?.name ?? "?"} · {fmt(lastCard.at)}{lastCard.by ? ` · ${lastCard.by}` : ""}{lastCard.reason ? ` · ${lastCard.reason}` : ""}
+            </button>
+          )}
           {view === "race" && laps > 1 && (
             <span className="flex items-center gap-2 text-[11px] font-bold text-ink-2">
               {Array.from({ length: laps }, (_, i) => (
@@ -395,7 +404,7 @@ export function HyroxClient({
             </div>
           )
         )}
-        {view === "cards" && <CardsView states={states} teams={teams} sessionId={sessionId} phase={phase} penSec={ctx.settings.penSec} onRun={run} pending={pending} />}
+        {view === "cards" && <CardsView states={states} teams={teams} cards={ctx.cards} sessionId={sessionId} phase={phase} penSec={ctx.settings.penSec} onRun={run} pending={pending} />}
         {view === "results" && <ResultsView ctx={liveCtx} hasData={phase !== "pre" || ctx.events.length > 0} />}
         {view === "stats" && <StatsView ctx={liveCtx} />}
         {view === "levels" && <LevelsView states={states} teams={teams} settings={ctx.settings} sessionId={sessionId} onRun={run} pending={pending} />}
@@ -427,6 +436,7 @@ export function HyroxClient({
             <p className={ui.hint}>Élèves arbitres : un élève tiré au sort, suivi 5 minutes, 4 critères. Profs : qui ils veulent, 6 critères + l&apos;implication de l&apos;équipe, objectif 3 exercices par élève. Le compte rendu compare l&apos;heure de chaque série aux clics de cet écran.</p>
             <div className="flex flex-wrap gap-2">
               <a href={`/admin/observations?session=${sessionId}`} target="_blank" rel="noopener" className={btn.primary}>📋 Compte rendu des arbitres ↗</a>
+              {showConsole && <a href={`/admin/eval/notes?session=${sessionId}`} target="_blank" rel="noopener" className={btn.ghost}>🎯 Notes /20 ↗</a>}
               <a href={`/touche-coule?session=${sessionId}`} target="_blank" rel="noopener" className={btn.sea}>👁 Arbitrer (prof) ↗</a>
             </div>
             {/* Dias a projeter en debut de seance (ou Imprimer -> PDF) : le parcours et les criteres de CETTE seance. */}
@@ -440,6 +450,19 @@ export function HyroxClient({
 
       {settingsOpen && (
         <SettingsSheet sessionId={sessionId} settings={ctx.settings} locked={locked} numTeams={ctx.teams.length} canResize={phase === "pre"} onClose={() => setSettingsOpen(false)} onSaved={() => { setSettingsOpen(false); refresh(); }} />
+      )}
+
+      {/* 🟨 en un geste depuis la course (Sartay 06/10 : « rendre l'acces aux cartes jaunes plus facile ») */}
+      {cardSheet && (
+        <div className={ui.backdrop} onClick={() => setCardSheet(false)}>
+          <div className={cx(ui.sheet, "sm:max-w-5xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h2 className={ui.h3}>🟨 Carte jaune</h2>
+              <button onClick={() => setCardSheet(false)} className={ui.close} aria-label="Fermer">✕</button>
+            </div>
+            <CardsView states={states} teams={teams} cards={ctx.cards} sessionId={sessionId} phase={phase} penSec={ctx.settings.penSec} onRun={run} pending={pending} onGiven={() => setCardSheet(false)} />
+          </div>
+        </div>
       )}
 
       {openSt && (
@@ -701,22 +724,35 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
   );
 }
 
-// Onglet cartes jaunes : choisir l'equipe, confirmer. Une carte ajoute penSec secondes au temps.
-function CardsView({ states, teams, sessionId, phase, penSec, onRun, pending }: { states: Map<string, HXTeamState>; teams: HXContext["teams"]; sessionId: string; phase: Phase; penSec: number; onRun: (a: () => Promise<ActionResult>) => void; pending: boolean }) {
+// Onglet cartes jaunes (et fenetre 🟨 de la course) : choisir l'equipe, confirmer. Une carte ajoute penSec secondes au
+// temps et retire 1 point sur 20 a chaque eleve de l'equipe. Motif facultatif ; chaque carte dit qui l'a donnee
+// (greffier, prof ou arbitre depuis son telephone) et pourquoi.
+function CardsView({ states, teams, cards, sessionId, phase, penSec, onRun, pending, onGiven }: { states: Map<string, HXTeamState>; teams: HXContext["teams"]; cards: HXCard[]; sessionId: string; phase: Phase; penSec: number; onRun: (a: () => Promise<ActionResult>) => void; pending: boolean; onGiven?: () => void }) {
+  const [reason, setReason] = useState<string | null>(null);
   return (
     <div>
-      <p className={`${ui.hint} mb-3`}>Touche une équipe pour lui donner une carte jaune ({penSec} s ajoutées à son temps). « retirer » enlève la dernière.</p>
+      <p className={`${ui.hint} mb-2`}>Touche une équipe pour lui donner une carte jaune ({penSec} s ajoutées à son temps, 1 point de moins sur 20 pour chacun de ses élèves). « retirer » enlève la dernière.</p>
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <span className="text-xs font-bold text-ink-2">Motif (facultatif) :</span>
+        {CARD_REASONS.map((r) => (
+          <button key={r} onClick={() => setReason(reason === r ? null : r)} className={`${ui.pill} ${reason === r ? ui.pillOn : ui.pillOff}`}>{r}</button>
+        ))}
+      </div>
       {phase === "pre" && <p className={`${ui.alertWarn} mb-3`}>Les cartes jaunes se donnent une fois la course lancée.</p>}
       <div className="grid grid-cols-5 gap-2">
         {teams.map((team) => {
           const st = states.get(team.id)!;
+          const mine = cards.filter((c) => c.teamId === team.id).sort((a, b) => a.at - b.at);
           return (
             <div key={team.id} className={cx("rounded-2xl border p-2.5 min-h-[96px] flex flex-col", st.cards ? "bg-yellow-50 border-yellow-400" : "bg-card border-line")}>
-              <button onClick={() => { if (confirm(`Carte jaune pour ${team.name} ?`)) onRun(() => hxCardAction(sessionId, team.id, 1)); }} disabled={pending || phase === "pre"} className="text-left flex-1 disabled:opacity-50">
+              <button onClick={() => { if (confirm(`Carte jaune pour ${team.name}${reason ? ` (${reason})` : ""} ?`)) { onRun(() => hxCardAction(sessionId, team.id, 1, reason)); onGiven?.(); } }} disabled={pending || phase === "pre"} className="text-left flex-1 disabled:opacity-50">
                 <span className="font-team text-[28px] leading-none uppercase tracking-wide">Équipe {team.order}</span>
                 <span className="block text-[11px] text-ink-2 truncate">{team.members.map((m) => m.name).join(" · ") || "—"}</span>
                 <span className="block font-bold mt-1">🟨 ×{st.cards}{st.cards ? <span className="text-xs text-ink-3 font-normal"> (+{fmt(st.penMs)})</span> : null}</span>
               </button>
+              {mine.map((c) => (
+                <span key={c.id} className="block text-[11px] text-ink-2 leading-tight mt-0.5">{fmt(c.at)}{c.by ? ` · ${c.by}` : ""}{c.reason ? ` · ${c.reason}` : ""}</span>
+              ))}
               {st.cards > 0 && <button onClick={() => onRun(() => hxCardAction(sessionId, team.id, -1))} disabled={pending} className={`${btn.smGhost} mt-1 self-start`}>retirer</button>}
             </div>
           );

@@ -3873,6 +3873,13 @@
                   "kind": "scalar"
                 }
               },
+              "givenById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -3882,6 +3889,13 @@
               },
               "raceStateId": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reason": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -3918,11 +3932,17 @@
                 "at": {
                   "column": "at"
                 },
+                "givenById": {
+                  "column": "givenById"
+                },
                 "id": {
                   "column": "id"
                 },
                 "raceStateId": {
                   "column": "raceStateId"
+                },
+                "reason": {
+                  "column": "reason"
                 },
                 "teamId": {
                   "column": "teamId"
@@ -6795,6 +6815,11 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "givenById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -6804,6 +6829,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "reason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "teamId": {
                   "codecId": "pg/text@1",
@@ -6913,7 +6943,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f107e9ce68352319522dfd7921e0cfa95c9573a5244e0290dea4dc63a17f9f0b"
+    "storageHash": "864b824d82023cb1abb4efa2c6b97d84f92b6f2475f593d6b9d3d957439ceeaf"
   },
   "execution": {
     "executionHash": "2949a3b0e1f08f3d101e69a3b603ecc5ac843524d5d35e9b8cd4d9fa4c4cb298",

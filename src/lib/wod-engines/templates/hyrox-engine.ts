@@ -125,7 +125,8 @@ export type HXTeam = { id: string; order: number; name: string; startStationId: 
 // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees de course ; abs = heure d'horloge du clic (ms epoch,
 // null pour un clic local pas encore confirme par le serveur) : c'est elle qu'on compare a l'heure des arbitres.
 export type HXEvent = { id: string; teamId: string; key: string; at: number; abs: number | null };
-export type HXCard = { id: string; teamId: string; at: number };
+// `by` : qui l'a donnee (« Léa M. · arbitre ») ; `reason` : son motif (cartes des arbitres, depuis le 06/10).
+export type HXCard = { id: string; teamId: string; at: number; by?: string | null; reason?: string | null };
 export type HXContext = { teams: HXTeam[]; settings: HXSettings; events: HXEvent[]; cards: HXCard[] };
 
 // Ancienne cle des tours de Cindy (AMRAP apres le parcours, abandonnee le 03/10 : « on laisse tomber le cindy »). Les
