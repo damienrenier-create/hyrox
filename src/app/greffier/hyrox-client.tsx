@@ -18,7 +18,7 @@ import { greffierPulseAction } from "@/lib/pulse";
 import { usePulse } from "../_components/usePulse";
 import { Snowfall } from "../_components/Snowfall";
 import { EvalBaremeTable } from "../_components/EvalBareme";
-import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, evalNote, isEvalGroup, noteText, starsText } from "@/lib/eval-bareme";
+import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, evalGroupDefaultStars, evalNote, isEvalGroup, noteText, starsText } from "@/lib/eval-bareme";
 import { evalExpectedMs } from "@/lib/eval-reference";
 import { CARD_REASONS } from "@/lib/observation-types";
 import type { Stars } from "@/lib/wod-engines/templates/level-engine";
@@ -667,7 +667,7 @@ function TeamPanel({ ctx, st, sessionId, phase, isPaused, liveMs, onValidate, on
               ))}
             </div>
             <p className={`${ui.hint} mt-2`}>
-              {done > 0 ? "🔒 Parcours figé : l'équipe a commencé. " : `Sans choix : ${EVAL_DEFAULT_STARS}★. Il se choisit avant le départ : à la première validation, il ne change plus. `}
+              {done > 0 ? "🔒 Parcours figé : l'équipe a commencé. " : `Sans choix : ${team.defaultStars ?? EVAL_DEFAULT_STARS}★${(team.defaultStars ?? EVAL_DEFAULT_STARS) !== EVAL_DEFAULT_STARS ? " (équipe de filles de 3e-4e : 20/20 dès ce parcours)" : ""}. Il se choisit avant le départ : à la première validation, il ne change plus. `}
               Le parcours fixe les répétitions de chaque station (les allers-retours ne changent pas) ; les points de la perf, si le WOD est bouclé avant {ctx.settings.capMin}:00, dépendent aussi des années et du sexe.
             </p>
           </div>
@@ -771,7 +771,7 @@ function LevelsView({ states, teams, settings, sessionId, onRun, pending }: { st
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,560px)] items-start">
       <div>
         <h3 className={`${ui.h3} mb-1.5`}>⭐ Le parcours de chaque équipe</h3>
-        <p className={`${ui.hint} mb-2`}>Un clic = le parcours de l&apos;équipe, avant son départ : ses répétitions à chaque station (les allers-retours ne changent pas). Sans choix : {EVAL_DEFAULT_STARS}★. Figé dès sa première validation. Ses points dépendent aussi de son groupe.</p>
+        <p className={`${ui.hint} mb-2`}>Un clic = le parcours de l&apos;équipe, avant son départ : ses répétitions à chaque station (les allers-retours ne changent pas). Sans choix : {EVAL_DEFAULT_STARS}★, {evalGroupDefaultStars("34F")}★ pour une équipe de filles de 3e-4e. Figé dès sa première validation. Ses points dépendent aussi de son groupe.</p>
         <div className={`${ui.card} overflow-auto`}>
           <table className="w-full text-[13px] border-collapse whitespace-nowrap">
             <thead><tr><th className={ui.th}>Équipe</th><th className={ui.th}>Élèves · groupe</th><th className={ui.th}>Parcours · répétitions</th><th className={`${ui.th} text-right`} title="Points de la perf si le WOD est bouclé avant la fin officielle">Si bouclé</th></tr></thead>
@@ -811,7 +811,7 @@ function LevelsView({ states, teams, settings, sessionId, onRun, pending }: { st
         <p className={`${ui.hint} mb-2`}>Note de l&apos;équipe qui boucle le WOD ({settings.laps} tour{settings.laps > 1 ? "s" : ""}) avant la fin officielle ({settings.capMin}:00) : le même parcours pour tous, mais pas les mêmes points selon les années et le sexe.</p>
         <EvalBaremeTable big />
         <ul className="mt-3 space-y-1.5 text-sm text-ink-2 list-disc pl-5">
-          <li>Tout le monde part à {EVAL_DEFAULT_STARS}★ ; une équipe peut demander de monter ou de descendre à la création des équipes. Ensuite, le parcours ne change plus.</li>
+          <li>Tout le monde part à {EVAL_DEFAULT_STARS}★ (une équipe de filles de 3e-4e à {evalGroupDefaultStars("34F")}★) ; une équipe peut demander de monter ou de descendre à la création des équipes. Ensuite, le parcours ne change plus.</li>
           <li>Une équipe mixte lit la colonne « garçons ou mixte » ; « filles » = une équipe de filles uniquement.</li>
           <li>WOD pas bouclé à {settings.capMin}:00 : la note part de ce maximum et baisse selon ce qu&apos;il restait à faire.</li>
           {settings.extraMin > 0 && <li>De {settings.capMin}:00 à {settings.capMin + settings.extraMin}:00, le chrono continue pour finir son parcours : c&apos;est affiché, mais hors classement.</li>}
@@ -1020,7 +1020,7 @@ function SettingsSheet({ sessionId, settings, locked, numTeams, canResize, onClo
           <label className="text-xs"><span className={ui.label}>Carte jaune (s)</span><input type="number" min={0} max={600} value={form.penSec} onChange={(e) => setForm({ ...form, penSec: parseInt(e.target.value, 10) || 0 })} className={ui.input} /></label>
         </div>
         <p className={`${ui.hint} mb-3`}>Le classement et les notes s&apos;arrêtent à la fin officielle ; pendant la prolongation, les équipes peuvent encore valider pour finir leur parcours. À la fin de la prolongation, la course s&apos;arrête toute seule (0 = pas de prolongation).</p>
-        <label className="flex items-start gap-2 text-sm mb-4"><input type="checkbox" checked={form.levels} disabled={locked} onChange={(e) => setForm({ ...form, levels: e.target.checked })} className={`${ui.check} mt-0.5`} /><span>Parcours étoilés : chaque équipe choisit son parcours avant le départ, de 1★ = 40 à 5★ = 60 répétitions par station ({EVAL_DEFAULT_STARS}★ par défaut) ; ses points dépendent aussi des années et du sexe (onglet Niveaux &amp; barème). Les quantités ci-dessus sont celles du 5★ ; les allers-retours ne changent pas.</span></label>
+        <label className="flex items-start gap-2 text-sm mb-4"><input type="checkbox" checked={form.levels} disabled={locked} onChange={(e) => setForm({ ...form, levels: e.target.checked })} className={`${ui.check} mt-0.5`} /><span>Parcours étoilés : chaque équipe choisit son parcours avant le départ, de 1★ = 40 à 5★ = 60 répétitions par station ({EVAL_DEFAULT_STARS}★ par défaut, {evalGroupDefaultStars("34F")}★ pour une équipe de filles de 3e-4e) ; ses points dépendent aussi des années et du sexe (onglet Niveaux &amp; barème). Les quantités ci-dessus sont celles du 5★ ; les allers-retours ne changent pas.</span></label>
         <label className="text-xs block mb-4"><span className={ui.label}>Nombre d&apos;équipes {canResize ? "" : "(figé : course lancée)"}</span><input type="number" min={1} max={50} value={teams} disabled={!canResize} onChange={(e) => setTeams(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)))} className={`${ui.input} w-28`} /></label>
 
         <div className="flex justify-end gap-2">

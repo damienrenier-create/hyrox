@@ -49,6 +49,16 @@ export const evalGroupLabel = (key: EvalGroup) => `${evalGroup(key).years} · ${
 export const evalLevelReps = (stars: number): number => (EVAL_LEVELS.find((l) => l.stars === stars) ?? EVAL_LEVELS[2]).reps;
 // Note de perf (sur 20) d'une equipe de ce groupe qui boucle le WOD avant la fin officielle sur ce parcours.
 export const evalNote = (key: EvalGroup, stars: number): number => evalGroup(key).notes[stars - 1] ?? 0;
+// Parcours par defaut d'une equipe qui n'a rien choisi : 3★ pour tout le monde, SAUF une equipe de filles de 3e-4e qui part
+// a 2★ (Sartay 07/10 : « 2 etoiles suffisent pour avoir 20/20 »). Seulement pour les seances a partir du 08/10 : les
+// equipes des seances precedentes ont bel et bien couru 3★ et le gardent. `sessionDay` = jour de la seance (AAAA-MM-JJ, Bruxelles).
+export const EVAL_GROUP_DEFAULT_STARS: Partial<Record<EvalGroup, number>> = { "34F": 2 };
+export const EVAL_GROUP_DEFAULT_FROM = "2026-10-08";
+export const evalGroupDefaultStars = (key: EvalGroup): number => EVAL_GROUP_DEFAULT_STARS[key] ?? EVAL_DEFAULT_STARS;
+export function evalDefaultStars(group: unknown, sessionDay: string | null | undefined): number {
+  if (!sessionDay || sessionDay < EVAL_GROUP_DEFAULT_FROM || !isEvalGroup(group)) return EVAL_DEFAULT_STARS;
+  return evalGroupDefaultStars(group);
+}
 // Premier parcours qui vaut 20/20 pour ce groupe (« a chacun son 20/20 »).
 export const evalTopStars = (key: EvalGroup): number => EVAL_LEVELS.find((l) => evalNote(key, l.stars) >= EVAL_NOTE_MAX)?.stars ?? EVAL_LEVELS[4].stars;
 export const starsText = (stars: number) => "★".repeat(Math.max(1, stars));

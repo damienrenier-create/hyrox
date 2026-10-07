@@ -121,7 +121,8 @@ export function readHXStars(settings: unknown): Record<string, number> {
 export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
 // `stars` = parcours de l'equipe (choisi, sinon 3 etoiles) ; `group` = son groupe pour les points (annees + filles /
 // garcons ou mixte, voir eval-bareme.ts).
-export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[]; stars?: number | null; group?: string | null };
+// `defaultStars` = parcours qu'elle aurait sans choix (3★, ou 2★ pour une equipe de filles de 3e-4e : eval-bareme.ts).
+export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[]; stars?: number | null; group?: string | null; defaultStars?: number };
 // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees de course ; abs = heure d'horloge du clic (ms epoch,
 // null pour un clic local pas encore confirme par le serveur) : c'est elle qu'on compare a l'heure des arbitres.
 export type HXEvent = { id: string; teamId: string; key: string; at: number; abs: number | null };
@@ -421,7 +422,7 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   L.push([ctx.settings.extraMin > 0 ? "Fin officielle (min)" : "Temps limite (min)", ctx.settings.capMin].join(";"));
   if (ctx.settings.extraMin > 0) L.push(["Prolongation (min)", ctx.settings.extraMin].join(";"));
   if (lv) {
-    L.push(["Parcours (etoiles = repetitions par station)", HX_LEVELS.map((l) => `${l.stars} = ${l.reps}`).join(" / "), `${HX_DEFAULT_STARS} par defaut`].join(";"));
+    L.push(["Parcours (etoiles = repetitions par station)", HX_LEVELS.map((l) => `${l.stars} = ${l.reps}`).join(" / "), `${HX_DEFAULT_STARS} par defaut (2 pour une equipe de filles de 3e-4e)`].join(";"));
     EVAL_GROUPS.forEach((g) => L.push([`Note perf /20 ${g.years} ${g.team}`, HX_LEVELS.map((l) => `${l.reps} rep = ${evalNote(g.key, l.stars)}`).join(" / ")].join(";")));
   }
   L.push(["Carte jaune (s)", ctx.settings.penSec].join(";"));

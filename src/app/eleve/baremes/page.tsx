@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
-import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_WEIGHTS, evalLevelReps, evalYears } from "@/lib/eval-bareme";
+import { EVAL_DEFAULT_STARS, EVAL_GROUPS, evalGroupDefaultStars, EVAL_LEVELS, EVAL_WEIGHTS, evalLevelReps, evalYears } from "@/lib/eval-bareme";
 import { HX_DEFAULTS } from "@/lib/wod-engines/templates/hyrox-engine";
 import { TopBar } from "../../_components/TopBar";
 import { LogoutButton } from "../../_components/LogoutButton";
@@ -52,7 +52,7 @@ export default async function BaremesPage() {
 
         <section className={`${ui.cardPad} space-y-2`}>
           <h2 className={ui.h2}>⭐ Le parcours de ton équipe</h2>
-          <p className={ui.muted}>Tout le monde part au parcours <b>{EVAL_DEFAULT_STARS}★</b> : {evalLevelReps(EVAL_DEFAULT_STARS)} répétitions à chaque station. À la création des équipes, ton équipe peut demander de <b>monter ou de descendre</b>, de {first.stars}★ = {first.reps} à {last.stars}★ = {last.reps}. <b>Une fois partie, le parcours ne change plus.</b></p>
+          <p className={ui.muted}>Tout le monde part au parcours <b>{EVAL_DEFAULT_STARS}★</b> : {evalLevelReps(EVAL_DEFAULT_STARS)} répétitions à chaque station. Une équipe de filles de 3e-4e part au <b>{evalGroupDefaultStars("34F")}★</b> ({evalLevelReps(evalGroupDefaultStars("34F"))} répétitions), qui vaut déjà 20/20. À la création des équipes, ton équipe peut demander de <b>monter ou de descendre</b>, de {first.stars}★ = {first.reps} à {last.stars}★ = {last.reps}. <b>Une fois partie, le parcours ne change plus.</b></p>
           <p className={ui.muted}>Le parcours est le même pour tout le monde, mais pas les points : ils dépendent de tes années et de ton équipe (filles, ou garçons / mixte). Les allers-retours (burpees, fentes, farmer carry) sont les mêmes pour tous.</p>
         </section>
 

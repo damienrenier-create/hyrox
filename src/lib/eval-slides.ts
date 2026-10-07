@@ -8,7 +8,7 @@
 
 import { RUN_CRITERIA_KEY, evalShortFor } from "@/lib/level-criteria";
 import { OBS_MINUTES, OBS_PREVIEW_MS } from "@/lib/observation-types";
-import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, EVAL_WEIGHTS, evalLevelReps, evalNote, evalTopStars, noteText, starsText } from "@/lib/eval-bareme";
+import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, EVAL_WEIGHTS, evalGroupDefaultStars, evalLevelReps, evalNote, evalTopStars, noteText, starsText } from "@/lib/eval-bareme";
 import type { HXSettings } from "@/lib/wod-engines/templates/hyrox-engine";
 
 export const EVAL_NAME = "EVAL S.O.R.O";
@@ -149,7 +149,7 @@ export function renderEvalRules(s: HXSettings): string {
   <div class="org">
     <div class="card"><h2>👥 Ton équipe</h2><p>Équipes de <b>3</b>. Le greffier vous donne un <b>numéro d'équipe</b> et une <b>station de départ</b>.</p><p>Restez groupés toute la séance.</p></div>
     ${s.levels
-      ? `<div class="card gold"><h2>⭐ Ton parcours</h2><p>Tout le monde part à <b>${EVAL_DEFAULT_STARS}★ = ${evalLevelReps(EVAL_DEFAULT_STARS)} répétitions</b> par station. À la création des équipes, demandez de <b>monter ou de descendre</b> (${first.stars}★ = ${first.reps} … ${last.stars}★ = ${last.reps}), en connaissance de cause.</p><p>Une fois partis, il <b>ne change plus</b>.</p></div>`
+      ? `<div class="card gold"><h2>⭐ Ton parcours</h2><p>Tout le monde part à <b>${EVAL_DEFAULT_STARS}★ = ${evalLevelReps(EVAL_DEFAULT_STARS)} répétitions</b> par station (équipe de filles de 3e-4e : <b>${evalGroupDefaultStars("34F")}★ = ${evalLevelReps(evalGroupDefaultStars("34F"))}</b>, déjà 20/20). À la création des équipes, demandez de <b>monter ou de descendre</b> (${first.stars}★ = ${first.reps} … ${last.stars}★ = ${last.reps}), en connaissance de cause.</p><p>Une fois partis, il <b>ne change plus</b>.</p></div>`
       : `<div class="card"><h2>💪 Les quantités</h2><p>Elles comptent pour <b>toute l'équipe</b> : à vous de vous répartir le travail.</p></div>`}
     <div class="card"><h2>🤝 Un sport d'équipe</h2><p>Un coéquipier qui bâcle ses répétitions fait gagner du temps : <b>c'est de la triche</b>. Tu dois voir qu'un partenaire de <b>TON équipe</b> ne respecte pas les règles, et le lui dire.</p></div>
     <div class="card"><h2>🗣️ Communication &amp; transitions</h2><p>Trop d'équipes perdent du temps dans les <b>transitions</b> : entre deux élèves d'une même station, et entre deux stations.</p><p>Parlez-vous : qui commence, combien chacun, qui va valider.</p></div>
@@ -171,7 +171,7 @@ export function renderEvalRules(s: HXSettings): string {
   const head = EVAL_GROUPS.map((g) => `<th class="grp"><b>${esc(g.years)}</b>${esc(g.team)}</th>`).join("");
   const rows = [...EVAL_LEVELS].reverse().map((l) => {
     const def = l.stars === EVAL_DEFAULT_STARS;
-    return `<tr${def ? ' class="def"' : ""}><td>${starsText(l.stars)}${def ? '<span class="tag">par défaut</span>' : ""}</td><td class="rp">${l.reps}</td>${EVAL_GROUPS.map((g) => { const n = evalNote(g.key, l.stars); return `<td class="nt${n >= EVAL_NOTE_MAX ? " max" : ""}">${noteText(n)}<small>/${EVAL_NOTE_MAX}</small></td>`; }).join("")}</tr>`;
+    return `<tr${def ? ' class="def"' : ""}><td>${starsText(l.stars)}${def ? '<span class="tag">par défaut</span>' : ""}</td><td class="rp">${l.reps}</td>${EVAL_GROUPS.map((g) => { const n = evalNote(g.key, l.stars); const gd = l.stars !== EVAL_DEFAULT_STARS && l.stars === evalGroupDefaultStars(g.key); return `<td class="nt${n >= EVAL_NOTE_MAX ? " max" : ""}">${noteText(n)}<small>/${EVAL_NOTE_MAX}</small>${gd ? '<span class="tag">par défaut</span>' : ""}</td>`; }).join("")}</tr>`;
   }).join("");
   // « A chacun son 20/20 » : premier parcours qui vaut 20 pour chaque groupe.
   const top20 = [...new Set(EVAL_GROUPS.map((g) => g.years))].map((y) => `${esc(y)} : ${EVAL_GROUPS.filter((g) => g.years === y).map((g) => `${g.team === "filles" ? "filles" : "garçons"} dès <b>${evalTopStars(g.key)}★</b>`).join(", ")}`).join(" · ");

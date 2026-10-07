@@ -3,8 +3,16 @@ import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { toMs } from "@/lib/scheduling";
 import { memberNames } from "@/lib/staff-names";
 import { isDeletedSession, isTestClass, readSessionClasses } from "@/lib/session-roles";
-import { evalGroupOf } from "@/lib/eval-bareme";
-import { CINDY_KEY, HX_DEFAULT_STARS, hxStationKey, parcoursTops, readHXSettings, readHXStars, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
+import { EVAL_GROUP_DEFAULT_FROM, evalDefaultStars, evalGroupOf } from "@/lib/eval-bareme";
+import { CINDY_KEY, hxStationKey, parcoursTops, readHXSettings, readHXStars, teamState, type HXContext, type HXTeam } from "@/lib/wod-engines/templates/hyrox-engine";
+
+// Jour d'une seance (Bruxelles, AAAA-MM-JJ) : son depart, sinon son ouverture prevue, sinon sa creation.
+const dayOf = (v: unknown): string => Temporal.Instant.fromEpochMilliseconds(toMs(v)).toZonedDateTimeISO("Europe/Brussels").toPlainDate().toString();
+// Groupe d'une equipe d'apres ses eleves (les profs ne comptent pas) ; equipe vide : les classes de la seance.
+type GroupMember = { teamId: string; userId: string };
+type GroupUser = { role: string; className?: string | null; sex?: string | null };
+const teamGroup = (teamId: string, members: GroupMember[], userById: Map<string, GroupUser>, sessionClasses: string[]) =>
+  evalGroupOf(members.filter((m) => m.teamId === teamId).flatMap((m) => { const u = userById.get(m.userId); return u && u.role === "STUDENT" ? [{ className: u.className ?? null, sex: u.sex ?? null }] : []; }), sessionClasses);
 
 export type HXBundle = {
   ctx: HXContext;
@@ -64,18 +72,21 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   // QCM bonus : score de chaque eleve ayant repondu.
   const quizBy = new Map((await db.orm.public.QuizAnswer.where({ sessionId }).all()).map((q) => [q.studentId, q.score]));
   // Parcours de chaque equipe : celui qu'elle a choisi, sinon 3 etoiles (Sartay : « le niveau de base est a 3 etoiles
-  // pour tout le monde »). Son groupe (annees, filles / garcons ou mixte), lu sur ses eleves, fixe ses points.
+  // pour tout le monde »), ou 2 pour une equipe de filles de 3e-4e a partir du 08/10 (evalDefaultStars). Son groupe
+  // (annees, filles / garcons ou mixte), lu sur ses eleves, fixe ses points.
   const chosenStars = readHXStars(session.settings);
   const sessionClasses = readSessionClasses(session.settings);
-  const groupOf = (teamId: string) =>
-    evalGroupOf(members.filter((m) => m.teamId === teamId).flatMap((m) => { const u = userById.get(m.userId); return u && u.role === "STUDENT" ? [{ className: u.className ?? null, sex: u.sex ?? null }] : []; }), sessionClasses);
+  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
+  const day = dayOf(rs?.startedAt ?? session.opensAt ?? session.createdAt);
+  const groupOf = (teamId: string) => teamGroup(teamId, members, userById, sessionClasses);
   const teams: HXTeam[] = rawTeams.map((t) => ({
     id: t.id,
     order: t.order ?? 0,
     name: t.name,
     startStationId: t.startExerciseId ?? null,
     group: groupOf(t.id),
-    stars: chosenStars[t.id] ?? HX_DEFAULT_STARS,
+    defaultStars: evalDefaultStars(groupOf(t.id), day),
+    stars: chosenStars[t.id] ?? evalDefaultStars(groupOf(t.id), day),
     members: members
       .filter((m) => m.teamId === t.id)
       .flatMap((m) => {
@@ -85,7 +96,6 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
       .sort((a, b) => a.name.localeCompare(b.name, "fr")),
   }));
 
-  const rs = await db.orm.public.RaceState.where({ sessionId }).first();
   const startedAtMs = rs?.startedAt ? toMs(rs.startedAt) : null;
   const endedAtMs = rs?.endedAt ? toMs(rs.endedAt) : null;
   const [pausesRaw, cardsRaw, rawEvents] = await Promise.all([
@@ -135,6 +145,12 @@ export async function buildHXRecords(sessionId: string): Promise<Record<string, 
     db.orm.public.RaceState.where((r) => r.sessionId.in(ids)).all(),
   ]);
   const pausesRaw = states.length ? await db.orm.public.RacePause.where((p) => p.raceStateId.in(states.map((r) => r.id))).all() : [];
+  // Parcours par defaut (2★ pour une equipe de filles de 3e-4e des le 08/10) : il faut les eleves des equipes de ces seances-la.
+  const dayBy = new Map(sessions.map((s) => [s.id, dayOf(states.find((r) => r.sessionId === s.id)?.startedAt ?? s.opensAt ?? s.createdAt)]));
+  const recentTeams = teams.filter((t) => (dayBy.get(t.sessionId) ?? "") >= EVAL_GROUP_DEFAULT_FROM).map((t) => t.id);
+  const members = recentTeams.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(recentTeams)).all() : [];
+  const users = members.length ? await db.orm.public.User.where((u) => u.id.in([...new Set(members.map((m) => m.userId))])).all() : [];
+  const userById = new Map(users.map((u) => [u.id, u]));
   for (const s of sessions) {
     const rs = states.find((r) => r.sessionId === s.id);
     if (!rs?.startedAt) continue;
@@ -144,7 +160,7 @@ export async function buildHXRecords(sessionId: string): Promise<Record<string, 
     const chosen = readHXStars(s.settings);
     const ctx: HXContext = {
       settings,
-      teams: teams.filter((t) => t.sessionId === s.id).map((t) => ({ id: t.id, order: t.order ?? 0, name: t.name, startStationId: t.startExerciseId ?? null, members: [], stars: chosen[t.id] ?? HX_DEFAULT_STARS })),
+      teams: teams.filter((t) => t.sessionId === s.id).map((t) => ({ id: t.id, order: t.order ?? 0, name: t.name, startStationId: t.startExerciseId ?? null, members: [], stars: chosen[t.id] ?? evalDefaultStars(teamGroup(t.id, members, userById, readSessionClasses(s.settings)), dayBy.get(s.id)) })),
       events: events.filter((e) => e.sessionId === s.id).map((e) => ({ id: e.id, teamId: e.teamId, key: e.stationId, at: elapsed(startedAtMs, pauses, toMs(e.at)) ?? 0, abs: toMs(e.at) })),
       cards: [],
     };

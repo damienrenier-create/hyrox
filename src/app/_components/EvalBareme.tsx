@@ -1,4 +1,4 @@
-import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, evalNote, noteText, starsText, type EvalGroup } from "@/lib/eval-bareme";
+import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, evalGroupDefaultStars, evalNote, noteText, starsText, type EvalGroup } from "@/lib/eval-bareme";
 import { cx, ui } from "@/lib/ui";
 
 // Bareme de la perf du WOD Eval (Sartay 05/10) : une ligne par parcours (les memes repetitions pour tout le monde), une
@@ -33,10 +33,13 @@ export function EvalBaremeTable({ groups, big = false }: { groups?: EvalGroup[];
                 <td className="p-2 text-right font-display font-extrabold">{l.reps}</td>
                 {cols.map((g) => {
                   const n = evalNote(g.key, l.stars);
+                  // Parcours par defaut propre a ce groupe (filles de 3e-4e : 2★), s'il differe de celui de tout le monde.
+                  const gd = !def && l.stars === evalGroupDefaultStars(g.key);
                   return (
-                    <td key={g.key} className={cx("p-2 font-display font-extrabold", n >= EVAL_NOTE_MAX ? "text-success-ink" : "text-ink")}>
+                    <td key={g.key} className={cx("p-2 font-display font-extrabold", n >= EVAL_NOTE_MAX ? "text-success-ink" : "text-ink", gd && "bg-accent-soft/60")}>
                       {noteText(n)}
                       <span className="text-ink-3 font-sans font-semibold text-xs">/{EVAL_NOTE_MAX}</span>
+                      {gd && <span className="block text-[11px] font-sans font-semibold text-ink-2">par défaut</span>}
                     </td>
                   );
                 })}
