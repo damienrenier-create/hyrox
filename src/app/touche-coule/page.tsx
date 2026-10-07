@@ -16,7 +16,7 @@ import type { BoardShip } from "./Board";
 import { btn, ui } from "@/lib/ui";
 import { notDeleted } from "@/lib/session-roles";
 import { ObservationClient, type ObsHistoryRow } from "./ObservationClient";
-import { currentObservation, loadObsView, obsStations, participantsOf, staffCoverage, staffObservation, studentObservations } from "@/lib/observations";
+import { currentObservation, loadObsView, obsStations, participantsOf, staffCoverage, staffObservation, studentObservations, readObsWatch } from "@/lib/observations";
 
 // Heure du serveur (hors du rendu, regle react-hooks/purity) : le compte a rebours de l'arbitre s'y recale.
 function serverNow(): number {
@@ -84,7 +84,8 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     const common = { sessionId: session.id, sessionLabel: session.label ?? wodLabel(session.wodType), race, serverNowMs: nowMs } as const;
     if (staff) {
       const coverage = await staffCoverage(session.id);
-      const roster = parts.map((p) => ({ ...p, done: coverage[p.userId] ?? {} }));
+      const watch = new Set(readObsWatch(session.settings));
+      const roster = parts.map((p) => ({ ...p, done: coverage[p.userId] ?? {}, watch: watch.has(p.userId) }));
       const selected = roster.find((p) => p.userId === eleve) ?? null;
       const row = selected ? await staffObservation(session.id, evaluator.id, selected.userId) : null;
       return <ObservationClient {...common} mode="STAFF" backHref={`/greffier?session=${session.id}`} stations={obsStations(session, "STAFF")} obs={row ? await loadObsView(row, parts) : null} roster={roster} selected={selected} />;

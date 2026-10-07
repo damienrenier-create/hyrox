@@ -8,7 +8,7 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { elapsed } from "@/lib/wod-engines/templates/pyramide-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
 import { CINDY_KEY, clockText, fmt, readHXSettings, segmentsFor, teamState } from "@/lib/wod-engines/templates/hyrox-engine";
-import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_RUN_ID, OBS_TOLERANCE_MS, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
+import { OBS_MINUTES, OBS_PREVIEW_MS, OBS_RUN_ID, OBS_TOLERANCE_MS, OBS_WATCH_TARGET, type GreffierPass, type ObsApp, type ObsEntry, type ObsMode, type ObsParticipant, type ObsReport, type ObsStation, type ObsView, type ReportEntry, type ReportObs } from "@/lib/observation-types";
 
 // Arbitrage du WOD Eval (Sartay 04/10).
 // - Arbitre ELEVE : l'appli lui tire un eleve au sort, il le suit 5 minutes chrono, consigne chaque serie de reps
@@ -106,11 +106,19 @@ export async function loadObsView(o: ObsRow, parts?: ObsParticipant[]): Promise<
 // fenetre fermee VIDE (arbitre absent, eleve introuvable) : cet eleve repasse avant ceux qui ont vraiment ete evalues,
 // mais pas indefiniment. L'observation commence dans OBS_PREVIEW_MS (le temps de reperer l'eleve) et dure OBS_MINUTES.
 const DRAW_ATTEMPTS = 8; // tirages successifs au plus quand plusieurs arbitres visent le meme eleve au meme instant
+// Eleves a observer en priorite (Session.settings.obsWatch, regle par un prof sur /admin/observations) : invisible pour les
+// arbitres eleves, marque ★ pour les profs.
+export function readObsWatch(settings: unknown): string[] {
+  const raw = (settings as { obsWatch?: unknown } | null)?.obsWatch;
+  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+}
+
 export async function drawTarget(sessionId: string, evaluatorId: string, ownTeamId: string | null): Promise<{ error: string; soft?: true } | { ok: true; observationId: string }> {
   const parts = await participantsOf(sessionId);
   // Une equipe ARRIVEE (parcours boucle) n'a plus rien a montrer : ses eleves ne sont plus tires (Sartay 05/10).
   const [session, events] = await Promise.all([db.orm.public.Session.where({ id: sessionId }).first(), db.orm.public.StationEvent.where({ sessionId }).all()]);
   const total = segmentsFor(readHXSettings(session?.settings), 0).length;
+  const watch = new Set(readObsWatch(session?.settings));
   const validated = new Map<string, number>();
   for (const e of events) if (e.stationId !== CINDY_KEY) validated.set(e.teamId, (validated.get(e.teamId) ?? 0) + 1);
   const racing = parts.filter((p) => (validated.get(p.teamId) ?? 0) < total);
@@ -139,7 +147,10 @@ export async function drawTarget(sessionId: string, evaluatorId: string, ownTeam
     // Rang d'un eleve pour CET arbitre : son compte, + 0,75 s'il l'a deja suivi. Un eleve en retard d'une evaluation
     // entiere passe toujours d'abord ; a egalite (ou a une demi-fenetre pres), l'arbitre prend quelqu'un de nouveau
     // pour lui et laisse l'eleve qu'il connait a un autre arbitre.
-    const rank = (p: ObsParticipant) => (seen.get(p.userId) ?? 0) + (mine.has(p.userId) ? 0.75 : 0);
+    // Eleve a observer en priorite : passe devant tout le monde tant qu'il n'a pas ses OBS_WATCH_TARGET observations, et seulement
+    // pour un arbitre qui ne l'a pas encore suivi (un autre arbitre, un autre moment : « busy » l'ecarte deja pendant une fenetre).
+    const priority = (p: ObsParticipant) => watch.has(p.userId) && !mine.has(p.userId) && (seen.get(p.userId) ?? 0) < OBS_WATCH_TARGET;
+    const rank = (p: ObsParticipant) => (seen.get(p.userId) ?? 0) + (mine.has(p.userId) ? 0.75 : 0) - (priority(p) ? 100 : 0);
     const min = Math.min(...pool.map(rank));
     const least = pool.filter((p) => rank(p) === min);
     const pick = least[Math.floor(Math.random() * least.length)];

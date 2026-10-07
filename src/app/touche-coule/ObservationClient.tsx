@@ -10,7 +10,7 @@ import { qualityCodeFromValue } from "@/lib/wod-engines/core/quality";
 import { btn, cx, ui } from "@/lib/ui";
 
 type Done = Record<string, { by: string; atMs: number }>;
-export type StaffRosterRow = ObsParticipant & { done: Done };
+export type StaffRosterRow = ObsParticipant & { done: Done; watch?: boolean }; // watch : a observer en priorite (profs seulement)
 export type ObsHistoryRow = { id: string; targetName: string; teamName: string; clock: string; summary: string };
 type AppJob = { observationId: string; exerciseId: string; met: number[] };
 
@@ -483,7 +483,7 @@ function StaffRoster({ roster, stations, selectedId, onPick }: { roster: StaffRo
                   <span className="font-bold text-sm truncate">{r.name}</span>
                   <span className={cx(ui.chip, c >= OBS_STAFF_TARGET ? ui.chipOk : c > 0 ? ui.chipWarn : ui.chipMuted)}>{c}/{OBS_STAFF_TARGET}</span>
                 </span>
-                <span className="block text-[11px] text-ink-3 truncate">{r.teamName}{r.className ? ` · ${r.className}` : ""}{c > 0 ? ` · ${Object.keys(r.done).map((id) => short.get(id) ?? id).join(", ")}` : ""}</span>
+                {r.watch && <span className="mr-1 text-[11px] font-bold text-accent-ink" title="À observer en priorité (réglage prof)">★</span>}<span className="block text-[11px] text-ink-3 truncate">{r.teamName}{r.className ? ` · ${r.className}` : ""}{c > 0 ? ` · ${Object.keys(r.done).map((id) => short.get(id) ?? id).join(", ")}` : ""}</span>
               </button>
             </li>
           );

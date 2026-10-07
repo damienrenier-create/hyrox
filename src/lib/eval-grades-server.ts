@@ -8,7 +8,8 @@ import { teamState, type HXSettings } from "./wod-engines/templates/hyrox-engine
 
 export type EvalGradesData = { settings: HXSettings; startedAtMs: number | null; endedAtMs: number | null; rows: EvalGradeRow[] };
 
-export async function loadEvalGrades(sessionId: string): Promise<EvalGradesData> {
+// `excludeEvaluators` : arbitres dont les appreciations ne comptent pas (identifiants ou debuts d'identifiant).
+export async function loadEvalGrades(sessionId: string, excludeEvaluators: string[] = []): Promise<EvalGradesData> {
   const b = await buildHXBundle(sessionId);
   const teamIds = b.ctx.teams.map((t) => t.id);
   const [members, evalsRaw, obs] = await Promise.all([
@@ -28,7 +29,7 @@ export async function loadEvalGrades(sessionId: string): Promise<EvalGradesData>
     return [{ userId: u.id, teamId: m.teamId, name: `${n.firstName} ${n.lastName}`.trim() || u.name, className: u.className ?? null, sex: u.sex ?? null }];
   });
   const evals: GradeEval[] = evalsRaw.flatMap((e) => {
-    if (!e.targetUserId) return [];
+    if (!e.targetUserId || excludeEvaluators.some((p) => e.evaluatorId.startsWith(p))) return [];
     const mode = e.observationId ? modeOf.get(e.observationId) : undefined;
     const staff = mode ? mode === "STAFF" : userById.get(e.evaluatorId)?.role !== "STUDENT";
     return [{ targetUserId: e.targetUserId, teamId: e.teamId, exerciseId: e.exerciseId, value: e.note, staff, checks: readCriteria(e.criteria) ?? [] }];

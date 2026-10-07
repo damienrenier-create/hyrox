@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { buildObsReport } from "@/lib/observations";
+import { buildObsReport, participantsOf, readObsWatch } from "@/lib/observations";
+import { ObsWatchForm } from "./ObsWatchForm";
 import { notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { TopBar } from "../../_components/TopBar";
@@ -30,6 +31,8 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
   }
   const report = await buildObsReport(session.id);
   const classes = readSessionClasses(session.settings);
+  const parts = await participantsOf(session.id);
+  const watch = readObsWatch(session.settings);
 
   return (
     <div className={ui.page}>
@@ -55,7 +58,8 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
           </div>
         )}
       </TopBar>
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        {parts.length > 0 && <ObsWatchForm sessionId={session.id} rows={parts.map((p) => ({ userId: p.userId, name: p.name, teamName: p.teamName, className: p.className }))} initial={watch} />}
         <ObsReportView report={report} />
       </main>
     </div>

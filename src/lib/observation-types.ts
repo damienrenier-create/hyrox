@@ -4,7 +4,9 @@ export const OBS_MINUTES = 5; // duree d'une fenetre d'observation d'arbitre ele
 export const OBS_PREVIEW_MS = 60_000; // avant chaque fenetre : 1 minute d'ecran avec le prochain eleve a reperer
 export const OBS_GRACE_MS = 20_000; // une saisie partie juste avant la fermeture de la fenetre est encore acceptee
 export const OBS_TOLERANCE_MS = 60_000; // ecart tolere entre l'heure d'une serie et les clics du greffier
-export const OBS_STAFF_TARGET = 3; // objectif prof : chaque eleve evalue sur 3 exercices differents au moins
+export const OBS_STAFF_TARGET = 3;
+// Eleves a observer en priorite (Sartay 07/10) : le tirage des arbitres eleves les sert d'abord, jusqu'a ce nombre d'observations chacun.
+export const OBS_WATCH_TARGET = 2; // objectif prof : chaque eleve evalue sur 3 exercices differents au moins
 // Motifs d'une carte jaune donnee depuis l'ecran d'un arbitre (Sartay 06/10). Une carte coute du temps a l'equipe et
 // 1 point sur 20 a chacun de ses eleves.
 export const CARD_REASONS = [
