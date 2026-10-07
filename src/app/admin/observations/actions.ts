@@ -10,9 +10,12 @@ export async function setObsWatchAction(sessionId: string, userIds: string[]): P
   if (!user || !["MASTER_ADMIN", "ADMIN"].includes(user.role)) return { error: "Accès refusé." };
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session || session.deletedAt) return { error: "Séance introuvable." };
-  const allowed = new Set((await participantsOf(sessionId)).map((p) => p.userId));
+  const parts = await participantsOf(sessionId);
+  const allowed = new Set(parts.map((p) => p.userId));
   const keep = [...new Set(userIds.filter((id) => typeof id === "string" && allowed.has(id)))];
+  // Eleves marques sur leur fiche (coches d'office) que le prof decoche pour CETTE seance.
+  const off = parts.filter((p) => p.watch && !keep.includes(p.userId)).map((p) => p.userId);
   const prev = (session.settings as Record<string, unknown> | null) ?? {};
-  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, obsWatch: keep })) });
+  await db.orm.public.Session.where({ id: sessionId }).update({ settings: JSON.parse(JSON.stringify({ ...prev, obsWatch: keep, obsWatchOff: off })) });
   return { ok: true, n: keep.length };
 }

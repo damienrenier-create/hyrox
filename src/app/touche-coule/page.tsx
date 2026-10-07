@@ -84,7 +84,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     const common = { sessionId: session.id, sessionLabel: session.label ?? wodLabel(session.wodType), race, serverNowMs: nowMs } as const;
     if (staff) {
       const coverage = await staffCoverage(session.id);
-      const watch = new Set(readObsWatch(session.settings));
+      const watch = new Set(readObsWatch(session.settings, parts));
       const roster = parts.map((p) => ({ ...p, done: coverage[p.userId] ?? {}, watch: watch.has(p.userId) }));
       const selected = roster.find((p) => p.userId === eleve) ?? null;
       const row = selected ? await staffObservation(session.id, evaluator.id, selected.userId) : null;

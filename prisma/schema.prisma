@@ -59,6 +59,9 @@ model User {
   // « Winter arc » (Sartay 01/10) : l'eleve a dit oui a l'interrupteur du greffier -> vrai jusqu'a cette date
   // (30 decembre, fin de journee a Bruxelles). null = pas en winter arc.
   winterArcUntil    DateTime?
+  // Eval S.O.R.O (Sartay 07/10) : eleve a observer en priorite par les arbitres, dans toute nouvelle seance ou il joue
+  // (coche par defaut du bloc « Eleves a observer en priorite » ; une seance peut ensuite retirer ou ajouter des eleves).
+  obsWatch          Boolean      @default(false)
 
   createdAt         DateTime     @default(now())
 

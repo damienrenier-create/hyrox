@@ -47,7 +47,7 @@ export async function participantsOf(sessionId: string): Promise<ObsParticipant[
     const t = teamById.get(m.teamId);
     if (!u || !t) continue;
     const n = memberNames(u);
-    out.push({ userId: u.id, name: `${n.firstName} ${n.lastName}`.trim() || u.name, sortName: `${n.lastName} ${n.firstName}`.trim().toLowerCase(), className: u.role === "STUDENT" ? u.className ?? null : "prof", teamId: t.id, teamName: t.name, teamOrder: t.order ?? 0 });
+    out.push({ userId: u.id, name: `${n.firstName} ${n.lastName}`.trim() || u.name, sortName: `${n.lastName} ${n.firstName}`.trim().toLowerCase(), className: u.role === "STUDENT" ? u.className ?? null : "prof", teamId: t.id, teamName: t.name, teamOrder: t.order ?? 0, watch: u.obsWatch === true });
   }
   return out.sort((a, b) => a.teamOrder - b.teamOrder || a.sortName.localeCompare(b.sortName, "fr"));
 }
@@ -106,11 +106,18 @@ export async function loadObsView(o: ObsRow, parts?: ObsParticipant[]): Promise<
 // fenetre fermee VIDE (arbitre absent, eleve introuvable) : cet eleve repasse avant ceux qui ont vraiment ete evalues,
 // mais pas indefiniment. L'observation commence dans OBS_PREVIEW_MS (le temps de reperer l'eleve) et dure OBS_MINUTES.
 const DRAW_ATTEMPTS = 8; // tirages successifs au plus quand plusieurs arbitres visent le meme eleve au meme instant
-// Eleves a observer en priorite (Session.settings.obsWatch, regle par un prof sur /admin/observations) : invisible pour les
-// arbitres eleves, marque ★ pour les profs.
-export function readObsWatch(settings: unknown): string[] {
-  const raw = (settings as { obsWatch?: unknown } | null)?.obsWatch;
-  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+// Eleves a observer en priorite : invisible pour les arbitres eleves, marque ★ pour les profs.
+// - Fiche eleve (User.obsWatch, Sartay 07/10 « coche par defaut ») : coche d'office dans toute seance ou il joue.
+// - Seance (Session.settings, regle par un prof sur /admin/observations) : obsWatch = eleves coches, obsWatchOff = eleves
+//   marques sur leur fiche mais decoches pour cette seance. Un eleve marque qui rejoint une equipe apres l'enregistrement
+//   reste donc coche.
+const idList = (raw: unknown) => (Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : []);
+export function readObsWatch(settings: unknown, parts: ObsParticipant[]): string[] {
+  const s = settings as { obsWatch?: unknown; obsWatchOff?: unknown } | null;
+  const off = new Set(idList(s?.obsWatchOff));
+  const out = new Set(idList(s?.obsWatch));
+  for (const p of parts) if (p.watch && !off.has(p.userId)) out.add(p.userId);
+  return [...out];
 }
 
 export async function drawTarget(sessionId: string, evaluatorId: string, ownTeamId: string | null): Promise<{ error: string; soft?: true } | { ok: true; observationId: string }> {
@@ -118,7 +125,7 @@ export async function drawTarget(sessionId: string, evaluatorId: string, ownTeam
   // Une equipe ARRIVEE (parcours boucle) n'a plus rien a montrer : ses eleves ne sont plus tires (Sartay 05/10).
   const [session, events] = await Promise.all([db.orm.public.Session.where({ id: sessionId }).first(), db.orm.public.StationEvent.where({ sessionId }).all()]);
   const total = segmentsFor(readHXSettings(session?.settings), 0).length;
-  const watch = new Set(readObsWatch(session?.settings));
+  const watch = new Set(readObsWatch(session?.settings, parts));
   const validated = new Map<string, number>();
   for (const e of events) if (e.stationId !== CINDY_KEY) validated.set(e.teamId, (validated.get(e.teamId) ?? 0) + 1);
   const racing = parts.filter((p) => (validated.get(p.teamId) ?? 0) < total);

@@ -6,7 +6,7 @@ import { sessionsForStudent, fmtDate } from "@/lib/student-sessions";
 import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { TopBar } from "../../../_components/TopBar";
-import { resetStudentPinAction, updateStudentAction } from "../actions";
+import { resetStudentPinAction, setStudentObsWatchAction, updateStudentAction } from "../actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { isWinterArc } from "@/lib/winter-arc";
 
@@ -84,6 +84,13 @@ export default async function EleveFichePage({ params, searchParams }: { params:
             <p className={ui.muted}>
               Fiabilité <b className="text-ink tabular-nums">{s.reliability}</b> · <b className="text-ink tabular-nums">{evalsGiven.n}</b> évaluation(s) données · arbitre sur <b className="text-ink tabular-nums">{refereeRows.filter((r) => r.status === "APPROVED").length}</b> séance(s)
             </p>
+            <form action={setStudentObsWatchAction} className="mt-3 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="id" value={s.id} />
+              <input type="hidden" name="on" value={s.obsWatch ? "0" : "1"} />
+              {s.obsWatch && <span className={cx(ui.chip, ui.chipAccent)}>★ À observer en priorité</span>}
+              <button type="submit" className={btn.smGhost}>{s.obsWatch ? "Retirer la priorité" : "★ À observer en priorité (Eval)"}</button>
+            </form>
+            <p className={`${ui.hint} mt-1`}>Coché d&apos;office dans chaque séance Eval où il joue : le tirage le donne d&apos;abord aux arbitres élèves, sans qu&apos;ils le sachent.</p>
           </div>
         </section>
 

@@ -35,7 +35,8 @@ export type ObsView = {
   entries: ObsEntry[];
   apps: ObsApp[];
 };
-export type ObsParticipant = { userId: string; name: string; sortName: string; className: string | null; teamId: string; teamName: string; teamOrder: number };
+// watch : eleve marque « a observer en priorite » sur sa fiche (User.obsWatch) ; ne part jamais vers l'ecran d'un arbitre eleve.
+export type ObsParticipant = { userId: string; name: string; sortName: string; className: string | null; teamId: string; teamName: string; teamOrder: number; watch?: boolean };
 
 // ===== Compte rendu =====
 export type ReportEntry = {

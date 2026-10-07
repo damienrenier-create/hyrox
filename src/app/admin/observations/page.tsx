@@ -32,7 +32,7 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
   const report = await buildObsReport(session.id);
   const classes = readSessionClasses(session.settings);
   const parts = await participantsOf(session.id);
-  const watch = readObsWatch(session.settings);
+  const watch = readObsWatch(session.settings, parts);
 
   return (
     <div className={ui.page}>
@@ -59,7 +59,7 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
         )}
       </TopBar>
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-4">
-        {parts.length > 0 && <ObsWatchForm sessionId={session.id} rows={parts.map((p) => ({ userId: p.userId, name: p.name, teamName: p.teamName, className: p.className }))} initial={watch} />}
+        {parts.length > 0 && <ObsWatchForm sessionId={session.id} rows={parts.map((p) => ({ userId: p.userId, name: p.name, teamName: p.teamName, className: p.className, byDefault: p.watch === true }))} initial={watch} />}
         <ObsReportView report={report} />
       </main>
     </div>

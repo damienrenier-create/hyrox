@@ -67,6 +67,19 @@ export async function createStudentAction(fd: FormData) {
   redirect(`/admin/eleves/${created.id}?ok=` + encodeURIComponent("Profil créé. L'élève choisira son PIN à sa première connexion."));
 }
 
+// « A observer en priorite » (WOD Eval, Sartay 07/10) : l'eleve est coche d'office dans la liste de chaque seance ou il joue ;
+// le tirage au sort le donne d'abord aux arbitres eleves, discretement. Reversible, rien n'est efface.
+export async function setStudentObsWatchAction(fd: FormData) {
+  await requireStaff();
+  const id = str(fd, "id");
+  const on = str(fd, "on") === "1";
+  const student = await db.orm.public.User.where({ id, role: "STUDENT" }).first();
+  if (!student) redirect("/admin/eleves?msg=" + encodeURIComponent("Élève introuvable."));
+  await db.orm.public.User.where({ id }).update({ obsWatch: on });
+  revalidatePath(`/admin/eleves/${id}`);
+  redirect(`/admin/eleves/${id}?ok=` + encodeURIComponent(on ? "Élève à observer en priorité : coché d'office dans chaque séance Eval où il joue." : "Élève retiré des priorités d'observation."));
+}
+
 export async function resetStudentPinAction(fd: FormData) {
   await requireStaff();
   const id = str(fd, "id");
