@@ -137,11 +137,16 @@ export async function drawTarget(sessionId: string, evaluatorId: string, ownTeam
     const refereeing = new Set(all.filter((o) => o.endsAt != null && toMs(o.endsAt) > now - 15 * 60_000).map((o) => o.evaluatorId));
     const playing = others.filter((p) => !refereeing.has(p.userId));
     const candidates = playing.length ? playing : others;
-    const busy = new Set(all.filter((o) => o.evaluatorId !== evaluatorId && live(o)).map((o) => o.targetUserId));
+    const liveOthers = all.filter((o) => o.evaluatorId !== evaluatorId && live(o));
+    const busy = new Set(liveOthers.map((o) => o.targetUserId));
+    // Jamais deux arbitres sur la meme EQUIPE en meme temps (Sartay 07/10) : les equipes qu'un autre arbitre suit en ce moment
+    // sortent du tirage tant qu'il reste une equipe libre.
+    const busyTeams = new Set(liveOthers.map((o) => o.teamId));
     const seen = new Map<string, number>();
     for (const o of all) seen.set(o.targetUserId, (seen.get(o.targetUserId) ?? 0) + (live(o) || used.has(o.id) ? 1 : 0.5));
     const mine = new Set(all.filter((o) => o.evaluatorId === evaluatorId).map((o) => o.targetUserId));
-    let pool = candidates.filter((p) => !busy.has(p.userId));
+    let pool = candidates.filter((p) => !busy.has(p.userId) && !busyTeams.has(p.teamId));
+    if (!pool.length) pool = candidates.filter((p) => !busy.has(p.userId)); // toutes les equipes sont suivies : au moins un autre eleve
     const everyoneBusy = !pool.length; // plus d'arbitres que d'eleves libres : un eleve peut alors etre suivi a deux
     if (everyoneBusy) pool = candidates;
     // Rang d'un eleve pour CET arbitre : son compte, + 0,75 s'il l'a deja suivi. Un eleve en retard d'une evaluation
