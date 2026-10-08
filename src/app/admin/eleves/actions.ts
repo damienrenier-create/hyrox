@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
+import { canonicalClassName, classCountsOf } from "@/lib/class-names";
 
 // Fiche eleve, cote admin : identite corrigeable (nom, prenom, classe, sexe, date de naissance) et
 // remise a zero du code PIN. Jamais de suppression d'eleve ici.
@@ -22,7 +23,8 @@ export async function updateStudentAction(fd: FormData) {
 
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
-  const className = str(fd, "className");
+  // Orthographe de la classe existante (« 5GTA » -> « 5GTa ») : sinon une classe de plus dans la liste de connexion.
+  const className = canonicalClassName(str(fd, "className"), classCountsOf(await db.orm.public.User.where({ role: "STUDENT" }).all()));
   const sexRaw = str(fd, "sex");
   const dob = str(fd, "dateOfBirth");
   if (!firstName || !lastName) redirect(`/admin/eleves/${id}?msg=` + encodeURIComponent("Prénom et nom sont obligatoires."));
@@ -47,12 +49,14 @@ export async function createStudentAction(fd: FormData) {
   await requireStaff();
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
-  const className = str(fd, "className").toUpperCase();
   const sexRaw = str(fd, "sex");
   const dob = str(fd, "dateOfBirth");
   if (!firstName || !lastName) redirect("/admin/eleves?msg=" + encodeURIComponent("Prénom et nom sont obligatoires."));
   if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) redirect("/admin/eleves?msg=" + encodeURIComponent("Date de naissance invalide."));
-  const dup = (await db.orm.public.User.where({ role: "STUDENT" }).all()).find((u) => (u.firstName ?? "").trim().toLowerCase() === firstName.toLowerCase() && (u.lastName ?? "").trim().toLowerCase() === lastName.toLowerCase());
+  const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
+  // Plus de MAJUSCULES forcees (Sartay 08/10) : la classe reprend l'orthographe de la classe existante (« 5gta » -> « 5GTa »).
+  const className = canonicalClassName(str(fd, "className"), classCountsOf(students));
+  const dup = students.find((u) => (u.firstName ?? "").trim().toLowerCase() === firstName.toLowerCase() && (u.lastName ?? "").trim().toLowerCase() === lastName.toLowerCase());
   if (dup) redirect(`/admin/eleves/${dup.id}?msg=` + encodeURIComponent("Ce profil existe déjà : le voici."));
   const created = await db.orm.public.User.create({
     role: "STUDENT",
