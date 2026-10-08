@@ -508,7 +508,7 @@ function SettingsSheet({ sessionId, settings, numTeams, onClose, onSaved }: { se
           ))}
         </ul>
         {list.length < AMRAP_MAX_EXERCISES && <button type="button" onClick={() => setList((l) => [...l, { label: "", reps: 10, unit: "rép." }])} className={`${btn.smGhost} mb-3`}>+ Exercice</button>}
-        <p className={`${ui.hint} mb-3`}>Les quantités comptent pour toute l&apos;équipe, qui se répartit le travail.</p>
+        <p className={`${ui.hint} mb-3`}>Les quantités d&apos;un tour, affichées à droite de l&apos;écran de course et sur les dias.</p>
         <div className="flex gap-2">
           <button onClick={save} disabled={pending} className={btn.primary}>{pending ? "Enregistrement…" : "Enregistrer"}</button>
           <button onClick={onClose} className={btn.ghost}>Annuler</button>

@@ -66,6 +66,8 @@ const CSS = `
 // Dias du WOD : 1. le principe et le circuit ; 2. bien faire chaque exercice ; 3. (seance avec equipes) les departs.
 export function renderAmrapSlides(s: AmrapSettings, teams: { order: number; name: string }[] = []): string {
   const n = s.exercises.length;
+  // Circuit « en echelle » (Sartay 08/10 : 1 run, 2 burpees … 10 cordes) : le numero de l'exercice = ses repetitions.
+  const ladder = n >= 2 && s.exercises.every((e, i) => e.unit === "rép." && e.reps === i + 1);
   const list = s.exercises.map((e, i) => `<li><span class="n">${i + 1}</span><span class="name">${esc(e.label)}</span><span class="qty">${nb(amountWords(e))}</span></li>`).join("");
   const rules = `<section class="slide">
   <div class="top"><h1>🔁 AMRAP ${s.capMin}′</h1><span class="sub">As Many Rounds As Possible · le plus de tours possible en ${s.capMin} minutes · par équipe</span></div>
@@ -81,7 +83,7 @@ export function renderAmrapSlides(s: AmrapSettings, teams: { order: number; name
         <p><b>Le plus de tours possible</b> en ${s.capMin} minutes. Pas de pause imposée : à vous de <b>gérer votre effort</b> pour tenir jusqu'au bout.</p>
       </div>
       <div class="card"><h2>🖥️ Fin du tour : à l'ordi</h2><p>À la fin de <b>chaque tour</b>, l'équipe vient à l'ordi : le greffier clique, <b>le tour est compté</b>. Pas de clic, pas de tour !</p></div>
-      <div class="card"><h2>💪 Les répétitions</h2><p>Elles comptent pour <b>toute l'équipe</b> : répartissez-vous le travail. Chaque répétition se fait <b>en entier et proprement</b>.</p></div>
+      <div class="card"><h2>💪 Les répétitions</h2><p>${ladder ? `<b>Le numéro de l'exercice = son nombre de répétitions</b> : 1 ${esc(s.exercises[0].label.toLowerCase())}, 2 ${esc(s.exercises[1]?.label.toLowerCase() ?? "")}… jusqu'à ${n} ${esc(s.exercises[n - 1].label.toLowerCase())}. ` : ""}Chaque répétition se fait <b>en entier et proprement</b>.</p></div>
       <div class="card"><h2>📍 Le départ</h2><p>${s.staggered ? `Chaque équipe commence à <b>SON exercice</b>, donné par le greffier, puis suit l'ordre : après le ${n}, le 1.` : "Toutes les équipes commencent au <b>1</b>, puis suivent l'ordre."}</p></div>
       <div class="card"><h2>🏆 Le classement</h2><p>Le <b>plus de tours</b>. À égalité, l'équipe qui les a bouclés <b>le plus tôt</b>. À <b>${s.capMin}:00</b>, tout s'arrête : le tour en cours <b>ne compte pas</b>.</p></div>
     </div>
@@ -94,7 +96,7 @@ export function renderAmrapSlides(s: AmrapSettings, teams: { order: number; name
   const exercises = `<section class="slide">
   <div class="top"><h1>✅ Bien faire chaque exercice</h1><span class="sub">Une répétition bâclée ne compte pas</span></div>
   <div class="ex">${cards}</div>
-  <div class="foot">Les quantités comptent pour toute l'équipe · fin du tour = passage à l'ordi</div>
+  <div class="foot">Fin du tour = passage à l'ordi · le tour en cours à la fin du temps ne compte pas</div>
 </section>`;
   const slides = [rules, exercises];
   if (teams.length) {

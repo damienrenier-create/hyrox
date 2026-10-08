@@ -20,21 +20,11 @@ export const AMRAP_MAX_CAP = 60;
 // Ecart minimal entre deux tours d'une meme equipe : en dessous, c'est un double clic du greffier, pas un tour.
 export const AMRAP_MIN_LAP_MS = 60_000;
 
-// Les 10 exercices de Sartay (08/10), dans son ordre. Les quantites sont un premier reglage (un tour d'environ 5 minutes
-// pour une equipe de 2-3), a ajuster dans ⚙️ Reglages avant le depart : elles comptent pour toute l'equipe, qui se
-// repartit le travail, comme a l'Eval.
-export const AMRAP_DEFAULT_EXERCISES: AmrapExercise[] = [
-  { id: "ex1", label: "Run", reps: 2, unit: "A/R" },
-  { id: "ex2", label: "Burpees", reps: 10, unit: "rép." },
-  { id: "ex3", label: "Jump squats", reps: 20, unit: "rép." },
-  { id: "ex4", label: "Fentes", reps: 20, unit: "rép." },
-  { id: "ex5", label: "Pompages", reps: 20, unit: "rép." },
-  { id: "ex6", label: "Crawling", reps: 1, unit: "A/R" },
-  { id: "ex7", label: "Commando", reps: 20, unit: "rép." },
-  { id: "ex8", label: "Monkey slide", reps: 20, unit: "rép." },
-  { id: "ex9", label: "Hélico", reps: 20, unit: "rép." },
-  { id: "ex10", label: "Cordes", reps: 60, unit: "rép." },
-];
+// Les 10 exercices de Sartay (08/10), dans son ordre, et leurs repetitions (Sartay : « c'est 1 rep de run, 2 reps de
+// burpees, 3 reps de jump squats etc et 10 reps de cordes ») : le numero de l'exercice = son nombre de repetitions.
+// Reglables dans ⚙️ Reglages avant le depart.
+export const AMRAP_DEFAULT_EXERCISES: AmrapExercise[] = ["Run", "Burpees", "Jump squats", "Fentes", "Pompages", "Crawling", "Commando", "Monkey slide", "Hélico", "Cordes"]
+  .map((label, i) => ({ id: `ex${i + 1}`, label, reps: i + 1, unit: "rép." }));
 export const AMRAP_DEFAULTS: AmrapSettings = { capMin: 20, exercises: AMRAP_DEFAULT_EXERCISES, staggered: true };
 
 const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
