@@ -5,6 +5,8 @@ import { teamRows, colorOf, fmt as ffFmt, type FFContext, type FFTeam } from "@/
 import { readFFSettings } from "@/lib/fete-foraine-context";
 import { FF_COLORS, FF_STATIONS, type FFColor } from "@/lib/wod-engines/templates/fete-foraine-engine";
 import type { SessionStandings, StandingRow } from "@/lib/session-standings";
+import { amrapRows } from "@/lib/amrap-standings";
+import { readAmrapSettings } from "@/lib/wod-engines/templates/amrap-engine";
 import { toMs } from "@/lib/scheduling";
 import { readFrozenFromSettings } from "@/lib/level";
 import { levelPoints, rankGlobal, readEmom, readReorient, readStarSwitches, ladderFor, levelLabel, orderedLevels, progressOf, rankTeams, readLadders, readLevelOrder, readPenalties, readTeamFormats, readTeamStars, teamFormatOf, teamStarsOf, type Loss, type Tick } from "@/lib/wod-engines/templates/level-engine";
@@ -74,6 +76,16 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
 
     if (session.wodType === "LEVEL") {
       out.set(session.id, levelStandingsBatch(session, rawTeams, ticksBySession.get(session.id) ?? [], lossesBySession.get(session.id) ?? [], rs ? cardsByRs.get(rs.id) ?? [] : [], startedAtMs, sessionPauses));
+      continue;
+    }
+    if (session.wodType === "AMRAP") {
+      // WOD AMRAP : les tours de chaque equipe (table Lap), en ms ecoulees ; fin de course = fin pour tout le monde.
+      const endedAtMs = rs?.endedAt ? toMs(rs.endedAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : null;
+      const laps = rs ? (lapsByRs.get(rs.id) ?? []).map((l, i) => ({ id: String(i), teamId: l.teamId, at: elapsed(startedAtMs, sessionPauses, toMs(l.at)) ?? 0, abs: toMs(l.at) })) : [];
+      const amrapTeams = rawTeams.map((t) => ({ id: t.id, order: t.order ?? 0, name: t.name, members: [] }));
+      const fin: Record<string, number> = {};
+      if (endedAtMs !== null) for (const t of amrapTeams) fin[t.id] = endedAtMs;
+      out.set(session.id, amrapRows({ settings: readAmrapSettings(session.settings), teams: amrapTeams, laps }, endedAtMs !== null, fin));
       continue;
     }
     if (session.wodType === "FETE_FORAINE") {

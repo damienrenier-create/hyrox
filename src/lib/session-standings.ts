@@ -6,6 +6,8 @@ import { buildLevelBundle, levelStandings, phaseExtras, teamFinishedAbsMs } from
 import { levelLabel } from "@/lib/wod-engines/templates/level-engine";
 import { buildHXBundle } from "@/lib/hyrox-context";
 import { fmt as hxFmt, timeRows as hxTimeRows } from "@/lib/wod-engines/templates/hyrox-engine";
+import { buildAmrapBundle } from "@/lib/amrap-context";
+import { amrapRows } from "@/lib/amrap-standings";
 
 // Classement « generique » d'une seance, quel que soit son moteur (Pyramide = tours, Fete Foraine = ateliers/score),
 // pour l'espace eleve et la consultation admin. Les colonnes portent leur libelle selon le moteur.
@@ -75,6 +77,10 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
       done: st.finishedMs !== null,
     }));
     return { columns: { laps: "Stations", time: "Temps", reps: "Runs", cards: "🟨", start: b.ctx.settings.levels ? "Niveau · départ" : "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
+  }
+  if (session.wodType === "AMRAP") {
+    const b = await buildAmrapBundle(session.id);
+    return amrapRows(b.ctx, b.endedAtMs !== null || !!session.raceEndedAt, b.finishedAbsMs);
   }
   if (session.wodType === "FETE_FORAINE") {
     const b = await buildFFBundle(session.id);

@@ -213,7 +213,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
                   </td>
                   <td className="p-2">{r.teamName ?? "—"}</td>
                   <td className="p-2 font-black">{r.rank ?? ""}</td>
-                  <td className="p-2">{r.laps !== null ? `${r.laps}/${r.lapsTotal}` : ""}</td>
+                  <td className="p-2">{r.laps !== null ? (r.lapsTotal ? `${r.laps}/${r.lapsTotal}` : String(r.laps)) : ""}</td>
                   <td className="p-2">{r.time ?? ""}</td>
                   <td className="p-2">{r.reps ?? ""}</td>
                   <td className="p-2">{r.cards || ""}</td>

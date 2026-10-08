@@ -16,6 +16,7 @@ enum WodTemplate {
   FETE_FORAINE = "FETE_FORAINE"
   LEVEL = "LEVEL"
   HYROX = "HYROX"
+  AMRAP = "AMRAP" // Sartay 08/10 : le plus de tours possible en 20 min, un clic du greffier par tour
 }
 
 enum Visibility {

@@ -78,7 +78,7 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
           </div>
           <div>
             <div className={ui.eyebrow}>{columns.laps}</div>
-            <div className={stat}>{mine.laps}<span className="text-sm text-ink-3 font-sans">/{mine.lapsTotal}</span></div>
+            <div className={stat}>{mine.laps}{mine.lapsTotal > 0 && <span className="text-sm text-ink-3 font-sans">/{mine.lapsTotal}</span>}</div>
           </div>
           <div>
             <div className={ui.eyebrow}>{mine.time ? columns.time : columns.reps}</div>
@@ -157,7 +157,7 @@ export function WodView({ sessionId, ended, myTeamName, columns, results, refere
                 <tr key={r.teamId} className={cx("border-b border-line/70", r.mine ? "bg-brand-soft font-extrabold" : "odd:bg-paper/60")}>
                   <td className="p-2">{r.done || ended ? r.rank : "—"}</td>
                   <td className="p-2">{r.teamName}{r.mine ? " ★" : ""}</td>
-                  <td className="p-2">{r.laps}/{r.lapsTotal}</td>
+                  <td className="p-2">{r.laps}{r.lapsTotal > 0 ? `/${r.lapsTotal}` : ""}</td>
                   <td className="p-2 tabular-nums">{r.time ? `🏁 ${r.time}` : "—"}{r.late ? <span className="text-xs text-ink-3"> +{r.late}</span> : null}</td>
                   <td className="p-2">{r.reps}</td>
                   <td className="p-2">{r.cards || ""}</td>

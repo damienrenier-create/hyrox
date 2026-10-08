@@ -8,6 +8,8 @@ import { buildFFBundle } from "@/lib/fete-foraine-context";
 import { exercisesFor } from "@/lib/session-exercises";
 import { FeteForaineClient } from "./ff-client";
 import { HyroxClient } from "./hyrox-client";
+import { AmrapClient } from "./amrap-client";
+import { buildAmrapBundle } from "@/lib/amrap-context";
 import { buildHXBundle, buildHXRecords } from "@/lib/hyrox-context";
 import { LevelClient } from "./level-client";
 import { buildLevelBundle, readChild } from "@/lib/level-context";
@@ -78,7 +80,7 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
 
   await ensureRaceStateAction(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
-  const board = session.refereeMode && session.wodType !== "LEVEL" && session.wodType !== "HYROX" ? await buildBoardData(session.id) : null;
+  const board = session.refereeMode && session.wodType !== "LEVEL" && session.wodType !== "HYROX" && session.wodType !== "AMRAP" ? await buildBoardData(session.id) : null;
 
   // Composition des equipes (identifiants permanents) + arbitres + classes pour l'onglet "Equipes & arbitres".
   // Les eleves sont charges UNE fois (une requete) et les membres de toutes les equipes en parallele :
@@ -192,6 +194,27 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
         referees={referees}
         pendingRequests={pendingRequests}
         board={board}
+        picker={picker}
+      />
+    );
+  }
+  // WOD AMRAP (Sartay 08/10) : le plus de tours possible en 20 minutes, un clic par tour.
+  if (session.wodType === "AMRAP") {
+    const amrapBundle = await buildAmrapBundle(session.id);
+    return (
+      <AmrapClient
+        sessionId={session.id}
+        showConsole={evaluator.role !== "GREFFIER"}
+        sessionLabel={session.label ?? wodLabel(session.wodType)}
+        sessionOptions={options}
+        olderSession={olderSession}
+        newerSession={newerSession}
+        bundle={amrapBundle}
+        teamsWithMembers={teamsWithMembers}
+        classes={classes}
+        allClasses={allClasses}
+        referees={referees}
+        pendingRequests={pendingRequests}
         picker={picker}
       />
     );

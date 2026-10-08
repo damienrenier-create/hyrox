@@ -232,6 +232,10 @@
               {
                 "name": "HYROX",
                 "value": "HYROX"
+              },
+              {
+                "name": "AMRAP",
+                "value": "AMRAP"
               }
             ]
           }
@@ -4235,8 +4239,8 @@
             "cyclePlan": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX')",
-                  "name": "cyclePlan_wodType_check_7c965a6d",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP')",
+                  "name": "cyclePlan_wodType_check_e729d788",
                   "prefix": "cyclePlan_wodType_check"
                 }
               ],
@@ -5978,8 +5982,8 @@
             "session": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX')",
-                  "name": "session_wodType_check_7c965a6d",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP')",
+                  "name": "session_wodType_check_e729d788",
                   "prefix": "session_wodType_check"
                 }
               ],
@@ -6953,7 +6957,8 @@
                 "TOUCHE_COULE_HYROX",
                 "FETE_FORAINE",
                 "LEVEL",
-                "HYROX"
+                "HYROX",
+                "AMRAP"
               ]
             }
           }
@@ -6962,7 +6967,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "57e1f43e2241c4c243bc9eb139ad5b0878b4c09f8e59328d6157343e845b4fae"
+    "storageHash": "1674cab46e8a09d3931d55addaa0b36674613523f84da9afbf3b3b76dc4ed566"
   },
   "execution": {
     "executionHash": "2949a3b0e1f08f3d101e69a3b603ecc5ac843524d5d35e9b8cd4d9fa4c4cb298",

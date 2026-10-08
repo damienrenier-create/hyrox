@@ -1,0 +1,170 @@
+[
+  {
+    "id": "dropCheckConstraint.cyclePlan.cyclePlan_wodType_check_7c965a6d",
+    "label": "Drop check constraint \"cyclePlan_wodType_check_7c965a6d\" on \"cyclePlan\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_7c965a6d",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_7c965a6d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"cyclePlan_wodType_check_7c965a6d\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" DROP CONSTRAINT \"cyclePlan_wodType_check_7c965a6d\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_7c965a6d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_7c965a6d",
+    "label": "Drop check constraint \"session_wodType_check_7c965a6d\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_7c965a6d",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_7c965a6d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_7c965a6d\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_7c965a6d\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_7c965a6d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_7c965a6d",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.cyclePlan.cyclePlan_wodType_check_e729d788",
+    "label": "Add check constraint \"cyclePlan_wodType_check_e729d788\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_e729d788",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_e729d788\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_e729d788",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"cyclePlan_wodType_check_e729d788\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" ADD CONSTRAINT \"cyclePlan_wodType_check_e729d788\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_e729d788\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_e729d788",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_e729d788",
+    "label": "Add check constraint \"session_wodType_check_e729d788\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_e729d788",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_e729d788\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_e729d788",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_e729d788\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_e729d788\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_e729d788\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_e729d788",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  }
+]

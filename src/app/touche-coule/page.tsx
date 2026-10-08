@@ -57,6 +57,19 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     );
   }
 
+  // WOD AMRAP (Sartay 08/10) : pas d'arbitrage, le greffier ne compte que les tours.
+  if (session.wodType === "AMRAP") {
+    return (
+      <div className={`${ui.page} flex items-center justify-center p-6 text-center`}>
+        <div className={`${ui.cardPad} max-w-sm`}>
+          <div className="text-5xl mb-3">🔁</div>
+          <h1 className={`${ui.h2} mb-2`}>Pas d&apos;arbitrage pour l&apos;AMRAP</h1>
+          <p className={`${ui.muted} mb-6`}>Le greffier compte les tours de chaque équipe. Demande à ton prof ce que tu peux faire pendant le WOD.</p>
+          <a href="/eleve" className={btn.primary}>← Mon espace</a>
+        </div>
+      </div>
+    );
+  }
   // Participant encode dans une equipe et pas inscrit arbitre par le greffier -> pas d'arbitrage.
   const access = await refereeAccess(session.id, evaluator);
   if (!access.allowed) {

@@ -3,12 +3,14 @@ import { PyramideClassique } from "./templates/pyramide";
 import { FeteForaine } from "./templates/fete-foraine";
 import { LevelWod } from "./templates/level";
 import { HyroxWod } from "./templates/hyrox";
+import { AmrapWod } from "./templates/amrap";
 
 const templates: Record<string, WodTemplate> = {
   [PyramideClassique.id]: PyramideClassique,
   [FeteForaine.id]: FeteForaine,
   [LevelWod.id]: LevelWod,
   [HyroxWod.id]: HyroxWod,
+  [AmrapWod.id]: AmrapWod, // Sartay 08/10 : le plus de tours possible en 20 minutes
   // Prochaines seances du cycle Hyrox (AMRAP, EMOM, Cindy, Intro, Eval) et autres cycles : ajouter ici.
 };
 

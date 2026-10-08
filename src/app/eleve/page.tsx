@@ -164,7 +164,7 @@ export default async function ElevePage() {
 
 // Records existants par type de WOD (lien depuis un WOD fait par l'eleve).
 const RECORDS_WOD: Record<string, string> = { PYRAMIDE_CLASSIQUE: "pyramide", LEVEL: "level" };
-const WOD_ORDER = ["LEVEL", "PYRAMIDE_CLASSIQUE", "FETE_FORAINE"];
+const WOD_ORDER = ["LEVEL", "PYRAMIDE_CLASSIQUE", "FETE_FORAINE", "AMRAP"];
 
 // Historique de l'eleve : un bloc par cycle (le plus recent d'abord), puis un par type de WOD.
 function groupHistory(rows: StudentSessionRow[]) {
