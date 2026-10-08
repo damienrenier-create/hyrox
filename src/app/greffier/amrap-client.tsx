@@ -494,11 +494,11 @@ function SettingsSheet({ sessionId, settings, numTeams, onClose, onSaved }: { se
         <p className={`${ui.label} mb-1`}>Le circuit (une info pour les élèves : l&apos;ordi ne compte que les tours)</p>
         <ul className="space-y-1.5 mb-2">
           {list.map((e, i) => (
-            <li key={i} className="flex items-center gap-1.5">
-              <span className="w-6 text-center font-bold text-sm">{i + 1}</span>
-              <input value={e.label} onChange={(ev) => set(i, { label: ev.target.value })} className={`${ui.input} flex-1 py-1`} />
-              <input type="number" min={1} max={999} value={e.reps} onChange={(ev) => set(i, { reps: Number(ev.target.value) })} className={`${ui.input} w-20 py-1`} />
-              <select value={e.unit} onChange={(ev) => set(i, { unit: ev.target.value })} className={`${ui.input} w-20 py-1`}>
+            <li key={i} className="grid grid-cols-[1.5rem_minmax(0,1fr)_5rem_5.5rem_auto_auto_auto] items-center gap-1.5">
+              <span className="text-center font-bold text-sm">{i + 1}</span>
+              <input value={e.label} onChange={(ev) => set(i, { label: ev.target.value })} placeholder="Exercice" className={`${ui.input} py-1`} />
+              <input type="number" min={1} max={999} value={e.reps} onChange={(ev) => set(i, { reps: Number(ev.target.value) })} className={`${ui.input} py-1`} />
+              <select value={e.unit} onChange={(ev) => set(i, { unit: ev.target.value })} className={`${ui.input} py-1`}>
                 {AMRAP_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
               <button type="button" onClick={() => move(i, -1)} className={btn.smGhost} aria-label="Monter">↑</button>
