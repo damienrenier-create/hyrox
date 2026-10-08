@@ -84,7 +84,7 @@ export function renderAmrapSlides(s: AmrapSettings, teams: { order: number; name
       </div>
       <div class="card"><h2>🖥️ Fin du tour : à l'ordi</h2><p>À la fin de <b>chaque tour</b>, l'équipe vient à l'ordi : le greffier clique, <b>le tour est compté</b>. Pas de clic, pas de tour !</p></div>
       <div class="card"><h2>💪 Les répétitions</h2><p>${ladder ? `<b>Le numéro de l'exercice = son nombre de répétitions</b> : 1 ${esc(s.exercises[0].label.toLowerCase())}, 2 ${esc(s.exercises[1]?.label.toLowerCase() ?? "")}… jusqu'à ${n} ${esc(s.exercises[n - 1].label.toLowerCase())}. ` : ""}Chaque répétition se fait <b>en entier et proprement</b>.</p></div>
-      <div class="card"><h2>📍 Le départ</h2><p>${s.staggered ? `Chaque équipe commence à <b>SON exercice</b>, donné par le greffier, puis suit l'ordre : après le ${n}, le 1.` : "Toutes les équipes commencent au <b>1</b>, puis suivent l'ordre."}</p></div>
+      <div class="card"><h2>📍 Le départ</h2><p>${s.staggered ? `Chaque équipe commence à <b>SON exercice</b>, donné par le greffier, puis suit l'ordre : après le ${n}, le 1.` : `<b>Tout le monde part ensemble</b>, par le même exercice : <b>${esc(s.exercises[0].label.toLowerCase())}</b>. Puis on suit l'ordre jusqu'au ${n}.`}</p></div>
       <div class="card"><h2>🏆 Le classement</h2><p>Le <b>plus de tours</b>. À égalité, l'équipe qui les a bouclés <b>le plus tôt</b>. À <b>${s.capMin}:00</b>, tout s'arrête : le tour en cours <b>ne compte pas</b>.</p></div>
     </div>
   </div>
@@ -99,7 +99,7 @@ export function renderAmrapSlides(s: AmrapSettings, teams: { order: number; name
   <div class="foot">Fin du tour = passage à l'ordi · le tour en cours à la fin du temps ne compte pas</div>
 </section>`;
   const slides = [rules, exercises];
-  if (teams.length) {
+  if (teams.length && s.staggered) {
     const starts = [...teams].sort((a, b) => a.order - b.order).map((t) => {
       const i = startIndexOf(s, t);
       return `<div class="card"><span class="t">${esc(t.name)}</span><span class="s"><span class="n">${i + 1}</span>${esc(s.exercises[i]?.label ?? "")}</span></div>`;

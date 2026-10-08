@@ -25,7 +25,9 @@ export const AMRAP_MIN_LAP_MS = 60_000;
 // Reglables dans ⚙️ Reglages avant le depart.
 export const AMRAP_DEFAULT_EXERCISES: AmrapExercise[] = ["Run", "Burpees", "Jump squats", "Fentes", "Pompages", "Crawling", "Commando", "Monkey slide", "Hélico", "Cordes"]
   .map((label, i) => ({ id: `ex${i + 1}`, label, reps: i + 1, unit: "rép." }));
-export const AMRAP_DEFAULTS: AmrapSettings = { capMin: 20, exercises: AMRAP_DEFAULT_EXERCISES, staggered: true };
+// Depart commun par defaut (Sartay 08/10 : « tout le monde commence par le meme exo : le run ») ; le depart decale reste
+// une option des reglages.
+export const AMRAP_DEFAULTS: AmrapSettings = { capMin: 20, exercises: AMRAP_DEFAULT_EXERCISES, staggered: false };
 
 const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
   const n = typeof v === "number" ? v : Number(v);

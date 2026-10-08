@@ -301,7 +301,7 @@ export function AmrapClient({
                       key={team.id}
                       st={st}
                       rank={rankOf.get(team.id) ?? null}
-                      start={startByTeam[team.id]}
+                      start={ctx.settings.staggered ? startByTeam[team.id] : null}
                       phase={phase}
                       liveMs={Math.min(liveMs, capMs)}
                       compact={rows >= 5}
@@ -319,7 +319,7 @@ export function AmrapClient({
         )}
         {view === "results" && <ResultsView ranking={ranking} settings={ctx.settings} hasData={phase !== "pre"} />}
         {view === "teams" && (
-          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={startByTeam} picker={picker} />
+          <TeamsManager sessionId={sessionId} teams={teamsWithMembers} classes={classes} allClasses={allClasses} referees={referees} phase={phase} startByTeam={ctx.settings.staggered ? startByTeam : undefined} picker={picker} />
         )}
       </main>
 
@@ -333,7 +333,7 @@ export function AmrapClient({
   );
 }
 
-function Tile({ st, rank, start, phase, liveMs, compact, flashing, disabled, onClick, onMore }: { st: AmrapTeamState; rank: number | null; start: { number: number; label: string }; phase: Phase; liveMs: number; compact: boolean; flashing: boolean; disabled: boolean; onClick: () => void; onMore: () => void }) {
+function Tile({ st, rank, start, phase, liveMs, compact, flashing, disabled, onClick, onMore }: { st: AmrapTeamState; rank: number | null; start: { number: number; label: string } | null; phase: Phase; liveMs: number; compact: boolean; flashing: boolean; disabled: boolean; onClick: () => void; onMore: () => void }) {
   const since = phase === "run" ? liveMs - (st.lastMs ?? 0) : null;
   const medal = rank !== null && rank <= 3 ? MEDALS[rank - 1] : null;
   return (
@@ -350,7 +350,7 @@ function Tile({ st, rank, start, phase, liveMs, compact, flashing, disabled, onC
           {since !== null && <span className={cx("ml-auto font-display font-bold tabular-nums", compact ? "text-sm" : "text-lg", flashing ? "text-white" : "text-ink-3")} title="Depuis le dernier tour (ou le départ)">⏱ {fmt(since)}</span>}
         </span>
         <span className={cx("truncate", compact ? "text-[10px]" : "text-[11px]", flashing ? "text-white/90" : "text-ink-2")}>
-          départ {start.number} · {start.label}{st.team.members.length ? ` · ${st.team.members.map((m) => m.name.split(" ")[0]).join(", ")}` : ""}
+          {[start ? `départ ${start.number} · ${start.label}` : "", st.team.members.map((m) => m.name.split(" ")[0]).join(", ")].filter(Boolean).join(" · ")}
         </span>
       </button>
       <button type="button" onClick={onMore} className="absolute top-1 right-1 w-7 h-7 rounded-lg bg-paper/80 text-ink-2 font-bold text-sm hover:bg-paper" title="Détail : temps de chaque tour, annuler un tour">⋯</button>
@@ -371,7 +371,7 @@ function CircuitColumn({ settings }: { settings: AmrapSettings }) {
           </li>
         ))}
       </ol>
-      <p className={`${ui.hint} mt-2`}>{settings.staggered ? "Départ décalé : chaque équipe commence à SON exercice, puis suit l'ordre." : "Tout le monde commence au 1."} Fin du tour : l&apos;équipe vient à l&apos;ordi.</p>
+      <p className={`${ui.hint} mt-2`}>{settings.staggered ? "Départ décalé : chaque équipe commence à SON exercice, puis suit l'ordre." : `Tout le monde part ensemble par le ${settings.exercises[0]?.label.toLowerCase() ?? "1"}.`} Fin du tour : l&apos;équipe vient à l&apos;ordi.</p>
     </aside>
   );
 }
