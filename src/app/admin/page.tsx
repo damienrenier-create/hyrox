@@ -152,6 +152,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
             <Link href="/admin/eleves" className={btn.smGhost}>Élèves</Link>
+            <Link href="/admin/qr" className={btn.smGhost} title="Le QR à projeter pour que les élèves se connectent">📱 QR élèves</Link>
             <Link href="/admin/voir-eleve" className={btn.smGhost}>👁 Se connecter en tant que…</Link>
             <Link href="/admin/level" className={btn.smGhost}>🧗 Level</Link>
             {canDelete && <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>}
