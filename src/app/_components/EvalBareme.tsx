@@ -1,4 +1,4 @@
-import { EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, evalGroupDefaultStars, evalNote, noteText, starsText, type EvalGroup } from "@/lib/eval-bareme";
+import { EVAL_GROUPS, EVAL_LEVELS, EVAL_NOTE_MAX, evalGroupDefaultStars, evalNote, noteText, starsText, type EvalGroup } from "@/lib/eval-bareme";
 import { cx, ui } from "@/lib/ui";
 
 // Bareme de la perf du WOD Eval (Sartay 05/10) : une ligne par parcours (les memes repetitions pour tout le monde), une
@@ -23,18 +23,14 @@ export function EvalBaremeTable({ groups, big = false }: { groups?: EvalGroup[];
         </thead>
         <tbody>
           {[...EVAL_LEVELS].reverse().map((l) => {
-            const def = l.stars === EVAL_DEFAULT_STARS;
             return (
-              <tr key={l.stars} className={cx("border-b border-line/70", def ? "bg-accent-soft/60" : "odd:bg-paper/60")}>
-                <td className="p-2 text-left font-bold text-accent-ink whitespace-nowrap">
-                  {starsText(l.stars)}
-                  {def && <span className="ml-1.5 text-[11px] font-semibold text-ink-2">par défaut</span>}
-                </td>
+              <tr key={l.stars} className="border-b border-line/70 odd:bg-paper/60">
+                <td className="p-2 text-left font-bold text-accent-ink whitespace-nowrap">{starsText(l.stars)}</td>
                 <td className="p-2 text-right font-display font-extrabold">{l.reps}</td>
                 {cols.map((g) => {
                   const n = evalNote(g.key, l.stars);
-                  // Parcours par defaut propre a ce groupe (filles de 3e-4e : 2★), s'il differe de celui de tout le monde.
-                  const gd = !def && l.stars === evalGroupDefaultStars(g.key);
+                  // Parcours par defaut du groupe : le premier qui vaut 20/20 (regle du moment, eval-bareme.ts).
+                  const gd = l.stars === evalGroupDefaultStars(g.key);
                   return (
                     <td key={g.key} className={cx("p-2 font-display font-extrabold", n >= EVAL_NOTE_MAX ? "text-success-ink" : "text-ink", gd && "bg-accent-soft/60")}>
                       {noteText(n)}

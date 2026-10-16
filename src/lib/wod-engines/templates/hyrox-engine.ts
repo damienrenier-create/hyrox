@@ -6,7 +6,7 @@
 // avant son depart (40 a 60 repetitions, 3 etoiles par defaut). Tout est reglable par seance (stations, reps, tours).
 // Module PUR : temps en ms ECOULEES de course (pauses deduites), comme la Fete Foraine.
 
-import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, evalGroupLabel, evalLevelReps, evalNote, isEvalGroup, isEvalStars, noteText } from "@/lib/eval-bareme";
+import { EVAL_BASE_GROUP, EVAL_DEFAULT_STARS, EVAL_GROUPS, EVAL_LEVELS, evalDefaultsText, evalGroupLabel, evalLevelReps, evalNote, isEvalGroup, isEvalStars, noteText } from "@/lib/eval-bareme";
 
 export const HX_MIN_STATIONS = 2;
 export const HX_MAX_STATIONS = 12;
@@ -121,7 +121,7 @@ export function readHXStars(settings: unknown): Record<string, number> {
 export type HXMember = { memberId: string; userId: string; name: string; quiz: number | null }; // quiz = score au QCM bonus (null = pas repondu)
 // `stars` = parcours de l'equipe (choisi, sinon 3 etoiles) ; `group` = son groupe pour les points (annees + filles /
 // garcons ou mixte, voir eval-bareme.ts).
-// `defaultStars` = parcours qu'elle aurait sans choix (3★, ou 2★ pour une equipe de filles de 3e-4e : eval-bareme.ts).
+// `defaultStars` = parcours qu'elle aurait sans choix (le premier qui vaut 20/20 pour son groupe : eval-bareme.ts).
 export type HXTeam = { id: string; order: number; name: string; startStationId: string | null; members: HXMember[]; stars?: number | null; group?: string | null; defaultStars?: number };
 // key = "st:<id>[:<tour>]" | "run:<n>[:<partie>]" ; at = ms ecoulees de course ; abs = heure d'horloge du clic (ms epoch,
 // null pour un clic local pas encore confirme par le serveur) : c'est elle qu'on compare a l'heure des arbitres.
@@ -422,7 +422,7 @@ export function hxCsv(ctx: HXContext, liveMs: number, state: string): string {
   L.push([ctx.settings.extraMin > 0 ? "Fin officielle (min)" : "Temps limite (min)", ctx.settings.capMin].join(";"));
   if (ctx.settings.extraMin > 0) L.push(["Prolongation (min)", ctx.settings.extraMin].join(";"));
   if (lv) {
-    L.push(["Parcours (etoiles = repetitions par station)", HX_LEVELS.map((l) => `${l.stars} = ${l.reps}`).join(" / "), `${HX_DEFAULT_STARS} par defaut (2 pour une equipe de filles de 3e-4e)`].join(";"));
+    L.push(["Parcours (etoiles = repetitions par station)", HX_LEVELS.map((l) => `${l.stars} = ${l.reps}`).join(" / "), `par defaut : le premier parcours a 20/20 du groupe (${evalDefaultsText()})`].join(";"));
     EVAL_GROUPS.forEach((g) => L.push([`Note perf /20 ${g.years} ${g.team}`, HX_LEVELS.map((l) => `${l.reps} rep = ${evalNote(g.key, l.stars)}`).join(" / ")].join(";")));
   }
   L.push(["Carte jaune (s)", ctx.settings.penSec].join(";"));

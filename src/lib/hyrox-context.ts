@@ -72,7 +72,7 @@ export async function buildHXBundle(sessionId: string): Promise<HXBundle> {
   // QCM bonus : score de chaque eleve ayant repondu.
   const quizBy = new Map((await db.orm.public.QuizAnswer.where({ sessionId }).all()).map((q) => [q.studentId, q.score]));
   // Parcours de chaque equipe : celui qu'elle a choisi, sinon 3 etoiles (Sartay : « le niveau de base est a 3 etoiles
-  // pour tout le monde »), ou 2 pour une equipe de filles de 3e-4e a partir du 08/10 (evalDefaultStars). Son groupe
+  // pour tout le monde »), puis, regle par regle datee, le premier parcours qui vaut 20/20 pour son groupe (evalDefaultStars). Son groupe
   // (annees, filles / garcons ou mixte), lu sur ses eleves, fixe ses points.
   const chosenStars = readHXStars(session.settings);
   const sessionClasses = readSessionClasses(session.settings);
@@ -145,7 +145,7 @@ export async function buildHXRecords(sessionId: string): Promise<Record<string, 
     db.orm.public.RaceState.where((r) => r.sessionId.in(ids)).all(),
   ]);
   const pausesRaw = states.length ? await db.orm.public.RacePause.where((p) => p.raceStateId.in(states.map((r) => r.id))).all() : [];
-  // Parcours par defaut (2★ pour une equipe de filles de 3e-4e des le 08/10) : il faut les eleves des equipes de ces seances-la.
+  // Parcours par defaut selon le groupe (regles datees, la premiere au 08/10) : il faut les eleves des equipes de ces seances-la.
   const dayBy = new Map(sessions.map((s) => [s.id, dayOf(states.find((r) => r.sessionId === s.id)?.startedAt ?? s.opensAt ?? s.createdAt)]));
   const recentTeams = teams.filter((t) => (dayBy.get(t.sessionId) ?? "") >= EVAL_GROUP_DEFAULT_FROM).map((t) => t.id);
   const members = recentTeams.length ? await db.orm.public.TeamMember.where((m) => m.teamId.in(recentTeams)).all() : [];

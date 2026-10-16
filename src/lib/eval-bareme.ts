@@ -49,16 +49,29 @@ export const evalGroupLabel = (key: EvalGroup) => `${evalGroup(key).years} · ${
 export const evalLevelReps = (stars: number): number => (EVAL_LEVELS.find((l) => l.stars === stars) ?? EVAL_LEVELS[2]).reps;
 // Note de perf (sur 20) d'une equipe de ce groupe qui boucle le WOD avant la fin officielle sur ce parcours.
 export const evalNote = (key: EvalGroup, stars: number): number => evalGroup(key).notes[stars - 1] ?? 0;
-// Parcours par defaut d'une equipe qui n'a rien choisi : 3★ pour tout le monde, SAUF une equipe de filles de 3e-4e qui part
-// a 2★ (Sartay 07/10 : « 2 etoiles suffisent pour avoir 20/20 »). Seulement pour les seances a partir du 08/10 : les
-// equipes des seances precedentes ont bel et bien couru 3★ et le gardent. `sessionDay` = jour de la seance (AAAA-MM-JJ, Bruxelles).
-export const EVAL_GROUP_DEFAULT_STARS: Partial<Record<EvalGroup, number>> = { "34F": 2 };
-export const EVAL_GROUP_DEFAULT_FROM = "2026-10-08";
-export const evalGroupDefaultStars = (key: EvalGroup): number => EVAL_GROUP_DEFAULT_STARS[key] ?? EVAL_DEFAULT_STARS;
-export function evalDefaultStars(group: unknown, sessionDay: string | null | undefined): number {
-  if (!sessionDay || sessionDay < EVAL_GROUP_DEFAULT_FROM || !isEvalGroup(group)) return EVAL_DEFAULT_STARS;
-  return evalGroupDefaultStars(group);
+// Parcours par defaut d'une equipe qui n'a rien choisi : le PREMIER PARCOURS QUI VAUT 20/20 pour son groupe (« a chacun son
+// 20/20 »), mis en place regle par regle, chacune datee : les equipes des seances precedentes gardent le parcours qu'elles
+// ont vraiment couru. 3★ pour tout le monde a l'origine (= deja 20/20 en 3e-4e garcons ou mixte) ; 08/10 (Sartay : « 2 etoiles
+// suffisent pour avoir 20/20 ») : filles de 3e-4e 2★ ; 16/10 (Sartay : « les equipes de gars en 5 etoiles et les equipes filles
+// en 4 etoiles, et 5 etoiles par defaut » pour les 5e-6e) : 5e-6e garcons ou mixte 5★, filles 4★.
+// `sessionDay` = jour de la seance (AAAA-MM-JJ, Bruxelles) ; sans jour (textes generaux) : la regle la plus recente.
+export const EVAL_GROUP_DEFAULTS: { from: string; group: EvalGroup; stars: number }[] = [
+  { from: "2026-10-08", group: "34F", stars: 2 },
+  { from: "2026-10-16", group: "56M", stars: 5 },
+  { from: "2026-10-16", group: "56F", stars: 4 },
+];
+export const EVAL_GROUP_DEFAULT_FROM = EVAL_GROUP_DEFAULTS.map((r) => r.from).sort()[0]; // premiere regle : avant, 3★ pour tous
+export function evalGroupDefaultStars(key: EvalGroup, sessionDay?: string | null): number {
+  const rules = EVAL_GROUP_DEFAULTS.filter((r) => r.group === key && (!sessionDay || r.from <= sessionDay)).sort((a, b) => a.from.localeCompare(b.from));
+  return rules.length ? rules[rules.length - 1].stars : EVAL_DEFAULT_STARS;
 }
+export function evalDefaultStars(group: unknown, sessionDay: string | null | undefined): number {
+  if (!sessionDay || !isEvalGroup(group)) return EVAL_DEFAULT_STARS;
+  return evalGroupDefaultStars(group, sessionDay);
+}
+// « 3e-4e : 3★ (filles 2★) · 5e-6e : 5★ (filles 4★) » : les parcours par defaut du moment, en une phrase.
+export const evalDefaultsText = (): string =>
+  [...new Set(EVAL_GROUPS.map((g) => g.years))].map((y) => { const m = EVAL_GROUPS.find((g) => g.years === y && !g.team.startsWith("filles"))!; const f = EVAL_GROUPS.find((g) => g.years === y && g.team.startsWith("filles"))!; return `${y} : ${evalGroupDefaultStars(m.key)}★ (filles ${evalGroupDefaultStars(f.key)}★)`; }).join(" · ");
 // Premier parcours qui vaut 20/20 pour ce groupe (« a chacun son 20/20 »).
 export const evalTopStars = (key: EvalGroup): number => EVAL_LEVELS.find((l) => evalNote(key, l.stars) >= EVAL_NOTE_MAX)?.stars ?? EVAL_LEVELS[4].stars;
 export const starsText = (stars: number) => "★".repeat(Math.max(1, stars));
