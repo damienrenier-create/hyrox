@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
-import { EVAL_GROUPS, evalDefaultsText, EVAL_LEVELS, EVAL_WEIGHTS, evalLevelReps, evalYears } from "@/lib/eval-bareme";
+import { EVAL_GROUPS, evalDefaultsText, EVAL_LEVELS, EVAL_WEIGHTS, evalYears } from "@/lib/eval-bareme";
 import { HX_DEFAULTS } from "@/lib/wod-engines/templates/hyrox-engine";
 import { TopBar } from "../../_components/TopBar";
 import { LogoutButton } from "../../_components/LogoutButton";
