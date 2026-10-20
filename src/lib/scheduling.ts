@@ -234,8 +234,9 @@ export type OpenSessionInput = {
 // Creation d'une seance + ses equipes vides. Ne ferme PAS les autres seances ouvertes (deux profs peuvent
 // tourner en parallele) : la fermeture vient de closesAt, de FIN DE COURSE ou du bouton Fermer de la console.
 export async function openSession(input: OpenSessionInput) {
-  getWodEngine(input.wodType); // moteur connu, sinon throw
-  const numTeams = Math.min(50, Math.max(1, Math.floor(input.numTeams)));
+  const engine = getWodEngine(input.wodType); // moteur connu, sinon throw
+  // Seance sans equipes (Badminton) : aucune equipe a creer.
+  const numTeams = engine.noTeams ? 0 : Math.min(50, Math.max(1, Math.floor(input.numTeams)));
   return db.transaction(async (tx) => {
     const session = await tx.orm.public.Session.create({
       wodType: input.wodType as "PYRAMIDE_CLASSIQUE",
@@ -251,7 +252,7 @@ export async function openSession(input: OpenSessionInput) {
       closesAt: input.closesAt ?? null,
       autoOpened: input.autoOpened ?? false,
     });
-    const numbers = input.teamNumbers?.length ? input.teamNumbers : Array.from({ length: numTeams }, (_, i) => i + 1);
+    const numbers = engine.noTeams ? [] : input.teamNumbers?.length ? input.teamNumbers : Array.from({ length: numTeams }, (_, i) => i + 1);
     for (const n of numbers) {
       await tx.orm.public.Team.create({ name: `Équipe ${n}`, order: n, sessionId: session.id });
     }

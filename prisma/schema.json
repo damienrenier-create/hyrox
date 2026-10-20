@@ -4,6 +4,14 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "badmintonEvent": {
+      "model": "BadmintonEvent",
+      "namespace": "public"
+    },
+    "badmintonMatch": {
+      "model": "BadmintonMatch",
+      "namespace": "public"
+    },
     "boatPlacement": {
       "model": "BoatPlacement",
       "namespace": "public"
@@ -236,11 +244,226 @@
               {
                 "name": "AMRAP",
                 "value": "AMRAP"
+              },
+              {
+                "name": "BADMINTON",
+                "value": "BADMINTON"
               }
             ]
           }
         },
         "models": {
+          "BadmintonEvent": {
+            "fields": {
+              "at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "authorId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "kind": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "matchId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sets": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "match": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "matchId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "BadmintonMatch",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "at": {
+                  "column": "at"
+                },
+                "authorId": {
+                  "column": "authorId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "kind": {
+                  "column": "kind"
+                },
+                "matchId": {
+                  "column": "matchId"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "sets": {
+                  "column": "sets"
+                }
+              },
+              "namespaceId": "public",
+              "table": "badmintonEvent"
+            }
+          },
+          "BadmintonMatch": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "playerAId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "playerBId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "events": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "matchId"
+                  ]
+                },
+                "to": {
+                  "model": "BadmintonEvent",
+                  "namespace": "public"
+                }
+              },
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "sessionId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Session",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "playerAId": {
+                  "column": "playerAId"
+                },
+                "playerBId": {
+                  "column": "playerBId"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "badmintonMatch"
+            }
+          },
           "BoatPlacement": {
             "fields": {
               "createdAt": {
@@ -2735,6 +2958,21 @@
               }
             },
             "relations": {
+              "badmintonMatches": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "sessionId"
+                  ]
+                },
+                "to": {
+                  "model": "BadmintonMatch",
+                  "namespace": "public"
+                }
+              },
               "boatPlacements": {
                 "cardinality": "1:N",
                 "on": {
@@ -3975,6 +4213,170 @@
       "public": {
         "entries": {
           "table": {
+            "badmintonEvent": {
+              "columns": {
+                "at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "authorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "kind": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "matchId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sets": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "matchId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "badmintonEvent"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "badmintonMatch"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "matchId"
+                  ],
+                  "name": "badmintonEvent_matchId_idx_4caf5ecc",
+                  "prefix": "badmintonEvent_matchId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "badmintonEvent_sessionId_idx_29f415d4",
+                  "prefix": "badmintonEvent_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "badmintonMatch": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "playerAId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "playerBId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "sessionId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "badmintonMatch"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "badmintonMatch_sessionId_idx_29f415d4",
+                  "prefix": "badmintonMatch_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "boatPlacement": {
               "columns": {
                 "createdAt": {
@@ -4239,8 +4641,8 @@
             "cyclePlan": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP')",
-                  "name": "cyclePlan_wodType_check_e729d788",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP', 'BADMINTON')",
+                  "name": "cyclePlan_wodType_check_a74eed95",
                   "prefix": "cyclePlan_wodType_check"
                 }
               ],
@@ -5982,8 +6384,8 @@
             "session": {
               "checks": [
                 {
-                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP')",
-                  "name": "session_wodType_check_e729d788",
+                  "expression": "\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP', 'BADMINTON')",
+                  "name": "session_wodType_check_a74eed95",
                   "prefix": "session_wodType_check"
                 }
               ],
@@ -6958,7 +7360,8 @@
                 "FETE_FORAINE",
                 "LEVEL",
                 "HYROX",
-                "AMRAP"
+                "AMRAP",
+                "BADMINTON"
               ]
             }
           }
@@ -6967,12 +7370,34 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "1674cab46e8a09d3931d55addaa0b36674613523f84da9afbf3b3b76dc4ed566"
+    "storageHash": "83b2afe40db4901196878621375e5e843223c86f7de25efff4fdbd2a3e535465"
   },
   "execution": {
-    "executionHash": "2949a3b0e1f08f3d101e69a3b603ecc5ac843524d5d35e9b8cd4d9fa4c4cb298",
+    "executionHash": "50b482c1dde2ba3ee6289941fca6f64e022e4ad408e5bd51a4124e1e0d3e6665",
     "mutations": {
       "defaults": [
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "badmintonEvent"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "badmintonMatch"
+          }
+        },
         {
           "onCreate": {
             "id": "uuidv4",

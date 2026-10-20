@@ -12,6 +12,7 @@ export const WOD_LABELS: Record<string, string> = {
   LEVEL: "WOD Level",
   HYROX: "WOD Eval S.O.R.O", // Sartay 05/10 : « son nom = EVAL S.O.R.O » (station - ordi - run - ordi)
   AMRAP: "WOD AMRAP", // Sartay 08/10 : le plus de tours possible en 20 minutes
+  BADMINTON: "Badminton", // Sartay 20/10 : matchs encodes par les eleves
 };
 
 export function wodLabel(wodType: string): string {

@@ -14,8 +14,10 @@ import { TopBar } from "../_components/TopBar";
 import { cx, ui } from "@/lib/ui";
 import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
-import { readQuizOpen, readSessionSex } from "@/lib/session-roles";
+import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
+import { loadMatches } from "@/lib/badminton-server";
+import { matchState, pupilStats } from "@/lib/badminton";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -42,6 +44,26 @@ export default async function ElevePage() {
   const quizOpenIds = new Set(hyroxIds.length ? (await db.orm.public.Session.where((s) => s.id.in(hyroxIds)).all()).filter((s) => readQuizOpen(s.settings)).map((s) => s.id) : []);
   const quizLink = (id: string) => (quizOpenIds.has(id) || quizDone.has(id) ? { href: `/eleve/${id}/qcm`, label: quizDone.has(id) ? "📝 QCM répondu" : "📝 QCM bonus ouvert" } : null);
 
+  // Badminton (Sartay 20/10) : pour chaque seance ouverte, les matchs que l'eleve doit encore signer ; et ses seances de
+  // badminton passees (il n'est dans aucune equipe : elles n'apparaissent pas dans « Mes WOD »).
+  const toSignBy = new Map<string, number>();
+  for (const s of openSessions.filter((x) => x.wodType === "BADMINTON")) {
+    toSignBy.set(s.id, (await loadMatches(s.id)).filter((m) => { const st = matchState(m); return st.status === "PENDING" && st.waitingFor === user.id; }).length);
+  }
+  const myMatchRows = [
+    ...(await db.orm.public.BadmintonMatch.where({ playerAId: user.id }).all()),
+    ...(await db.orm.public.BadmintonMatch.where({ playerBId: user.id }).all()),
+    ...(await db.orm.public.BadmintonMatch.where({ createdById: user.id }).all()),
+  ];
+  const bmSessionIds = [...new Set(myMatchRows.map((m) => m.sessionId))].filter((id) => !openIds.has(id));
+  const bmPast = bmSessionIds.length ? (await db.orm.public.Session.where((s) => s.id.in(bmSessionIds)).all()).filter(notDeleted).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : [];
+  const bmHistory = [];
+  for (const s of bmPast) {
+    const ms = await loadMatches(s.id);
+    const st = pupilStats(user.id, ms.map((m) => ({ match: m, state: matchState(m) })));
+    bmHistory.push({ id: s.id, dateMs: toMs(s.createdAt), st, toSign: ms.filter((m) => { const x = matchState(m); return x.status === "PENDING" && x.waitingFor === user.id; }).length });
+  }
+
   const cards = [];
   for (const s of openSessions) {
     const membership = mine.find((r) => r.sessionId === s.id) ?? null;
@@ -65,7 +87,21 @@ export default async function ElevePage() {
             </p>
           ) : (
             <div className="space-y-3">
-              {cards.map(({ s, membership, access }) => (
+              {cards.map(({ s, membership, access }) => s.wodType === "BADMINTON" ? (
+                <Link key={s.id} href={`/eleve/badminton/${s.id}`} className={`${ui.card} border-brand/40 p-4 block hover:border-brand transition`}>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div>
+                      <div className="font-display font-extrabold text-lg">🏸 Badminton</div>
+                      <div className="text-xs text-ink-2">{fmtDate(s.createdAt)} · ouvert{s.closesAt ? ` jusqu'à ${new Date(toMs(s.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" })}` : ""}</div>
+                    </div>
+                    {(toSignBy.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {toSignBy.get(s.id)} à signer</span>}
+                  </div>
+                  <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
+                    Encoder mes matchs
+                    <span className="block text-[11px] font-normal text-white/85 mt-1">contre qui, le score · signer les matchs de mes adversaires · arbitrer</span>
+                  </div>
+                </Link>
+              ) : (
                 <div key={s.id} className={`${ui.card} border-brand/40 p-4`}>
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div>
@@ -129,6 +165,25 @@ export default async function ElevePage() {
             </div>
           )}
         </section>
+
+        {bmHistory.length > 0 && (
+          <section className="space-y-2">
+            <h2 className={ui.eyebrow}>🏸 Mes matchs de badminton</h2>
+            <ul className="space-y-1.5">
+              {bmHistory.map((h) => (
+                <li key={h.id}>
+                  <Link href={`/eleve/badminton/${h.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card hover:border-brand px-3 py-2 transition">
+                    <span>
+                      <span className="block font-bold text-sm capitalize">{fmtDate(new Date(h.dateMs).toISOString())}</span>
+                      <span className="block text-xs text-ink-2">{h.st.played} match{h.st.played > 1 ? "s" : ""} validé{h.st.played > 1 ? "s" : ""} · {h.st.won} victoire{h.st.won > 1 ? "s" : ""}{h.st.refereed ? ` · ${h.st.refereed} arbitré${h.st.refereed > 1 ? "s" : ""}` : ""}</span>
+                    </span>
+                    <span className="flex items-center gap-2">{h.toSign > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {h.toSign}</span>}<span className="text-ink-3 font-black">›</span></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {byCycle.map((c) => (
           <section key={c.key} className="space-y-3">

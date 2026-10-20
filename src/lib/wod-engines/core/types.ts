@@ -40,6 +40,8 @@ export interface WodTemplate {
   // Taille d'une equipe quand elle est FIXE (Eval : 3, Pyramide : 2). La seance s'ouvre alors avec le nombre d'equipes
   // qu'il faut pour l'effectif de ses classes (scheduling.ts, teamsNeeded) ; sans elle, on garde defaultTeams.
   teamSize?: number;
+  // Seance SANS equipes (Badminton : des matchs entre eleves) : aucune equipe n'est creee a l'ouverture.
+  noTeams?: boolean;
   
   // Calcul du score à partir de l'état
   calculateScores(

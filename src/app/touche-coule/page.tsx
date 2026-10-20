@@ -1,4 +1,5 @@
 import { getSession } from "@/lib/session-server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { exercisesFor } from "@/lib/session-exercises";
@@ -57,6 +58,8 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
     );
   }
 
+  // Badminton (Sartay 20/10) : l'arbitre encode le match de deux eleves sur la page des matchs, pas ici.
+  if (session.wodType === "BADMINTON") redirect(evaluator.role === "STUDENT" ? `/eleve/badminton/${session.id}` : `/admin/badminton?session=${session.id}`);
   // WOD AMRAP (Sartay 08/10) : pas d'arbitrage, le greffier ne compte que les tours.
   if (session.wodType === "AMRAP") {
     return (
@@ -65,7 +68,7 @@ export default async function ToucheCoulePage({ searchParams }: { searchParams: 
           <div className="text-5xl mb-3">🔁</div>
           <h1 className={`${ui.h2} mb-2`}>Pas d&apos;arbitrage pour l&apos;AMRAP</h1>
           <p className={`${ui.muted} mb-6`}>Le greffier compte les tours de chaque équipe. Demande à ton prof ce que tu peux faire pendant le WOD.</p>
-          <a href="/eleve" className={btn.primary}>← Mon espace</a>
+          <Link href="/eleve" className={btn.primary}>← Mon espace</Link>
         </div>
       </div>
     );

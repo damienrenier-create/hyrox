@@ -4,6 +4,7 @@ import { FeteForaine } from "./templates/fete-foraine";
 import { LevelWod } from "./templates/level";
 import { HyroxWod } from "./templates/hyrox";
 import { AmrapWod } from "./templates/amrap";
+import { BadmintonWod } from "./templates/badminton";
 
 const templates: Record<string, WodTemplate> = {
   [PyramideClassique.id]: PyramideClassique,
@@ -11,6 +12,7 @@ const templates: Record<string, WodTemplate> = {
   [LevelWod.id]: LevelWod,
   [HyroxWod.id]: HyroxWod,
   [AmrapWod.id]: AmrapWod, // Sartay 08/10 : le plus de tours possible en 20 minutes
+  [BadmintonWod.id]: BadmintonWod, // Sartay 20/10 : matchs encodes par les eleves, signes par l'adversaire
   // Prochaines seances du cycle Hyrox (AMRAP, EMOM, Cindy, Intro, Eval) et autres cycles : ajouter ici.
 };
 
@@ -23,8 +25,8 @@ export function getWodEngine(id: string): WodTemplate {
 }
 
 // Seances-types disponibles pour la console (seuls les moteurs reellement codes sont proposes).
-export function listWodEngines(): { id: string; name: string; teamSize: number | null }[] {
-  return Object.values(templates).map((t) => ({ id: t.id, name: (t as { name?: string }).name ?? t.id, teamSize: t.teamSize ?? null }));
+export function listWodEngines(): { id: string; name: string; teamSize: number | null; noTeams: boolean }[] {
+  return Object.values(templates).map((t) => ({ id: t.id, name: (t as { name?: string }).name ?? t.id, teamSize: t.teamSize ?? null, noTeams: !!t.noTeams }));
 }
 
 export * from "./core/types";

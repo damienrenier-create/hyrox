@@ -78,6 +78,8 @@ export default async function GreffierPage({ searchParams }: { searchParams: Pro
   const olderSession = at >= 0 && at < options.length - 1 ? options[at + 1] : null;
   const newerSession = at > 0 ? options[at - 1] : null;
 
+  // Badminton (Sartay 20/10) : pas de course ni d'equipes ; le greffier suit les matchs sur la page des profs.
+  if (session.wodType === "BADMINTON") redirect(`/admin/badminton?session=${session.id}`);
   await ensureRaceStateAction(session.id);
   // Onglet Arbitrage (evaluations par case + classement pirate) uniquement si le Touche-Coule est actif.
   const board = session.refereeMode && session.wodType !== "LEVEL" && session.wodType !== "HYROX" && session.wodType !== "AMRAP" ? await buildBoardData(session.id) : null;

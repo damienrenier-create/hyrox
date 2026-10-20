@@ -78,6 +78,10 @@ export async function buildStandingsForSessions(sessions: SessionLike[]): Promis
       out.set(session.id, levelStandingsBatch(session, rawTeams, ticksBySession.get(session.id) ?? [], lossesBySession.get(session.id) ?? [], rs ? cardsByRs.get(rs.id) ?? [] : [], startedAtMs, sessionPauses));
       continue;
     }
+    if (session.wodType === "BADMINTON") {
+      out.set(session.id, { columns: { laps: "Matchs", time: "", reps: "", cards: "", start: "" }, rows: [], finishedAtMs: {} });
+      continue;
+    }
     if (session.wodType === "AMRAP") {
       // WOD AMRAP : les tours de chaque equipe (table Lap), en ms ecoulees ; fin de course = fin pour tout le monde.
       const endedAtMs = rs?.endedAt ? toMs(rs.endedAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : null;

@@ -26,6 +26,8 @@ export default async function EleveSessionPage({ params }: { params: Promise<{ s
 
   const session = await db.orm.public.Session.where({ id: sessionId }).first();
   if (!session || session.deletedAt) redirect("/eleve");
+  // Badminton : pas d'equipes, l'eleve suit ses matchs sur sa page a lui.
+  if (session.wodType === "BADMINTON") redirect(`/eleve/badminton/${sessionId}`);
 
   // Acces uniquement si l'eleve a ete encode (par identifiant) dans une equipe de cette seance.
   const teams = await db.orm.public.Team.where({ sessionId }).all();

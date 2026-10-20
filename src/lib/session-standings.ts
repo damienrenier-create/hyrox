@@ -78,6 +78,8 @@ export async function buildSessionStandings(session: SessionLike): Promise<Sessi
     }));
     return { columns: { laps: "Stations", time: "Temps", reps: "Runs", cards: "🟨", start: b.ctx.settings.levels ? "Niveau · départ" : "Départ" }, rows, finishedAtMs: b.finishedAbsMs };
   }
+  // Badminton : pas d'equipes, donc pas de classement d'equipes (les matchs ont leurs propres pages).
+  if (session.wodType === "BADMINTON") return { columns: { laps: "Matchs", time: "", reps: "", cards: "", start: "" }, rows: [], finishedAtMs: {} };
   if (session.wodType === "AMRAP") {
     const b = await buildAmrapBundle(session.id);
     return amrapRows(b.ctx, b.endedAtMs !== null || !!session.raceEndedAt, b.finishedAbsMs);

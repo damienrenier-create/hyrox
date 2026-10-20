@@ -1,0 +1,449 @@
+[
+  {
+    "id": "dropCheckConstraint.cyclePlan.cyclePlan_wodType_check_e729d788",
+    "label": "Drop check constraint \"cyclePlan_wodType_check_e729d788\" on \"cyclePlan\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_e729d788",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_e729d788\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_e729d788",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"cyclePlan_wodType_check_e729d788\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" DROP CONSTRAINT \"cyclePlan_wodType_check_e729d788\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_e729d788\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_e729d788",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dropCheckConstraint.session.session_wodType_check_e729d788",
+    "label": "Drop check constraint \"session_wodType_check_e729d788\" on \"session\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_e729d788",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_e729d788\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_e729d788",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"session_wodType_check_e729d788\"",
+        "sql": "ALTER TABLE \"public\".\"session\" DROP CONSTRAINT \"session_wodType_check_e729d788\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_e729d788\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_e729d788",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.badmintonEvent",
+    "label": "Create table \"badmintonEvent\"",
+    "summary": "Creates table \"badmintonEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "badmintonEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"badmintonEvent\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"badmintonEvent\"",
+        "sql": "CREATE TABLE \"public\".\"badmintonEvent\" (\n  \"at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"authorId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"kind\" text NOT NULL,\n  \"matchId\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  \"sets\" json,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"badmintonEvent\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.badmintonMatch",
+    "label": "Create table \"badmintonMatch\"",
+    "summary": "Creates table \"badmintonMatch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "badmintonMatch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"badmintonMatch\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"badmintonMatch\"",
+        "sql": "CREATE TABLE \"public\".\"badmintonMatch\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdById\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"playerAId\" text NOT NULL,\n  \"playerBId\" text NOT NULL,\n  \"sessionId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"badmintonMatch\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.cyclePlan.cyclePlan_wodType_check_a74eed95",
+    "label": "Add check constraint \"cyclePlan_wodType_check_a74eed95\" on \"cyclePlan\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "cyclePlan_wodType_check_a74eed95",
+        "table": "cyclePlan"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"cyclePlan_wodType_check_a74eed95\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_a74eed95",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"cyclePlan_wodType_check_a74eed95\"",
+        "sql": "ALTER TABLE \"public\".\"cyclePlan\" ADD CONSTRAINT \"cyclePlan_wodType_check_a74eed95\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP', 'BADMINTON'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"cyclePlan_wodType_check_a74eed95\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "cyclePlan_wodType_check_a74eed95",
+          "public",
+          "\"public\".\"cyclePlan\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.session.session_wodType_check_a74eed95",
+    "label": "Add check constraint \"session_wodType_check_a74eed95\" on \"session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "session_wodType_check_a74eed95",
+        "table": "session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"session_wodType_check_a74eed95\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_a74eed95",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"session_wodType_check_a74eed95\"",
+        "sql": "ALTER TABLE \"public\".\"session\" ADD CONSTRAINT \"session_wodType_check_a74eed95\" CHECK (\"wodType\" IN ('PYRAMIDE_CLASSIQUE', 'RELAIS_SPRINT', 'TOUCHE_COULE_HYROX', 'FETE_FORAINE', 'LEVEL', 'HYROX', 'AMRAP', 'BADMINTON'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"session_wodType_check_a74eed95\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "session_wodType_check_a74eed95",
+          "public",
+          "\"public\".\"session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonEvent.badmintonEvent_matchId_idx_4caf5ecc",
+    "label": "Create index \"badmintonEvent_matchId_idx_4caf5ecc\" on \"badmintonEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonEvent_matchId_idx_4caf5ecc",
+        "table": "badmintonEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonEvent_matchId_idx_4caf5ecc\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent_matchId_idx_4caf5ecc\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonEvent_matchId_idx_4caf5ecc\"",
+        "sql": "CREATE INDEX \"badmintonEvent_matchId_idx_4caf5ecc\" ON \"public\".\"badmintonEvent\" (\"matchId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonEvent_matchId_idx_4caf5ecc\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent_matchId_idx_4caf5ecc\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonEvent.badmintonEvent_sessionId_idx_29f415d4",
+    "label": "Create index \"badmintonEvent_sessionId_idx_29f415d4\" on \"badmintonEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonEvent_sessionId_idx_29f415d4",
+        "table": "badmintonEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonEvent_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonEvent_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"badmintonEvent_sessionId_idx_29f415d4\" ON \"public\".\"badmintonEvent\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonEvent_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonEvent_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonMatch.badmintonMatch_sessionId_idx_29f415d4",
+    "label": "Create index \"badmintonMatch_sessionId_idx_29f415d4\" on \"badmintonMatch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonMatch_sessionId_idx_29f415d4",
+        "table": "badmintonMatch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonMatch_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonMatch_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"badmintonMatch_sessionId_idx_29f415d4\" ON \"public\".\"badmintonMatch\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonMatch_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.badmintonEvent.badmintonEvent_matchId_fkey",
+    "label": "Add foreign key \"badmintonEvent_matchId_fkey\" on \"badmintonEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "badmintonEvent_matchId_fkey",
+        "table": "badmintonEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"badmintonEvent_matchId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonEvent_matchId_fkey",
+          "public",
+          "\"public\".\"badmintonEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"badmintonEvent_matchId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"badmintonEvent\"\nADD CONSTRAINT \"badmintonEvent_matchId_fkey\"\nFOREIGN KEY (\"matchId\")\nREFERENCES \"public\".\"badmintonMatch\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"badmintonEvent_matchId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonEvent_matchId_fkey",
+          "public",
+          "\"public\".\"badmintonEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.badmintonMatch.badmintonMatch_sessionId_fkey",
+    "label": "Add foreign key \"badmintonMatch_sessionId_fkey\" on \"badmintonMatch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "badmintonMatch_sessionId_fkey",
+        "table": "badmintonMatch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"badmintonMatch_sessionId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonMatch_sessionId_fkey",
+          "public",
+          "\"public\".\"badmintonMatch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"badmintonMatch_sessionId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"badmintonMatch\"\nADD CONSTRAINT \"badmintonMatch_sessionId_fkey\"\nFOREIGN KEY (\"sessionId\")\nREFERENCES \"public\".\"session\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"badmintonMatch_sessionId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonMatch_sessionId_fkey",
+          "public",
+          "\"public\".\"badmintonMatch\""
+        ]
+      }
+    ]
+  }
+]

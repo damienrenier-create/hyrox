@@ -17,6 +17,7 @@ enum WodTemplate {
   LEVEL = "LEVEL"
   HYROX = "HYROX"
   AMRAP = "AMRAP" // Sartay 08/10 : le plus de tours possible en 20 min, un clic du greffier par tour
+  BADMINTON = "BADMINTON" // Sartay 20/10 : matchs en simple encodes par les eleves, signes par l adversaire
 }
 
 enum Visibility {
@@ -161,6 +162,7 @@ model Session {
   selfEvaluations SelfEvaluation[]
   referees        SessionReferee[]
   stationEvents   StationEvent[]
+  badmintonMatches BadmintonMatch[]
   levelTicks      LevelTick[]
   levelLosses     LevelLoss[]
   mineBoard       MineBoard?
@@ -231,6 +233,38 @@ model QuizAnswer {
 
 // Fete Foraine / Hyrox : pointages du greffier (corde = repetable, exN = un seul, "fin" = Fin du WOD ;
 // Hyrox : "st:<station>", "run:<n>", "cindy" repetable).
+// Badminton (Sartay 20/10 : « les eleves encodent les resultats de leurs matchs et contre qui ils ont joue ; l adversaire
+// peut signer / valider le score et le modifier si necessaire ; un arbitre peut aussi indiquer le score entre deux eleves ;
+// quoi qu il arrive on voit toujours qui a encode les points »). Un match en simple = deux joueurs ; tout ce qui lui arrive
+// est une ligne de BadmintonEvent, en AJOUT SEUL (jamais d effacement) : son etat se lit sur ce journal (src/lib/badminton.ts).
+model BadmintonMatch {
+  id          String           @id @default(uuid())
+  session     Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String
+  playerAId   String           // l eleve qui encode son match, ou le premier nomme par l arbitre / le prof
+  playerBId   String
+  createdById String
+  createdAt   DateTime         @default(now())
+  events      BadmintonEvent[]
+
+  @@index([sessionId])
+}
+
+model BadmintonEvent {
+  id        String         @id @default(uuid())
+  match     BadmintonMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchId   String
+  sessionId String         // copie de la seance du match : le « pouls » des ecrans compte les lignes d une seance
+  kind      String         // SCORE (saisie ou correction) | VALIDATE (signature) | DISPUTE (« je n ai pas joue ce match ») | CANCEL
+  sets      Json?          // SCORE : [[points de A, points de B], …] set par set
+  authorId  String
+  role      String         // PLAYER | REFEREE | STAFF
+  at        DateTime       @default(now())
+
+  @@index([matchId])
+  @@index([sessionId])
+}
+
 model StationEvent {
   id        String   @id @default(uuid())
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
