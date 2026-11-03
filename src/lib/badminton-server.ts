@@ -2,9 +2,10 @@
 import { db } from "@/lib/db";
 import { memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
-import { readSessionClasses, readSessionSex } from "@/lib/session-roles";
+import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
-import { readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
+import { matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
+import { computeElo, countsForElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -18,6 +19,12 @@ export async function loadMatches(sessionId: string): Promise<BmMatch[]> {
     db.orm.public.BadmintonMatch.where({ sessionId }).all(),
     db.orm.public.BadmintonEvent.where({ sessionId }).all(),
   ]);
+  return toMatches(rows, events);
+}
+
+type MatchRow = { id: string; sessionId: string; playerAId: string; playerBId: string; createdById: string; createdAt: unknown };
+type EventRow = { id: string; matchId: string; kind: string; sets: unknown; authorId: string; role: string; at: unknown };
+function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
   return rows
     .map((m) => ({
       id: m.id,
@@ -34,6 +41,48 @@ export async function loadMatches(sessionId: string): Promise<BmMatch[]> {
         }),
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// ===== Classement ELO (Sartay 03/11, regles dans src/lib/badminton-elo.ts) =====
+// Tous les matchs de toutes les seances de badminton (inter-classes), recalcules a chaque affichage. La classe de test
+// (7A) n'entre jamais dans les statistiques des vraies classes : ses eleves ont leur classement a part (pour les tests).
+export type EloBoard = { entries: Map<string, EloEntry>; people: Map<string, BmPerson>; test: Set<string> };
+export async function loadEloBoard(): Promise<EloBoard> {
+  const sessions = (await db.orm.public.Session.where({ wodType: "BADMINTON" }).all()).filter(notDeleted);
+  if (!sessions.length) return { entries: new Map(), people: new Map(), test: new Set() };
+  const ids = sessions.map((s) => s.id);
+  const [rows, events] = await Promise.all([
+    db.orm.public.BadmintonMatch.where((m) => m.sessionId.in(ids)).all(),
+    db.orm.public.BadmintonEvent.where((e) => e.sessionId.in(ids)).all(),
+  ]);
+  const matches = toMatches(rows, events);
+  const people = await peopleOf(matches);
+  const test = new Set([...people.values()].filter((p) => isTestClass(p.className)).map((p) => p.id));
+  const games: EloGame[] = [];
+  for (const m of matches) {
+    const st = matchState(m);
+    if (!countsForElo(st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
+    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result! });
+  }
+  return { entries: computeElo(games), people, test };
+}
+
+// Groupe de cours d'un eleve pour le classement : les classes (et le sexe, si la seance est garcons / filles) de sa
+// derniere seance de badminton ; sinon sa classe seule.
+export async function badmintonGroupOf(className: string | null): Promise<{ classes: string[]; sex: string | null }> {
+  if (!className) return { classes: [], sex: null };
+  const sessions = (await db.orm.public.Session.where({ wodType: "BADMINTON" }).all())
+    .filter((s) => notDeleted(s) && readSessionClasses(s.settings).includes(className))
+    .sort((a, b) => toMs(b.opensAt ?? b.createdAt) - toMs(a.opensAt ?? a.createdAt));
+  return sessions[0] ? { classes: readSessionClasses(sessions[0].settings), sex: readSessionSex(sessions[0].settings) } : { classes: [className], sex: null };
+}
+
+// Onglet « Classement » de l'espace eleve : des que sa classe a eu une seance de badminton, ou qu'il a joue un match.
+export async function badmintonTabVisible(userId: string, className: string | null): Promise<boolean> {
+  const sessions = (await db.orm.public.Session.where({ wodType: "BADMINTON" }).all()).filter(notDeleted);
+  if (!sessions.length) return false;
+  if (className && sessions.some((s) => readSessionClasses(s.settings).includes(className))) return true;
+  return !!(await db.orm.public.BadmintonMatch.where({ playerAId: userId }).first()) || !!(await db.orm.public.BadmintonMatch.where({ playerBId: userId }).first());
 }
 
 // Eleves de la seance : ceux de ses classes (et les 1P, souvent integres a d'autres classes, comme au greffier), du sexe
@@ -76,6 +125,10 @@ export function pupilWindowOpen(session: SessionLike, nowMs = Date.now()): boole
   if (session.deletedAt) return false;
   if (isSessionOpen(session as Parameters<typeof isSessionOpen>[0], nowMs)) return true;
   if (session.opensAt && nowMs < toMs(session.opensAt)) return false;
+  return nowMs < pupilWindowEnd(session);
+}
+// Fin de cette fenetre : 24 h apres la fin de la seance (aussi la fin de l'auto-evaluation badminton).
+export function pupilWindowEnd(session: SessionLike): number {
   const end = session.closesAt ? toMs(session.closesAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : toMs(session.createdAt) + 12 * 3600_000;
-  return nowMs < end + BM_AFTER_MS;
+  return end + BM_AFTER_MS;
 }

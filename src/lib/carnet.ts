@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
+import { selfEvalGridFor } from "@/lib/wod-engines/core/self-eval";
 import { gradeOfCode, isQualityCode } from "@/lib/wod-engines/core/quality";
 import { notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { wodLabel } from "@/lib/student-sessions";
@@ -10,12 +10,14 @@ import { wodLabel } from "@/lib/student-sessions";
 // elle ne juge pas (voir core/self-eval.ts) ; elle reste consultable en info-bulle.
 
 export const UNGRADED_CRITERIA = new Set(["forme"]);
-export const GRADED_CRITERIA = SELF_EVAL_CRITERIA.filter((c) => !UNGRADED_CRITERIA.has(c.id));
+// Criteres notes de la grille d'une seance (badminton : sa propre grille depuis le 03/11 ; sinon celle du Hyrox).
+export const gradedCriteriaFor = (wodType?: string | null) => selfEvalGridFor(wodType).criteria.filter((c) => !UNGRADED_CRITERIA.has(c.id));
+export const GRADED_CRITERIA = gradedCriteriaFor(null);
 
-export function gradeOfAnswers(answers: Record<string, unknown> | null | undefined): number | null {
+export function gradeOfAnswers(answers: Record<string, unknown> | null | undefined, wodType?: string | null): number | null {
   if (!answers) return null;
   const vals: number[] = [];
-  for (const c of GRADED_CRITERIA) {
+  for (const c of gradedCriteriaFor(wodType)) {
     const code = answers[c.id];
     if (!isQualityCode(code)) continue;
     const g = gradeOfCode(code);
@@ -45,9 +47,9 @@ export function gradeTone(g: number | null): string {
   return "text-sky-600";
 }
 
-export type CarnetColumn = { sessionId: string; label: string; dateMs: number; classes: string[] };
+export type CarnetColumn = { sessionId: string; label: string; dateMs: number; classes: string[]; wodType: string };
 export type CarnetCell = {
-  participated: boolean; // encode dans une equipe de la seance
+  participated: boolean; // encode dans une equipe de la seance (badminton : joueur ou arbitre d'un match)
   submitted: boolean; // auto-evaluation rendue
   grade: number | null;
   codes: Record<string, string>; // criterionId -> code, pour l'info-bulle
@@ -88,6 +90,12 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     db.orm.public.SelfEvalReview.where((r) => r.studentId.in(ids)).all(),
     db.orm.public.Session.where({}).all().then((all) => all.filter(notDeleted)),
   ]);
+  // Badminton : pas d'equipes, l'eleve a participe s'il a joue ou arbitre un match de la seance.
+  const bmMatches = [
+    ...(await db.orm.public.BadmintonMatch.where((m) => m.playerAId.in(ids)).all()),
+    ...(await db.orm.public.BadmintonMatch.where((m) => m.playerBId.in(ids)).all()),
+    ...(await db.orm.public.BadmintonMatch.where((m) => m.createdById.in(ids)).all()),
+  ];
   const teamIds = [...new Set(memberships.map((m) => m.teamId))];
   const teams = teamIds.length ? await db.orm.public.Team.where((t) => t.id.in(teamIds)).all() : [];
   const sessionOfTeam = new Map(teams.map((t) => [t.id, t.sessionId]));
@@ -100,9 +108,10 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     const sid = sessionOfTeam.get(m.teamId);
     if (sid) candidate.add(sid);
   }
+  for (const m of bmMatches) candidate.add(m.sessionId);
   const columns: CarnetColumn[] = sessions
     .filter((s) => candidate.has(s.id))
-    .map((s) => ({ sessionId: s.id, label: s.label ?? wodLabel(s.wodType), dateMs: new Date(String(s.createdAt)).getTime(), classes: readSessionClasses(s.settings) }))
+    .map((s) => ({ sessionId: s.id, label: s.label ?? wodLabel(s.wodType), dateMs: new Date(String(s.createdAt)).getTime(), classes: readSessionClasses(s.settings), wodType: s.wodType }))
     .sort((a, b) => a.dateMs - b.dateMs);
 
   const participated = new Set<string>();
@@ -110,6 +119,7 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     const sid = sessionOfTeam.get(m.teamId);
     if (sid) participated.add(`${sid}_${m.userId}`);
   }
+  for (const m of bmMatches) for (const id of [m.playerAId, m.playerBId, m.createdById]) participated.add(`${m.sessionId}_${id}`);
   const evalOf = new Map(evals.map((e) => [`${e.sessionId}_${e.studentId}`, e]));
   const reviewOf = new Map(reviews.map((r) => [`${r.sessionId}_${r.studentId}`, r]));
 
@@ -126,10 +136,10 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
         cells[col.sessionId] = {
           participated: participated.has(key),
           submitted: !!e,
-          grade: gradeOfAnswers(answers),
+          grade: gradeOfAnswers(answers, col.wodType),
           codes,
           forme: typeof answers?.forme === "string" ? (answers.forme as string) : null,
-          reviewGrade: r ? gradeOfAnswers(r.answers as Record<string, unknown>) : null,
+          reviewGrade: r ? gradeOfAnswers(r.answers as Record<string, unknown>, col.wodType) : null,
         };
       }
       const grades = columns.map((c) => cells[c.sessionId].grade);

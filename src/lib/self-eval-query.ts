@@ -74,8 +74,9 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
     if (f.sessionId === sid) participants = members.reduce((n, list) => n + list.length, 0);
   }
 
-  // Seance supprimee (corbeille) : ses auto-evaluations disparaissent avec elle.
-  const all: SelfEvalRow[] = evals.filter((e) => !isDeletedSession(sessionById.get(e.sessionId))).map((e) => {
+  // Seance supprimee (corbeille) : ses auto-evaluations disparaissent avec elle. Celles du badminton (autre grille,
+  // 03/11) sont sur la page Badminton (onglet « Auto-évaluations ») et dans le carnet.
+  const all: SelfEvalRow[] = evals.filter((e) => !isDeletedSession(sessionById.get(e.sessionId)) && sessionById.get(e.sessionId)?.wodType !== "BADMINTON").map((e) => {
     const u = studentById.get(e.studentId);
     const s = sessionById.get(e.sessionId);
     const at = String(e.submittedAt);

@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { GRADE_MAX, QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
-import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
-import { GRADED_CRITERIA, buildCarnet, carnetCsv, fmtGrade, gradeTone, type CarnetCell } from "@/lib/carnet";
+import { selfEvalGridFor } from "@/lib/wod-engines/core/self-eval";
+import { gradedCriteriaFor, buildCarnet, carnetCsv, fmtGrade, gradeTone, type CarnetCell } from "@/lib/carnet";
 import { groupLabel, groupSlots, latestSlots, type SlotRow } from "@/lib/journal";
 import { listTeachers } from "@/lib/staff";
 import { TopBar } from "../../_components/TopBar";
@@ -54,10 +54,10 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
   const carnet = selected.length ? await buildCarnet(selected, sex || undefined) : null;
   const csv = carnet ? carnetCsv(carnet) : "";
 
-  const tooltip = (cell: CarnetCell) => {
+  const tooltip = (cell: CarnetCell, wodType: string) => {
     if (!cell.submitted) return cell.participated ? "A participé, mais n'a pas rendu son auto-évaluation." : "Pas dans cette séance.";
-    const lines = GRADED_CRITERIA.map((c) => `${c.label} : ${cell.codes[c.id] ?? "—"}`);
-    const forme = SELF_EVAL_CRITERIA.find((c) => c.id === "forme");
+    const lines = gradedCriteriaFor(wodType).map((c) => `${c.label} : ${cell.codes[c.id] ?? "—"}`);
+    const forme = selfEvalGridFor(wodType).criteria.find((c) => c.id === "forme");
     if (forme && cell.forme) lines.push(`${forme.label} : ${cell.forme} (hors note)`);
     if (cell.reviewGrade !== null) lines.push(`Grille du prof : ${fmtGrade(cell.reviewGrade)}/${GRADE_MAX}`);
     return lines.join("\n");
@@ -147,7 +147,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
 
         {/* ===== Bareme ===== */}
         <p className={`${ui.hint} px-1`}>
-          Barème sur {GRADE_MAX} : {QUALITY_LEVELS.map((l) => `${l.code} ${fmtGrade(l.grade)}`).join(" · ")}. Note d&apos;un WOD = moyenne des {GRADED_CRITERIA.length} critères de la grille officielle ;
+          Barème sur {GRADE_MAX} : {QUALITY_LEVELS.map((l) => `${l.code} ${fmtGrade(l.grade)}`).join(" · ")}. Note d&apos;un WOD = moyenne des {gradedCriteriaFor(null).length} critères de la grille officielle (badminton : les {gradedCriteriaFor("BADMINTON").length} de sa grille) ;
           « Ma forme du jour » n&apos;est pas comptée (visible au survol). <b>∅</b> = a participé sans rendre son auto-évaluation, <b>·</b> = pas dans cette séance.
         </p>
 
@@ -186,7 +186,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
                     {carnet.columns.map((c) => {
                       const cell = r.cells[c.sessionId];
                       return (
-                        <td key={c.sessionId} className="p-2 text-center tabular-nums whitespace-pre-line" title={tooltip(cell)}>
+                        <td key={c.sessionId} className="p-2 text-center tabular-nums whitespace-pre-line" title={tooltip(cell, c.wodType)}>
                           {cell.grade !== null ? (
                             <span className={cx("font-extrabold", gradeTone(cell.grade))}>{fmtGrade(cell.grade)}</span>
                           ) : cell.participated ? (

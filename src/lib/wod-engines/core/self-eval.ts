@@ -90,6 +90,90 @@ export const SELF_EVAL_CRITERIA: SelfEvalCriterion[] = [
   },
 ];
 
+// ===== Badminton (Sartay 03/11 : « voilà la grille d'auto éval badminton », Downloads/Grille d'évaluation Badminton.pdf) =====
+// Les 5 criteres du PDF mot pour mot, plus « Ma forme du jour » comme au Hyrox. Une auto-evaluation PAR SEANCE (le PDF
+// dit « lors de ce cycle » : meme choix que pour le Hyrox), ouverte tant que l'eleve peut encoder ses matchs.
+// ⚠️ La 5e ligne (« Fair-play et Arbitrage ») est coupee en bas de page : fins de phrase completees au plus naturel, a
+// valider par Sartay — TI « …les points ou les [décisions de l'arbitre] », I « …manque de respect envers [l'adversaire
+// ou l'arbitre] », S « …les décisions [d'arbitrage] », B « …les matchs des autres [élèves] », TB « …avant de [lancer
+// chaque échange] », E « …et sur la chaise [d'arbitre] ».
+const FORME = SELF_EVAL_CRITERIA.find((c) => c.id === "forme")!;
+export const SELF_EVAL_BADMINTON_TITLE = "AUTO-ÉVALUATION – CYCLE BADMINTON";
+export const SELF_EVAL_BADMINTON_INSTRUCTION =
+  "Touche la case qui correspond le mieux à ton investissement et ton niveau de pratique lors de cette séance de badminton en simple. Sois honnête et objectif.";
+export const SELF_EVAL_BADMINTON: SelfEvalCriterion[] = [
+  {
+    id: "engagement",
+    label: "Implication / Engagement",
+    levels: {
+      TI: "Refuse souvent de participer ou abandonne rapidement.",
+      I: "Participe peu, doit être souvent relancé.",
+      S: "Participe régulièrement mais avec une implication variable.",
+      B: "Est investi tout au long de la séance.",
+      TB: "Très investi, persévère même en difficulté.",
+      E: "S'investit pleinement et maintient une concentration optimale sur tous ses matchs.",
+    },
+  },
+  {
+    id: "deplacements",
+    label: "Déplacements et Replacement (Jeu de jambes)",
+    levels: {
+      TI: "Reste souvent immobile, ne se place pas. Ne retourne jamais au centre.",
+      I: "Se déplace tardivement ou de manière inadaptée. Subit systématiquement la trajectoire.",
+      S: "Se déplace pour jouer mais oublie parfois de se replacer.",
+      B: "Se place correctement et se replace au centre après la plupart des actions.",
+      TB: "Anticipe les déplacements pour prendre le volant tôt. Reprise d'appuis dynamique.",
+      E: "Se déplace en permanence à bon escient, déplacement explosif et replacement immédiat.",
+    },
+  },
+  {
+    id: "frappe",
+    label: "Technique et Qualité de frappe",
+    levels: {
+      TI: "Évite le volant ou ne parvient presque jamais à le jouer. Gestes non maîtrisés.",
+      I: "Joue peu de volants avec beaucoup de difficultés. Frappes « à la cuillère » dominantes.",
+      S: "Réalise plusieurs contacts utiles malgré des erreurs. Renvois majoritairement dans le mi-court.",
+      B: "Bonne maîtrise technique avec peu d'erreurs. Commence à utiliser le clear.",
+      TB: "Enchaîne des contacts précis et variés. Bonne longueur de volant, maîtrise du drop et du clear.",
+      E: "Excellente maîtrise technique adaptée aux situations. Alternance parfaite drop/clear.",
+    },
+  },
+  {
+    id: "tactique",
+    label: "Tactique et Gestion de l'échange",
+    levels: {
+      TI: "Renvoie le volant au hasard, souvent sur l'adversaire ou hors limites.",
+      I: "Essaie simplement de faire passer le volant de l'autre côté sans intention particulière.",
+      S: "Cherche parfois à faire bouger l'adversaire, mais son jeu reste prévisible et dans l'axe.",
+      B: "Vise régulièrement les espaces libres pour mettre l'adversaire en difficulté.",
+      TB: "Construit l'échange intelligemment. Alterne les coups pour créer l'ouverture.",
+      E: "Vision tactique parfaite. Anticipe, exploite les points faibles et impose son rythme.",
+    },
+  },
+  {
+    id: "fairplay",
+    label: "Fair-play et Arbitrage",
+    levels: {
+      TI: "Ne respecte pas les règles et conteste souvent les points ou les décisions de l'arbitre.",
+      I: "Accepte mal les décisions d'arbitrage et manque de respect envers l'adversaire ou l'arbitre.",
+      S: "Respecte son adversaire et accepte globalement les décisions d'arbitrage.",
+      B: "Attitude fair-play. Arbitre sérieusement les matchs des autres élèves.",
+      TB: "Arbitrage rigoureux, annonce clairement le score avant de lancer chaque échange.",
+      E: "Modèle de fair-play et d'intégrité sur le terrain et sur la chaise d'arbitre.",
+    },
+  },
+  { ...FORME, levels: { ...FORME.levels, B: "Je suis en bonne forme : de l'énergie tout au long de la séance, j'ai bien récupéré entre les matchs." } },
+];
+
+// Une grille par type de seance : le badminton a la sienne, tout le reste (WOD) garde celle du Hyrox.
+export type SelfEvalGridKey = "hyrox" | "badminton";
+export type SelfEvalGridDef = { key: SelfEvalGridKey; name: string; title: string; instruction: string; criteria: SelfEvalCriterion[] };
+export const SELF_EVAL_GRIDS: Record<SelfEvalGridKey, SelfEvalGridDef> = {
+  hyrox: { key: "hyrox", name: "Hyrox", title: SELF_EVAL_TITLE, instruction: SELF_EVAL_INSTRUCTION, criteria: SELF_EVAL_CRITERIA },
+  badminton: { key: "badminton", name: "Badminton", title: SELF_EVAL_BADMINTON_TITLE, instruction: SELF_EVAL_BADMINTON_INSTRUCTION, criteria: SELF_EVAL_BADMINTON },
+};
+export const selfEvalGridFor = (wodType: string | null | undefined): SelfEvalGridDef => (wodType === "BADMINTON" ? SELF_EVAL_GRIDS.badminton : SELF_EVAL_GRIDS.hyrox);
+
 export const SELF_EVAL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // La fenetre s'ouvre a la fin de l'equipe de l'eleve si elle est arrivee, sinon a la fin officielle du WOD.

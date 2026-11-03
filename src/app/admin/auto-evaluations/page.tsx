@@ -29,7 +29,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
   const levels = readLevelParams(sp);
 
   const [sessions, allClasses] = await Promise.all([
-    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all().then((all) => all.filter(notDeleted)),
+    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all().then((all) => all.filter((s) => notDeleted(s) && s.wodType !== "BADMINTON")),
     db.orm.public.User.where({ role: "STUDENT" }).all().then((us) => [...new Set(us.map((u) => u.className).filter((c): c is string => !!c))].sort()),
   ]);
 

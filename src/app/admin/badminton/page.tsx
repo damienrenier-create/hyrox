@@ -2,12 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, loadMatches, peopleOf, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { badmintonRoster, loadEloBoard, loadMatches, peopleOf, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { rankElo } from "@/lib/badminton-elo";
+import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
+import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
+import { gradeOfAnswers } from "@/lib/carnet";
 import { matchState, pupilStats, viewOf, type BmPersonRef } from "@/lib/badminton";
-import { notDeleted, readSessionClasses } from "@/lib/session-roles";
+import { isTestClass, notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { TopBar } from "../../_components/TopBar";
-import { BadmintonStaff, type BmPupilRow } from "./BadmintonStaff";
+import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow } from "./BadmintonStaff";
 import { cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +51,27 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
     .filter((r) => !r.staff)
     .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
     .map(({ id, name, className, stats }) => ({ id, name, className, stats }));
+  // Auto-evaluations de la seance (grille badminton, 03/11) : une ligne par eleve du bilan, remplie ou pas.
+  const selfRows = await db.orm.public.SelfEvaluation.where({ sessionId: session.id }).all();
+  const selfIds = [...new Set([...rows.map((r) => r.id), ...selfRows.map((r) => r.studentId)])];
+  const selfPeople = await peopleOf([], selfIds);
+  const selfEvals: BmSelfEvalRow[] = selfIds
+    .map((id) => {
+      const p = selfPeople.get(id);
+      const se = selfRows.find((r) => r.studentId === id);
+      const answers = (se?.answers as Record<string, string> | null) ?? null;
+      return { id, name: p?.name ?? "?", lastName: p?.lastName ?? "", firstName: p?.firstName ?? "", className: p?.className ?? null, answers, grade: answers ? gradeOfAnswers(answers, "BADMINTON") : null, at: se ? toMs(se.submittedAt) : null };
+    })
+    .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
+    .map(({ id, name, className, answers, grade, at }) => ({ id, name, className, answers, grade, at }));
+  const seCols = SELF_EVAL_GRIDS.badminton.criteria.map((c) => ({ id: c.id, short: SELF_EVAL_SHORT[c.id] ?? c.label, label: c.label }));
+  // Classement ELO (tous les matchs de toutes les seances, inter-classes). Seance de la classe de test : son monde a part.
+  const board = await loadEloBoard();
+  const testSession = classes.length > 0 && classes.every((c) => isTestClass(c));
+  const elo: BmEloRow[] = rankElo([...board.entries.values()].filter((e) => board.test.has(e.id) === testSession)).map((e) => {
+    const p = board.people.get(e.id);
+    return { id: e.id, name: p?.name ?? "?", className: p?.className ?? null, rating: e.rating, games: e.games, won: e.won, draws: e.draws, lost: e.lost, provisional: e.provisional };
+  });
   const label = (s: (typeof all)[number]) => `${new Date(toMs(s.opensAt ?? s.createdAt)).toLocaleDateString("fr-BE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" })} · ${readSessionClasses(s.settings).join("+")}`;
 
   return (
@@ -60,7 +85,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
             ))}
           </nav>
         )}
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map((p) => ({ id: p.id, name: p.name, className: p.className }))} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map((p) => ({ id: p.id, name: p.name, className: p.className }))} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} />
       </main>
     </div>
   );

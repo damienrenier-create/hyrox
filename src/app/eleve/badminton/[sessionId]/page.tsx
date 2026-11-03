@@ -1,19 +1,23 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, loadMatches, peopleOf, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { badmintonRoster, loadMatches, peopleOf, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
 import { readSessionClasses } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
 import { TopBar } from "../../../_components/TopBar";
 import { BadmintonClient } from "./BadmintonClient";
+import { SelfEvalGrid } from "../../SelfEvalGrid";
+import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
+import { cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
 // Badminton, cote eleve (Sartay 20/10) : encoder ses matchs (contre qui, le score), signer ou corriger ceux que
 // l'adversaire a encodes, encoder comme arbitre le match de deux autres eleves. Tout ce qui a ete encode reste visible.
-export default async function BadmintonPupilPage({ params }: { params: Promise<{ sessionId: string }> }) {
+export default async function BadmintonPupilPage({ params, searchParams }: { params: Promise<{ sessionId: string }>; searchParams: Promise<{ autoeval?: string }> }) {
   const { sessionId } = await params;
+  const { autoeval } = await searchParams;
   const user = await getSession();
   if (!user) redirect("/");
   if (BM_STAFF_ROLES.includes(user.role)) redirect(`/admin/badminton?session=${sessionId}`);
@@ -30,6 +34,11 @@ export default async function BadmintonPupilPage({ params }: { params: Promise<{
   const toSign = involved.filter((v) => v.status === "PENDING" && v.waitingFor?.id === me.id);
   const mine = involved.filter((v) => v.meSide !== null && !toSign.includes(v));
   const refereed = involved.filter((v) => v.meSide === null);
+  // Auto-evaluation de la seance (grille « AUTO-ÉVALUATION – CYCLE BADMINTON », Sartay 03/11) : ouverte tant que l'eleve
+  // peut encoder ses matchs (seance ouverte, ou terminee depuis moins de 24 h).
+  const writable = pupilWindowOpen(session);
+  const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
+  const grid = SELF_EVAL_GRIDS.badminton;
   const closes = session.closesAt ? new Date(toMs(session.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
 
   return (
@@ -38,12 +47,32 @@ export default async function BadmintonPupilPage({ params }: { params: Promise<{
       <BadmintonClient
         sessionId={sessionId}
         meId={me.id}
-        writable={pupilWindowOpen(session)}
+        writable={writable}
         roster={roster.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, name: p.name, className: p.className }))}
         toSign={toSign}
         mine={mine}
         refereed={refereed}
       />
+      <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
+        <details open={autoeval === "1"} className={`${ui.card} p-3`}>
+          <summary className="cursor-pointer select-none flex items-center justify-between gap-2">
+            <span className="font-display font-extrabold text-ink">📝 Mon auto-évaluation</span>
+            <span className={cx(ui.chip, selfEval ? ui.chipOk : writable ? ui.chipWarn : ui.chipMuted)}>{selfEval ? "envoyée ✅" : writable ? "à remplir" : "non remplie"}</span>
+          </summary>
+          <div className="mt-3">
+            <p className={`${ui.hint} mb-2`}>{grid.title}. À remplir à la fin du cours (jusqu&apos;à 24 h après).</p>
+            <SelfEvalGrid
+              sessionId={sessionId}
+              criteria={grid.criteria}
+              instruction={grid.instruction}
+              initial={selfEval ? (selfEval.answers as Record<string, string>) : null}
+              state={writable ? "open" : "expired"}
+              closesAt={pupilWindowEnd(session)}
+              submittedAt={selfEval ? new Date(String(selfEval.submittedAt)).getTime() : null}
+            />
+          </div>
+        </details>
+      </section>
     </div>
   );
 }

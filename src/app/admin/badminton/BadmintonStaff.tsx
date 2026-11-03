@@ -7,12 +7,17 @@ import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-a
 import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../_components/BadmintonParts";
 import { usePulse } from "../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
+import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
+import { fmtElo } from "@/lib/badminton-elo";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
-type Tab = "matchs" | "eleves" | "encoder";
+export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null };
+export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
+type SeCol = { id: string; short: string; label: string };
+type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "encoder";
 type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[] }) {
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   usePulse(pulse, 10000, !refLive);
@@ -33,8 +38,12 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { s
       L.push([hm(v.createdAt), v.a.name, v.a.className ?? "", setsText(v.sets), v.b.name, v.b.className ?? "", w, STATUS_TEXT[v.status], `${v.createdBy.name} (${v.createdBy.role === "PLAYER" ? "joueur" : v.createdBy.role === "REFEREE" ? "arbitre" : "prof"})`, v.history.map((h) => `${hm(h.at)} ${h.text}`).join(" | ")].map((x) => q(String(x))).join(";"));
     }
     L.push("");
-    L.push(["Élève", "Classe", "Matchs validés", "Victoires", "Égalités", "Défaites", "Sets +", "Sets -", "Points +", "Points -", "À signer", "Contestés", "Arbitrés"].join(";"));
-    for (const r of rows) { const s = r.stats; L.push([r.name, r.className ?? "", s.played, s.won, s.draws, s.lost, s.setsFor, s.setsAgainst, s.pointsFor, s.pointsAgainst, s.pending, s.disputed, s.refereed].map((x) => q(String(x))).join(";")); }
+    const eloOf = new Map(elo.map((e) => [e.id, e]));
+    L.push(["Élève", "Classe", "Matchs validés", "Victoires", "Égalités", "Défaites", "Sets +", "Sets -", "Points +", "Points -", "À signer", "Contestés", "Arbitrés", "ELO"].join(";"));
+    for (const r of rows) { const s = r.stats; const e = eloOf.get(r.id); L.push([r.name, r.className ?? "", s.played, s.won, s.draws, s.lost, s.setsFor, s.setsAgainst, s.pointsFor, s.pointsAgainst, s.pending, s.disputed, s.refereed, e ? fmtElo(e.rating) : ""].map((x) => q(String(x))).join(";")); }
+    L.push("");
+    L.push(["Auto-évaluation", "Classe", ...seCols.map((c) => c.label), "Note /5"].join(";"));
+    for (const r of selfEvals) L.push([r.name, r.className ?? "", ...seCols.map((c) => r.answers?.[c.id] ?? ""), r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")].map((x) => q(String(x))).join(";"));
     const blob = new Blob(["﻿" + L.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -60,6 +69,8 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { s
         <div className={ui.segmented}>
           <button type="button" onClick={() => setTab("matchs")} className={tabBtn(tab === "matchs")}>Matchs</button>
           <button type="button" onClick={() => setTab("eleves")} className={tabBtn(tab === "eleves")}>Élèves</button>
+          <button type="button" onClick={() => setTab("autoevals")} className={tabBtn(tab === "autoevals")}>Auto-évaluations · {selfEvals.filter((r) => r.answers).length}</button>
+          <button type="button" onClick={() => setTab("elo")} className={tabBtn(tab === "elo")}>Classement ELO</button>
           <button type="button" onClick={() => setTab("encoder")} className={tabBtn(tab === "encoder")}>＋ Encoder un match</button>
         </div>
         <button type="button" onClick={exportCsv} className={btn.smGhost}>⬇ Excel</button>
@@ -79,6 +90,10 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { s
       )}
 
       {tab === "eleves" && <PupilsTable rows={rows} />}
+
+      {tab === "autoevals" && <SelfEvalTable rows={selfEvals} cols={seCols} />}
+
+      {tab === "elo" && <EloTable rows={elo} groupClasses={groupClasses} />}
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
     </div>
@@ -131,6 +146,82 @@ function PupilsTable({ rows }: { rows: BmPupilRow[] }) {
         </table>
       </div>
       <p className={ui.hint}>Seuls les matchs validés comptent dans les victoires, sets et points. « À signer » : l&apos;adversaire n&apos;a pas encore signé ; « Contestés » : un joueur dit ne pas avoir joué ce match.</p>
+    </section>
+  );
+}
+
+// Auto-evaluations de la seance (grille badminton) : code par critere, note /5 calculee comme au carnet (forme hors note).
+function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] }) {
+  const done = rows.filter((r) => r.answers).length;
+  const color = (code: string | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
+  const hm = (ms: number) => new Date(ms).toLocaleString("fr-BE", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+  return (
+    <section className={`${ui.cardPad} space-y-2`}>
+      <p className={ui.hint}>{done} auto-évaluation{done > 1 ? "s" : ""} rendue{done > 1 ? "s" : ""} sur {rows.length} élève{rows.length > 1 ? "s" : ""}. Note /5 comme au carnet (« Forme du jour » hors note).</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left">
+              <th className={ui.th}>Élève</th><th className={ui.th}>Classe</th>
+              {cols.map((c) => <th key={c.id} className={`${ui.th} text-center`} title={c.label}>{c.short}</th>)}
+              <th className={`${ui.th} text-right`}>Note /5</th><th className={ui.th}>Envoyée</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className={cx("border-t border-line", !r.answers && "text-ink-3")}>
+                <td className="p-2 font-bold">{r.name}</td>
+                <td className="p-2">{r.className ?? ""}</td>
+                {cols.map((c) => <td key={c.id} className={cx("p-2 text-center font-black", color(r.answers?.[c.id]))}>{r.answers?.[c.id] ?? "—"}</td>)}
+                <td className="p-2 text-right tabular-nums font-bold">{r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")}</td>
+                <td className="p-2 text-xs whitespace-nowrap">{r.at ? hm(r.at) : "pas encore"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// Classement ELO (regles : src/lib/badminton-elo.ts) : le groupe de la seance par defaut, ou toutes les classes.
+function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: string[] }) {
+  const [all, setAll] = useState(false);
+  const list = all ? rows : rows.filter((r) => r.className && groupClasses.includes(r.className));
+  return (
+    <section className={`${ui.cardPad} space-y-2`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className={ui.segmented}>
+          <button type="button" onClick={() => setAll(false)} className={cx("text-sm font-bold px-3 py-1.5 rounded-lg", !all ? ui.segOn : ui.segOff)}>{groupClasses.join(" + ") || "Groupe"}</button>
+          <button type="button" onClick={() => setAll(true)} className={cx("text-sm font-bold px-3 py-1.5 rounded-lg", all ? ui.segOn : ui.segOff)}>Toutes classes · {rows.length}</button>
+        </div>
+        <span className={ui.hint}>Départ à 1000 · un match compte s&apos;il n&apos;est ni contesté, ni annulé (signé ou pas) · provisoire avant 5 matchs</span>
+      </div>
+      {list.length === 0 ? <p className={ui.muted}>Aucun match qui compte pour l&apos;instant.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                <th className={`${ui.th} text-right`}>#</th><th className={ui.th}>Élève</th><th className={ui.th}>Classe</th><th className={`${ui.th} text-right`}>ELO</th><th className={`${ui.th} text-right`}>Matchs</th><th className={`${ui.th} text-right`}>V</th><th className={`${ui.th} text-right`}>N</th><th className={`${ui.th} text-right`}>D</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r, i) => (
+                <tr key={r.id} className="border-t border-line">
+                  <td className="p-2 text-right tabular-nums text-ink-3">{i + 1}</td>
+                  <td className="p-2 font-bold">{r.name}{r.provisional && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5 text-[10px]")}>provisoire</span>}</td>
+                  <td className="p-2">{r.className ?? ""}</td>
+                  <td className="p-2 text-right tabular-nums font-display font-extrabold">{fmtElo(r.rating)}</td>
+                  <td className="p-2 text-right tabular-nums">{r.games}</td>
+                  <td className="p-2 text-right tabular-nums">{r.won}</td>
+                  <td className="p-2 text-right tabular-nums">{r.draws}</td>
+                  <td className="p-2 text-right tabular-nums">{r.lost}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

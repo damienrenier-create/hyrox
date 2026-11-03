@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
+import { badmintonTabVisible } from "@/lib/badminton-server";
 import { EVAL_GROUPS, evalDefaultsText, EVAL_LEVELS, EVAL_WEIGHTS, evalYears } from "@/lib/eval-bareme";
 import { HX_DEFAULTS } from "@/lib/wod-engines/templates/hyrox-engine";
 import { TopBar } from "../../_components/TopBar";
@@ -20,6 +21,7 @@ export default async function BaremesPage() {
   if (!user) redirect("/");
   if (user.role !== "STUDENT") redirect("/eleve");
   const { todo } = await loadSelfEvalHistory(user.id);
+  const classement = await badmintonTabVisible(user.id, user.className ?? null);
   const years = evalYears([user.className]);
   const groups = EVAL_GROUPS.filter((g) => g.key.startsWith(years));
   const { capMin, extraMin, laps } = HX_DEFAULTS;
@@ -31,7 +33,7 @@ export default async function BaremesPage() {
     <div className={ui.page}>
       <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
       <main className="max-w-2xl mx-auto p-4 space-y-4">
-        <EleveTabs active="bareme" todo={todo.length} bareme />
+        <EleveTabs active="bareme" todo={todo.length} bareme classement={classement} />
 
         <section className={`${ui.cardPad} space-y-2`}>
           <h2 className={ui.h2}>📊 Ta note du cycle</h2>
