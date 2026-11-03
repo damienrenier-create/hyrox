@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
-import { cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveScoreAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveScoreAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -91,11 +91,13 @@ const STATUS_CHIP = { PENDING: ui.chipWarn, VALIDATED: ui.chipOk, DISPUTED: ui.c
 
 // Fiche d'un match, vue par `viewerId` : le score de SON cote d'abord s'il joue, le statut, l'historique complet (qui a
 // encode quoi, qui a signe) et les gestes permis. `staff` : vue du prof (noms complets, tous les gestes).
-export function MatchCard({ v, viewerId, staff = false, compact = false, onReferee }: { v: BmView; viewerId: string; staff?: boolean; compact?: boolean; onReferee?: (v: BmView) => void }) {
+// `roster` : eleves qu'on peut demander comme temoins (match libre).
+export function MatchCard({ v, viewerId, staff = false, compact = false, onReferee, roster }: { v: BmView; viewerId: string; staff?: boolean; compact?: boolean; onReferee?: (v: BmView) => void; roster?: BmPersonRef[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [asking, setAsking] = useState(false);
   // Cote du lecteur d'abord : « Toi 21 – 15 Tom ».
   const flip = v.meSide === "B";
   const left = v.meSide ? (staff ? (flip ? v.b : v.a).name : "Toi") : v.a.name;
@@ -125,11 +127,14 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
             <span className="font-display text-xl font-extrabold tabular-nums">{shownSets ? shownSets.map(([a, b]) => `${a}–${b}`).join("  ") : "—"}</span>
             <span className="font-bold">{right}{rightClass && <span className="text-ink-3 text-xs font-semibold"> {rightClass}</span>}</span>
           </div>
-          {!v.meSide && !staff && <p className={ui.hint}>Arbitré par toi</p>}
+          {!v.meSide && !staff && <p className={ui.hint}>{v.createdBy.id === viewerId ? "Arbitré par toi" : "On te demande d'attester ce match"}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-1">
           <span className={cx(ui.chip, STATUS_CHIP[v.status])}>{statusText}</span>
           {won && v.status !== "CANCELLED" && <span className={cx(ui.chip, won.startsWith("🏆") ? ui.chipAccent : ui.chipMuted)}>{won}</span>}
+          {v.free && v.status !== "CANCELLED" && v.status !== "LIVE" && (
+            <span className={cx(ui.chip, v.official ? ui.chipOk : ui.chipMuted)} title="Officiel = 2 témoins (l'arbitre en est un) ou validé par un prof : il compte au classement">{v.official ? "🏅 officiel" : `👀 témoins ${Math.min(v.witnesses.count, v.witnesses.needed)}/${v.witnesses.needed}`}</span>
+          )}
         </div>
       </div>
       {!compact && (
@@ -148,11 +153,20 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
           </div>
           {!staff && <p className={ui.hint}>{v.meSide ? "Ton adversaire devra signer ta correction." : "Les joueurs voient ta correction."}</p>}
         </div>
+      ) : asking && roster ? (
+        <div className="space-y-2 rounded-xl bg-paper p-2">
+          <PersonPicker people={roster} value={null} onChange={(id) => { if (id) run(() => askWitnessAction(v.id, id)); setAsking(false); }} exclude={[v.a.id, v.b.id, viewerId, ...v.witnesses.asked.map((p) => p.id)]} label="Qui a vu ce match ?" placeholder="Tape le nom d'un élève" />
+          <button type="button" onClick={() => setAsking(false)} className={btn.smGhost}>Annuler</button>
+          <p className={ui.hint}>Il recevra le match sur son téléphone et pourra attester le score.</p>
+        </div>
       ) : (
-        (v.can.validate || v.can.correct || v.can.dispute || v.can.cancel || (v.can.referee && onReferee)) && (
+        (v.can.validate || v.can.correct || v.can.dispute || v.can.cancel || (v.can.referee && onReferee) || v.can.attest || v.can.decline || (v.can.askWitness && roster)) && (
           <div className="flex flex-wrap gap-2">
+            {v.can.attest && <button type="button" disabled={pending} onClick={() => run(() => attestMatchAction(v.id, true))} className={btn.success}>🖊️ J&apos;atteste ce score</button>}
+            {v.can.decline && <button type="button" disabled={pending} onClick={() => { if (confirm("Tu n'as pas vu ce match ?")) run(() => attestMatchAction(v.id, false)); }} className={btn.smGhost}>🙈 Je n&apos;ai pas vu ce match</button>}
+            {v.can.askWitness && roster && <button type="button" disabled={pending} onClick={() => setAsking(true)} className={btn.smGhost}>👀 Demander un témoin</button>}
             {v.can.referee && onReferee && <button type="button" onClick={() => onReferee(v)} className={staff ? btn.smSea : btn.sea}>🎯 Reprendre l&apos;arbitrage</button>}
-            {v.can.validate && <button type="button" disabled={pending} onClick={() => { if (v.status !== "LIVE" || confirm("Terminer ce match en direct avec le score du moment ?")) run(() => validateMatchAction(v.id)); }} className={staff ? btn.smSuccess : btn.success}>✅ {staff ? (v.status === "LIVE" ? "Terminer et valider" : "Valider") : "Je signe ce score"}</button>}
+            {v.can.validate && <button type="button" disabled={pending} onClick={() => { if (v.status !== "LIVE" || confirm("Terminer ce match en direct avec le score du moment ?")) run(() => validateMatchAction(v.id)); }} className={staff ? btn.smSuccess : btn.success}>✅ {staff ? (v.status === "LIVE" ? "Terminer et valider" : v.free && !v.official ? "Valider (officiel)" : "Valider") : "Je signe ce score"}</button>}
             {v.can.correct && <button type="button" disabled={pending} onClick={() => setEditing(true)} className={btn.smGhost}>✏️ Corriger</button>}
             {v.can.dispute && <button type="button" disabled={pending} onClick={() => { if (confirm("Tu n'as pas joué ce match ? Ton prof verra ta contestation.")) run(() => disputeMatchAction(v.id)); }} className={btn.smGhost}>🚫 Je n&apos;ai pas joué ce match</button>}
             {v.can.cancel && <button type="button" disabled={pending} onClick={() => { if (confirm("Annuler ce match ? Il restera dans l'historique, barré.")) run(() => cancelMatchAction(v.id)); }} className={btn.smGhost}>✖ Annuler</button>}

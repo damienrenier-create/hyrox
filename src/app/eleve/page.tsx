@@ -17,7 +17,7 @@ import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
 import { badmintonTabVisible, loadMatches } from "@/lib/badminton-server";
-import { matchState, pupilStats } from "@/lib/badminton";
+import { BM_FREE, matchState, pupilStats, viewOf } from "@/lib/badminton";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -56,7 +56,7 @@ export default async function ElevePage() {
     ...(await db.orm.public.BadmintonMatch.where({ playerBId: user.id }).all()),
     ...(await db.orm.public.BadmintonMatch.where({ createdById: user.id }).all()),
   ];
-  const bmSessionIds = [...new Set(myMatchRows.map((m) => m.sessionId))].filter((id) => !openIds.has(id));
+  const bmSessionIds = [...new Set(myMatchRows.map((m) => m.sessionId))].filter((id): id is string => !!id && !openIds.has(id));
   const bmPast = bmSessionIds.length ? (await db.orm.public.Session.where((s) => s.id.in(bmSessionIds)).all()).filter(notDeleted).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : [];
   const bmHistory = [];
   for (const s of bmPast) {
@@ -64,6 +64,11 @@ export default async function ElevePage() {
     const st = pupilStats(user.id, ms.map((m) => ({ match: m, state: matchState(m) })));
     bmHistory.push({ id: s.id, dateMs: toMs(s.createdAt), st, toSign: ms.filter((m) => { const x = matchState(m); return x.status === "PENDING" && x.waitingFor === user.id; }).length });
   }
+
+  // Matchs libres (03/11, entre classes, hors cours) : ce que l'eleve doit signer ou attester.
+  const free = classement ? (await loadMatches(BM_FREE)).map((m) => viewOf(m, user.id, false, (id) => ({ id, name: "", className: null }))) : [];
+  const freeToSign = free.filter((v) => v.status === "PENDING" && v.waitingFor?.id === user.id).length;
+  const freeToAttest = free.filter((v) => v.can.attest).length;
 
   const cards = [];
   for (const s of openSessions) {
@@ -166,6 +171,20 @@ export default async function ElevePage() {
             </div>
           )}
         </section>
+
+        {classement && (
+          <Link href={`/eleve/badminton/${BM_FREE}`} className={`flex items-center justify-between gap-3 ${ui.card} hover:border-brand p-3 transition`}>
+            <span>
+              <span className="block font-display font-extrabold text-ink">🏸 Matchs libres</span>
+              <span className="block text-xs text-ink-2">Affronte un élève de n&apos;importe quelle classe, en dehors des cours. Officiel avec 2 témoins ou ton prof.</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              {freeToSign > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {freeToSign}</span>}
+              {freeToAttest > 0 && <span className={`${ui.chip} ${ui.chipSea}`}>🖊️ {freeToAttest}</span>}
+              <span className="text-ink-3 font-black">›</span>
+            </span>
+          </Link>
+        )}
 
         {bmHistory.length > 0 && (
           <section className="space-y-2">

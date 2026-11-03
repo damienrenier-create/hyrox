@@ -10,51 +10,69 @@ import { btn, cx, ui } from "@/lib/ui";
 
 // Ecran eleve du badminton (telephone) : « à signer » en haut, puis « Encoder un match » (j'ai joue / j'ai arbitre),
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[] }) {
+// Matchs libres (`free`, 03/11) : tous les eleves dans la liste, temoins a demander, « à attester » en haut.
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [] }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[] }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
   const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null } | null>(null);
   usePulse(pulse, 8000, !live);
-  const [open, setOpen] = useState(toSign.length === 0 && mine.length === 0 && writable);
+  const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
+  const witnessRoster = free ? roster : undefined;
   const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
       {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
+      {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
+
+      {toAttest.length > 0 && (
+        <section className="space-y-2">
+          <h2 className={ui.eyebrow}>🖊️ À attester · {toAttest.length}</h2>
+          <p className={ui.hint}>On te demande de confirmer le score d&apos;un match que tu as vu. Si tu ne l&apos;as pas vu, dis-le.</p>
+          {toAttest.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} />)}
+        </section>
+      )}
 
       {toSign.length > 0 && (
         <section className="space-y-2">
           <h2 className={ui.eyebrow}>✍️ À signer · {toSign.length}</h2>
           <p className={ui.hint}>Ton adversaire a encodé votre match. Si le score est juste, signe-le ; sinon corrige-le (il devra signer ta correction).</p>
-          {toSign.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} />)}
+          {toSign.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} roster={witnessRoster} />)}
         </section>
       )}
 
       {writable && (
         <section>
-          {open ? <NewMatch sessionId={sessionId} meId={meId} roster={roster} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
-            <button type="button" onClick={() => setOpen(true)} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match</button>
+          {open ? <NewMatch sessionId={sessionId} meId={meId} roster={roster} free={free} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
+            <button type="button" onClick={() => setOpen(true)} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match{free ? " libre" : ""}</button>
           )}
         </section>
       )}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
-        {mine.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match pour l&apos;instant.</p> : mine.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} />)}
+        {mine.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match pour l&apos;instant.</p> : mine.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} roster={witnessRoster} />)}
       </section>
 
       {refereed.length > 0 && (
         <section className="space-y-2">
           <h2 className={ui.eyebrow}>Matchs que j&apos;ai arbitrés · {refereed.length}</h2>
-          {refereed.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} onReferee={writable ? resume : undefined} />)}
+          {refereed.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} onReferee={writable ? resume : undefined} roster={witnessRoster} />)}
+        </section>
+      )}
+
+      {witnessed.length > 0 && (
+        <section className="space-y-2">
+          <h2 className={ui.eyebrow}>Matchs dont je suis témoin · {witnessed.length}</h2>
+          {witnessed.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} />)}
         </section>
       )}
     </main>
   );
 }
 
-function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
+function NewMatch({ sessionId, meId, roster, free, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">("player");
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
@@ -64,6 +82,10 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessio
   const [error, setError] = useState("");
   const [twin, setTwin] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // Match libre : jusqu'a 2 temoins demandes tout de suite (facultatif : on peut les demander plus tard sur la fiche).
+  const [w1, setW1] = useState<string | null>(null);
+  const [w2, setW2] = useState<string | null>(null);
+  const witnessIds = free ? [w1, w2].filter((x): x is string => !!x) : undefined;
   const nameOf = (id: string | null) => roster.find((p) => p.id === id)?.name.split(" ")[0] ?? "";
   const left = mode === "player" ? "Toi" : nameOf(a) || "Joueur 1";
   const right = mode === "player" ? nameOf(b) || "Adversaire" : nameOf(b) || "Joueur 2";
@@ -73,7 +95,7 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessio
   function startLive(force = false) {
     setError("");
     start(async () => {
-      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force });
+      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
       if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: [[0, 0]] });
@@ -82,7 +104,7 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessio
   function save(force = false) {
     setError("");
     start(async () => {
-      const res = await recordMatchAction(sessionId, { playerAId: mode === "player" ? meId : a, playerBId: b ?? "", sets, force });
+      const res = await recordMatchAction(sessionId, { playerAId: mode === "player" ? meId : a, playerBId: b ?? "", sets, force, witnessIds });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
       onDone();
@@ -117,6 +139,14 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessio
           <span className={ui.label}>Le score</span>
           <SetsEditor sets={sets} onChange={setSets} left={left} right={right} />
           {setsReady(sets) && b && <p className={`${ui.hint} mt-2`}>{resultText(sets, left, right)}</p>}
+        </div>
+      )}
+      {free && (
+        <div className="space-y-2">
+          <span className={ui.label}>Témoins (facultatif)</span>
+          <PersonPicker people={roster} value={w1} onChange={setW1} exclude={[a, b, w2].filter((x): x is string => !!x)} label="Témoin 1" placeholder="Un élève qui a vu le match" />
+          <PersonPicker people={roster} value={w2} onChange={setW2} exclude={[a, b, w1].filter((x): x is string => !!x)} label="Témoin 2" placeholder="Un autre élève qui a vu le match" />
+          <p className={ui.hint}>Ils recevront le match à attester. Officiel (il compte au classement) avec 2 témoins{mode === "referee" ? " : en arbitrant, tu en es déjà un" : ""}, ou si ton prof le valide.</p>
         </div>
       )}
       {twin && (

@@ -239,8 +239,8 @@ model QuizAnswer {
 // est une ligne de BadmintonEvent, en AJOUT SEUL (jamais d effacement) : son etat se lit sur ce journal (src/lib/badminton.ts).
 model BadmintonMatch {
   id          String           @id @default(uuid())
-  session     Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId   String
+  session     Session?         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String?          // null = match LIBRE (03/11 : entre classes, en dehors des heures de cours)
   playerAId   String           // l eleve qui encode son match, ou le premier nomme par l arbitre / le prof
   playerBId   String
   createdById String
@@ -254,8 +254,9 @@ model BadmintonEvent {
   id        String         @id @default(uuid())
   match     BadmintonMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   matchId   String
-  sessionId String         // copie de la seance du match : le « pouls » des ecrans compte les lignes d une seance
-  kind      String         // SCORE (saisie ou correction) | VALIDATE (signature) | DISPUTE (« je n ai pas joue ce match ») | CANCEL
+  sessionId String?        // copie de la seance du match : le « pouls » des ecrans compte les lignes d une seance (null = match libre)
+  kind      String         // SCORE (saisie ou correction) | VALIDATE (signature) | DISPUTE (« je n ai pas joue ce match ») | CANCEL | LIVE | WITNESS_ASK | WITNESS | WITNESS_NO
+  targetId  String?        // WITNESS_ASK : l eleve a qui on demande d attester le match (03/11)
   sets      Json?          // SCORE : [[points de A, points de B], …] set par set
   authorId  String
   role      String         // PLAYER | REFEREE | STAFF

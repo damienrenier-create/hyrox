@@ -1,7 +1,8 @@
 // Classement ELO du badminton (Sartay 03/11). Module PUR (importable cote client). Regles :
 // - tout le monde part a 1000 (« c'est okay ») ;
 // - un match compte s'il a un score et n'est ni conteste, ni annule, ni encore en direct : signe ou pas (« un match non
-//   conteste compte, pas la peine qu'il soit signe ») ;
+//   conteste compte, pas la peine qu'il soit signe ») ; un match LIBRE (hors cours) seulement une fois officiel : atteste
+//   par 2 autres eleves, ou valide par un prof (isOfficial, src/lib/badminton.ts) ;
 // - formule ELO classique : score attendu = 1 / (1 + 10^((Rb − Ra) / 400)) ; victoire 1, egalite 0,5, defaite 0 ;
 // - K = 40 sur les 10 premiers matchs d'un eleve (son classement se place vite), puis 20 (plus stable) ;
 // - ecart au score : ×1 pour un match serre, jusqu'a ×1,5 a 16 points d'ecart ou plus (un 21-5) ;
@@ -10,7 +11,7 @@
 //   repercute toute seule ;
 // - un seul classement pour toutes les classes (inter-classes) ; l'eleve le voit dans l'onglet « Classement » de son
 //   espace (pas sur chaque match), d'abord son groupe de cours.
-import { swapSets, type BmResult, type BmSet, type BmState } from "@/lib/badminton";
+import { swapSets, type BmResult, type BmSet } from "@/lib/badminton";
 
 export const ELO_START = 1000;
 export const ELO_PROVISIONAL_GAMES = 5;
@@ -22,8 +23,6 @@ const MARGIN_FULL = 16;
 export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult };
 export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
-
-export const countsForElo = (st: BmState): boolean => (st.status === "VALIDATED" || st.status === "PENDING") && !!st.sets && !!st.result;
 
 export function marginFactor(r: BmResult): number {
   if (r.winner === "DRAW") return 1;

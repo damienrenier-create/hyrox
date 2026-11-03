@@ -108,7 +108,7 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     const sid = sessionOfTeam.get(m.teamId);
     if (sid) candidate.add(sid);
   }
-  for (const m of bmMatches) candidate.add(m.sessionId);
+  for (const m of bmMatches) if (m.sessionId) candidate.add(m.sessionId); // (match libre : hors seance, pas de colonne)
   const columns: CarnetColumn[] = sessions
     .filter((s) => candidate.has(s.id))
     .map((s) => ({ sessionId: s.id, label: s.label ?? wodLabel(s.wodType), dateMs: new Date(String(s.createdAt)).getTime(), classes: readSessionClasses(s.settings), wodType: s.wodType }))
@@ -119,7 +119,7 @@ export async function buildCarnet(classes: string[], sex?: string): Promise<Carn
     const sid = sessionOfTeam.get(m.teamId);
     if (sid) participated.add(`${sid}_${m.userId}`);
   }
-  for (const m of bmMatches) for (const id of [m.playerAId, m.playerBId, m.createdById]) participated.add(`${m.sessionId}_${id}`);
+  for (const m of bmMatches) if (m.sessionId) for (const id of [m.playerAId, m.playerBId, m.createdById]) participated.add(`${m.sessionId}_${id}`);
   const evalOf = new Map(evals.map((e) => [`${e.sessionId}_${e.studentId}`, e]));
   const reviewOf = new Map(reviews.map((r) => [`${r.sessionId}_${r.studentId}`, r]));
 

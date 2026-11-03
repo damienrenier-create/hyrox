@@ -17,7 +17,8 @@ type SeCol = { id: string; short: string; label: string };
 type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "encoder";
 type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[] }) {
+// `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   usePulse(pulse, 10000, !refLive);
@@ -63,13 +64,13 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
         <Kpi label="Validés" value={count("VALIDATED")} tone="ok" />
         <Kpi label="À signer" value={count("PENDING")} tone={count("PENDING") ? "warn" : undefined} />
         <Kpi label="Contestés" value={count("DISPUTED")} tone={count("DISPUTED") ? "err" : undefined} />
-        <Kpi label="Élèves ayant joué" value={`${played}/${rows.length}`} />
+        {free ? <Kpi label="Officiels (au classement)" value={views.filter((v) => v.official).length} tone="ok" /> : <Kpi label="Élèves ayant joué" value={`${played}/${rows.length}`} />}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className={ui.segmented}>
           <button type="button" onClick={() => setTab("matchs")} className={tabBtn(tab === "matchs")}>Matchs</button>
           <button type="button" onClick={() => setTab("eleves")} className={tabBtn(tab === "eleves")}>Élèves</button>
-          <button type="button" onClick={() => setTab("autoevals")} className={tabBtn(tab === "autoevals")}>Auto-évaluations · {selfEvals.filter((r) => r.answers).length}</button>
+          {!free && <button type="button" onClick={() => setTab("autoevals")} className={tabBtn(tab === "autoevals")}>Auto-évaluations · {selfEvals.filter((r) => r.answers).length}</button>}
           <button type="button" onClick={() => setTab("elo")} className={tabBtn(tab === "elo")}>Classement ELO</button>
           <button type="button" onClick={() => setTab("encoder")} className={tabBtn(tab === "encoder")}>＋ Encoder un match</button>
         </div>
@@ -186,16 +187,16 @@ function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] })
 
 // Classement ELO (regles : src/lib/badminton-elo.ts) : le groupe de la seance par defaut, ou toutes les classes.
 function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: string[] }) {
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useState(groupClasses.length === 0);
   const list = all ? rows : rows.filter((r) => r.className && groupClasses.includes(r.className));
   return (
     <section className={`${ui.cardPad} space-y-2`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className={ui.segmented}>
-          <button type="button" onClick={() => setAll(false)} className={cx("text-sm font-bold px-3 py-1.5 rounded-lg", !all ? ui.segOn : ui.segOff)}>{groupClasses.join(" + ") || "Groupe"}</button>
+          {groupClasses.length > 0 && <button type="button" onClick={() => setAll(false)} className={cx("text-sm font-bold px-3 py-1.5 rounded-lg", !all ? ui.segOn : ui.segOff)}>{groupClasses.join(" + ")}</button>}
           <button type="button" onClick={() => setAll(true)} className={cx("text-sm font-bold px-3 py-1.5 rounded-lg", all ? ui.segOn : ui.segOff)}>Toutes classes · {rows.length}</button>
         </div>
-        <span className={ui.hint}>Départ à 1000 · un match compte s&apos;il n&apos;est ni contesté, ni annulé (signé ou pas) · provisoire avant 5 matchs</span>
+        <span className={ui.hint}>Départ à 1000 · un match de cours compte s&apos;il n&apos;est ni contesté, ni annulé (signé ou pas) ; un match libre, une fois officiel · provisoire avant 5 matchs</span>
       </div>
       {list.length === 0 ? <p className={ui.muted}>Aucun match qui compte pour l&apos;instant.</p> : (
         <div className="overflow-x-auto">

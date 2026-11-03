@@ -4,8 +4,8 @@ import { memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
 import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
-import { matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
-import { computeElo, countsForElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
+import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
+import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -14,16 +14,23 @@ export const BM_AFTER_MS = 24 * 3600_000;
 export type BmPerson = { id: string; name: string; firstName: string; lastName: string; className: string | null; sex: string | null; staff: boolean };
 type SessionLike = { id: string; wodType: string; settings?: unknown; isActive: boolean; opensAt?: unknown | null; closesAt?: unknown | null; raceEndedAt?: unknown | null; createdAt: unknown; deletedAt?: unknown | null };
 
+// Les matchs d'une seance, ou tous les matchs libres (sessionId = BM_FREE).
 export async function loadMatches(sessionId: string): Promise<BmMatch[]> {
+  const free = sessionId === BM_FREE;
   const [rows, events] = await Promise.all([
-    db.orm.public.BadmintonMatch.where({ sessionId }).all(),
-    db.orm.public.BadmintonEvent.where({ sessionId }).all(),
+    free ? db.orm.public.BadmintonMatch.where((m) => m.sessionId.isNull()).all() : db.orm.public.BadmintonMatch.where({ sessionId }).all(),
+    free ? db.orm.public.BadmintonEvent.where((e) => e.sessionId.isNull()).all() : db.orm.public.BadmintonEvent.where({ sessionId }).all(),
   ]);
   return toMatches(rows, events);
 }
+// Un seul match et son journal.
+export async function loadMatch(matchId: string): Promise<BmMatch | null> {
+  const [rows, events] = await Promise.all([db.orm.public.BadmintonMatch.where({ id: matchId }).all(), db.orm.public.BadmintonEvent.where({ matchId }).all()]);
+  return toMatches(rows, events)[0] ?? null;
+}
 
-type MatchRow = { id: string; sessionId: string; playerAId: string; playerBId: string; createdById: string; createdAt: unknown };
-type EventRow = { id: string; matchId: string; kind: string; sets: unknown; authorId: string; role: string; at: unknown };
+type MatchRow = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: unknown };
+type EventRow = { id: string; matchId: string; kind: string; sets: unknown; authorId: string; role: string; at: unknown; targetId?: string | null };
 function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
   return rows
     .map((m) => ({
@@ -37,31 +44,33 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
         .filter((e) => e.matchId === m.id)
         .flatMap((e) => {
           const kind = readKind(e.kind);
-          return kind ? [{ id: e.id, kind, sets: readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at) }] : [];
+          return kind ? [{ id: e.id, kind, sets: readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null }] : [];
         }),
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 // ===== Classement ELO (Sartay 03/11, regles dans src/lib/badminton-elo.ts) =====
-// Tous les matchs de toutes les seances de badminton (inter-classes), recalcules a chaque affichage. La classe de test
+// Tous les matchs de toutes les seances de badminton et les matchs libres officiels (inter-classes), recalcules a chaque
+// affichage. La classe de test
 // (7A) n'entre jamais dans les statistiques des vraies classes : ses eleves ont leur classement a part (pour les tests).
 export type EloBoard = { entries: Map<string, EloEntry>; people: Map<string, BmPerson>; test: Set<string> };
 export async function loadEloBoard(): Promise<EloBoard> {
   const sessions = (await db.orm.public.Session.where({ wodType: "BADMINTON" }).all()).filter(notDeleted);
-  if (!sessions.length) return { entries: new Map(), people: new Map(), test: new Set() };
   const ids = sessions.map((s) => s.id);
-  const [rows, events] = await Promise.all([
-    db.orm.public.BadmintonMatch.where((m) => m.sessionId.in(ids)).all(),
-    db.orm.public.BadmintonEvent.where((e) => e.sessionId.in(ids)).all(),
+  const [rows, events, free] = await Promise.all([
+    ids.length ? db.orm.public.BadmintonMatch.where((m) => m.sessionId.in(ids)).all() : Promise.resolve([]),
+    ids.length ? db.orm.public.BadmintonEvent.where((e) => e.sessionId.in(ids)).all() : Promise.resolve([]),
+    loadMatches(BM_FREE),
   ]);
-  const matches = toMatches(rows, events);
+  const matches = [...toMatches(rows, events), ...free];
+  if (!matches.length) return { entries: new Map(), people: new Map(), test: new Set() };
   const people = await peopleOf(matches);
   const test = new Set([...people.values()].filter((p) => isTestClass(p.className)).map((p) => p.id));
   const games: EloGame[] = [];
   for (const m of matches) {
     const st = matchState(m);
-    if (!countsForElo(st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
+    if (!isOfficial(m, st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
     games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result! });
   }
   return { entries: computeElo(games), people, test };
@@ -75,6 +84,15 @@ export async function badmintonGroupOf(className: string | null): Promise<{ clas
     .filter((s) => notDeleted(s) && readSessionClasses(s.settings).includes(className))
     .sort((a, b) => toMs(b.opensAt ?? b.createdAt) - toMs(a.opensAt ?? a.createdAt));
   return sessions[0] ? { classes: readSessionClasses(sessions[0].settings), sex: readSessionSex(sessions[0].settings) } : { classes: [className], sex: null };
+}
+
+// Matchs libres (03/11) : n'importe quel eleve, toutes classes ; les eleves de test (7A) entre eux seulement.
+export async function freeRoster(test: boolean): Promise<BmPerson[]> {
+  const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
+  return students
+    .filter((u) => u.className && isTestClass(u.className) === test)
+    .map((u) => person(u, null))
+    .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
 }
 
 // Onglet « Classement » de l'espace eleve : des que sa classe a eu une seance de badminton, ou qu'il a joue un match.

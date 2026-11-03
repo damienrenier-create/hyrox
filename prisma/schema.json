@@ -298,7 +298,7 @@
                 }
               },
               "sessionId": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -308,6 +308,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "targetId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -355,6 +362,9 @@
                 },
                 "sets": {
                   "column": "sets"
+                },
+                "targetId": {
+                  "column": "targetId"
                 }
               },
               "namespaceId": "public",
@@ -399,7 +409,7 @@
                 }
               },
               "sessionId": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -424,7 +434,7 @@
               },
               "session": {
                 "cardinality": "N:1",
-                "nullable": false,
+                "nullable": true,
                 "on": {
                   "localFields": [
                     "sessionId"
@@ -4252,11 +4262,16 @@
                 "sessionId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": true
                 },
                 "sets": {
                   "codecId": "pg/json@1",
                   "nativeType": "json",
+                  "nullable": true
+                },
+                "targetId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": true
                 }
               },
@@ -4338,7 +4353,7 @@
                 "sessionId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": true
                 }
               },
               "foreignKeys": [
@@ -7370,7 +7385,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "83b2afe40db4901196878621375e5e843223c86f7de25efff4fdbd2a3e535465"
+    "storageHash": "26ae7a0fa6bf482b1620882508567aa6ee0328a62726d80bf239f20d802d84c5"
   },
   "execution": {
     "executionHash": "50b482c1dde2ba3ee6289941fca6f64e022e4ad408e5bd51a4124e1e0d3e6665",

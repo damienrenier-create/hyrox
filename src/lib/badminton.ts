@@ -11,12 +11,21 @@
 // - CANCEL : annule (encode par erreur), garde dans l'historique.
 // - LIVE (03/11) : arbitrage en direct, un appui sur + ou − = une photo du score ; le match est « en direct » jusqu'au
 //   SCORE de fin (« Fin du match ») de l'arbitre, valide d'office.
+// - MATCH LIBRE (03/11, Sartay : « les eleves doivent pouvoir s'affronter en inter-classes en dehors de leurs heures
+//   officielles, en allant chercher dans une liste d'eleves » ; « pour devenir officiel, les matchs pourraient etre signes
+//   par 2 autres eleves ou par un prof ») : match sans seance (sessionId null). WITNESS_ASK = on demande a un eleve
+//   d'attester le match (targetId) ; WITNESS = il atteste le score en vigueur ; WITNESS_NO = « je n'ai pas vu ce match ».
+//   Une correction du score efface les attestations (elles portaient sur l'ancien score). Officiel = 2 temoins (l'arbitre
+//   qui a encode le score en est un) ou un prof. Seuls les matchs officiels comptent au classement ELO.
 
 export type BmSet = [number, number]; // points de A, points de B
-export type BmRole = "PLAYER" | "REFEREE" | "STAFF";
-export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE";
-export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number };
-export type BmMatch = { id: string; sessionId: string; playerAId: string; playerBId: string; createdById: string; createdAt: number; events: BmEvent[] };
+export type BmRole = "PLAYER" | "REFEREE" | "STAFF" | "WITNESS";
+export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO";
+export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number; targetId?: string | null };
+export type BmMatch = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: number; events: BmEvent[] };
+// Identifiant des matchs libres dans les liens et les actions (/eleve/badminton/libre, /admin/badminton?session=libre).
+export const BM_FREE = "libre";
+export const BM_WITNESSES_NEEDED = 2;
 export type BmStatus = "PENDING" | "VALIDATED" | "DISPUTED" | "CANCELLED" | "LIVE";
 
 export const BM_MAX_SETS = 3;
@@ -24,8 +33,8 @@ export const BM_MAX_POINTS = 99;
 // Deux saisies du meme duel a moins de ce delai : sans doute le meme match (l'adversaire ou l'arbitre l'a deja encode).
 export const BM_DUPLICATE_MS = 20 * 60_000;
 
-const isRole = (v: unknown): v is BmRole => v === "PLAYER" || v === "REFEREE" || v === "STAFF";
-const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE";
+const isRole = (v: unknown): v is BmRole => v === "PLAYER" || v === "REFEREE" || v === "STAFF" || v === "WITNESS";
+const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO";
 export const readRole = (v: unknown): BmRole => (isRole(v) ? v : "PLAYER");
 export const readKind = (v: unknown): BmKind | null => (isKind(v) ? v : null);
 
@@ -90,6 +99,9 @@ export type BmState = {
   waitingFor: string | null; // joueur qui doit encore signer (statut PENDING)
   result: BmResult | null;
   corrections: number; // saisies apres la premiere
+  asked: string[]; // match libre : eleves a qui on a demande d'attester le match
+  attested: BmSign[]; // ... ceux qui ont atteste le score en vigueur
+  declined: string[]; // ... ceux qui disent ne pas l'avoir vu (score en vigueur)
 };
 
 export function matchState(m: BmMatch): BmState {
@@ -101,8 +113,29 @@ export function matchState(m: BmMatch): BmState {
   let cancelledBy: BmSign | null = null;
   let status: BmStatus = "PENDING";
   let scores = 0;
+  const asked: string[] = [];
+  let attested: BmSign[] = [];
+  let declined: string[] = [];
+  const players = [m.playerAId, m.playerBId];
   for (const e of events) {
     const sign = { id: e.authorId, role: e.role, at: e.at };
+    if (e.kind === "WITNESS_ASK") {
+      if (e.targetId && !players.includes(e.targetId) && !asked.includes(e.targetId)) asked.push(e.targetId);
+      continue;
+    }
+    if (e.kind === "WITNESS" || e.kind === "WITNESS_NO") {
+      if (players.includes(e.authorId) || !asked.includes(e.authorId)) continue;
+      attested = attested.filter((s) => s.id !== e.authorId);
+      declined = declined.filter((id) => id !== e.authorId);
+      if (e.kind === "WITNESS") attested.push(sign);
+      else declined.push(e.authorId);
+      continue;
+    }
+    if ((e.kind === "LIVE" || e.kind === "SCORE") && e.sets) {
+      // Nouveau score : les attestations portaient sur l'ancien.
+      attested = [];
+      declined = [];
+    }
     if (e.kind === "LIVE" && e.sets && status !== "CANCELLED") {
       sets = e.sets;
       scoreBy = sign;
@@ -133,11 +166,25 @@ export function matchState(m: BmMatch): BmState {
     }
   }
   const waitingFor = status === "PENDING" && scoreBy ? (scoreBy.id === m.playerAId ? m.playerBId : scoreBy.id === m.playerBId ? m.playerAId : null) : null;
-  return { status, sets, scoreBy, validatedBy, disputedBy, cancelledBy, waitingFor, result: sets ? resultOf(sets) : null, corrections: Math.max(0, scores - 1) };
+  return { status, sets, scoreBy, validatedBy, disputedBy, cancelledBy, waitingFor, result: sets ? resultOf(sets) : null, corrections: Math.max(0, scores - 1), asked, attested, declined };
+}
+
+// Temoins d'un match libre : ceux qui ont atteste le score en vigueur, plus l'arbitre qui l'a encode.
+export function witnessesOf(st: BmState): string[] {
+  const ids = st.attested.map((s) => s.id);
+  if (st.scoreBy?.role === "REFEREE" && !ids.includes(st.scoreBy.id)) ids.push(st.scoreBy.id);
+  return ids;
+}
+// Match officiel (il compte au classement ELO) : un score, ni conteste, ni annule, ni en direct ; en seance, rien de plus
+// (« un match non conteste compte, pas la peine qu'il soit signe ») ; match libre : 2 temoins, ou un prof.
+export function isOfficial(m: BmMatch, st: BmState): boolean {
+  if ((st.status !== "VALIDATED" && st.status !== "PENDING") || !st.sets || !st.result) return false;
+  if (m.sessionId !== null) return true;
+  return st.scoreBy?.role === "STAFF" || st.validatedBy?.role === "STAFF" || witnessesOf(st).length >= BM_WITNESSES_NEEDED;
 }
 
 export const STATUS_TEXT: Record<BmStatus, string> = { PENDING: "à signer", VALIDATED: "validé", DISPUTED: "contesté", CANCELLED: "annulé", LIVE: "en direct" };
-export const ROLE_TEXT: Record<BmRole, string> = { PLAYER: "joueur", REFEREE: "arbitre", STAFF: "prof" };
+export const ROLE_TEXT: Record<BmRole, string> = { PLAYER: "joueur", REFEREE: "arbitre", STAFF: "prof", WITNESS: "témoin" };
 
 // Historique lisible, ligne par ligne : qui a fait quoi, et quand. `nameOf` donne le nom a afficher d'un identifiant.
 export type BmHistoryLine = { at: number; icon: string; text: string };
@@ -166,11 +213,18 @@ export function historyOf(m: BmMatch, nameOf: (id: string) => string): BmHistory
       afterLive = false;
       continue;
     }
-    out.push(lineOf(e, who));
+    out.push(lineOf(e, who, nameOf));
   }
   return out;
 }
-function lineOf(e: BmEvent, who: string): BmHistoryLine {
+function lineOf(e: BmEvent, who: string, nameOf: (id: string) => string): BmHistoryLine {
+  if (e.kind === "WITNESS_ASK") {
+    const by = nameOf(e.authorId);
+    const to = e.targetId ? nameOf(e.targetId) : "?";
+    return { at: e.at, icon: "👀", text: by === "toi" ? `Tu as demandé à ${to} d'attester le match` : to === "toi" ? `${by} te demande d'attester le match` : `${by} demande à ${to} d'attester le match` };
+  }
+  if (e.kind === "WITNESS") return { at: e.at, icon: "🖊️", text: `Attesté par ${who}` };
+  if (e.kind === "WITNESS_NO") return { at: e.at, icon: "🙈", text: `${who} : « je n'ai pas vu ce match »` };
   if (e.kind === "VALIDATE") return { at: e.at, icon: "✅", text: `Signé par ${who}` };
   if (e.kind === "DISPUTE") return { at: e.at, icon: "⚠️", text: `Contesté par ${who} : « je n'ai pas joué ce match »` };
   return { at: e.at, icon: "✖", text: `Annulé par ${who}` };
@@ -219,15 +273,24 @@ export type BmView = {
   waitingFor: BmPersonRef | null;
   createdBy: BmPersonRef & { role: BmRole };
   history: BmHistoryLine[];
-  can: { validate: boolean; correct: boolean; dispute: boolean; cancel: boolean; referee: boolean }; // referee : reprendre l'arbitrage en direct
+  free: boolean; // match libre (hors seance)
+  official: boolean; // compte au classement ELO
+  witnesses: { count: number; needed: number; asked: BmPersonRef[]; attested: BmPersonRef[]; declined: BmPersonRef[] };
+  // referee : reprendre l'arbitrage en direct ; attest / decline : temoin d'un match libre ; askWitness : demander un temoin
+  can: { validate: boolean; correct: boolean; dispute: boolean; cancel: boolean; referee: boolean; attest: boolean; decline: boolean; askWitness: boolean };
 };
 
 export function viewOf(m: BmMatch, viewerId: string, staff: boolean, ref: (id: string) => BmPersonRef): BmView {
   const st = matchState(m);
   const meSide = viewerId === m.playerAId ? "A" : viewerId === m.playerBId ? "B" : null;
   const player = meSide !== null;
-  const creatorRole = [...m.events].sort((x, y) => x.at - y.at).find((e) => e.kind === "SCORE")?.role ?? "PLAYER";
+  const creatorRole = [...m.events].sort((x, y) => x.at - y.at).find((e) => e.kind === "SCORE" || e.kind === "LIVE")?.role ?? "PLAYER";
   const live = st.status !== "CANCELLED";
+  const free = m.sessionId === null;
+  const official = isOfficial(m, st);
+  const witnessIds = witnessesOf(st);
+  const askedMe = free && !staff && !player && st.asked.includes(viewerId);
+  const scored = live && st.status !== "LIVE" && !!st.sets;
   return {
     id: m.id,
     createdAt: m.createdAt,
@@ -240,13 +303,20 @@ export function viewOf(m: BmMatch, viewerId: string, staff: boolean, ref: (id: s
     waitingFor: st.waitingFor ? ref(st.waitingFor) : null,
     createdBy: { ...ref(m.createdById), role: creatorRole },
     history: historyOf(m, (id) => (id === viewerId && !staff ? "toi" : ref(id).name)),
+    free,
+    official,
+    witnesses: { count: witnessIds.length, needed: BM_WITNESSES_NEEDED, asked: st.asked.map(ref), attested: st.attested.map((s) => ref(s.id)), declined: st.declined.map(ref) },
     can: {
-      // Prof : valider un match a signer, conteste, ou encore en direct (il le termine avec le score du moment).
-      validate: staff ? st.status === "PENDING" || st.status === "DISPUTED" || st.status === "LIVE" : st.status === "PENDING" && st.waitingFor === viewerId,
+      // Prof : valider un match a signer, conteste, ou encore en direct (il le termine avec le score du moment) ; match libre :
+      // aussi un match signe mais pas encore officiel (sa validation le rend officiel).
+      validate: staff ? st.status === "PENDING" || st.status === "DISPUTED" || st.status === "LIVE" || (free && scored && !official) : st.status === "PENDING" && st.waitingFor === viewerId,
       correct: staff || (live && st.status !== "LIVE" && (player || viewerId === m.createdById)),
       dispute: !staff && player && live && st.status !== "DISPUTED" && st.scoreBy?.id !== viewerId,
       cancel: live && (staff || (viewerId === m.createdById && st.status !== "VALIDATED")),
       referee: st.status === "LIVE" && (staff || viewerId === m.createdById),
+      attest: askedMe && scored && !st.attested.some((s) => s.id === viewerId),
+      decline: askedMe && scored && !st.declined.includes(viewerId) && !st.attested.some((s) => s.id === viewerId),
+      askWitness: free && !staff && live && !official && (player || viewerId === m.createdById),
     },
   };
 }

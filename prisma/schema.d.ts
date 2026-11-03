@@ -34,7 +34,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'83b2afe40db4901196878621375e5e843223c86f7de25efff4fdbd2a3e535465'>;
+  StorageHashBase<'26ae7a0fa6bf482b1620882508567aa6ee0328a62726d80bf239f20d802d84c5'>;
 export type ExecutionHash =
   ExecutionHashBase<'50b482c1dde2ba3ee6289941fca6f64e022e4ad408e5bd51a4124e1e0d3e6665'>;
 export type ProfileHash =
@@ -245,8 +245,9 @@ export type FieldOutputTypes = {
     readonly BadmintonEvent: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly matchId: CodecTypes['pg/text@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly kind: CodecTypes['pg/text@1']['output'];
+      readonly targetId: CodecTypes['pg/text@1']['output'] | null;
       readonly sets: CodecTypes['pg/json@1']['output'] | null;
       readonly authorId: CodecTypes['pg/text@1']['output'];
       readonly role: CodecTypes['pg/text@1']['output'];
@@ -254,7 +255,7 @@ export type FieldOutputTypes = {
     };
     readonly BadmintonMatch: {
       readonly id: CodecTypes['pg/text@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly playerAId: CodecTypes['pg/text@1']['output'];
       readonly playerBId: CodecTypes['pg/text@1']['output'];
       readonly createdById: CodecTypes['pg/text@1']['output'];
@@ -579,8 +580,9 @@ export type FieldInputTypes = {
     readonly BadmintonEvent: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly matchId: CodecTypes['pg/text@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly kind: CodecTypes['pg/text@1']['input'];
+      readonly targetId: CodecTypes['pg/text@1']['input'] | null;
       readonly sets: CodecTypes['pg/json@1']['input'] | null;
       readonly authorId: CodecTypes['pg/text@1']['input'];
       readonly role: CodecTypes['pg/text@1']['input'];
@@ -588,7 +590,7 @@ export type FieldInputTypes = {
     };
     readonly BadmintonMatch: {
       readonly id: CodecTypes['pg/text@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly playerAId: CodecTypes['pg/text@1']['input'];
       readonly playerBId: CodecTypes['pg/text@1']['input'];
       readonly createdById: CodecTypes['pg/text@1']['input'];
@@ -917,8 +919,9 @@ export type StorageColumnTypes = {
       readonly kind: CodecTypes['pg/text@1']['output'];
       readonly matchId: CodecTypes['pg/text@1']['output'];
       readonly role: CodecTypes['pg/text@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly sets: CodecTypes['pg/json@1']['output'] | null;
+      readonly targetId: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly badmintonMatch: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -926,7 +929,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly playerAId: CodecTypes['pg/text@1']['output'];
       readonly playerBId: CodecTypes['pg/text@1']['output'];
-      readonly sessionId: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly boatPlacement: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -1251,8 +1254,9 @@ export type StorageColumnInputTypes = {
       readonly kind: CodecTypes['pg/text@1']['input'];
       readonly matchId: CodecTypes['pg/text@1']['input'];
       readonly role: CodecTypes['pg/text@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly sets: CodecTypes['pg/json@1']['input'] | null;
+      readonly targetId: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly badmintonMatch: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1260,7 +1264,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly playerAId: CodecTypes['pg/text@1']['input'];
       readonly playerBId: CodecTypes['pg/text@1']['input'];
-      readonly sessionId: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly boatPlacement: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1757,20 +1761,21 @@ export namespace Models {
   };
   export type public_BadmintonMatch = {
     id: CodecTypes['pg/text@1']['output'];
-    sessionId: CodecTypes['pg/text@1']['output'];
+    sessionId: CodecTypes['pg/text@1']['output'] | null;
     playerAId: CodecTypes['pg/text@1']['output'];
     playerBId: CodecTypes['pg/text@1']['output'];
     createdById: CodecTypes['pg/text@1']['output'];
     createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     events: public_BadmintonEvent[];
-    session: public_Session;
+    session: public_Session | null;
     readonly [RelationKeys]?: 'events' | 'session';
   };
   export type public_BadmintonEvent = {
     id: CodecTypes['pg/text@1']['output'];
     matchId: CodecTypes['pg/text@1']['output'];
-    sessionId: CodecTypes['pg/text@1']['output'];
+    sessionId: CodecTypes['pg/text@1']['output'] | null;
     kind: CodecTypes['pg/text@1']['output'];
+    targetId: CodecTypes['pg/text@1']['output'] | null;
     sets: CodecTypes['pg/json@1']['output'] | null;
     authorId: CodecTypes['pg/text@1']['output'];
     role: CodecTypes['pg/text@1']['output'];
@@ -2095,12 +2100,17 @@ type ContractBase = Omit<
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
+                  readonly nullable: true;
                 };
                 readonly kind: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly targetId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sets: {
                   readonly nativeType: 'json';
@@ -2165,7 +2175,7 @@ type ContractBase = Omit<
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
+                  readonly nullable: true;
                 };
                 readonly playerAId: {
                   readonly nativeType: 'text';
@@ -4647,11 +4657,15 @@ type ContractBase = Omit<
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
-                readonly nullable: false;
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly kind: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly targetId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sets: {
@@ -4696,6 +4710,7 @@ type ContractBase = Omit<
                 readonly matchId: { readonly column: 'matchId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly kind: { readonly column: 'kind' };
+                readonly targetId: { readonly column: 'targetId' };
                 readonly sets: { readonly column: 'sets' };
                 readonly authorId: { readonly column: 'authorId' };
                 readonly role: { readonly column: 'role' };
@@ -4710,7 +4725,7 @@ type ContractBase = Omit<
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
-                readonly nullable: false;
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly playerAId: {
@@ -4751,7 +4766,7 @@ type ContractBase = Omit<
                   readonly model: 'Session';
                 };
                 readonly cardinality: 'N:1';
-                readonly nullable: false;
+                readonly nullable: true;
                 readonly on: {
                   readonly localFields: readonly ['sessionId'];
                   readonly targetFields: readonly ['id'];
