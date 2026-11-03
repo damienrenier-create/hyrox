@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
-import { cancelMatchAction, correctMatchAction, disputeMatchAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveScoreAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -87,11 +87,11 @@ export function resultText(sets: BmSet[], left: string, right: string): string {
   return sets.length > 1 && s[0] !== s[1] ? `Victoire de ${won}, ${s[0]} set${s[0] > 1 ? "s" : ""} à ${s[1]}` : `Victoire de ${won}`;
 }
 
-const STATUS_CHIP = { PENDING: ui.chipWarn, VALIDATED: ui.chipOk, DISPUTED: ui.chipErr, CANCELLED: ui.chipMuted } as const;
+const STATUS_CHIP = { PENDING: ui.chipWarn, VALIDATED: ui.chipOk, DISPUTED: ui.chipErr, CANCELLED: ui.chipMuted, LIVE: ui.chipSea } as const;
 
 // Fiche d'un match, vue par `viewerId` : le score de SON cote d'abord s'il joue, le statut, l'historique complet (qui a
 // encode quoi, qui a signe) et les gestes permis. `staff` : vue du prof (noms complets, tous les gestes).
-export function MatchCard({ v, viewerId, staff = false, compact = false }: { v: BmView; viewerId: string; staff?: boolean; compact?: boolean }) {
+export function MatchCard({ v, viewerId, staff = false, compact = false, onReferee }: { v: BmView; viewerId: string; staff?: boolean; compact?: boolean; onReferee?: (v: BmView) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
@@ -114,8 +114,8 @@ export function MatchCard({ v, viewerId, staff = false, compact = false }: { v: 
   };
   const statusText = v.status === "PENDING"
     ? v.waitingFor ? (v.waitingFor.id === viewerId && !staff ? "⏳ à toi de signer" : `⏳ attend la signature de ${v.waitingFor.name}`) : "⏳ à signer"
-    : v.status === "VALIDATED" ? "✅ validé" : v.status === "DISPUTED" ? "⚠️ contesté" : "✖ annulé";
-  const won = v.result && v.meSide && !staff ? (v.result.winner === "DRAW" ? "Égalité" : (v.result.winner === v.meSide ? "🏆 Victoire" : "Défaite")) : null;
+    : v.status === "VALIDATED" ? "✅ validé" : v.status === "DISPUTED" ? "⚠️ contesté" : v.status === "LIVE" ? `🔴 en direct · set ${v.sets?.length ?? 1}` : "✖ annulé";
+  const won = v.status !== "LIVE" && v.result && v.meSide && !staff ? (v.result.winner === "DRAW" ? "Égalité" : (v.result.winner === v.meSide ? "🏆 Victoire" : "Défaite")) : null;
   return (
     <div className={cx(ui.card, "p-3 space-y-2", v.status === "CANCELLED" && "opacity-60", v.waitingFor?.id === viewerId && !staff && "border-accent")}>
       <div className="space-y-1.5">
@@ -149,15 +149,124 @@ export function MatchCard({ v, viewerId, staff = false, compact = false }: { v: 
           {!staff && <p className={ui.hint}>{v.meSide ? "Ton adversaire devra signer ta correction." : "Les joueurs voient ta correction."}</p>}
         </div>
       ) : (
-        (v.can.validate || v.can.correct || v.can.dispute || v.can.cancel) && (
+        (v.can.validate || v.can.correct || v.can.dispute || v.can.cancel || (v.can.referee && onReferee)) && (
           <div className="flex flex-wrap gap-2">
-            {v.can.validate && <button type="button" disabled={pending} onClick={() => run(() => validateMatchAction(v.id))} className={staff ? btn.smSuccess : btn.success}>✅ {staff ? "Valider" : "Je signe ce score"}</button>}
+            {v.can.referee && onReferee && <button type="button" onClick={() => onReferee(v)} className={staff ? btn.smSea : btn.sea}>🎯 Reprendre l&apos;arbitrage</button>}
+            {v.can.validate && <button type="button" disabled={pending} onClick={() => { if (v.status !== "LIVE" || confirm("Terminer ce match en direct avec le score du moment ?")) run(() => validateMatchAction(v.id)); }} className={staff ? btn.smSuccess : btn.success}>✅ {staff ? (v.status === "LIVE" ? "Terminer et valider" : "Valider") : "Je signe ce score"}</button>}
             {v.can.correct && <button type="button" disabled={pending} onClick={() => setEditing(true)} className={btn.smGhost}>✏️ Corriger</button>}
             {v.can.dispute && <button type="button" disabled={pending} onClick={() => { if (confirm("Tu n'as pas joué ce match ? Ton prof verra ta contestation.")) run(() => disputeMatchAction(v.id)); }} className={btn.smGhost}>🚫 Je n&apos;ai pas joué ce match</button>}
             {v.can.cancel && <button type="button" disabled={pending} onClick={() => { if (confirm("Annuler ce match ? Il restera dans l'historique, barré.")) run(() => cancelMatchAction(v.id)); }} className={btn.smGhost}>✖ Annuler</button>}
           </div>
         )
       )}
+    </div>
+  );
+}
+
+// ===== Arbitrage en direct (Sartay 03/11) =====
+// Tableau de score plein ecran pour l'arbitre : un gros « +1 » et un petit « −1 » par joueur, le service (celui qui vient
+// de marquer), le set suivant, la fin du match. Chaque appui part tout de suite au serveur ; si plusieurs appuis se
+// suivent pendant un envoi, seul le dernier score est renvoye (c'est une photo du score : rien ne se perd).
+const BM_TARGETS = [11, 15, 21, 0] as const; // 0 = sans limite (match au temps)
+export function LiveBoard({ matchId, aName, bName, initialSets, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; onClose: () => void }) {
+  const router = useRouter();
+  const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
+  const [server, setServer] = useState<0 | 1 | null>(null);
+  // Points par set (rappel « set gagné ? ») : retenu sur ce telephone. Le tableau n'existe que cote navigateur (ouvert au clic).
+  const [target, setTarget] = useState<number>(() => { try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [finishing, startFinish] = useTransition();
+  const latest = useRef(sets);
+  const inFlight = useRef(false);
+  const dirty = useRef(false);
+  async function flush() {
+    if (inFlight.current) { dirty.current = true; return; }
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      do {
+        dirty.current = false;
+        const res = await liveScoreAction(matchId, latest.current);
+        if ("error" in res) { setError(res.error); break; }
+        setError("");
+      } while (dirty.current);
+    } catch {
+      setError("Connexion perdue : le score repartira au prochain appui.");
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  }
+  function change(next: BmSet[]) { latest.current = next; setSets(next); void flush(); }
+  const cur = sets[sets.length - 1];
+  const plus = (side: 0 | 1) => { const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] = Math.min(99, n[n.length - 1][side] + 1); setServer(side); change(n); };
+  const minus = (side: 0 | 1) => { if (cur[side] === 0) return; const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] -= 1; setServer(null); change(n); };
+  const nextSet = () => { if (sets.length >= BM_MAX_SETS || cur[0] + cur[1] === 0) return; setServer(null); change([...sets, [0, 0]]); };
+  const pickTarget = (t: number) => { setTarget(t); try { localStorage.setItem("reps_bm_target", String(t)); } catch { /* stockage indisponible */ } };
+  // Set gagne (rappel seulement, l'arbitre decide) : la cible atteinte avec 2 points d'avance, ou le plafond (30 a 21 points).
+  const cap = target === 21 ? 30 : target + 4;
+  const setWinner = target > 0 && ((Math.max(cur[0], cur[1]) >= target && Math.abs(cur[0] - cur[1]) >= 2) || Math.max(cur[0], cur[1]) >= cap) ? (cur[0] > cur[1] ? 0 : 1) : null;
+  const names = [aName, bName];
+  function finish() {
+    if (!confirm(`Fin du match : ${aName} ${sets.filter(([a, b], i) => a + b > 0 || i === 0).map(([a, b]) => `${a}-${b}`).join(" · ")} ${bName} ?`)) return;
+    setError("");
+    startFinish(async () => {
+      const res = await finishLiveMatchAction(matchId, latest.current);
+      if ("error" in res) { setError(res.error); return; }
+      router.refresh();
+      onClose();
+    });
+  }
+  const panel = (side: 0 | 1) => (
+    <div className={cx("rounded-3xl p-3 text-white flex flex-col gap-2", side === 0 ? "bg-brand" : "bg-sea")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-display text-lg font-extrabold truncate">{names[side]}</span>
+        {server === side && <span className="text-xs font-bold bg-white/25 rounded-full px-2 py-0.5 whitespace-nowrap">🏸 au service</span>}
+      </div>
+      <div className="flex items-stretch gap-2">
+        <div className="font-display text-6xl font-extrabold tabular-nums leading-none w-24 text-center self-center">{cur[side]}</div>
+        <button type="button" onClick={() => plus(side)} disabled={finishing} className="flex-1 rounded-2xl bg-white/20 active:bg-white/35 text-4xl font-black py-6 select-none touch-manipulation" aria-label={`Un point pour ${names[side]}`}>+1</button>
+        <button type="button" onClick={() => minus(side)} disabled={finishing || cur[side] === 0} className="w-14 rounded-2xl bg-black/15 active:bg-black/25 text-2xl font-black disabled:opacity-40 select-none touch-manipulation" aria-label={`Retirer un point à ${names[side]}`}>−</button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 bg-paper overflow-auto">
+      <div className="max-w-xl mx-auto p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className={ui.eyebrow}>🎯 Arbitrage en direct</p>
+            <p className="text-xs text-ink-2">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
+          </div>
+          <button type="button" onClick={() => { router.refresh(); onClose(); }} className={ui.close} aria-label="Fermer (le match reste en direct)">✕</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {sets.map(([a, b], i) => (
+            <span key={i} className={cx(ui.chip, i === sets.length - 1 ? ui.chipBrand : ui.chipMuted, "tabular-nums")}>Set {i + 1}{i < sets.length - 1 ? ` · ${a}-${b}` : " en cours"}</span>
+          ))}
+        </div>
+        {error && <p className={ui.alertErr}>{error}</p>}
+        {panel(0)}
+        {panel(1)}
+        {setWinner !== null && sets.length < BM_MAX_SETS && (
+          <div className={`${ui.alertInfo} flex items-center justify-between gap-2`}>
+            <span>Set gagné par <b>{names[setWinner]}</b> ?</span>
+            <button type="button" onClick={nextSet} className={btn.smPrimary}>Set suivant</button>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={ui.hint}>Set en</span>
+          {BM_TARGETS.map((t) => (
+            <button key={t} type="button" onClick={() => pickTarget(t)} className={cx(ui.chip, target === t ? ui.chipBrand : ui.chipMuted, "py-1")}>{t ? `${t} points` : "sans limite"}</button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={nextSet} disabled={finishing || sets.length >= BM_MAX_SETS || cur[0] + cur[1] === 0} className={btn.ghost}>Set suivant ›</button>
+          <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : "🏁 Fin du match"}</button>
+        </div>
+        <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre l&apos;arbitrage plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
+      </div>
     </div>
   );
 }

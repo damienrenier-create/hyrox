@@ -4,17 +4,18 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
 import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-actions";
-import { MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../_components/BadmintonParts";
+import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../_components/BadmintonParts";
 import { usePulse } from "../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
 type Tab = "matchs" | "eleves" | "encoder";
-type Filter = "all" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
+type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
 export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
-  usePulse(pulse, 10000, true);
+  const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
+  usePulse(pulse, 10000, !refLive);
   const [tab, setTab] = useState<Tab>("matchs");
   const [filter, setFilter] = useState<Filter>("all");
   const count = (s: Filter) => views.filter((v) => v.status === s).length;
@@ -47,6 +48,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { s
 
   return (
     <div className="space-y-4">
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} onClose={() => setRefLive(null)} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi label="Matchs encodés" value={live} />
         <Kpi label="Validés" value={count("VALIDATED")} tone="ok" />
@@ -66,12 +68,12 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster }: { s
       {tab === "matchs" && (
         <section className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
-            {(["all", "PENDING", "DISPUTED", "VALIDATED", "CANCELLED"] as Filter[]).map((f) => (
+            {(["all", "LIVE", "PENDING", "DISPUTED", "VALIDATED", "CANCELLED"] as Filter[]).map((f) => (
               <button key={f} type="button" onClick={() => setFilter(f)} className={cx(ui.chip, filter === f ? ui.chipBrand : ui.chipMuted, "py-1")}>{f === "all" ? `Tous · ${views.length}` : `${STATUS_TEXT[f]} · ${count(f)}`}</button>
             ))}
           </div>
           {shown.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match{filter === "all" ? " encodé pour l'instant" : " dans cette catégorie"}.</p> : (
-            <div className="grid gap-2 lg:grid-cols-2">{shown.map((v) => <MatchCard key={v.id} v={v} viewerId={viewerId} staff />)}</div>
+            <div className="grid gap-2 lg:grid-cols-2">{shown.map((v) => <MatchCard key={v.id} v={v} viewerId={viewerId} staff onReferee={setRefLive} />)}</div>
           )}
         </section>
       )}

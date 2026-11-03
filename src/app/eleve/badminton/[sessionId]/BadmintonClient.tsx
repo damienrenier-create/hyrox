@@ -3,8 +3,8 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
-import { badmintonPulseAction, recordMatchAction } from "../../badminton-actions";
-import { MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
+import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "../../badminton-actions";
+import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -13,10 +13,14 @@ import { btn, cx, ui } from "@/lib/ui";
 export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[] }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
-  usePulse(pulse, 8000, true);
+  // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
+  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null } | null>(null);
+  usePulse(pulse, 8000, !live);
   const [open, setOpen] = useState(toSign.length === 0 && mine.length === 0 && writable);
+  const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
+      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
 
       {toSign.length > 0 && (
@@ -29,7 +33,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
 
       {writable && (
         <section>
-          {open ? <NewMatch sessionId={sessionId} meId={meId} roster={roster} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} /> : (
+          {open ? <NewMatch sessionId={sessionId} meId={meId} roster={roster} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
             <button type="button" onClick={() => setOpen(true)} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match</button>
           )}
         </section>
@@ -43,15 +47,17 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
       {refereed.length > 0 && (
         <section className="space-y-2">
           <h2 className={ui.eyebrow}>Matchs que j&apos;ai arbitrés · {refereed.length}</h2>
-          {refereed.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} />)}
+          {refereed.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} onReferee={writable ? resume : undefined} />)}
         </section>
       )}
     </main>
   );
 }
 
-function NewMatch({ sessionId, meId, roster, onDone, onClose }: { sessionId: string; meId: string; roster: BmPersonRef[]; onDone: () => void; onClose: () => void }) {
+function NewMatch({ sessionId, meId, roster, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">("player");
+  // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
+  const [how, setHow] = useState<"live" | "final">("live");
   const [a, setA] = useState<string | null>(null); // arbitre : joueur 1
   const [b, setB] = useState<string | null>(null); // adversaire, ou joueur 2
   const [sets, setSets] = useState<BmSet[]>(emptySets);
@@ -61,7 +67,18 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose }: { sessionId: str
   const nameOf = (id: string | null) => roster.find((p) => p.id === id)?.name.split(" ")[0] ?? "";
   const left = mode === "player" ? "Toi" : nameOf(a) || "Joueur 1";
   const right = mode === "player" ? nameOf(b) || "Adversaire" : nameOf(b) || "Joueur 2";
-  const ready = setsReady(sets) && !!b && (mode === "player" || !!a);
+  const isLive = mode === "referee" && how === "live";
+  const ready = isLive ? !!a && !!b : setsReady(sets) && !!b && (mode === "player" || !!a);
+  const fullName = (id: string | null) => roster.find((p) => p.id === id)?.name ?? "";
+  function startLive(force = false) {
+    setError("");
+    start(async () => {
+      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force });
+      if ("error" in res) { setError(res.error); return; }
+      if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
+      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: [[0, 0]] });
+    });
+  }
   function save(force = false) {
     setError("");
     start(async () => {
@@ -89,21 +106,29 @@ function NewMatch({ sessionId, meId, roster, onDone, onClose }: { sessionId: str
           <PersonPicker people={roster} value={b} onChange={(id) => { setB(id); setTwin(null); }} exclude={a ? [a] : []} label="Joueur 2" placeholder="Tape un nom" />
         </div>
       )}
-      <div>
-        <span className={ui.label}>Le score</span>
-        <SetsEditor sets={sets} onChange={setSets} left={left} right={right} />
-        {setsReady(sets) && b && <p className={`${ui.hint} mt-2`}>{resultText(sets, left, right)}</p>}
-      </div>
+      {mode === "referee" && (
+        <div className={cx(ui.segmented, "w-full grid grid-cols-2")}>
+          <button type="button" onClick={() => setHow("live")} className={cx("py-2 rounded-lg text-sm font-bold", how === "live" ? ui.segOn : ui.segOff)}>🎯 En direct (+1 / −1)</button>
+          <button type="button" onClick={() => setHow("final")} className={cx("py-2 rounded-lg text-sm font-bold", how === "final" ? ui.segOn : ui.segOff)}>✏️ Score final</button>
+        </div>
+      )}
+      {!isLive && (
+        <div>
+          <span className={ui.label}>Le score</span>
+          <SetsEditor sets={sets} onChange={setSets} left={left} right={right} />
+          {setsReady(sets) && b && <p className={`${ui.hint} mt-2`}>{resultText(sets, left, right)}</p>}
+        </div>
+      )}
       {twin && (
         <div className={`${ui.alertWarn} space-y-2`}>
           <p>{twin}</p>
           <p className="text-sm">{mode === "player" ? "Regarde plutôt dans « À signer » en haut de la page : tu peux le signer ou le corriger." : "Les joueurs l'ont peut-être déjà encodé."}</p>
-          <button type="button" disabled={pending} onClick={() => save(true)} className={btn.smGhost}>C&apos;est un autre match : l&apos;encoder quand même</button>
+          <button type="button" disabled={pending} onClick={() => (isLive ? startLive(true) : save(true))} className={btn.smGhost}>C&apos;est un autre match : {isLive ? "l\u2019arbitrer" : "l\u2019encoder"} quand même</button>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
-      <button type="button" disabled={pending || !ready} onClick={() => save(false)} className={cx(btn.lgPrimary, "w-full")}>{pending ? "Enregistrement…" : "Enregistrer le match"}</button>
-      <p className={ui.hint}>{mode === "player" ? "Ton adversaire recevra le match à signer sur son téléphone." : "En tant qu'arbitre, ton score compte tout de suite ; les joueurs peuvent le corriger."}</p>
+      <button type="button" disabled={pending || !ready} onClick={() => (isLive ? startLive(false) : save(false))} className={cx(btn.lgPrimary, "w-full")}>{pending ? "Un instant…" : isLive ? "🎯 Commencer l\u2019arbitrage" : "Enregistrer le match"}</button>
+      <p className={ui.hint}>{mode === "player" ? "Ton adversaire recevra le match à signer sur son téléphone." : isLive ? "Tu comptes les points au fil du match : un appui sur +1 à chaque point. À la fin, ton score compte tout de suite ; les joueurs peuvent le corriger." : "En tant qu'arbitre, ton score compte tout de suite ; les joueurs peuvent le corriger."}</p>
     </div>
   );
 }

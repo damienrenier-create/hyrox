@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
-import { BM_DUPLICATE_MS, checkSets, matchState, readSets, sameSets, setsText, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
+import { BM_DUPLICATE_MS, checkLiveSets, checkSets, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, badmintonRoster, loadMatches, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { toMs } from "@/lib/scheduling";
 
@@ -100,6 +100,15 @@ export async function validateMatchAction(matchId: string): Promise<BmResult> {
   const { c, m, st } = x;
   if (st.status === "CANCELLED") return { error: "Ce match a été annulé." };
   if (st.status === "VALIDATED") return { ok: true };
+  if (st.status === "LIVE") {
+    if (!c.staff) return { error: "Ce match est encore en direct : c'est l'arbitre qui le termine." };
+    const sets = trimLiveSets(st.sets ?? [[0, 0]]);
+    const bad = checkSets(sets);
+    if (bad) return { error: `Score du direct incomplet : ${bad}` };
+    await addEvent(m.id, m.sessionId, "SCORE", c.userId, "STAFF", sets);
+    done(m.sessionId);
+    return { ok: true };
+  }
   if (!c.staff) {
     if (st.status !== "PENDING" || st.waitingFor !== c.userId) return { error: "C'est à ton adversaire de signer ce score, pas à toi." };
   }
@@ -121,6 +130,7 @@ export async function correctMatchAction(matchId: string, rawSets: BmSet[]): Pro
   const referee = !player && c.userId === m.createdById;
   if (!c.staff && !player && !referee) return { error: "Ce n'est pas ton match." };
   if (!c.staff && st.status === "CANCELLED") return { error: "Ce match a été annulé : demande à ton prof." };
+  if (!c.staff && st.status === "LIVE") return { error: "Ce match est encore arbitré en direct : attends la fin du match." };
   if (sameSets(st.sets, sets) && st.status !== "CANCELLED") {
     if (st.waitingFor === c.userId || c.staff) {
       await addEvent(m.id, m.sessionId, "VALIDATE", c.userId, c.staff ? "STAFF" : "PLAYER", null);
@@ -175,4 +185,73 @@ export async function badmintonPulseAction(sessionId: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+// ===== Arbitrage en direct (Sartay 03/11 : « encoder les points au fur et a mesure avec un petit plus et un petit moins,
+// pour ne pas devoir ecrire le chiffre a chaque fois tout en les poussant a suivre le match ») =====
+// Un eleve qui NE JOUE PAS le match (ou un prof) l'ouvre ; chaque appui envoie la photo du score (ligne LIVE) ; « Fin du
+// match » l'enregistre (ligne SCORE de l'arbitre, validee d'office).
+export async function startLiveMatchAction(sessionId: string, input: { playerAId: string; playerBId: string; force?: boolean }): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  const a = String(input.playerAId ?? "");
+  const b = String(input.playerBId ?? "");
+  if (!a || !b) return { error: "Choisis les deux joueurs." };
+  if (a === b) return { error: "Un match se joue à deux : choisis deux élèves différents." };
+  if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : tu ne peux pas l'arbitrer." };
+  const roster = new Set((await badmintonRoster(c.session)).map((p) => p.id));
+  if (!roster.has(a) || !roster.has(b)) return { error: "Cet élève n'est pas dans cette séance." };
+  if (!input.force) {
+    const now = Date.now();
+    const twin = (await loadMatches(sessionId)).find((m) => ((m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a)) && now - m.createdAt < BM_DUPLICATE_MS && matchState(m).status !== "CANCELLED");
+    if (twin) {
+      const st = matchState(twin);
+      const people = await peopleOf([twin]);
+      const nm = (id: string) => people.get(id)?.name ?? "?";
+      const at = new Date(twin.createdAt).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+      return { duplicate: { matchId: twin.id, text: st.status === "LIVE" ? `${nm(twin.createdById)} arbitre déjà ce match en direct depuis ${at}.` : `${nm(st.scoreBy?.id ?? twin.createdById)} a déjà encodé ce match à ${at} : ${nm(twin.playerAId)} ${setsText(st.sets)} ${nm(twin.playerBId)}.` } };
+    }
+  }
+  const role: BmRole = c.staff ? "STAFF" : "REFEREE";
+  const match = await db.transaction(async (tx) => {
+    const m = await tx.orm.public.BadmintonMatch.create({ sessionId, playerAId: a, playerBId: b, createdById: c.userId });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
+    return m;
+  });
+  done(sessionId);
+  return { ok: true, matchId: match.id };
+}
+
+async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {
+  const x = await matchCtx(matchId);
+  if ("error" in x) return x;
+  if (x.st.status !== "LIVE") return { error: x.st.status === "CANCELLED" ? "Ce match a été annulé." : "Ce match n'est plus en direct : il est déjà terminé." };
+  if (!x.c.staff && x.c.userId !== x.m.createdById) return { error: "Seul l'arbitre de ce match encode ses points." };
+  return x;
+}
+
+// Un appui sur + ou − : la nouvelle photo du score (points de A puis de B, set par set).
+export async function liveScoreAction(matchId: string, rawSets: BmSet[]): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const sets = readSets(rawSets);
+  const bad = sets ? checkLiveSets(sets) : "Score illisible.";
+  if (bad || !sets) return { error: bad ?? "Score illisible." };
+  if (sameSets(x.st.sets, sets)) return { ok: true };
+  await addEvent(x.m.id, x.m.sessionId, "LIVE", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", sets);
+  return { ok: true };
+}
+
+// « Fin du match » : le score final de l'arbitre (les sets restes a 0-0 sont retires), valide d'office.
+export async function finishLiveMatchAction(matchId: string, rawSets: BmSet[]): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const raw = readSets(rawSets);
+  if (!raw) return { error: "Score illisible." };
+  const sets = trimLiveSets(raw);
+  const bad = checkSets(sets);
+  if (bad) return { error: bad };
+  await addEvent(x.m.id, x.m.sessionId, "SCORE", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", sets);
+  done(x.m.sessionId);
+  return { ok: true };
 }
