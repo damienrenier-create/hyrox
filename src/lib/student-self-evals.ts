@@ -22,6 +22,7 @@ export const SELF_EVAL_SHORT: Record<string, string> = {
   frappe: "Frappe",
   tactique: "Tactique",
   fairplay: "Fair-play",
+  coaching: "Coaching",
   forme: "Forme du jour",
 };
 

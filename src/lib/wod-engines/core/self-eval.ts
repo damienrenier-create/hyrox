@@ -91,8 +91,9 @@ export const SELF_EVAL_CRITERIA: SelfEvalCriterion[] = [
 ];
 
 // ===== Badminton (Sartay 03/11 : « voilà la grille d'auto éval badminton », Downloads/Grille d'évaluation Badminton.pdf) =====
-// Les 5 criteres du PDF mot pour mot, plus « Ma forme du jour » comme au Hyrox. Une auto-evaluation PAR SEANCE (le PDF
-// dit « lors de ce cycle » : meme choix que pour le Hyrox), ouverte tant que l'eleve peut encoder ses matchs.
+// Les 5 criteres du PDF mot pour mot, une ligne « coaching » (05/11, hors PDF) et « Ma forme du jour » comme au Hyrox.
+// Une auto-evaluation PAR SEANCE (le PDF dit « lors de ce cycle » : meme choix que pour le Hyrox), ouverte tant que
+// l'eleve peut encoder ses matchs.
 // ⚠️ La 5e ligne (« Fair-play et Arbitrage ») est coupee en bas de page : fins de phrase completees au plus naturel, a
 // valider par Sartay — TI « …les points ou les [décisions de l'arbitre] », I « …manque de respect envers [l'adversaire
 // ou l'arbitre] », S « …les décisions [d'arbitrage] », B « …les matchs des autres [élèves] », TB « …avant de [lancer
@@ -160,6 +161,21 @@ export const SELF_EVAL_BADMINTON: SelfEvalCriterion[] = [
       B: "Attitude fair-play. Arbitre sérieusement les matchs des autres élèves.",
       TB: "Arbitrage rigoureux, annonce clairement le score avant de lancer chaque échange.",
       E: "Modèle de fair-play et d'intégrité sur le terrain et sur la chaise d'arbitre.",
+    },
+  },
+  // Ligne ajoutee le 05/11 a la demande de Sartay (hors PDF) : « le coaching des partenaires ET des adversaires ; de "ne
+  // donne aucun conseil" a "pose le bon diagnostic au probleme prioritaire et donne des conseils realistes pour creer une
+  // emulation et une spirale d'apprentissage positive" ». Les niveaux I a TB sont rediges entre ces deux bornes.
+  {
+    id: "coaching",
+    label: "Coaching des partenaires et des adversaires",
+    levels: {
+      TI: "Ne donne aucun conseil, ni à ses partenaires ni à ses adversaires.",
+      I: "Donne rarement un conseil, vague ou peu utile (« vas-y », « tape plus fort »).",
+      S: "Donne parfois des conseils, mais sans viser le vrai problème ni proposer de solution.",
+      B: "Repère une erreur et donne un conseil utile, à ses partenaires comme à ses adversaires.",
+      TB: "Repère le problème principal et propose une solution concrète, en encourageant.",
+      E: "Pose le bon diagnostic sur le problème prioritaire et donne des conseils réalistes qui créent une émulation et une spirale d'apprentissage positive.",
     },
   },
   { ...FORME, levels: { ...FORME.levels, B: "Je suis en bonne forme : de l'énergie tout au long de la séance, j'ai bien récupéré entre les matchs." } },
