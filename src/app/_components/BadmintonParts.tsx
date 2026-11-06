@@ -114,12 +114,14 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
       else { setEditing(false); router.refresh(); }
     });
   };
-  const statusText = v.status === "PENDING"
+  const statusText = v.status === "PENDING" && v.needsSecond
+    ? v.meSide && !staff ? "⏳ revanche : à toi de signer" : "⏳ revanche : attend la signature d'un joueur"
+    : v.status === "PENDING"
     ? v.waitingFor ? (v.waitingFor.id === viewerId && !staff ? "⏳ à toi de signer" : `⏳ attend la signature de ${v.waitingFor.name}`) : "⏳ à signer"
     : v.status === "VALIDATED" ? "✅ validé" : v.status === "DISPUTED" ? "⚠️ contesté" : v.status === "LIVE" ? `🔴 en direct · set ${v.sets?.length ?? 1}` : "✖ annulé";
   const won = v.status !== "LIVE" && v.result && v.meSide && !staff ? (v.result.winner === "DRAW" ? "Égalité" : (v.result.winner === v.meSide ? "🏆 Victoire" : "Défaite")) : null;
   return (
-    <div className={cx(ui.card, "p-3 space-y-2", v.status === "CANCELLED" && "opacity-60", v.waitingFor?.id === viewerId && !staff && "border-accent")}>
+    <div className={cx(ui.card, "p-3 space-y-2", v.status === "CANCELLED" && "opacity-60", v.can.validate && v.status === "PENDING" && !staff && "border-accent")}>
       <div className="space-y-1.5">
         <div className={cx("min-w-0", v.status === "CANCELLED" && "line-through")}>
           <div className="flex flex-wrap items-baseline gap-x-2">

@@ -17,10 +17,14 @@
 //   d'attester le match (targetId) ; WITNESS = il atteste le score en vigueur ; WITNESS_NO = « je n'ai pas vu ce match ».
 //   Une correction du score efface les attestations (elles portaient sur l'ancien score). Officiel = 2 temoins (l'arbitre
 //   qui a encode le score en est un) ou un prof. Seuls les matchs officiels comptent au classement ELO.
+// - REMATCH (06/11, Sartay : « encode quoi qu'il arrive une revanche mais signale a l'arbitre en lui demandant s'il est
+//   sur et exige dans ce cas une seconde signature ») : un arbitre qui encode (ou arbitre en direct) un duel deja joue il y
+//   a moins de 20 min confirme ; le match est marque REMATCH et son score d'arbitre n'est plus valide d'office : un des
+//   deux joueurs (ou un prof) doit le signer. En attendant, il ne compte pas au classement.
 
 export type BmSet = [number, number]; // points de A, points de B
 export type BmRole = "PLAYER" | "REFEREE" | "STAFF" | "WITNESS";
-export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO";
+export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO" | "REMATCH";
 export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number; targetId?: string | null };
 export type BmMatch = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: number; events: BmEvent[] };
 // Identifiant des matchs libres dans les liens et les actions (/eleve/badminton/libre, /admin/badminton?session=libre).
@@ -34,7 +38,7 @@ export const BM_MAX_POINTS = 99;
 export const BM_DUPLICATE_MS = 20 * 60_000;
 
 const isRole = (v: unknown): v is BmRole => v === "PLAYER" || v === "REFEREE" || v === "STAFF" || v === "WITNESS";
-const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO";
+const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO" || v === "REMATCH";
 export const readRole = (v: unknown): BmRole => (isRole(v) ? v : "PLAYER");
 export const readKind = (v: unknown): BmKind | null => (isKind(v) ? v : null);
 
@@ -102,6 +106,7 @@ export type BmState = {
   asked: string[]; // match libre : eleves a qui on a demande d'attester le match
   attested: BmSign[]; // ... ceux qui ont atteste le score en vigueur
   declined: string[]; // ... ceux qui disent ne pas l'avoir vu (score en vigueur)
+  needsSecond: boolean; // revanche encodee par un arbitre : un des deux joueurs (ou un prof) doit encore la signer
 };
 
 export function matchState(m: BmMatch): BmState {
@@ -116,9 +121,19 @@ export function matchState(m: BmMatch): BmState {
   const asked: string[] = [];
   let attested: BmSign[] = [];
   let declined: string[] = [];
+  let rematch = false;
   const players = [m.playerAId, m.playerBId];
   for (const e of events) {
     const sign = { id: e.authorId, role: e.role, at: e.at };
+    if (e.kind === "REMATCH") {
+      // Revanche confirmee par l'arbitre : son score attend une seconde signature.
+      rematch = true;
+      if (status === "VALIDATED" && validatedBy?.role === "REFEREE") {
+        validatedBy = null;
+        status = "PENDING";
+      }
+      continue;
+    }
     if (e.kind === "WITNESS_ASK") {
       if (e.targetId && !players.includes(e.targetId) && !asked.includes(e.targetId)) asked.push(e.targetId);
       continue;
@@ -148,8 +163,9 @@ export function matchState(m: BmMatch): BmState {
       scoreBy = sign;
       disputedBy = null;
       cancelledBy = null;
-      validatedBy = e.role === "PLAYER" ? null : sign;
-      status = e.role === "PLAYER" ? "PENDING" : "VALIDATED";
+      const toSign = e.role === "PLAYER" || (rematch && e.role === "REFEREE");
+      validatedBy = toSign ? null : sign;
+      status = toSign ? "PENDING" : "VALIDATED";
     } else if (e.kind === "VALIDATE" && sets && status !== "CANCELLED") {
       // Un joueur ne signe pas sa propre saisie ; un prof peut tout valider.
       if (e.role === "STAFF" || e.authorId !== scoreBy?.id) {
@@ -166,19 +182,29 @@ export function matchState(m: BmMatch): BmState {
     }
   }
   const waitingFor = status === "PENDING" && scoreBy ? (scoreBy.id === m.playerAId ? m.playerBId : scoreBy.id === m.playerBId ? m.playerAId : null) : null;
-  return { status, sets, scoreBy, validatedBy, disputedBy, cancelledBy, waitingFor, result: sets ? resultOf(sets) : null, corrections: Math.max(0, scores - 1), asked, attested, declined };
+  const needsSecond = status === "PENDING" && rematch && scoreBy?.role === "REFEREE";
+  return { status, sets, scoreBy, validatedBy, disputedBy, cancelledBy, waitingFor, result: sets ? resultOf(sets) : null, corrections: Math.max(0, scores - 1), asked, attested, declined, needsSecond };
 }
+
+// L'eleve doit-il signer ce match ? Le joueur qui n'a pas encode le score, ou (revanche d'un arbitre) l'un des deux.
+export const mustSign = (m: BmMatch, st: BmState, userId: string): boolean =>
+  st.status === "PENDING" && (st.waitingFor === userId || (st.needsSecond && (m.playerAId === userId || m.playerBId === userId)));
 
 // Doublon probable d'un nouveau match entre a et b : leur dernier duel, encode il y a moins de BM_DUPLICATE_MS et non
 // annule. Sauf REVANCHE (Sartay 06/11 : « des joueurs peuvent rejouer rapidement l'un contre l'autre ; si un match avec
 // un autre adversaire a ete encode pour l'un des deux, alors il s'agit d'une revanche ») : alors rien a signaler.
 export function recentTwin(matches: BmMatch[], a: string, b: string, now: number): BmMatch | null {
+  const twin = recentDuel(matches, a, b, now);
+  if (!twin) return null;
   const samePair = (m: BmMatch) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
   const alive = (m: BmMatch) => matchState(m).status !== "CANCELLED";
-  const twin = [...matches].sort((x, y) => y.createdAt - x.createdAt).find((m) => samePair(m) && now - m.createdAt < BM_DUPLICATE_MS && alive(m));
-  if (!twin) return null;
   const rematch = matches.some((m) => m.createdAt > twin.createdAt && !samePair(m) && (m.playerAId === a || m.playerBId === a || m.playerAId === b || m.playerBId === b) && alive(m));
   return rematch ? null : twin;
+}
+// Dernier duel entre a et b encode il y a moins de BM_DUPLICATE_MS et non annule (revanche ou pas).
+export function recentDuel(matches: BmMatch[], a: string, b: string, now: number): BmMatch | null {
+  const samePair = (m: BmMatch) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
+  return [...matches].sort((x, y) => y.createdAt - x.createdAt).find((m) => samePair(m) && now - m.createdAt < BM_DUPLICATE_MS && matchState(m).status !== "CANCELLED") ?? null;
 }
 
 // Temoins d'un match libre : ceux qui ont atteste le score en vigueur, plus l'arbitre qui l'a encode.
@@ -190,7 +216,7 @@ export function witnessesOf(st: BmState): string[] {
 // Match officiel (il compte au classement ELO) : un score, ni conteste, ni annule, ni en direct ; en seance, rien de plus
 // (« un match non conteste compte, pas la peine qu'il soit signe ») ; match libre : 2 temoins, ou un prof.
 export function isOfficial(m: BmMatch, st: BmState): boolean {
-  if ((st.status !== "VALIDATED" && st.status !== "PENDING") || !st.sets || !st.result) return false;
+  if ((st.status !== "VALIDATED" && st.status !== "PENDING") || !st.sets || !st.result || st.needsSecond) return false;
   if (m.sessionId !== null) return true;
   return st.scoreBy?.role === "STAFF" || st.validatedBy?.role === "STAFF" || witnessesOf(st).length >= BM_WITNESSES_NEEDED;
 }
@@ -230,6 +256,7 @@ export function historyOf(m: BmMatch, nameOf: (id: string) => string): BmHistory
   return out;
 }
 function lineOf(e: BmEvent, who: string, nameOf: (id: string) => string): BmHistoryLine {
+  if (e.kind === "REMATCH") return { at: e.at, icon: "🔁", text: `Revanche rapide confirmée par ${who} : un des deux joueurs doit la signer` };
   if (e.kind === "WITNESS_ASK") {
     const by = nameOf(e.authorId);
     const to = e.targetId ? nameOf(e.targetId) : "?";
@@ -285,6 +312,7 @@ export type BmView = {
   waitingFor: BmPersonRef | null;
   createdBy: BmPersonRef & { role: BmRole };
   history: BmHistoryLine[];
+  needsSecond: boolean; // revanche d'un arbitre : un des deux joueurs doit encore la signer
   free: boolean; // match libre (hors seance)
   official: boolean; // compte au classement ELO
   witnesses: { count: number; needed: number; asked: BmPersonRef[]; attested: BmPersonRef[]; declined: BmPersonRef[] };
@@ -315,13 +343,14 @@ export function viewOf(m: BmMatch, viewerId: string, staff: boolean, ref: (id: s
     waitingFor: st.waitingFor ? ref(st.waitingFor) : null,
     createdBy: { ...ref(m.createdById), role: creatorRole },
     history: historyOf(m, (id) => (id === viewerId && !staff ? "toi" : ref(id).name)),
+    needsSecond: st.needsSecond,
     free,
     official,
     witnesses: { count: witnessIds.length, needed: BM_WITNESSES_NEEDED, asked: st.asked.map(ref), attested: st.attested.map((s) => ref(s.id)), declined: st.declined.map(ref) },
     can: {
       // Prof : valider un match a signer, conteste, ou encore en direct (il le termine avec le score du moment) ; match libre :
       // aussi un match signe mais pas encore officiel (sa validation le rend officiel).
-      validate: staff ? st.status === "PENDING" || st.status === "DISPUTED" || st.status === "LIVE" || (free && scored && !official) : st.status === "PENDING" && st.waitingFor === viewerId,
+      validate: staff ? st.status === "PENDING" || st.status === "DISPUTED" || st.status === "LIVE" || (free && scored && !official) : mustSign(m, st, viewerId),
       correct: staff || (live && st.status !== "LIVE" && (player || viewerId === m.createdById)),
       dispute: !staff && player && live && st.status !== "DISPUTED" && st.scoreBy?.id !== viewerId,
       cancel: live && (staff || (viewerId === m.createdById && st.status !== "VALIDATED")),

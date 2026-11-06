@@ -17,7 +17,7 @@ import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
 import { badmintonTabVisible, loadMatches } from "@/lib/badminton-server";
-import { BM_FREE, matchState, pupilStats, viewOf } from "@/lib/badminton";
+import { BM_FREE, matchState, mustSign, pupilStats, viewOf } from "@/lib/badminton";
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -49,7 +49,7 @@ export default async function ElevePage() {
   // badminton passees (il n'est dans aucune equipe : elles n'apparaissent pas dans « Mes WOD »).
   const toSignBy = new Map<string, number>();
   for (const s of openSessions.filter((x) => x.wodType === "BADMINTON")) {
-    toSignBy.set(s.id, (await loadMatches(s.id)).filter((m) => { const st = matchState(m); return st.status === "PENDING" && st.waitingFor === user.id; }).length);
+    toSignBy.set(s.id, (await loadMatches(s.id)).filter((m) => mustSign(m, matchState(m), user.id)).length);
   }
   const myMatchRows = [
     ...(await db.orm.public.BadmintonMatch.where({ playerAId: user.id }).all()),
@@ -62,12 +62,12 @@ export default async function ElevePage() {
   for (const s of bmPast) {
     const ms = await loadMatches(s.id);
     const st = pupilStats(user.id, ms.map((m) => ({ match: m, state: matchState(m) })));
-    bmHistory.push({ id: s.id, dateMs: toMs(s.createdAt), st, toSign: ms.filter((m) => { const x = matchState(m); return x.status === "PENDING" && x.waitingFor === user.id; }).length });
+    bmHistory.push({ id: s.id, dateMs: toMs(s.createdAt), st, toSign: ms.filter((m) => mustSign(m, matchState(m), user.id)).length });
   }
 
   // Matchs libres (03/11, entre classes, hors cours) : ce que l'eleve doit signer ou attester.
   const free = classement ? (await loadMatches(BM_FREE)).map((m) => viewOf(m, user.id, false, (id) => ({ id, name: "", className: null }))) : [];
-  const freeToSign = free.filter((v) => v.status === "PENDING" && v.waitingFor?.id === user.id).length;
+  const freeToSign = free.filter((v) => v.status === "PENDING" && v.can.validate).length;
   const freeToAttest = free.filter((v) => v.can.attest).length;
 
   const cards = [];

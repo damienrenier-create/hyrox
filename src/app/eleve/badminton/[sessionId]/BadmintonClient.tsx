@@ -152,8 +152,8 @@ function NewMatch({ sessionId, meId, roster, free, onDone, onClose, onLive }: { 
       {twin && (
         <div className={`${ui.alertWarn} space-y-2`}>
           <p>{twin}</p>
-          <p className="text-sm">{mode === "player" ? "Regarde plutôt dans « À signer » en haut de la page : tu peux le signer ou le corriger." : "Les joueurs l'ont peut-être déjà encodé."}</p>
-          <button type="button" disabled={pending} onClick={() => (isLive ? startLive(true) : save(true))} className={btn.smGhost}>C&apos;est un autre match (une revanche) : {isLive ? "l\u2019arbitrer" : "l\u2019encoder"} quand même</button>
+          <p className="text-sm">{mode === "player" ? "Regarde plutôt dans « À signer » en haut de la page : tu peux le signer ou le corriger." : <><b>Es-tu sûr ?</b> Si c&apos;est une revanche, encode-la : un des deux joueurs devra la signer (seconde signature).</>}</p>
+          <button type="button" disabled={pending} onClick={() => (isLive ? startLive(true) : save(true))} className={btn.smGhost}>{mode === "player" ? <>C&apos;est un autre match (une revanche) : l&apos;encoder quand même</> : <>Oui, je suis sûr : c&apos;est une revanche, {isLive ? "l\u2019arbitrer" : "l\u2019encoder"}</>}</button>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}

@@ -31,7 +31,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const ref = (id: string): BmPersonRef => { const p = people.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
   const views = matches.map((m) => viewOf(m, me.id, false, ref));
   const involved = views.filter((v) => v.meSide !== null || v.createdBy.id === me.id);
-  const toSign = involved.filter((v) => v.status === "PENDING" && v.waitingFor?.id === me.id);
+  const toSign = involved.filter((v) => v.status === "PENDING" && v.can.validate);
   const mine = involved.filter((v) => v.meSide !== null && !toSign.includes(v));
   const refereed = involved.filter((v) => v.meSide === null);
   // Auto-evaluation de la seance (grille « AUTO-ÉVALUATION – CYCLE BADMINTON », Sartay 03/11) : ouverte tant que l'eleve

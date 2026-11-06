@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
-import { BM_FREE, BM_WITNESSES_NEEDED, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
+import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, badmintonRoster, freeRoster, loadMatch, loadMatches, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -70,9 +70,10 @@ async function askWitnesses(c: Ctx, matchId: string, a: string, b: string, role:
 }
 
 // Le meme duel encode il y a peu (par l'adversaire ou un arbitre) : on le signale plutot que d'en creer un deuxieme
-// (sauf revanche : voir recentTwin, src/lib/badminton.ts).
-async function twinOf(sessionId: string, a: string, b: string, live: boolean): Promise<{ matchId: string; text: string } | null> {
-  const twin = recentTwin(await loadMatches(sessionId), a, b, Date.now());
+// (sauf revanche : voir recentTwin, src/lib/badminton.ts). Un ARBITRE est toujours prevenu (« es-tu sur ? ») : s'il
+// confirme, sa saisie devra etre signee par un des joueurs (REMATCH).
+async function twinOf(all: Awaited<ReturnType<typeof loadMatches>>, a: string, b: string, live: boolean, referee: boolean): Promise<{ matchId: string; text: string } | null> {
+  const twin = referee ? recentDuel(all, a, b, Date.now()) : recentTwin(all, a, b, Date.now());
   if (!twin) return null;
   const st = matchState(twin);
   const people = await peopleOf([twin]);
@@ -105,8 +106,10 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
   const bad = sets ? checkSets(sets) : "Score illisible.";
   if (bad || !sets) return { error: bad ?? "Score illisible." };
 
+  const all = await loadMatches(sessionId);
+  const repeat = role === "REFEREE" && !!recentDuel(all, a, b, Date.now());
   if (!input.force) {
-    const twin = await twinOf(sessionId, a, b, false);
+    const twin = await twinOf(all, a, b, false, role === "REFEREE");
     if (twin) return { duplicate: twin };
   }
 
@@ -114,6 +117,7 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "SCORE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(sets)), at: Temporal.Now.instant() });
+    if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
@@ -147,7 +151,7 @@ export async function validateMatchAction(matchId: string): Promise<BmResult> {
     return { ok: true };
   }
   if (!c.staff) {
-    if (st.status !== "PENDING" || st.waitingFor !== c.userId) return { error: "C'est à ton adversaire de signer ce score, pas à toi." };
+    if (!mustSign(m, st, c.userId)) return { error: "C'est à ton adversaire de signer ce score, pas à toi." };
   }
   await addEvent(m.id, m.sessionId, "VALIDATE", c.userId, c.staff ? "STAFF" : "PLAYER", null);
   done(m.sessionId);
@@ -169,7 +173,7 @@ export async function correctMatchAction(matchId: string, rawSets: BmSet[]): Pro
   if (!c.staff && st.status === "CANCELLED") return { error: "Ce match a été annulé : demande à ton prof." };
   if (!c.staff && st.status === "LIVE") return { error: "Ce match est encore arbitré en direct : attends la fin du match." };
   if (sameSets(st.sets, sets) && st.status !== "CANCELLED") {
-    if (st.waitingFor === c.userId || c.staff) {
+    if (mustSign(m, st, c.userId) || c.staff) {
       await addEvent(m.id, m.sessionId, "VALIDATE", c.userId, c.staff ? "STAFF" : "PLAYER", null);
       done(m.sessionId);
       return { ok: true };
@@ -276,15 +280,18 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : tu ne peux pas l'arbitrer." };
   const roster = await rosterIds(c);
   if (!roster.has(a) || !roster.has(b)) return { error: notFound(c) };
+  const role: BmRole = c.staff ? "STAFF" : "REFEREE";
+  const all = await loadMatches(sessionId);
+  const repeat = role === "REFEREE" && !!recentDuel(all, a, b, Date.now());
   if (!input.force) {
-    const twin = await twinOf(sessionId, a, b, true);
+    const twin = await twinOf(all, a, b, true, role === "REFEREE");
     if (twin) return { duplicate: twin };
   }
-  const role: BmRole = c.staff ? "STAFF" : "REFEREE";
   const sid = dbSession(c);
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
+    if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);

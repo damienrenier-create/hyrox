@@ -26,7 +26,7 @@ export default async function BadmintonFreePage() {
   const byId = new Map(roster.map((p) => [p.id, p]));
   const ref = (id: string): BmPersonRef => { const p = people.get(id) ?? byId.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
   const views = involved.map((m) => viewOf(m, me.id, false, ref));
-  const toSign = views.filter((v) => v.status === "PENDING" && v.waitingFor?.id === me.id);
+  const toSign = views.filter((v) => v.status === "PENDING" && v.can.validate);
   const toAttest = views.filter((v) => v.can.attest && v.can.decline);
   const mine = views.filter((v) => v.meSide !== null && !toSign.includes(v));
   const refereed = views.filter((v) => v.meSide === null && v.createdBy.id === me.id);
