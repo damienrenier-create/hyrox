@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
-import { BM_DUPLICATE_MS, BM_FREE, BM_WITNESSES_NEEDED, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
+import { BM_FREE, BM_WITNESSES_NEEDED, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, badmintonRoster, freeRoster, loadMatch, loadMatches, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -69,10 +69,10 @@ async function askWitnesses(c: Ctx, matchId: string, a: string, b: string, role:
   return null;
 }
 
-// Le meme duel encode il y a peu (par l'adversaire ou un arbitre) : on le signale plutot que d'en creer un deuxieme.
+// Le meme duel encode il y a peu (par l'adversaire ou un arbitre) : on le signale plutot que d'en creer un deuxieme
+// (sauf revanche : voir recentTwin, src/lib/badminton.ts).
 async function twinOf(sessionId: string, a: string, b: string, live: boolean): Promise<{ matchId: string; text: string } | null> {
-  const now = Date.now();
-  const twin = (await loadMatches(sessionId)).find((m) => ((m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a)) && now - m.createdAt < BM_DUPLICATE_MS && matchState(m).status !== "CANCELLED");
+  const twin = recentTwin(await loadMatches(sessionId), a, b, Date.now());
   if (!twin) return null;
   const st = matchState(twin);
   const people = await peopleOf([twin]);

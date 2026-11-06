@@ -169,6 +169,18 @@ export function matchState(m: BmMatch): BmState {
   return { status, sets, scoreBy, validatedBy, disputedBy, cancelledBy, waitingFor, result: sets ? resultOf(sets) : null, corrections: Math.max(0, scores - 1), asked, attested, declined };
 }
 
+// Doublon probable d'un nouveau match entre a et b : leur dernier duel, encode il y a moins de BM_DUPLICATE_MS et non
+// annule. Sauf REVANCHE (Sartay 06/11 : « des joueurs peuvent rejouer rapidement l'un contre l'autre ; si un match avec
+// un autre adversaire a ete encode pour l'un des deux, alors il s'agit d'une revanche ») : alors rien a signaler.
+export function recentTwin(matches: BmMatch[], a: string, b: string, now: number): BmMatch | null {
+  const samePair = (m: BmMatch) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
+  const alive = (m: BmMatch) => matchState(m).status !== "CANCELLED";
+  const twin = [...matches].sort((x, y) => y.createdAt - x.createdAt).find((m) => samePair(m) && now - m.createdAt < BM_DUPLICATE_MS && alive(m));
+  if (!twin) return null;
+  const rematch = matches.some((m) => m.createdAt > twin.createdAt && !samePair(m) && (m.playerAId === a || m.playerBId === a || m.playerAId === b || m.playerBId === b) && alive(m));
+  return rematch ? null : twin;
+}
+
 // Temoins d'un match libre : ceux qui ont atteste le score en vigueur, plus l'arbitre qui l'a encode.
 export function witnessesOf(st: BmState): string[] {
   const ids = st.attested.map((s) => s.id);

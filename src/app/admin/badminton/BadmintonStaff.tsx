@@ -260,7 +260,7 @@ function StaffEntry({ sessionId, roster, onDone }: { sessionId: string; roster: 
       {twin && (
         <div className={`${ui.alertWarn} space-y-2`}>
           <p>{twin}</p>
-          <button type="button" disabled={pending} onClick={() => save(true)} className={btn.smGhost}>C&apos;est un autre match : l&apos;encoder quand même</button>
+          <button type="button" disabled={pending} onClick={() => save(true)} className={btn.smGhost}>C&apos;est un autre match (une revanche) : l&apos;encoder quand même</button>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}

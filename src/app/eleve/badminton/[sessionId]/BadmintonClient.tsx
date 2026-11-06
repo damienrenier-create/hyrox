@@ -153,7 +153,7 @@ function NewMatch({ sessionId, meId, roster, free, onDone, onClose, onLive }: { 
         <div className={`${ui.alertWarn} space-y-2`}>
           <p>{twin}</p>
           <p className="text-sm">{mode === "player" ? "Regarde plutôt dans « À signer » en haut de la page : tu peux le signer ou le corriger." : "Les joueurs l'ont peut-être déjà encodé."}</p>
-          <button type="button" disabled={pending} onClick={() => (isLive ? startLive(true) : save(true))} className={btn.smGhost}>C&apos;est un autre match : {isLive ? "l\u2019arbitrer" : "l\u2019encoder"} quand même</button>
+          <button type="button" disabled={pending} onClick={() => (isLive ? startLive(true) : save(true))} className={btn.smGhost}>C&apos;est un autre match (une revanche) : {isLive ? "l\u2019arbitrer" : "l\u2019encoder"} quand même</button>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
