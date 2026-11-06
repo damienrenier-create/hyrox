@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, loadMatches, peopleOf, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { badmintonRoster, loadMatches, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
 import { readSessionClasses } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -48,7 +48,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         sessionId={sessionId}
         meId={me.id}
         writable={writable}
-        roster={roster.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, name: p.name, className: p.className }))}
+        roster={roster.filter((p) => p.id !== me.id).map(pickerRef)}
         toSign={toSign}
         mine={mine}
         refereed={refereed}

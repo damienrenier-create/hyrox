@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, freeRoster, loadEloBoard, loadMatches, peopleOf, BM_STAFF_ROLES, type BmPerson, type EloBoard } from "@/lib/badminton-server";
+import { badmintonRoster, freeRoster, loadEloBoard, loadMatches, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type EloBoard } from "@/lib/badminton-server";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
 import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
@@ -69,7 +69,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
         <main className={`${ui.container} py-5 space-y-4`}>
           {nav}
           <p className={ui.hint}>Un match libre compte au classement quand il est officiel : 2 élèves l&apos;ont attesté (l&apos;arbitre en est un), ou un prof l&apos;a validé (« Valider (officiel) »).</p>
-          <BadmintonStaff sessionId={BM_FREE} viewerId={user.id} views={views} rows={rows} roster={roster.map((p) => ({ id: p.id, name: p.name, className: p.className }))} selfEvals={[]} seCols={[]} elo={eloRows(board, false)} groupClasses={[]} free />
+          <BadmintonStaff sessionId={BM_FREE} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={[]} seCols={[]} elo={eloRows(board, false)} groupClasses={[]} free />
         </main>
       </div>
     );
@@ -117,7 +117,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")} · ${isSessionOpen(session) ? "séance ouverte" : "séance fermée"}`} back={back} />
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map((p) => ({ id: p.id, name: p.name, className: p.className }))} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} />
       </main>
     </div>
   );

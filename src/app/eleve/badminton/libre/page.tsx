@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { freeRoster, loadMatches, peopleOf, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { freeRoster, loadMatches, peopleOf, pickerRef, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { BM_FREE, viewOf, type BmPersonRef } from "@/lib/badminton";
 import { isTestClass } from "@/lib/session-roles";
 import { TopBar } from "../../../_components/TopBar";
@@ -40,7 +40,7 @@ export default async function BadmintonFreePage() {
         meId={me.id}
         writable
         free
-        roster={roster.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, name: p.name, className: p.className }))}
+        roster={roster.filter((p) => p.id !== me.id).map(pickerRef)}
         toSign={toSign}
         toAttest={toAttest}
         mine={mine}

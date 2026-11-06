@@ -89,11 +89,24 @@ export async function badmintonGroupOf(className: string | null): Promise<{ clas
 // Matchs libres (03/11) : n'importe quel eleve, toutes classes ; les eleves de test (7A) entre eux seulement.
 export async function freeRoster(test: boolean): Promise<BmPerson[]> {
   const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
-  return students
-    .filter((u) => u.className && isTestClass(u.className) === test)
-    .map((u) => person(u, null))
-    .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
+  return [
+    ...students
+      .filter((u) => u.className && isTestClass(u.className) === test)
+      .map((u) => person(u, null))
+      .sort((a, b) => a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr")),
+    ...(await teachersAsPlayers()),
+  ];
 }
+
+// Les profs jouent aussi (Sartay 06/11 : « les profs doivent etre joignables et jouables dans n'importe quel match ») :
+// ils sont dans toutes les listes de joueurs, seance ou match libre.
+async function teachersAsPlayers(): Promise<BmPerson[]> {
+  const [users, names] = await Promise.all([db.orm.public.User.where({}).all(), teacherNameById()]);
+  return users.filter((u) => BM_TEACHER_ROLES.includes(u.role)).map((u) => person(u, names.get(u.id) ?? null)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+}
+const BM_TEACHER_ROLES = ["MASTER_ADMIN", "ADMIN"];
+// Une personne telle que les listes de choix l'affichent : un prof porte « prof » a la place d'une classe.
+export const pickerRef = (p: BmPerson) => ({ id: p.id, name: p.name, className: p.staff ? "prof" : p.className });
 
 // Onglet « Classement » de l'espace eleve : des que sa classe a eu une seance de badminton, ou qu'il a joue un match.
 export async function badmintonTabVisible(userId: string, className: string | null): Promise<boolean> {
@@ -104,15 +117,18 @@ export async function badmintonTabVisible(userId: string, className: string | nu
 }
 
 // Eleves de la seance : ceux de ses classes (et les 1P, souvent integres a d'autres classes, comme au greffier), du sexe
-// de la seance si elle est garcons / filles (sexe inconnu : propose quand meme).
+// de la seance si elle est garcons / filles (sexe inconnu : propose quand meme) ; puis les profs (06/11).
 export async function badmintonRoster(session: SessionLike): Promise<BmPerson[]> {
   const classes = readSessionClasses(session.settings);
   const sex = readSessionSex(session.settings);
   const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
-  return students
-    .filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className)) && (!sex || !u.sex || u.sex === sex))
-    .map((u) => person(u, null))
-    .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"));
+  return [
+    ...students
+      .filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className)) && (!sex || !u.sex || u.sex === sex))
+      .map((u) => person(u, null))
+      .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr")),
+    ...(await teachersAsPlayers()),
+  ];
 }
 
 type UserRow = { id: string; role: string; name: string; firstName?: string | null; lastName?: string | null; className?: string | null; sex?: string | null };
