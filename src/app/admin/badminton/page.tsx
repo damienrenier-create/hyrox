@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, freeRoster, loadEloBoard, loadMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
-import { formatText, poolsOf } from "@/lib/badminton-tournament";
+import { activeTournament, badmintonRoster, freeRoster, loadEloBoard, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
+import { bracketOf, formatText, poolsOf } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
@@ -114,24 +114,34 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const seCols = SELF_EVAL_GRIDS.badminton.criteria.map((c) => ({ id: c.id, short: SELF_EVAL_SHORT[c.id] ?? c.label, label: c.label }));
   const board = await loadEloBoard();
   const elo = eloRows(board, classes.length > 0 && classes.every((c) => isTestClass(c)));
-  // Tournoi par poules (09/11) : participants proposes = les eleves de la seance (coches : ceux qui y ont deja joue ou arbitre).
+  // Tournois (09/11) : participants proposes = les eleves de la seance (coches : ceux qui y ont deja joue ou arbitre). Les
+  // matchs d'un tournoi se lisent toutes seances confondues (il peut se continuer au cours suivant).
   const tours = await loadTournaments(session.id);
   const present = new Set(matches.flatMap((m) => [m.playerAId, m.playerBId, m.createdById]));
-  const tourView = (t: BmTournament): TourView => ({
-    id: t.id,
-    label: t.label,
-    format: formatText(t.settings),
-    pools: poolsOf(t.players, matches.filter((m) => m.tournamentId === t.id)),
-    names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: ref(p.studentId).name, className: ref(p.studentId).className }])),
-  });
+  const tourView = async (t: BmTournament): Promise<TourView> => {
+    const tm = await loadTournamentMatches(t.id);
+    const tp = await peopleOf(tm, t.players.map((p) => p.studentId));
+    return {
+      id: t.id,
+      kind: t.kind,
+      label: t.label,
+      format: formatText(t.settings),
+      pools: t.kind === "BRACKET" ? null : poolsOf(t.players, tm, t.kind === "HANDICAP" ? t.settings : null),
+      bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
+      names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.className ?? null }])),
+    };
+  };
   const active = activeTournament(tours);
   const previous = tours.find((t) => t.closedAt) ?? null;
+  const rosterIds = new Set(roster.map((p) => p.id));
+  const elsewhere = active ? [] : (await loadTournaments(null)).filter((t) => t.sessionId !== session.id && t.players.some((p) => rosterIds.has(p.studentId)));
   const tour: BmTourProps = {
     entrants: roster
       .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id)))
       .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
-    active: active ? tourView(active) : null,
-    previous: previous ? tourView(previous) : null,
+    active: active ? await tourView(active) : null,
+    previous: previous ? await tourView(previous) : null,
+    elsewhere: elsewhere.map((t) => ({ id: t.id, label: t.label, players: t.players.length, when: `le ${new Date(t.createdAt).toLocaleDateString("fr-BE", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" })}` })),
   };
 
   return (

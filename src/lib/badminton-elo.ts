@@ -3,6 +3,8 @@
 // - un match compte s'il a un score et n'est ni conteste, ni annule, ni encore en direct : signe ou pas (« un match non
 //   conteste compte, pas la peine qu'il soit signe ») ; un match LIBRE (hors cours) seulement une fois officiel : atteste
 //   par 2 autres eleves, ou valide par un prof (isOfficial, src/lib/badminton.ts) ;
+// - match d'un CHAMPIONNAT A HANDICAP (09/11) : le handicap a ramene les chances a 50/50, donc esperance ½ quel que soit
+//   l'ecart de classement (gagner en remontant son handicap rapporte comme une victoire contre un egal) ;
 // - formule ELO classique : score attendu = 1 / (1 + 10^((Rb − Ra) / 400)) ; victoire 1, egalite 0,5, defaite 0 ;
 // - K = 40 sur les 10 premiers matchs d'un eleve (son classement se place vite), puis 20 (plus stable) ;
 // - ecart au score : ×1 pour un match serre, jusqu'a ×1,5 a 16 points d'ecart ou plus (un 21-5) ;
@@ -20,7 +22,7 @@ const K_SETTLED = 20;
 const K_NEW_GAMES = 10;
 const MARGIN_FULL = 16;
 
-export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult };
+export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean }; // even : match a handicap
 export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
 
@@ -40,7 +42,7 @@ export function computeElo(games: EloGame[]): Map<string, EloEntry> {
     if (g.a === g.b) continue;
     const A = get(g.a);
     const B = get(g.b);
-    const expectA = 1 / (1 + 10 ** ((B.rating - A.rating) / 400));
+    const expectA = g.even ? 0.5 : 1 / (1 + 10 ** ((B.rating - A.rating) / 400));
     const scoreA = g.result.winner === "A" ? 1 : g.result.winner === "DRAW" ? 0.5 : 0;
     const m = marginFactor(g.result);
     const kA = A.games < K_NEW_GAMES ? K_NEW : K_SETTLED;

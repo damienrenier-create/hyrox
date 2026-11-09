@@ -130,6 +130,7 @@ export default async function ClassementPage({ searchParams }: { searchParams: P
             <li>Un match de cours compte dès qu&apos;il a un score et que personne ne l&apos;a contesté (pas besoin qu&apos;il soit signé).</li>
             <li>Un <Link href="/eleve/badminton/libre" className="underline">match libre</Link> (contre n&apos;importe quelle classe, en dehors des cours) compte quand il est officiel : 2 autres élèves l&apos;ont attesté (l&apos;arbitre en est un), ou ton prof l&apos;a validé.</li>
             <li>Gagner contre plus fort que toi rapporte beaucoup ; perdre contre plus fort coûte peu. Une égalité compte pour un demi-match gagné.</li>
+            <li>Un match d&apos;un championnat à handicap compte comme entre deux joueurs de même niveau : le handicap a déjà égalisé vos chances.</li>
             <li>Un large écart au score (par exemple 21-5) compte jusqu&apos;à une fois et demie plus qu&apos;un match serré.</li>
             <li>Sur tes 10 premiers matchs, ton classement bouge plus vite, pour trouver ta place. Avant {ELO_PROVISIONAL_GAMES} matchs, il est « provisoire ».</li>
           </ul>

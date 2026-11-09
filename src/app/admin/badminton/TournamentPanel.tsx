@@ -2,21 +2,23 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { makePools, TOUR_POINTS, TOUR_POOL_SIZES, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
-import { closeTournamentAction, createTournamentAction } from "@/app/eleve/badminton-actions";
+import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
+import { closeTournamentAction, createTournamentAction, moveTournamentAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
-// Tournoi par poules, cote prof (Sartay 09/11) : choisir les participants (cochés d'office : ceux qui ont deja joue ou
-// arbitre dans la seance), regler la taille des poules et le format, voir les poules avant de lancer ; puis suivre chaque
-// poule (classement, rondes, rencontres) et clore le tournoi. Regles : src/lib/badminton-tournament.ts.
+// Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
+// handicap), les participants (coches d'office : ceux qui ont deja joue ou arbitre dans la seance) et les reglages, voir
+// le tournoi avant de lancer ; puis le suivre et le clore. Regles : src/lib/badminton-tournament.ts.
 
 export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean };
-export type TourView = { id: string; label: string; format: string; pools: TourPool[]; names: Record<string, { name: string; className: string | null }> };
+export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }> };
+export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
-export function TournamentPanel({ sessionId, entrants, active, previous }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null }) {
+export function TournamentPanel({ sessionId, entrants, active, previous, elsewhere }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[] }) {
   if (active) return <TournamentBoard t={active} />;
   return (
     <div className="space-y-4">
+      {elsewhere.length > 0 && <Elsewhere sessionId={sessionId} list={elsewhere} />}
       <NewTournament sessionId={sessionId} entrants={entrants} />
       {previous && (
         <details className={`${ui.cardPad}`}>
@@ -28,47 +30,92 @@ export function TournamentPanel({ sessionId, entrants, active, previous }: { ses
   );
 }
 
+// Tournois pas encore clos, lances a un cours precedent avec ces eleves : on peut les continuer ici.
+function Elsewhere({ sessionId, list }: { sessionId: string; list: TourElsewhere[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  return (
+    <section className={`${ui.cardPad} space-y-2 border-accent`}>
+      <h3 className={ui.h3}>Tournoi en cours d&apos;un cours précédent</h3>
+      {list.map((t) => (
+        <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span><b>{t.label}</b> · {t.players} participants · lancé {t.when}</span>
+          <button type="button" disabled={pending} onClick={() => start(async () => { const r = await moveTournamentAction(t.id, sessionId); if ("error" in r) setError(r.error); else router.refresh(); })} className={btn.smPrimary}>Continuer ici</button>
+        </div>
+      ))}
+      {error && <p className={ui.alertErr}>{error}</p>}
+    </section>
+  );
+}
+
 function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: TourEntrantRow[] }) {
   const router = useRouter();
+  const [kind, setKind] = useState<TourKind>("POOLS");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.filter((e) => e.present).map((e) => e.id)));
-  const [poolSize, setPoolSize] = useState(4);
+  const [poolSizes, setPoolSizes] = useState<Record<TourKind, number>>({ POOLS: 4, BRACKET: 0, HANDICAP: 0 });
   const [sets, setSets] = useState<1 | 2 | 3>(1);
   const [points, setPoints] = useState(15);
+  const [eloPerPoint, setEloPerPoint] = useState(20);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  const poolSize = poolSizes[kind];
+  const settings = readTourSettings({ sets, points, poolSize, eloPerPoint }, kind);
   const byId = useMemo(() => new Map(entrants.map((e) => [e.id, e])), [entrants]);
-  const preview = useMemo(() => makePools(entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo })), poolSize), [entrants, selected, poolSize]);
+  const chosen = entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo }));
+  const preview = makePlayers(kind, chosen, settings);
   const poolNames = [...new Set(preview.map((p) => p.pool))];
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const seg = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg", on ? ui.segOn : ui.segOff);
+  const nm = (id: string | undefined) => (id ? byId.get(id)?.name ?? "?" : "");
   function launch() {
     setError("");
     start(async () => {
-      const res = await createTournamentAction(sessionId, { playerIds: [...selected], poolSize, sets, points });
+      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, sets: settings.sets, points, eloPerPoint });
       if ("error" in res) { setError(res.error); return; }
       router.refresh();
     });
   }
+  const size = bracketSize(Math.max(2, chosen.length));
   return (
     <section className={`${ui.cardPad} space-y-4`}>
-      <h3 className={ui.h3}>🏆 Nouveau tournoi par poules de niveau</h3>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <span className={ui.label}>Joueurs par poule</span>
-          <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => setPoolSize(n)} className={seg(poolSize === n)}>{n}</button>)}</div>
-        </div>
+      <h3 className={ui.h3}>🏆 Nouveau tournoi</h3>
+      <div className={cx(ui.segmented, "flex-wrap")}>
+        {TOUR_KINDS.map((k) => <button key={k.id} type="button" onClick={() => setKind(k.id)} className={seg(kind === k.id)}>{k.name}</button>)}
+      </div>
+      <p className={ui.hint}>
+        {kind === "POOLS" && "Poules par niveau (A = les meilleurs ELO) : chacun contre chacun dans sa poule, ronde par ronde."}
+        {kind === "BRACKET" && "Tableau à têtes de série (selon l'ELO) : à chaque tour, les gagnants jouent les places du haut, les perdants celles du bas. Chacun joue tous les tours : classement final de 1 à N."}
+        {kind === "HANDICAP" && "Chacun contre chacun ; le moins bien classé commence chaque set avec des points d'avance pour rendre les matchs serrés. À l'ELO, ces matchs comptent comme entre deux joueurs de même niveau."}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {kind !== "BRACKET" && (
+          <div>
+            <span className={ui.label}>Joueurs par poule</span>
+            <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => setPoolSizes((s) => ({ ...s, [kind]: n }))} className={seg(poolSize === n)}>{n || "Tous"}</button>)}</div>
+          </div>
+        )}
         <div>
           <span className={ui.label}>Sets par match</span>
           <div className={ui.segmented}>
-            <button type="button" onClick={() => setSets(1)} className={seg(sets === 1)}>1 set</button>
-            <button type="button" onClick={() => setSets(2)} className={seg(sets === 2)}>2 sets</button>
-            <button type="button" onClick={() => setSets(3)} className={seg(sets === 3)}>Au meilleur des 3</button>
+            <button type="button" onClick={() => setSets(1)} className={seg(settings.sets === 1)}>1 set</button>
+            {kind !== "BRACKET" && <button type="button" onClick={() => setSets(2)} className={seg(settings.sets === 2)}>2 sets</button>}
+            <button type="button" onClick={() => setSets(3)} className={seg(settings.sets === 3)}>Au meilleur des 3</button>
           </div>
         </div>
         <div>
           <span className={ui.label}>Points par set</span>
           <div className={ui.segmented}>{TOUR_POINTS.map((n) => <button key={n} type="button" onClick={() => setPoints(n)} className={seg(points === n)}>{n}</button>)}</div>
         </div>
+        {kind === "HANDICAP" && (
+          <div>
+            <span className={ui.label}>1 point d&apos;avance pour … d&apos;ELO d&apos;écart</span>
+            <select value={eloPerPoint} onChange={(e) => setEloPerPoint(Number(e.target.value))} className={ui.input}>
+              {TOUR_ELO_PER_POINT.map((n) => <option key={n} value={n}>{n}{n === 20 ? " (d'après les 515 matchs joués)" : ""}</option>)}
+            </select>
+            <span className={ui.hint}>Pour un set de 15 (proportionnel en 11 ou 21) ; au plus la moitié du set.</span>
+          </div>
+        )}
       </div>
 
       <div>
@@ -91,22 +138,43 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
         </div>
       </div>
 
-      {preview.length > 0 && (
+      {preview.length > 1 && kind !== "BRACKET" && (
         <div>
-          <span className={ui.label}>Aperçu : {poolNames.length} poule{poolNames.length > 1 ? "s" : ""} (A = les meilleurs ELO)</span>
+          <span className={ui.label}>Aperçu : {poolNames.length} poule{poolNames.length > 1 ? "s" : ""}{poolNames.length > 1 ? " (A = les meilleurs ELO)" : ""}</span>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {poolNames.map((n) => (
-              <div key={n} className="rounded-xl border border-line p-2 text-sm">
-                <p className="font-display font-extrabold mb-1">Poule {n}</p>
-                {preview.filter((p) => p.pool === n).map((p) => <p key={p.studentId} className="flex justify-between gap-2"><span className="truncate">{byId.get(p.studentId)?.name}</span><span className="tabular-nums text-ink-3">{p.elo}</span></p>)}
-              </div>
-            ))}
+            {poolNames.map((n) => {
+              const members = preview.filter((p) => p.pool === n);
+              const top = members[0];
+              return (
+                <div key={n} className="rounded-xl border border-line p-2 text-sm">
+                  <p className="font-display font-extrabold mb-1">Poule {n} · {members.length} joueurs, {members.length - 1 + (members.length % 2)} rondes</p>
+                  {members.map((p) => (
+                    <p key={p.studentId} className="flex justify-between gap-2">
+                      <span className="truncate">{nm(p.studentId)}</span>
+                      <span className="tabular-nums text-ink-3">{p.elo}{kind === "HANDICAP" && p !== top ? ` · +${handicapOf(top.elo, p.elo, settings)[1]} contre ${nm(top.studentId).split(" ")[0]}` : ""}</span>
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {preview.length > 1 && kind === "BRACKET" && (
+        <div>
+          <span className={ui.label}>Aperçu : tableau de {size} places, {Math.log2(size)} tours, {size - preview.length} exempt{size - preview.length > 1 ? "s" : ""} (pour les meilleures têtes de série)</span>
+          <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            {seedOrder(size).reduce<[number, number][]>((acc, s, i, arr) => (i % 2 ? acc : [...acc, [s, arr[i + 1]]]), []).map(([x, y], i) => {
+              const px = preview.find((p) => p.seed === x);
+              const py = preview.find((p) => p.seed === y);
+              return <p key={i} className="rounded-lg bg-paper px-2 py-1"><span className="text-ink-3 tabular-nums">{x}.</span> {nm(px?.studentId)} – {py ? <><span className="text-ink-3 tabular-nums">{y}.</span> {nm(py.studentId)}</> : <span className="text-ink-3">exempt</span>}</p>;
+            })}
           </div>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
       <button type="button" disabled={pending || selected.size < 2} onClick={launch} className={btn.primary}>{pending ? "Lancement…" : "🏆 Lancer le tournoi"}</button>
-      <p className={ui.hint}>Chacun joue contre chacun dans sa poule, ronde par ronde : chaque élève voit son adversaire sur son téléphone, puis le suivant quand toute sa poule a fini la ronde. Les élèves encodent leurs matchs comme d&apos;habitude (ou un arbitre) ; ils comptent aussi au classement ELO.</p>
+      <p className={ui.hint}>Chaque élève voit son prochain adversaire sur son téléphone. Les élèves encodent leurs matchs comme d&apos;habitude (ou un arbitre) ; ils comptent aussi au classement ELO.</p>
     </section>
   );
 }
@@ -115,13 +183,6 @@ function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean 
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
-  const nm = (id: string | null) => (id ? t.names[id]?.name ?? "?" : "");
-  const line = (p: TourPairing) => {
-    if (p.status === "bye") return <><b>{nm(p.a)}</b> <span className="text-ink-3">· repos</span></>;
-    const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
-    const tag = p.status === "played" ? "✅" : p.status === "live" ? "🔴 en direct" : p.status === "disputed" ? "⚠️ contesté" : "⏳";
-    return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span> <span className="text-xs">{tag}</span></>;
-  };
   function close() {
     if (!confirm("Clore le tournoi ? Il restera consultable et ses matchs restent comptés ; vous pourrez en lancer un autre.")) return;
     setError("");
@@ -131,21 +192,42 @@ function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean 
       else router.refresh();
     });
   }
+  const pools = t.pools ?? [];
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className={ui.h3}>🏆 {t.label}</h3>
-          <p className={ui.hint}>{t.format} · {t.pools.filter((p) => p.done).length}/{t.pools.length} poule{t.pools.length > 1 ? "s" : ""} terminée{t.pools.length > 1 ? "s" : ""}</p>
+          <p className={ui.hint}>
+            {t.format}
+            {t.bracket ? ` · tableau de ${t.bracket.size} places · ${t.bracket.done ? "terminé" : "en cours"}` : ` · ${pools.filter((p) => p.done).length}/${pools.length} poule${pools.length > 1 ? "s" : ""} terminée${pools.length > 1 ? "s" : ""}`}
+          </p>
         </div>
         {!closed && <button type="button" disabled={pending} onClick={close} className={btn.smGhost}>Clore le tournoi</button>}
       </div>
       {error && <p className={ui.alertErr}>{error}</p>}
+      {t.bracket ? <BracketBoard b={t.bracket} names={t.names} /> : <PoolsBoard pools={pools} names={t.names} />}
+    </section>
+  );
+}
+
+const tagOf = (status: string) => (status === "played" ? "✅" : status === "live" ? "🔴 en direct" : status === "disputed" ? "⚠️ contesté" : status === "tie" ? "⚖️ égalité : à départager" : status === "wait" ? "" : "⏳");
+
+function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["names"] }) {
+  const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
+  const line = (p: TourPairing) => {
+    if (p.status === "bye") return <><b>{nm(p.a)}</b> <span className="text-ink-3">· repos</span></>;
+    const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
+    const h = p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]})</span> : null;
+    return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span></>;
+  };
+  return (
+    <>
       <div className="grid gap-3 lg:grid-cols-2">
-        {t.pools.map((p) => (
+        {pools.map((p) => (
           <div key={p.name} className={`${ui.cardPad} space-y-2`}>
             <div className="flex items-center justify-between gap-2">
-              <p className="font-display text-lg font-extrabold">Poule {p.name}</p>
+              <p className="font-display text-lg font-extrabold">{pools.length > 1 ? `Poule ${p.name}` : "Tous les joueurs"}</p>
               <span className={cx(ui.chip, p.done ? ui.chipOk : ui.chipWarn)}>{p.done ? "terminée" : `ronde ${p.current}/${p.rounds.length}`}</span>
             </div>
             <table className="w-full text-sm">
@@ -156,7 +238,7 @@ function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean 
                 {p.standings.map((s) => (
                   <tr key={s.id} className="border-t border-line">
                     <td className="p-1.5 tabular-nums text-ink-3">{s.rank}</td>
-                    <td className="p-1.5 font-bold">{nm(s.id)} <span className="text-ink-3 text-xs font-normal">{t.names[s.id]?.className} · {s.elo}</span></td>
+                    <td className="p-1.5 font-bold">{nm(s.id)} <span className="text-ink-3 text-xs font-normal">{names[s.id]?.className} · {s.elo}</span></td>
                     <td className="p-1.5 text-right tabular-nums font-bold">{String(s.score).replace(".", ",")}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.won}-{s.drawn}-{s.lost}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.setsFor}-{s.setsAgainst}</td>
@@ -177,6 +259,44 @@ function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean 
         ))}
       </div>
       <p className={ui.hint}>Classement de poule : victoires (égalité = ½), puis différence de sets, puis différence de points, puis ELO de départ.</p>
-    </section>
+    </>
+  );
+}
+
+function BracketBoard({ b, names }: { b: Bracket; names: TourView["names"] }) {
+  const nm = (id: string | null | undefined) => (id ? names[id]?.name ?? "?" : id === null ? "exempt" : "…");
+  const line = (p: BracketPairing) => {
+    const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
+    if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{nm(p.a ?? p.b)}</b> passe (exempt)</>}</span>;
+    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span></>;
+  };
+  return (
+    <div className="space-y-3">
+      <div className={`${ui.cardPad}`}>
+        <p className="font-display text-lg font-extrabold mb-2">{b.done ? "Classement final" : "Classement (places encore en jeu)"}</p>
+        <ol className="grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {b.ranks.map((r) => (
+            <li key={r.id} className="flex justify-between gap-2">
+              <span className="truncate"><span className="tabular-nums text-ink-3">{r.rank ?? (r.lo === r.hi ? r.lo : `${r.lo}-${r.hi}`)}.</span> <b>{nm(r.id)}</b> <span className="text-ink-3 text-xs">{names[r.id]?.className} · tête de série {r.seed}</span></span>
+              <span className="tabular-nums text-xs text-ink-2 whitespace-nowrap">{r.won}/{r.played} gagnés</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {b.rounds.map((r) => (
+        <div key={r.n} className={`${ui.cardPad} space-y-2`}>
+          <p className="font-display font-extrabold">Tour {r.n}/{b.rounds.length}</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {r.groups.filter((g) => g.pairings.some((p) => p.status !== "bye" || p.a || p.b)).map((g) => (
+              <div key={g.lo} className="rounded-lg bg-paper px-2 py-1 text-sm">
+                <span className="text-xs font-bold text-ink-2">Places {g.lo} à {g.hi}</span>
+                {g.pairings.map((p, i) => <p key={i}>{line(p)}</p>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className={ui.hint}>Les places du classement comptent les places vides (exempts) du tableau ; le classement final, lui, va de 1 au nombre de joueurs.</p>
+    </div>
   );
 }

@@ -6,7 +6,7 @@ import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/l
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
-import { readTourSettings, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { readTourKind, readTourSettings, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -53,23 +53,31 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
 }
 
 // ===== Tournois (Sartay 09/11, regles dans src/lib/badminton-tournament.ts) =====
-export type BmTournament = { id: string; sessionId: string | null; kind: string; label: string; settings: TourSettings; createdAt: number; closedAt: number | null; players: TourPlayer[] };
-export async function loadTournaments(sessionId: string): Promise<BmTournament[]> {
-  const rows = await db.orm.public.BadmintonTournament.where({ sessionId }).all();
+export type BmTournament = { id: string; sessionId: string | null; kind: TourKind; label: string; settings: TourSettings; createdAt: number; closedAt: number | null; players: TourPlayer[] };
+// Les tournois d'une seance (`sessionId`), ou tous ceux qui ne sont pas clos (`null`, pour les continuer ailleurs).
+export async function loadTournaments(sessionId: string | null): Promise<BmTournament[]> {
+  const rows = sessionId ? await db.orm.public.BadmintonTournament.where({ sessionId }).all() : await db.orm.public.BadmintonTournament.where((t) => t.cancelledAt.isNull()).all();
   if (!rows.length) return [];
   const players = await db.orm.public.BadmintonTournamentPlayer.where((p) => p.tournamentId.in(rows.map((r) => r.id))).all();
   return rows
     .map((r) => ({
       id: r.id,
       sessionId: r.sessionId ?? null,
-      kind: r.kind,
+      kind: readTourKind(r.kind),
       label: r.label,
-      settings: readTourSettings(r.settings),
+      settings: readTourSettings(r.settings, readTourKind(r.kind)),
       createdAt: toMs(r.createdAt),
       closedAt: r.cancelledAt ? toMs(r.cancelledAt) : null,
       players: players.filter((p) => p.tournamentId === r.id).map((p) => ({ studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo })),
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+// Les matchs d'un tournoi, toutes seances confondues (un tournoi peut se continuer au cours suivant).
+export async function loadTournamentMatches(tournamentId: string): Promise<BmMatch[]> {
+  const rows = await db.orm.public.BadmintonMatch.where({ tournamentId }).all();
+  if (!rows.length) return [];
+  const events = await db.orm.public.BadmintonEvent.where((e) => e.matchId.in(rows.map((r) => r.id))).all();
+  return toMatches(rows, events);
 }
 // Le tournoi en cours d'une seance (un seul a la fois) : le plus recent qui n'a pas ete clos.
 export const activeTournament = (list: BmTournament[]): BmTournament | null => list.find((t) => !t.closedAt) ?? null;
@@ -91,11 +99,13 @@ export async function loadEloBoard(): Promise<EloBoard> {
   if (!matches.length) return { entries: new Map(), people: new Map(), test: new Set() };
   const people = await peopleOf(matches);
   const test = new Set([...people.values()].filter((p) => isTestClass(p.className)).map((p) => p.id));
+  // Matchs d'un championnat a handicap : esperance ½ (voir badminton-elo.ts).
+  const even = new Set((await db.orm.public.BadmintonTournament.where({ kind: "HANDICAP" }).all()).map((t) => t.id));
   const games: EloGame[] = [];
   for (const m of matches) {
     const st = matchState(m);
     if (!isOfficial(m, st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
-    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result! });
+    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: !!m.tournamentId && even.has(m.tournamentId) });
   }
   return { entries: computeElo(games), people, test };
 }

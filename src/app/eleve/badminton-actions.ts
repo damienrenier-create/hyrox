@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
-import { BM_STAFF_ROLES, activeTournament, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { makePools, pendingPairing, readTourSettings } from "@/lib/badminton-tournament";
+import { BM_STAFF_ROLES, activeTournament, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
+import { TOUR_KINDS, handicapOf, makePlayers, pendingPairing, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -17,7 +17,8 @@ import { toMs } from "@/lib/scheduling";
 // Matchs LIBRES (03/11) : sessionId = BM_FREE dans les actions, null en base ; a toute heure, entre toutes les classes ;
 // officiels une fois attestes par 2 autres eleves (ou valides par un prof).
 
-export type BmResult = { error: string } | { ok: true; matchId?: string } | { duplicate: { matchId: string; text: string } };
+// `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance.
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[] } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -62,11 +63,14 @@ function done(sessionId: string | null) {
 }
 
 // Tournoi en cours de la seance (09/11) : un match entre deux joueurs qui doivent s'y affronter lui est rattache.
-async function tournamentFor(c: Ctx, all: Awaited<ReturnType<typeof loadMatches>>, a: string, b: string): Promise<string | null> {
+// Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
-  if (!t) return null;
-  return pendingPairing(t.players, all.filter((m) => m.tournamentId === t.id), a, b) ? t.id : null;
+  if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
+  if (t.kind !== "HANDICAP") return { id: t.id, start: null };
+  const elo = (id: string) => t.players.find((p) => p.studentId === id)?.elo ?? 0;
+  return { id: t.id, start: handicapOf(elo(a), elo(b), t.settings) };
 }
 
 // Match libre : les temoins demandes a la saisie (au plus 2, ni joueurs, ni celui qui encode).
@@ -124,7 +128,7 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
   }
 
   const sid = dbSession(c);
-  const tournamentId = await tournamentFor(c, all, a, b);
+  const tournamentId = (await tournamentFor(c, a, b))?.id ?? null;
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "SCORE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(sets)), at: Temporal.Now.instant() });
@@ -264,21 +268,22 @@ export async function attestMatchAction(matchId: string, saw: boolean): Promise<
 }
 
 // ===== Tournois (Sartay 09/11) : le prof lance un tournoi par poules dans sa seance, puis le clot (rien n'est efface) =====
-export async function createTournamentAction(sessionId: string, input: { playerIds: string[]; poolSize: number; sets: number; points: number }): Promise<BmResult> {
+export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; sets: number; points: number; eloPerPoint?: number }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
   if (!c.session) return { error: "Un tournoi se lance dans une séance." };
   if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance : clos-le d'abord." };
-  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize });
+  const kind = readTourKind(input.kind);
+  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, eloPerPoint: input.eloPerPoint }, kind);
   const roster = new Set((await badmintonRoster(c.session)).filter((p) => !p.staff).map((p) => p.id));
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
   const board = await loadEloBoard();
-  const players = makePools(ids.map((id) => ({ id, elo: board.entries.get(id)?.rating ?? ELO_START })), settings.poolSize);
+  const players = makePlayers(kind, ids.map((id) => ({ id, elo: board.entries.get(id)?.rating ?? ELO_START })), settings);
   const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   const t = await db.transaction(async (tx) => {
-    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind: "POOLS", label: `Tournoi par poules du ${day}`, settings, createdById: c.userId });
+    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind, label: `${TOUR_KINDS.find((k) => k.id === kind)!.name} du ${day}`, settings, createdById: c.userId });
     for (const p of players) await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo });
     return t;
   });
@@ -295,6 +300,19 @@ export async function closeTournamentAction(tournamentId: string): Promise<BmRes
   if (!c.staff) return { error: "Réservé aux profs." };
   if (!t.cancelledAt) await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ cancelledAt: Temporal.Now.instant(), cancelledBy: c.userId });
   done(t.sessionId);
+  return { ok: true };
+}
+
+// Continuer dans cette seance un tournoi pas encore clos lance a un cours precedent (un seul tournoi en cours par seance).
+export async function moveTournamentAction(tournamentId: string, sessionId: string): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff) return { error: "Réservé aux profs." };
+  const t = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!t || t.cancelledAt) return { error: "Ce tournoi est clos." };
+  if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance." };
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ sessionId });
+  done(sessionId);
   return { ok: true };
 }
 
@@ -335,16 +353,17 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
     if (twin) return { duplicate: twin };
   }
   const sid = dbSession(c);
-  const tournamentId = await tournamentFor(c, all, a, b);
+  const tour = await tournamentFor(c, a, b);
+  const start: BmSet[] = [tour?.start ?? [0, 0]];
   const match = await db.transaction(async (tx) => {
-    const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId });
-    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
+    const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: tour?.id ?? null });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "LIVE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(start)), at: Temporal.Now.instant() });
     if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {
