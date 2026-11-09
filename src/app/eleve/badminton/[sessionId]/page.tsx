@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, loadMatches, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, loadMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { formatText, mineOf, poolsOf } from "@/lib/badminton-tournament";
+import { swapSets } from "@/lib/badminton";
+import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
 import { readSessionClasses } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -37,6 +40,30 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   // Auto-evaluation de la seance (grille « AUTO-ÉVALUATION – CYCLE BADMINTON », Sartay 03/11) : ouverte tant que l'eleve
   // peut encoder ses matchs (seance ouverte, ou terminee depuis moins de 24 h).
   const writable = pupilWindowOpen(session);
+  // Tournoi par poules en cours (09/11) : ma poule, mon adversaire de la ronde en cours, le classement de ma poule.
+  const tour = activeTournament(await loadTournaments(sessionId));
+  let tourCard: TourCardData | null = null;
+  if (tour) {
+    const mine = mineOf(poolsOf(tour.players, matches.filter((m) => m.tournamentId === tour.id)), me.id);
+    if (mine) {
+      const p = mine.pairing;
+      const meA = p?.a === me.id;
+      const opp = p ? (meA ? p.b : p.a) : null;
+      tourCard = {
+        label: tour.label,
+        format: formatText(tour.settings),
+        pool: mine.pool.name,
+        round: mine.pool.current,
+        rounds: mine.pool.rounds.length,
+        status: mine.pool.done ? "done" : p?.status ?? "bye",
+        opponent: opp ? ref(opp) : null,
+        sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null,
+        rank: mine.rank,
+        of: mine.of,
+        table: mine.pool.standings.map((s) => ({ name: ref(s.id).name, score: s.score, rank: s.rank, me: s.id === me.id })),
+      };
+    }
+  }
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
   const closes = session.closesAt ? new Date(toMs(session.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
@@ -52,6 +79,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         toSign={toSign}
         mine={mine}
         refereed={refereed}
+        tour={tourCard}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>

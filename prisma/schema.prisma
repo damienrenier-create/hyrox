@@ -246,8 +246,40 @@ model BadmintonMatch {
   createdById String
   createdAt   DateTime         @default(now())
   events      BadmintonEvent[]
+  tournamentId String?         // match d un tournoi (09/11), rattache a la saisie quand les deux joueurs doivent s y affronter
 
   @@index([sessionId])
+  @@index([tournamentId])
+}
+
+// Tournois de badminton (Sartay 09/11) : POOLS (poules de niveau, chacun contre chacun) d abord ; tableau et handicap a
+// venir. Les matchs restent des BadmintonMatch ordinaires (signature, arbitre, journal, ELO) ; l etat du tournoi se relit
+// sur ces matchs. Rien n est jamais efface : un tournoi arrete garde cancelledAt.
+model BadmintonTournament {
+  id          String                      @id @default(uuid())
+  sessionId   String?                     // seance ou il a ete lance
+  kind        String                      // POOLS (puis BRACKET, HANDICAP)
+  label       String
+  settings    Json                        // { sets, points, poolSize }
+  createdById String
+  createdAt   DateTime                    @default(now())
+  cancelledAt DateTime?
+  cancelledBy String?
+  players     BadmintonTournamentPlayer[]
+
+  @@index([sessionId])
+}
+
+model BadmintonTournamentPlayer {
+  id           String              @id @default(uuid())
+  tournament   BadmintonTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  studentId    String
+  pool         String              // « A », « B »… (A = les ELO les plus hauts)
+  seed         Int                 // ordre de depart dans la poule (1 = meilleur ELO)
+  elo          Int                 // ELO au lancement du tournoi
+
+  @@index([tournamentId])
 }
 
 model BadmintonEvent {

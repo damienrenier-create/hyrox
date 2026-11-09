@@ -1,0 +1,281 @@
+[
+  {
+    "id": "table.badmintonTournament",
+    "label": "Create table \"badmintonTournament\"",
+    "summary": "Creates table \"badmintonTournament\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "badmintonTournament"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"badmintonTournament\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournament\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"badmintonTournament\"",
+        "sql": "CREATE TABLE \"public\".\"badmintonTournament\" (\n  \"cancelledAt\" timestamptz,\n  \"cancelledBy\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdById\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"kind\" text NOT NULL,\n  \"label\" text NOT NULL,\n  \"sessionId\" text,\n  \"settings\" json NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"badmintonTournament\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournament\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.badmintonTournamentPlayer",
+    "label": "Create table \"badmintonTournamentPlayer\"",
+    "summary": "Creates table \"badmintonTournamentPlayer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "badmintonTournamentPlayer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"badmintonTournamentPlayer\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournamentPlayer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"badmintonTournamentPlayer\"",
+        "sql": "CREATE TABLE \"public\".\"badmintonTournamentPlayer\" (\n  \"elo\" int4 NOT NULL,\n  \"id\" text NOT NULL,\n  \"pool\" text NOT NULL,\n  \"seed\" int4 NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"tournamentId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"badmintonTournamentPlayer\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournamentPlayer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.badmintonMatch.tournamentId",
+    "label": "Add column \"tournamentId\" to \"badmintonMatch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "tournamentId",
+        "table": "badmintonMatch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"tournamentId\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "badmintonMatch",
+          "tournamentId"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"tournamentId\"",
+        "sql": "ALTER TABLE \"public\".\"badmintonMatch\" ADD COLUMN \"tournamentId\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"tournamentId\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "badmintonMatch",
+          "tournamentId"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonMatch.badmintonMatch_tournamentId_idx_d0bd97a6",
+    "label": "Create index \"badmintonMatch_tournamentId_idx_d0bd97a6\" on \"badmintonMatch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonMatch_tournamentId_idx_d0bd97a6",
+        "table": "badmintonMatch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonMatch_tournamentId_idx_d0bd97a6\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch_tournamentId_idx_d0bd97a6\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonMatch_tournamentId_idx_d0bd97a6\"",
+        "sql": "CREATE INDEX \"badmintonMatch_tournamentId_idx_d0bd97a6\" ON \"public\".\"badmintonMatch\" (\"tournamentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonMatch_tournamentId_idx_d0bd97a6\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonMatch_tournamentId_idx_d0bd97a6\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonTournament.badmintonTournament_sessionId_idx_29f415d4",
+    "label": "Create index \"badmintonTournament_sessionId_idx_29f415d4\" on \"badmintonTournament\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonTournament_sessionId_idx_29f415d4",
+        "table": "badmintonTournament"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonTournament_sessionId_idx_29f415d4\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournament_sessionId_idx_29f415d4\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonTournament_sessionId_idx_29f415d4\"",
+        "sql": "CREATE INDEX \"badmintonTournament_sessionId_idx_29f415d4\" ON \"public\".\"badmintonTournament\" (\"sessionId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonTournament_sessionId_idx_29f415d4\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournament_sessionId_idx_29f415d4\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.badmintonTournamentPlayer.badmintonTournamentPlayer_tournamentId_idx_d0bd97a6",
+    "label": "Create index \"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\" on \"badmintonTournamentPlayer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "badmintonTournamentPlayer_tournamentId_idx_d0bd97a6",
+        "table": "badmintonTournamentPlayer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\"",
+        "sql": "CREATE INDEX \"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\" ON \"public\".\"badmintonTournamentPlayer\" (\"tournamentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"badmintonTournamentPlayer_tournamentId_idx_d0bd97a6\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.badmintonTournamentPlayer.badmintonTournamentPlayer_tournamentId_fkey",
+    "label": "Add foreign key \"badmintonTournamentPlayer_tournamentId_fkey\" on \"badmintonTournamentPlayer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "badmintonTournamentPlayer_tournamentId_fkey",
+        "table": "badmintonTournamentPlayer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"badmintonTournamentPlayer_tournamentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonTournamentPlayer_tournamentId_fkey",
+          "public",
+          "\"public\".\"badmintonTournamentPlayer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"badmintonTournamentPlayer_tournamentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"badmintonTournamentPlayer\"\nADD CONSTRAINT \"badmintonTournamentPlayer_tournamentId_fkey\"\nFOREIGN KEY (\"tournamentId\")\nREFERENCES \"public\".\"badmintonTournament\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"badmintonTournamentPlayer_tournamentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "badmintonTournamentPlayer_tournamentId_fkey",
+          "public",
+          "\"public\".\"badmintonTournamentPlayer\""
+        ]
+      }
+    ]
+  }
+]

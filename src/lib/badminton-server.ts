@@ -6,6 +6,7 @@ import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/l
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
+import { readTourSettings, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -29,7 +30,7 @@ export async function loadMatch(matchId: string): Promise<BmMatch | null> {
   return toMatches(rows, events)[0] ?? null;
 }
 
-type MatchRow = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: unknown };
+type MatchRow = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: unknown; tournamentId?: string | null };
 type EventRow = { id: string; matchId: string; kind: string; sets: unknown; authorId: string; role: string; at: unknown; targetId?: string | null };
 function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
   return rows
@@ -40,6 +41,7 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
       playerBId: m.playerBId,
       createdById: m.createdById,
       createdAt: toMs(m.createdAt),
+      tournamentId: m.tournamentId ?? null,
       events: events
         .filter((e) => e.matchId === m.id)
         .flatMap((e) => {
@@ -49,6 +51,28 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
 }
+
+// ===== Tournois (Sartay 09/11, regles dans src/lib/badminton-tournament.ts) =====
+export type BmTournament = { id: string; sessionId: string | null; kind: string; label: string; settings: TourSettings; createdAt: number; closedAt: number | null; players: TourPlayer[] };
+export async function loadTournaments(sessionId: string): Promise<BmTournament[]> {
+  const rows = await db.orm.public.BadmintonTournament.where({ sessionId }).all();
+  if (!rows.length) return [];
+  const players = await db.orm.public.BadmintonTournamentPlayer.where((p) => p.tournamentId.in(rows.map((r) => r.id))).all();
+  return rows
+    .map((r) => ({
+      id: r.id,
+      sessionId: r.sessionId ?? null,
+      kind: r.kind,
+      label: r.label,
+      settings: readTourSettings(r.settings),
+      createdAt: toMs(r.createdAt),
+      closedAt: r.cancelledAt ? toMs(r.cancelledAt) : null,
+      players: players.filter((p) => p.tournamentId === r.id).map((p) => ({ studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo })),
+    }))
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+// Le tournoi en cours d'une seance (un seul a la fois) : le plus recent qui n'a pas ete clos.
+export const activeTournament = (list: BmTournament[]): BmTournament | null => list.find((t) => !t.closedAt) ?? null;
 
 // ===== Classement ELO (Sartay 03/11, regles dans src/lib/badminton-elo.ts) =====
 // Tous les matchs de toutes les seances de badminton et les matchs libres officiels (inter-classes), recalcules a chaque

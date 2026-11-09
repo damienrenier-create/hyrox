@@ -12,6 +12,14 @@
       "model": "BadmintonMatch",
       "namespace": "public"
     },
+    "badmintonTournament": {
+      "model": "BadmintonTournament",
+      "namespace": "public"
+    },
+    "badmintonTournamentPlayer": {
+      "model": "BadmintonTournamentPlayer",
+      "namespace": "public"
+    },
     "boatPlacement": {
       "model": "BoatPlacement",
       "namespace": "public"
@@ -414,6 +422,13 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
+              },
+              "tournamentId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {
@@ -468,10 +483,218 @@
                 },
                 "sessionId": {
                   "column": "sessionId"
+                },
+                "tournamentId": {
+                  "column": "tournamentId"
                 }
               },
               "namespaceId": "public",
               "table": "badmintonMatch"
+            }
+          },
+          "BadmintonTournament": {
+            "fields": {
+              "cancelledAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "cancelledBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdById": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "kind": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "label": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sessionId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "settings": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "players": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "tournamentId"
+                  ]
+                },
+                "to": {
+                  "model": "BadmintonTournamentPlayer",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "cancelledAt": {
+                  "column": "cancelledAt"
+                },
+                "cancelledBy": {
+                  "column": "cancelledBy"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "createdById": {
+                  "column": "createdById"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "kind": {
+                  "column": "kind"
+                },
+                "label": {
+                  "column": "label"
+                },
+                "sessionId": {
+                  "column": "sessionId"
+                },
+                "settings": {
+                  "column": "settings"
+                }
+              },
+              "namespaceId": "public",
+              "table": "badmintonTournament"
+            }
+          },
+          "BadmintonTournamentPlayer": {
+            "fields": {
+              "elo": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "pool": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "seed": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "studentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "tournamentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "tournament": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "tournamentId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "BadmintonTournament",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "elo": {
+                  "column": "elo"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "pool": {
+                  "column": "pool"
+                },
+                "seed": {
+                  "column": "seed"
+                },
+                "studentId": {
+                  "column": "studentId"
+                },
+                "tournamentId": {
+                  "column": "tournamentId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "badmintonTournamentPlayer"
             }
           },
           "BoatPlacement": {
@@ -4354,6 +4577,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "tournamentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 }
               },
               "foreignKeys": [
@@ -4382,6 +4610,153 @@
                   ],
                   "name": "badmintonMatch_sessionId_idx_29f415d4",
                   "prefix": "badmintonMatch_sessionId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "tournamentId"
+                  ],
+                  "name": "badmintonMatch_tournamentId_idx_d0bd97a6",
+                  "prefix": "badmintonMatch_tournamentId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "badmintonTournament": {
+              "columns": {
+                "cancelledAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "cancelledBy": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "createdById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "kind": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "label": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "settings": {
+                  "codecId": "pg/json@1",
+                  "nativeType": "json",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "sessionId"
+                  ],
+                  "name": "badmintonTournament_sessionId_idx_29f415d4",
+                  "prefix": "badmintonTournament_sessionId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "badmintonTournamentPlayer": {
+              "columns": {
+                "elo": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "pool": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "seed": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "studentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "tournamentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "tournamentId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "badmintonTournamentPlayer"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "badmintonTournament"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "tournamentId"
+                  ],
+                  "name": "badmintonTournamentPlayer_tournamentId_idx_d0bd97a6",
+                  "prefix": "badmintonTournamentPlayer_tournamentId_idx",
                   "unique": false
                 }
               ],
@@ -7385,10 +7760,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "26ae7a0fa6bf482b1620882508567aa6ee0328a62726d80bf239f20d802d84c5"
+    "storageHash": "dcf0ff645ab157d57f3e21e899f09ea159fb617e23e4a42012db62b91cbb4bc4"
   },
   "execution": {
-    "executionHash": "50b482c1dde2ba3ee6289941fca6f64e022e4ad408e5bd51a4124e1e0d3e6665",
+    "executionHash": "178eb95fffc8c1c4ec221c396bfaa1a099100244f9ee3d35afb4805ba603a3b4",
     "mutations": {
       "defaults": [
         {
@@ -7411,6 +7786,28 @@
             "column": "id",
             "namespace": "public",
             "table": "badmintonMatch"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "badmintonTournament"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "badmintonTournamentPlayer"
           }
         },
         {

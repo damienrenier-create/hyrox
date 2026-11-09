@@ -3,6 +3,7 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
+import type { PairingStatus } from "@/lib/badminton-tournament";
 import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "../../badminton-actions";
 import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
 import { usePulse } from "../../../_components/usePulse";
@@ -11,7 +12,9 @@ import { btn, cx, ui } from "@/lib/ui";
 // Ecran eleve du badminton (telephone) : « à signer » en haut, puis « Encoder un match » (j'ai joue / j'ai arbitre),
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
 // Matchs libres (`free`, 03/11) : tous les eleves dans la liste, temoins a demander, « à attester » en haut.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [] }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[] }) {
+// Tournoi par poules (`tour`, 09/11) : en tete, mon adversaire de la ronde en cours et « Encoder ce match ».
+export type TourCardData = { label: string; format: string; pool: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number; of: number; table: { name: string; score: number; rank: number; me: boolean }[] };
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -19,11 +22,13 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   usePulse(pulse, 8000, !live);
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
+  const [preset, setPreset] = useState<string | null>(null); // adversaire du tournoi, pre-rempli
   const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
       {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
+      {tour && <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
 
       {toAttest.length > 0 && (
@@ -44,7 +49,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
 
       {writable && (
         <section>
-          {open ? <NewMatch sessionId={sessionId} meId={meId} roster={roster} free={free} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
+          {open ? <NewMatch key={preset ?? "nouveau"} initialB={preset} sessionId={sessionId} meId={meId} roster={roster} free={free} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
             <button type="button" onClick={() => setOpen(true)} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match{free ? " libre" : ""}</button>
           )}
         </section>
@@ -72,12 +77,12 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   );
 }
 
-function NewMatch({ sessionId, meId, roster, free, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
+function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">("player");
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
   const [a, setA] = useState<string | null>(null); // arbitre : joueur 1
-  const [b, setB] = useState<string | null>(null); // adversaire, ou joueur 2
+  const [b, setB] = useState<string | null>(initialB); // adversaire, ou joueur 2
   const [sets, setSets] = useState<BmSet[]>(emptySets);
   const [error, setError] = useState("");
   const [twin, setTwin] = useState<string | null>(null);
@@ -160,5 +165,41 @@ function NewMatch({ sessionId, meId, roster, free, onDone, onClose, onLive }: { 
       <button type="button" disabled={pending || !ready} onClick={() => (isLive ? startLive(false) : save(false))} className={cx(btn.lgPrimary, "w-full")}>{pending ? "Un instant…" : isLive ? "🎯 Commencer l\u2019arbitrage" : "Enregistrer le match"}</button>
       <p className={ui.hint}>{mode === "player" ? "Ton adversaire recevra le match à signer sur son téléphone." : isLive ? "Tu comptes les points au fil du match : un appui sur +1 à chaque point. À la fin, ton score compte tout de suite ; les joueurs peuvent le corriger." : "En tant qu'arbitre, ton score compte tout de suite ; les joueurs peuvent le corriger."}</p>
     </div>
+  );
+}
+
+// Carte du tournoi par poules (09/11) : ce que l'eleve doit faire maintenant dans sa poule.
+function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; onPlay: (opponentId: string) => void }) {
+  const score = t.sets ? t.sets.map(([a, b]) => `${a}-${b}`).join(" ") : "";
+  const ronde = t.round ? `Ronde ${t.round}/${t.rounds}` : "";
+  return (
+    <section className={cx(ui.card, "p-3 space-y-2 border-accent bg-accent-soft/30")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-display font-extrabold text-ink">🏆 Tournoi · poule {t.pool}</p>
+        <span className={ui.hint}>{t.format}</span>
+      </div>
+      {t.status === "done" ? (
+        <p className="text-sm"><b>Poule terminée !</b> Tu finis <b>{t.rank}{t.rank === 1 ? "er" : "e"}</b> sur {t.of}.</p>
+      ) : t.status === "bye" ? (
+        <p className="text-sm">{ronde} : <b>tu es au repos.</b> Profites-en pour arbitrer un match de ta poule !</p>
+      ) : t.status === "todo" && t.opponent ? (
+        <div className="space-y-2">
+          <p className="text-sm">{ronde} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          {canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
+        </div>
+      ) : t.status === "live" ? (
+        <p className="text-sm">{ronde} : ton match contre <b>{t.opponent?.name}</b> est arbitré en direct.</p>
+      ) : t.status === "disputed" ? (
+        <p className="text-sm">{ronde} : ton match contre <b>{t.opponent?.name}</b> est contesté : ton prof va trancher.</p>
+      ) : (
+        <p className="text-sm">{ronde} : match joué contre <b>{t.opponent?.name}</b> ({score}). Attends que toute ta poule ait fini la ronde : ton prochain adversaire s&apos;affichera ici.</p>
+      )}
+      <details>
+        <summary className="cursor-pointer text-xs font-bold text-ink-2">Classement de ma poule</summary>
+        <ol className="mt-1 text-sm">
+          {t.table.map((r) => <li key={r.rank} className={cx("flex justify-between gap-2 px-1 rounded", r.me && "bg-brand-soft font-bold")}><span>{r.rank}. {r.name}</span><span className="tabular-nums">{String(r.score).replace(".", ",")} pt{r.score > 1 ? "s" : ""}</span></li>)}
+        </ol>
+      </details>
+    </section>
   );
 }

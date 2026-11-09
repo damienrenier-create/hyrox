@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { badmintonRoster, freeRoster, loadEloBoard, loadMatches, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type EloBoard } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, freeRoster, loadEloBoard, loadMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
+import { formatText, poolsOf } from "@/lib/badminton-tournament";
+import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
 import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
@@ -11,7 +13,8 @@ import { BM_FREE, matchState, pupilStats, viewOf, type BmMatch, type BmPersonRef
 import { isTestClass, notDeleted, readSessionClasses } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { TopBar } from "../../_components/TopBar";
-import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow } from "./BadmintonStaff";
+import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, type BmTourProps } from "./BadmintonStaff";
+import type { TourView } from "./TournamentPanel";
 import { cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -111,13 +114,32 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const seCols = SELF_EVAL_GRIDS.badminton.criteria.map((c) => ({ id: c.id, short: SELF_EVAL_SHORT[c.id] ?? c.label, label: c.label }));
   const board = await loadEloBoard();
   const elo = eloRows(board, classes.length > 0 && classes.every((c) => isTestClass(c)));
+  // Tournoi par poules (09/11) : participants proposes = les eleves de la seance (coches : ceux qui y ont deja joue ou arbitre).
+  const tours = await loadTournaments(session.id);
+  const present = new Set(matches.flatMap((m) => [m.playerAId, m.playerBId, m.createdById]));
+  const tourView = (t: BmTournament): TourView => ({
+    id: t.id,
+    label: t.label,
+    format: formatText(t.settings),
+    pools: poolsOf(t.players, matches.filter((m) => m.tournamentId === t.id)),
+    names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: ref(p.studentId).name, className: ref(p.studentId).className }])),
+  });
+  const active = activeTournament(tours);
+  const previous = tours.find((t) => t.closedAt) ?? null;
+  const tour: BmTourProps = {
+    entrants: roster
+      .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id)))
+      .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
+    active: active ? tourView(active) : null,
+    previous: previous ? tourView(previous) : null,
+  };
 
   return (
     <div className={ui.page}>
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")} · ${isSessionOpen(session) ? "séance ouverte" : "séance fermée"}`} back={back} />
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} />
       </main>
     </div>
   );

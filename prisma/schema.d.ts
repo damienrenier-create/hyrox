@@ -34,9 +34,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'26ae7a0fa6bf482b1620882508567aa6ee0328a62726d80bf239f20d802d84c5'>;
+  StorageHashBase<'dcf0ff645ab157d57f3e21e899f09ea159fb617e23e4a42012db62b91cbb4bc4'>;
 export type ExecutionHash =
-  ExecutionHashBase<'50b482c1dde2ba3ee6289941fca6f64e022e4ad408e5bd51a4124e1e0d3e6665'>;
+  ExecutionHashBase<'178eb95fffc8c1c4ec221c396bfaa1a099100244f9ee3d35afb4805ba603a3b4'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -260,6 +260,26 @@ export type FieldOutputTypes = {
       readonly playerBId: CodecTypes['pg/text@1']['output'];
       readonly createdById: CodecTypes['pg/text@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly tournamentId: CodecTypes['pg/text@1']['output'] | null;
+    };
+    readonly BadmintonTournament: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly kind: CodecTypes['pg/text@1']['output'];
+      readonly label: CodecTypes['pg/text@1']['output'];
+      readonly settings: CodecTypes['pg/json@1']['output'];
+      readonly createdById: CodecTypes['pg/text@1']['output'];
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly cancelledBy: CodecTypes['pg/text@1']['output'] | null;
+    };
+    readonly BadmintonTournamentPlayer: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly tournamentId: CodecTypes['pg/text@1']['output'];
+      readonly studentId: CodecTypes['pg/text@1']['output'];
+      readonly pool: CodecTypes['pg/text@1']['output'];
+      readonly seed: CodecTypes['pg/int4@1']['output'];
+      readonly elo: CodecTypes['pg/int4@1']['output'];
     };
     readonly BoatPlacement: {
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -595,6 +615,26 @@ export type FieldInputTypes = {
       readonly playerBId: CodecTypes['pg/text@1']['input'];
       readonly createdById: CodecTypes['pg/text@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly tournamentId: CodecTypes['pg/text@1']['input'] | null;
+    };
+    readonly BadmintonTournament: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly kind: CodecTypes['pg/text@1']['input'];
+      readonly label: CodecTypes['pg/text@1']['input'];
+      readonly settings: CodecTypes['pg/json@1']['input'];
+      readonly createdById: CodecTypes['pg/text@1']['input'];
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly cancelledBy: CodecTypes['pg/text@1']['input'] | null;
+    };
+    readonly BadmintonTournamentPlayer: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly tournamentId: CodecTypes['pg/text@1']['input'];
+      readonly studentId: CodecTypes['pg/text@1']['input'];
+      readonly pool: CodecTypes['pg/text@1']['input'];
+      readonly seed: CodecTypes['pg/int4@1']['input'];
+      readonly elo: CodecTypes['pg/int4@1']['input'];
     };
     readonly BoatPlacement: {
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -930,6 +970,26 @@ export type StorageColumnTypes = {
       readonly playerAId: CodecTypes['pg/text@1']['output'];
       readonly playerBId: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly tournamentId: CodecTypes['pg/text@1']['output'] | null;
+    };
+    readonly badmintonTournament: {
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly cancelledBy: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly createdById: CodecTypes['pg/text@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly kind: CodecTypes['pg/text@1']['output'];
+      readonly label: CodecTypes['pg/text@1']['output'];
+      readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly settings: CodecTypes['pg/json@1']['output'];
+    };
+    readonly badmintonTournamentPlayer: {
+      readonly elo: CodecTypes['pg/int4@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly pool: CodecTypes['pg/text@1']['output'];
+      readonly seed: CodecTypes['pg/int4@1']['output'];
+      readonly studentId: CodecTypes['pg/text@1']['output'];
+      readonly tournamentId: CodecTypes['pg/text@1']['output'];
     };
     readonly boatPlacement: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -1265,6 +1325,26 @@ export type StorageColumnInputTypes = {
       readonly playerAId: CodecTypes['pg/text@1']['input'];
       readonly playerBId: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly tournamentId: CodecTypes['pg/text@1']['input'] | null;
+    };
+    readonly badmintonTournament: {
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly cancelledBy: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly createdById: CodecTypes['pg/text@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly kind: CodecTypes['pg/text@1']['input'];
+      readonly label: CodecTypes['pg/text@1']['input'];
+      readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly settings: CodecTypes['pg/json@1']['input'];
+    };
+    readonly badmintonTournamentPlayer: {
+      readonly elo: CodecTypes['pg/int4@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly pool: CodecTypes['pg/text@1']['input'];
+      readonly seed: CodecTypes['pg/int4@1']['input'];
+      readonly studentId: CodecTypes['pg/text@1']['input'];
+      readonly tournamentId: CodecTypes['pg/text@1']['input'];
     };
     readonly boatPlacement: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1766,9 +1846,33 @@ export namespace Models {
     playerBId: CodecTypes['pg/text@1']['output'];
     createdById: CodecTypes['pg/text@1']['output'];
     createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    tournamentId: CodecTypes['pg/text@1']['output'] | null;
     events: public_BadmintonEvent[];
     session: public_Session | null;
     readonly [RelationKeys]?: 'events' | 'session';
+  };
+  export type public_BadmintonTournament = {
+    id: CodecTypes['pg/text@1']['output'];
+    sessionId: CodecTypes['pg/text@1']['output'] | null;
+    kind: CodecTypes['pg/text@1']['output'];
+    label: CodecTypes['pg/text@1']['output'];
+    settings: CodecTypes['pg/json@1']['output'];
+    createdById: CodecTypes['pg/text@1']['output'];
+    createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    cancelledBy: CodecTypes['pg/text@1']['output'] | null;
+    players: public_BadmintonTournamentPlayer[];
+    readonly [RelationKeys]?: 'players';
+  };
+  export type public_BadmintonTournamentPlayer = {
+    id: CodecTypes['pg/text@1']['output'];
+    tournamentId: CodecTypes['pg/text@1']['output'];
+    studentId: CodecTypes['pg/text@1']['output'];
+    pool: CodecTypes['pg/text@1']['output'];
+    seed: CodecTypes['pg/int4@1']['output'];
+    elo: CodecTypes['pg/int4@1']['output'];
+    tournament: public_BadmintonTournament;
+    readonly [RelationKeys]?: 'tournament';
   };
   export type public_BadmintonEvent = {
     id: CodecTypes['pg/text@1']['output'];
@@ -2042,6 +2146,8 @@ export declare const models: {
     TeamMember: Models.public_TeamMember;
     QuizAnswer: Models.public_QuizAnswer;
     BadmintonMatch: Models.public_BadmintonMatch;
+    BadmintonTournament: Models.public_BadmintonTournament;
+    BadmintonTournamentPlayer: Models.public_BadmintonTournamentPlayer;
     BadmintonEvent: Models.public_BadmintonEvent;
     StationEvent: Models.public_StationEvent;
     SelfEvaluation: Models.public_SelfEvaluation;
@@ -2198,6 +2304,11 @@ type ContractBase = Omit<
                   readonly nullable: false;
                   readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
                 };
+                readonly tournamentId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
               };
               primaryKey: { readonly columns: readonly ['id'] };
               uniques: readonly [];
@@ -2206,6 +2317,12 @@ type ContractBase = Omit<
                   readonly name: 'badmintonMatch_sessionId_idx_29f415d4';
                   readonly prefix: 'badmintonMatch_sessionId_idx';
                   readonly columns: readonly ['sessionId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'badmintonMatch_tournamentId_idx_d0bd97a6';
+                  readonly prefix: 'badmintonMatch_tournamentId_idx';
+                  readonly columns: readonly ['tournamentId'];
                   readonly unique: false;
                 },
               ];
@@ -2219,6 +2336,125 @@ type ContractBase = Omit<
                   readonly target: {
                     readonly namespaceId: 'public' & NamespaceId;
                     readonly tableName: 'session';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
+            };
+            readonly badmintonTournament: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly sessionId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly kind: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly label: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly settings: {
+                  readonly nativeType: 'json';
+                  readonly codecId: 'pg/json@1';
+                  readonly nullable: false;
+                };
+                readonly createdById: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly cancelledAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+                readonly cancelledBy: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'badmintonTournament_sessionId_idx_29f415d4';
+                  readonly prefix: 'badmintonTournament_sessionId_idx';
+                  readonly columns: readonly ['sessionId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [];
+            };
+            readonly badmintonTournamentPlayer: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly tournamentId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly studentId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly pool: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly seed: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly elo: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'badmintonTournamentPlayer_tournamentId_idx_d0bd97a6';
+                  readonly prefix: 'badmintonTournamentPlayer_tournamentId_idx';
+                  readonly columns: readonly ['tournamentId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'badmintonTournamentPlayer';
+                    readonly columns: readonly ['tournamentId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'badmintonTournament';
                     readonly columns: readonly ['id'];
                   };
                 },
@@ -4583,6 +4819,14 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'BadmintonMatch';
     };
+    readonly badmintonTournament: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'BadmintonTournament';
+    };
+    readonly badmintonTournamentPlayer: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'BadmintonTournamentPlayer';
+    };
     readonly badmintonEvent: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'BadmintonEvent';
@@ -4747,6 +4991,10 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/timestamptz-temporal@1';
                 };
               };
+              readonly tournamentId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
             };
             readonly relations: {
               readonly events: {
@@ -4783,6 +5031,135 @@ type ContractBase = Omit<
                 readonly playerBId: { readonly column: 'playerBId' };
                 readonly createdById: { readonly column: 'createdById' };
                 readonly createdAt: { readonly column: 'createdAt' };
+                readonly tournamentId: { readonly column: 'tournamentId' };
+              };
+            };
+          };
+          readonly BadmintonTournament: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly sessionId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly kind: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly label: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly settings: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/json@1' };
+              };
+              readonly createdById: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly cancelledAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly cancelledBy: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+            };
+            readonly relations: {
+              readonly players: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'BadmintonTournamentPlayer';
+                };
+                readonly cardinality: '1:N';
+                readonly on: {
+                  readonly localFields: readonly ['id'];
+                  readonly targetFields: readonly ['tournamentId'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'badmintonTournament';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly sessionId: { readonly column: 'sessionId' };
+                readonly kind: { readonly column: 'kind' };
+                readonly label: { readonly column: 'label' };
+                readonly settings: { readonly column: 'settings' };
+                readonly createdById: { readonly column: 'createdById' };
+                readonly createdAt: { readonly column: 'createdAt' };
+                readonly cancelledAt: { readonly column: 'cancelledAt' };
+                readonly cancelledBy: { readonly column: 'cancelledBy' };
+              };
+            };
+          };
+          readonly BadmintonTournamentPlayer: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly tournamentId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly studentId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly pool: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly seed: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly elo: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+            };
+            readonly relations: {
+              readonly tournament: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'BadmintonTournament';
+                };
+                readonly cardinality: 'N:1';
+                readonly nullable: false;
+                readonly on: {
+                  readonly localFields: readonly ['tournamentId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'badmintonTournamentPlayer';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly tournamentId: { readonly column: 'tournamentId' };
+                readonly studentId: { readonly column: 'studentId' };
+                readonly pool: { readonly column: 'pool' };
+                readonly seed: { readonly column: 'seed' };
+                readonly elo: { readonly column: 'elo' };
               };
             };
           };
@@ -7225,6 +7602,22 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'badmintonMatch';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'badmintonTournament';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'badmintonTournamentPlayer';
             readonly column: 'id';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
