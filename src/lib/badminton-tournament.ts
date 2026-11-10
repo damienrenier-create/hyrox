@@ -28,6 +28,12 @@
 //
 // Pour tous : les matchs sont des matchs ordinaires (signature, arbitre, ELO), rattaches au tournoi a la saisie quand les
 // deux joueurs doivent s'y affronter. Une rencontre est « jouee » des qu'elle a un score non conteste (signe ou pas).
+//
+// RETARDATAIRES (10/11, « idealement il faudrait que je puisse y integrer d'eventuels retardataires ») :
+// - poules / handicap : le retardataire (`late`) rejoint une poule sans changer les rondes des autres ; il joue contre
+//   chacun des matchs de RATTRAPAGE, quand ses adversaires sont libres ; ils comptent au classement de la poule ;
+// - grand tableau : il prend la derniere tete de serie (a la place d'un exempt), tant que le joueur qui devait profiter de
+//   cet exempt n'a pas encore joue (voir lateBracketSeat).
 import { matchState, swapSets, type BmMatch, type BmSet } from "@/lib/badminton";
 
 export type TourKind = "POOLS" | "BRACKET" | "HANDICAP";
@@ -36,6 +42,8 @@ export const TOUR_KINDS: { id: TourKind; name: string }[] = [
   { id: "BRACKET", name: "Grand tableau" },
   { id: "HANDICAP", name: "Championnat à handicap" },
 ];
+// Retardataires d'un tournoi de poules (settings.late : leurs identifiants).
+export const readLate = (settings: unknown): string[] => { const l = (settings as { late?: unknown } | null)?.late; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
 export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === "HANDICAP" ? v : "POOLS");
 
 export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; eloPerPoint: number };
@@ -56,7 +64,7 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
 export const formatText = (s: TourSettings) => `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants (au meilleur des 3)"} de ${s.points} points`;
 
 export type TourEntrant = { id: string; elo: number };
-export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number };
+export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number; late?: boolean };
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 
@@ -113,7 +121,7 @@ export type PairingStatus = "todo" | "live" | "played" | "disputed" | "bye" | "w
 export type TourPairing = { a: string; b: string | null; status: PairingStatus; matchId: string | null; sets: BmSet[] | null; winner: "A" | "B" | "DRAW" | null; handicap?: [number, number] };
 export type TourRound = { n: number; pairings: TourPairing[] };
 export type TourStanding = { id: string; rank: number; played: number; won: number; drawn: number; lost: number; score: number; setsFor: number; setsAgainst: number; pointsFor: number; pointsAgainst: number; elo: number };
-export type TourPool = { name: string; players: string[]; rounds: TourRound[]; current: number | null; done: boolean; standings: TourStanding[] };
+export type TourPool = { name: string; players: string[]; rounds: TourRound[]; catchUp: TourPairing[]; current: number | null; done: boolean; standings: TourStanding[] };
 
 const samePair = (m: BmMatch, a: string, b: string) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
 
@@ -137,16 +145,18 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
   return names.map((name) => {
     const members = players.filter((p) => p.pool === name).sort((a, b) => a.seed - b.seed);
     const ids = members.map((p) => p.studentId);
-    const rounds = roundRobin(ids).map((pairs, i) => ({
-      n: i + 1,
-      pairings: pairs.map(([a, b]) => {
-        const p = pairingOf(a, b, matches);
-        return handicap && b ? { ...p, handicap: handicapOf(eloOf.get(a) ?? 0, eloOf.get(b) ?? 0, handicap) } : p;
-      }),
-    }));
+    const lateIds = members.filter((p) => p.late).map((p) => p.studentId);
+    const withH = (a: string, b: string | null) => {
+      const p = pairingOf(a, b, matches);
+      return handicap && b ? { ...p, handicap: handicapOf(eloOf.get(a) ?? 0, eloOf.get(b) ?? 0, handicap) } : p;
+    };
+    // Rondes : les joueurs du depart seulement (un retardataire ne les change pas) ; puis ses matchs de rattrapage.
+    const rounds = roundRobin(ids.filter((id) => !lateIds.includes(id))).map((pairs, i) => ({ n: i + 1, pairings: pairs.map(([a, b]) => withH(a, b)) }));
+    const catchUp: TourPairing[] = [];
+    lateIds.forEach((l, li) => { for (const o of ids) if (o !== l && !lateIds.slice(0, li).includes(o)) catchUp.push(withH(l, o)); });
     const open = rounds.find((r) => r.pairings.some((p) => p.status !== "played" && p.status !== "bye"));
     const table = new Map(members.map((p) => [p.studentId, { id: p.studentId, rank: 0, played: 0, won: 0, drawn: 0, lost: 0, score: 0, setsFor: 0, setsAgainst: 0, pointsFor: 0, pointsAgainst: 0, elo: p.elo }]));
-    for (const r of rounds) for (const p of r.pairings) {
+    for (const p of [...rounds.flatMap((r) => r.pairings), ...catchUp]) {
       if (p.status !== "played" || !p.b || !p.sets) continue;
       const A = table.get(p.a)!;
       const B = table.get(p.b)!;
@@ -159,7 +169,7 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
     }
     const standings = [...table.values()].sort((x, y) => y.score - x.score || (y.setsFor - y.setsAgainst) - (x.setsFor - x.setsAgainst) || (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst) || y.elo - x.elo);
     standings.forEach((s, i) => (s.rank = i + 1));
-    return { name, players: ids, rounds, current: open?.n ?? null, done: !open, standings };
+    return { name, players: ids, rounds, catchUp, current: open?.n ?? null, done: !open && catchUp.every((p) => p.status === "played"), standings };
   });
 }
 
@@ -249,14 +259,43 @@ export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: B
   return st === "todo" || st === "disputed";
 }
 
-// Poules / handicap : ma poule, la ronde en cours et ma rencontre dans cette ronde.
-export type TourMine = { pool: TourPool; round: TourRound | null; pairing: TourPairing | null; rank: number; of: number };
+// Poules / handicap : ma poule, la ronde en cours et ma rencontre dans cette ronde ; un retardataire : son prochain match
+// de rattrapage. `extra` : les matchs de rattrapage qu'un retardataire doit encore jouer contre moi.
+export type TourMine = { pool: TourPool; round: TourRound | null; pairing: TourPairing | null; rank: number; of: number; late: boolean; extra: TourPairing[] };
 export function mineOf(pools: TourPool[], studentId: string): TourMine | null {
   const pool = pools.find((p) => p.players.includes(studentId));
   if (!pool) return null;
+  const rank = pool.standings.find((s) => s.id === studentId)?.rank ?? 0;
+  const pending = (p: TourPairing) => p.status !== "played" && p.status !== "bye";
+  const late = pool.catchUp.some((p) => p.a === studentId) && !pool.rounds.some((r) => r.pairings.some((p) => p.a === studentId || p.b === studentId));
+  if (late) {
+    const pairing = pool.catchUp.find((p) => (p.a === studentId || p.b === studentId) && pending(p)) ?? null;
+    return { pool, round: null, pairing, rank, of: pool.players.length, late, extra: [] };
+  }
   const round = pool.current ? pool.rounds[pool.current - 1] : null;
   const pairing = round?.pairings.find((p) => p.a === studentId || p.b === studentId) ?? null;
-  return { pool, round, pairing, rank: pool.standings.find((s) => s.id === studentId)?.rank ?? 0, of: pool.players.length };
+  const extra = pool.catchUp.filter((p) => p.b === studentId && pending(p));
+  return { pool, round, pairing, rank, of: pool.players.length, late, extra };
+}
+
+// Grand tableau : un retardataire prend la tete de serie N+1 (la place d'un exempt) si le tableau a encore une place vide
+// et que le joueur qu'elle affronte au 1er tour (tete de serie S+1-(N+1)) n'a encore joue aucun match du tableau.
+export function lateBracketSeat(players: TourPlayer[], matches: BmMatch[]): { ok: true; seed: number } | { ok: false; reason: string } {
+  const n = players.length;
+  const size = bracketSize(Math.max(2, n));
+  if (n + 1 > size) return { ok: false, reason: "Le tableau est complet : plus de place libre pour un retardataire." };
+  const facing = players.find((p) => p.seed === size + 1 - (n + 1));
+  if (facing && matches.some((m) => (m.playerAId === facing.studentId || m.playerBId === facing.studentId) && matchState(m).status !== "CANCELLED")) {
+    return { ok: false, reason: "Trop tard pour le tableau : le joueur qui aurait affronté le retardataire a déjà joué." };
+  }
+  return { ok: true, seed: n + 1 };
+}
+
+// Poule d'un retardataire : la seule poule, ou celle dont l'ELO moyen est le plus proche du sien.
+export function latePool(players: TourPlayer[], elo: number): string {
+  const names = [...new Set(players.map((p) => p.pool))].sort();
+  const mean = (n: string) => { const ps = players.filter((p) => p.pool === n); return ps.reduce((s, p) => s + p.elo, 0) / Math.max(1, ps.length); };
+  return names.sort((x, y) => Math.abs(mean(x) - elo) - Math.abs(mean(y) - elo))[0] ?? "A";
 }
 
 // Grand tableau : mon prochain match (le premier non joue ou les deux joueurs sont connus), ou j'attends, ou j'ai fini.

@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, handicapOf, makePlayers, pendingPairing, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pendingPairing, readLate, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -300,6 +300,35 @@ export async function closeTournamentAction(tournamentId: string): Promise<BmRes
   if (!c.staff) return { error: "Réservé aux profs." };
   if (!t.cancelledAt) await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ cancelledAt: Temporal.Now.instant(), cancelledBy: c.userId });
   done(t.sessionId);
+  return { ok: true };
+}
+
+// Retardataire (10/11) : l'ajouter au tournoi en cours. Poules / handicap : la poule la plus proche de son ELO, matchs de
+// rattrapage contre chacun ; grand tableau : la derniere tete de serie, a la place d'un exempt (voir badminton-tournament.ts).
+export async function addLatePlayerAction(tournamentId: string, studentId: string): Promise<BmResult> {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(row.sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
+  const id = String(studentId ?? "");
+  if (t.players.some((p) => p.studentId === id)) return { error: "Cet élève participe déjà au tournoi." };
+  if (!(await badmintonRoster(c.session)).some((p) => p.id === id && !p.staff)) return { error: "Cet élève n'est pas dans cette séance." };
+  const elo = Math.round((await loadEloBoard()).entries.get(id)?.rating ?? ELO_START);
+  if (t.kind === "BRACKET") {
+    const seat = lateBracketSeat(t.players, await loadTournamentMatches(t.id));
+    if (!seat.ok) return { error: seat.reason };
+    await db.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: id, pool: "T", seed: seat.seed, elo });
+  } else {
+    const pool = latePool(t.players, elo);
+    const seed = Math.max(0, ...t.players.filter((p) => p.pool === pool).map((p) => p.seed)) + 1;
+    await db.transaction(async (tx) => {
+      await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: id, pool, seed, elo });
+      await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), late: [...readLate(row.settings), id] } });
+    });
+  }
+  done(row.sessionId);
   return { ok: true };
 }
 

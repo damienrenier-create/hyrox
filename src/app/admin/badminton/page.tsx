@@ -141,6 +141,8 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
     active: active ? await tourView(active) : null,
     previous: previous ? await tourView(previous) : null,
+    // Retardataires possibles : les eleves de la seance pas encore dans le tournoi en cours.
+    candidates: active ? roster.filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id)) && !active.players.some((x) => x.studentId === p.id)).map((p) => ({ id: p.id, name: p.name, className: p.className })) : [],
     elsewhere: elsewhere.map((t) => ({ id: t.id, label: t.label, players: t.players.length, when: `le ${new Date(t.createdAt).toLocaleDateString("fr-BE", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" })}` })),
   };
 

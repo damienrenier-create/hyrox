@@ -54,7 +54,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const p = mine.pairing;
         const meA = p?.a === me.id;
         const opp = p ? (meA ? p.b : p.a) : null;
-        tourCard = { ...base, where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null };
+        tourCard = { ...base, where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank };
       }
     } else {
       const mine = mineOf(poolsOf(tour.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
@@ -68,13 +68,17 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
           where: mine.pool.players.length === tour.players.length ? "tous contre tous" : `poule ${mine.pool.name}`,
           round: mine.pool.current,
           rounds: mine.pool.rounds.length,
-          status: mine.pool.done ? "done" : p?.status ?? "bye",
+          // Retardataire : son prochain rattrapage, sinon il a fini ; les autres : la ronde en cours, sinon fini (rattrapages a part).
+          status: mine.late ? p?.status ?? "done" : mine.pool.done || !mine.pool.current ? "done" : p?.status ?? "bye",
           opponent: opp ? tref(opp) : null,
           sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null,
           rank: mine.rank,
           of: mine.of,
           table: mine.pool.standings.map((s) => ({ name: tref(s.id).name, score: s.score, rank: s.rank, me: s.id === me.id })),
           headStart: h ? { mine: meA ? h[0] : h[1], theirs: meA ? h[1] : h[0] } : null,
+          late: mine.late,
+          extra: mine.extra.map((x) => tref(x.a)),
+          poolDone: mine.pool.done,
         };
       }
     }

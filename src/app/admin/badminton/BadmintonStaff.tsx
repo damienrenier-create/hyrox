@@ -16,7 +16,7 @@ export type BmSelfEvalRow = { id: string; name: string; className: string | null
 export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
 type SeCol = { id: string; short: string; label: string };
 type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder";
-export type BmTourProps = { entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[] };
+export type BmTourProps = { entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: { id: string; name: string; className: string | null }[] };
 type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
@@ -100,7 +100,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "elo" && <EloTable rows={elo} groupClasses={groupClasses} />}
 
-      {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} />}
+      {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} />}
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
     </div>

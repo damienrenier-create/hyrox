@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
-import { closeTournamentAction, createTournamentAction, moveTournamentAction } from "@/app/eleve/badminton-actions";
+import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
@@ -14,8 +14,9 @@ export type TourEntrantRow = { id: string; name: string; className: string | nul
 export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }> };
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
-export function TournamentPanel({ sessionId, entrants, active, previous, elsewhere }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[] }) {
-  if (active) return <TournamentBoard t={active} />;
+export type TourCandidate = { id: string; name: string; className: string | null };
+export function TournamentPanel({ sessionId, entrants, active, previous, elsewhere, candidates }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: TourCandidate[] }) {
+  if (active) return <TournamentBoard t={active} candidates={candidates} />;
   return (
     <div className="space-y-4">
       {elsewhere.length > 0 && <Elsewhere sessionId={sessionId} list={elsewhere} />}
@@ -52,7 +53,8 @@ function Elsewhere({ sessionId, list }: { sessionId: string; list: TourElsewhere
 function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: TourEntrantRow[] }) {
   const router = useRouter();
   const [kind, setKind] = useState<TourKind>("POOLS");
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.filter((e) => e.present).map((e) => e.id)));
+  // Toute la classe par defaut (Sartay 10/11 : « je decoche ceux qui n'y participent pas, ou qui arbitrent, et pas le contraire »).
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.map((e) => e.id)));
   const [poolSizes, setPoolSizes] = useState<Record<TourKind, number>>({ POOLS: 4, BRACKET: 0, HANDICAP: 0 });
   const [sets, setSets] = useState<1 | 2 | 3>(1);
   const [points, setPoints] = useState(15);
@@ -120,7 +122,7 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <span className={ui.label}>Participants · {selected.size} coché{selected.size > 1 ? "s" : ""}</span>
+          <span className={ui.label}>Participants · {selected.size} coché{selected.size > 1 ? "s" : ""} sur {entrants.length} · décochez les absents et ceux qui arbitrent</span>
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => setSelected(new Set(entrants.filter((e) => e.present).map((e) => e.id)))} className={btn.smGhost}>Ceux qui ont joué aujourd&apos;hui</button>
             <button type="button" onClick={() => setSelected(new Set(entrants.map((e) => e.id)))} className={btn.smGhost}>Tout cocher</button>
@@ -179,10 +181,20 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   );
 }
 
-function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean }) {
+function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; closed?: boolean; candidates?: TourCandidate[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  const [lateId, setLateId] = useState("");
+  function addLate() {
+    if (!lateId) return;
+    setError("");
+    start(async () => {
+      const res = await addLatePlayerAction(t.id, lateId);
+      if ("error" in res) setError(res.error);
+      else { setLateId(""); router.refresh(); }
+    });
+  }
   function close() {
     if (!confirm("Clore le tournoi ? Il restera consultable et ses matchs restent comptés ; vous pourrez en lancer un autre.")) return;
     setError("");
@@ -205,6 +217,19 @@ function TournamentBoard({ t, closed = false }: { t: TourView; closed?: boolean 
         </div>
         {!closed && <button type="button" disabled={pending} onClick={close} className={btn.smGhost}>Clore le tournoi</button>}
       </div>
+      {!closed && candidates.length > 0 && (
+        <div className={`${ui.cardPad} space-y-1`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-sm">＋ Retardataire :</span>
+            <select value={lateId} onChange={(e) => setLateId(e.target.value)} className={`${ui.input} w-auto`} aria-label="Retardataire">
+              <option value="">Choisir un élève…</option>
+              {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}{c.className ? ` (${c.className})` : ""}</option>)}
+            </select>
+            <button type="button" disabled={pending || !lateId} onClick={addLate} className={btn.smPrimary}>Ajouter au tournoi</button>
+          </div>
+          <p className={ui.hint}>{t.bracket ? "Il prend la dernière tête de série, à la place d'un exempt (possible tant que le joueur qu'il affronte n'a pas encore joué)." : "Il rejoint la poule la plus proche de son ELO et joue des matchs de rattrapage contre chacun, quand ils sont libres ; les rondes des autres ne changent pas."}</p>
+        </div>
+      )}
       {error && <p className={ui.alertErr}>{error}</p>}
       {t.bracket ? <BracketBoard b={t.bracket} names={t.names} /> : <PoolsBoard pools={pools} names={t.names} />}
     </section>
@@ -247,6 +272,12 @@ function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["name
                 ))}
               </tbody>
             </table>
+            {p.catchUp.length > 0 && (
+              <div className="rounded-lg px-2 py-1 bg-sky-50 border border-sky-200 text-sm">
+                <span className="text-xs font-bold text-ink-2">Rattrapages (arrivé en retard, à jouer quand les deux sont libres)</span>
+                {p.catchUp.map((x, i) => <p key={i}>{line(x)}</p>)}
+              </div>
+            )}
             <ol className="space-y-1.5 text-sm">
               {p.rounds.map((r) => (
                 <li key={r.n} className={cx("rounded-lg px-2 py-1", r.n === p.current ? "bg-accent-soft/50 border border-accent/40" : "bg-paper")}>
