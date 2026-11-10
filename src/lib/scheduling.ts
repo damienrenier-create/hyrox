@@ -1,7 +1,7 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { MAX_CLASSES, notDeleted, readSessionClasses, readSessionSex, readCycleClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, forcedSessionSex, notDeleted, readSessionClasses, readSessionSex, readCycleClasses } from "@/lib/session-roles";
 import { groupSlots, mergeCoTaught, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -192,7 +192,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         numTeams: p.numTeams,
         refereeMode: p.refereeMode,
         sessionId: null,
-        sex: g.sex,
+        sex: g.sex ?? forcedSessionSex(p.wodType, dateKey),
         editable: (g.validFrom ?? null) === versionStart(slots, g.teacherId),
       });
     }
@@ -237,12 +237,15 @@ export async function openSession(input: OpenSessionInput) {
   const engine = getWodEngine(input.wodType); // moteur connu, sinon throw
   // Seance sans equipes (Badminton) : aucune equipe a creer.
   const numTeams = engine.noTeams ? 0 : Math.min(50, Math.max(1, Math.floor(input.numTeams)));
+  // Periode « garcons seulement » d'un type de seance (SESSION_SEX_RULES) : une seance mixte prend ce sexe.
+  const day = (input.opensAt ?? Temporal.Now.instant()).toZonedDateTimeISO(TZ).toPlainDate().toString();
+  const forced = readSessionSex(input.settings ?? null) ? null : forcedSessionSex(input.wodType, day);
   return db.transaction(async (tx) => {
     const session = await tx.orm.public.Session.create({
       wodType: input.wodType as "PYRAMIDE_CLASSIQUE",
       isActive: true,
       refereeMode: input.refereeMode,
-      settings: { numTeams, classes: input.classes, ...(input.settings ?? {}) },
+      settings: { numTeams, classes: input.classes, ...(input.settings ?? {}), ...(forced ? { sex: forced } : {}) },
       cycleId: input.cycleId ?? null,
       planId: input.planId ?? null,
       teacherId: input.teacherId ?? null,
