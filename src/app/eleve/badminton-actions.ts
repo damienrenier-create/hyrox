@@ -17,8 +17,9 @@ import { toMs } from "@/lib/scheduling";
 // Matchs LIBRES (03/11) : sessionId = BM_FREE dans les actions, null en base ; a toute heure, entre toutes les classes ;
 // officiels une fois attestes par 2 autres eleves (ou valides par un prof).
 
-// `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance.
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[] } | { duplicate: { matchId: string; text: string } };
+// `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance ; `target` (match de
+// tournoi) : les points du set du tournoi, proposes d'office au tableau de score de l'arbitre.
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -64,13 +65,13 @@ function done(sessionId: string | null) {
 
 // Tournoi en cours de la seance (09/11) : un match entre deux joueurs qui doivent s'y affronter lui est rattache.
 // Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
-async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null } | null> {
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
-  if (t.kind !== "HANDICAP") return { id: t.id, start: null };
+  if (t.kind !== "HANDICAP") return { id: t.id, start: null, points: t.settings.points };
   const elo = (id: string) => t.players.find((p) => p.studentId === id)?.elo ?? 0;
-  return { id: t.id, start: handicapOf(elo(a), elo(b), t.settings) };
+  return { id: t.id, start: handicapOf(elo(a), elo(b), t.settings), points: t.settings.points };
 }
 
 // Match libre : les temoins demandes a la saisie (au plus 2, ni joueurs, ni celui qui encode).
@@ -392,7 +393,7 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {

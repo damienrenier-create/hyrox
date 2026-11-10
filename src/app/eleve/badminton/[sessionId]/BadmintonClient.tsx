@@ -18,7 +18,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
-  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null } | null>(null);
+  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number } | null>(null);
   usePulse(pulse, 8000, !live);
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
@@ -26,7 +26,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
-      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} onClose={() => setLive(null)} />}
+      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
       {tour && <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
@@ -77,7 +77,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   );
 }
 
-function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void }) {
+function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">("player");
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
@@ -103,7 +103,7 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onCl
       const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
-      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]] });
+      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target });
     });
   }
   function save(force = false) {

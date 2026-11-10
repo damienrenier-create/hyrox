@@ -184,12 +184,13 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
 // de marquer), le set suivant, la fin du match. Chaque appui part tout de suite au serveur ; si plusieurs appuis se
 // suivent pendant un envoi, seul le dernier score est renvoye (c'est une photo du score : rien ne se perd).
 const BM_TARGETS = [11, 15, 21, 0] as const; // 0 = sans limite (match au temps)
-export function LiveBoard({ matchId, aName, bName, initialSets, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; onClose: () => void }) {
+// `initialTarget` : points du set d'un match de tournoi (sinon le dernier choix de ce telephone, 21 par defaut).
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
   // Points par set (rappel « set gagné ? ») : retenu sur ce telephone. Le tableau n'existe que cote navigateur (ouvert au clic).
-  const [target, setTarget] = useState<number>(() => { try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
+  const [target, setTarget] = useState<number>(() => { if (initialTarget && BM_TARGETS.includes(initialTarget as never)) return initialTarget; try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [finishing, startFinish] = useTransition();
@@ -219,6 +220,20 @@ export function LiveBoard({ matchId, aName, bName, initialSets, onClose }: { mat
   const plus = (side: 0 | 1) => { const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] = Math.min(99, n[n.length - 1][side] + 1); setServer(side); change(n); };
   const minus = (side: 0 | 1) => { if (cur[side] === 0) return; const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] -= 1; setServer(null); change(n); };
   const nextSet = () => { if (sets.length >= BM_MAX_SETS || cur[0] + cur[1] === 0) return; setServer(null); change([...sets, [0, 0]]); };
+  // Se rattraper (Sartay 10/11 : « qu'un arbitre puisse annuler l'encodage en cours, pour recommencer le match a zero ; il
+  // n'arrivait pas a corriger son encodage ») : chaque geste est une nouvelle photo du score, l'historique garde tout.
+  const dropSet = () => { if (sets.length <= 1 || !confirm(`Retirer le set ${sets.length} (${cur[0]}-${cur[1]}) et revenir au set précédent ?`)) return; setServer(null); change(sets.slice(0, -1)); };
+  const restart = () => { if (!confirm("Recommencer le match à 0-0 ? (L'historique garde ce qui a été compté.)")) return; setServer(null); change([[0, 0]]); };
+  function cancelMatch() {
+    if (!confirm("Annuler ce match ? Il restera dans l'historique, barré, et ne comptera pas.")) return;
+    setError("");
+    startFinish(async () => {
+      const res = await cancelMatchAction(matchId);
+      if ("error" in res) { setError(res.error); return; }
+      router.refresh();
+      onClose();
+    });
+  }
   const pickTarget = (t: number) => { setTarget(t); try { localStorage.setItem("reps_bm_target", String(t)); } catch { /* stockage indisponible */ } };
   // Set gagne (rappel seulement, l'arbitre decide) : la cible atteinte avec 2 points d'avance, ou le plafond (30 a 21 points).
   const cap = target === 21 ? 30 : target + 4;
@@ -268,7 +283,10 @@ export function LiveBoard({ matchId, aName, bName, initialSets, onClose }: { mat
         {setWinner !== null && sets.length < BM_MAX_SETS && (
           <div className={`${ui.alertInfo} flex items-center justify-between gap-2`}>
             <span>Set gagné par <b>{names[setWinner]}</b> ?</span>
-            <button type="button" onClick={nextSet} className={btn.smPrimary}>Set suivant</button>
+            <span className="flex gap-1.5">
+              <button type="button" onClick={finish} disabled={finishing} className={btn.smSuccess}>🏁 Fin du match</button>
+              <button type="button" onClick={nextSet} className={btn.smGhost}>Set suivant</button>
+            </span>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -280,6 +298,11 @@ export function LiveBoard({ matchId, aName, bName, initialSets, onClose }: { mat
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={nextSet} disabled={finishing || sets.length >= BM_MAX_SETS || cur[0] + cur[1] === 0} className={btn.ghost}>Set suivant ›</button>
           <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : "🏁 Fin du match"}</button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {sets.length > 1 && <button type="button" onClick={dropSet} disabled={finishing} className={btn.smGhost}>← Retirer ce set</button>}
+          <button type="button" onClick={restart} disabled={finishing || (sets.length === 1 && cur[0] + cur[1] === 0)} className={btn.smGhost}>↺ Recommencer à 0-0</button>
+          <button type="button" onClick={cancelMatch} disabled={finishing} className={btn.smGhost}>✖ Annuler ce match</button>
         </div>
         <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre l&apos;arbitrage plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
       </div>
