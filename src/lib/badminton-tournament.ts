@@ -6,8 +6,9 @@
 // - Participants tries par ELO decroissant, coupes en poules de taille equilibree (poule A = les ELO les plus hauts) ;
 //   nombre de poules = arrondi superieur (participants / taille voulue) ; taille 0 = une seule poule (toute la classe).
 // - Chacun contre chacun, ronde par ronde (methode du polygone : le 1er reste fixe, les autres tournent ; nombre impair =
-//   un joueur au repos a chaque ronde). Ronde 1 a 4 joueurs : 1-4, 2-3. La ronde suivante s'ouvre quand toute la poule a
-//   joue la sienne.
+//   un joueur au repos a chaque ronde). Ronde 1 a 4 joueurs : 1-4, 2-3. PAS d'attente de fin de ronde (Sartay 10/11 :
+//   « donne juste l'ordre, que tous les joueurs de la poule puissent le consulter et s'organiser » ; 2 terrains pour une
+//   poule de 6) : chacun voit son prochain match (le premier pas encore joue dans l'ordre des rondes) et l'ordre de la poule.
 // - Classement de poule : victoires (egalite = ½), puis difference de sets, puis difference de points, puis ELO de depart.
 //
 // BRACKET — grand tableau a classement integral. « Les tetes de serie (selon l'ELO) se partagent les differentes parties
@@ -272,10 +273,10 @@ export function mineOf(pools: TourPool[], studentId: string): TourMine | null {
     const pairing = pool.catchUp.find((p) => (p.a === studentId || p.b === studentId) && pending(p)) ?? null;
     return { pool, round: null, pairing, rank, of: pool.players.length, late, extra: [] };
   }
-  const round = pool.current ? pool.rounds[pool.current - 1] : null;
-  const pairing = round?.pairings.find((p) => p.a === studentId || p.b === studentId) ?? null;
+  // Mon prochain match : le premier pas encore joue, dans l'ordre des rondes (sans attendre la fin de la ronde).
+  const next = pool.rounds.flatMap((r) => r.pairings.filter((p) => p.a === studentId || p.b === studentId).map((p) => ({ r, p }))).find((x) => pending(x.p));
   const extra = pool.catchUp.filter((p) => p.b === studentId && pending(p));
-  return { pool, round, pairing, rank, of: pool.players.length, late, extra };
+  return { pool, round: next?.r ?? null, pairing: next?.p ?? null, rank, of: pool.players.length, late, extra };
 }
 
 // Grand tableau : un retardataire prend la tete de serie N+1 (la place d'un exempt) si le tableau a encore une place vide

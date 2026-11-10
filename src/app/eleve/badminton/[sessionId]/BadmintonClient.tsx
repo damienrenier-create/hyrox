@@ -13,7 +13,7 @@ import { btn, cx, ui } from "@/lib/ui";
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
 // Matchs libres (`free`, 03/11) : tous les eleves dans la liste, temoins a demander, « à attester » en haut.
 // Tournoi par poules (`tour`, 09/11) : en tete, mon adversaire de la ronde en cours et « Encoder ce match ».
-export type TourCardData = { kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean };
+export type TourCardData = { kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean; order: { round: number | null; a: string; b: string | null; status: PairingStatus; score: string | null; mine: boolean }[] | null };
 export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
@@ -194,7 +194,7 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
       ) : t.status === "todo" && t.opponent ? (
         <div className="space-y-2">
           {t.late && <p className="text-sm">Tu es arrivé en cours de tournoi : joue tes <b>matchs de rattrapage</b> contre chacun, quand ton adversaire est libre.</p>}
-          <p className="text-sm">{t.late ? "Rattrapage" : ronde} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          <p className="text-sm">{t.late ? "Rattrapage" : bracket ? ronde : `Ton prochain match (${ronde.toLowerCase()})`} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
           {h && h.mine > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>tu commences chaque set avec {h.mine} point{h.mine > 1 ? "s" : ""} d&apos;avance</b> ({h.mine}-0). Compte-les dans le score final.</p>}
           {h && h.theirs > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>{t.opponent.name.split(" ")[0]} commence chaque set avec {h.theirs} point{h.theirs > 1 ? "s" : ""} d&apos;avance</b> (0-{h.theirs}). Comptez-les dans le score final.</p>}
           {canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
@@ -211,6 +211,19 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
           <p>⏱️ Rattrapage : {t.extra.map((o) => o.name).join(", ")} (arrivé{t.extra.length > 1 ? "s" : ""} en retard) doi{t.extra.length > 1 ? "vent" : "t"} aussi jouer contre toi, quand vous êtes libres tous les deux.</p>
           {canPlay && <div className="flex flex-wrap gap-1.5">{t.extra.map((o) => <button key={o.id} type="button" onClick={() => onPlay(o.id)} className={btn.smGhost}>Encoder le match contre {o.name.split(" ")[0]}</button>)}</div>}
         </div>
+      )}
+      {t.order && t.order.length > 0 && (
+        <details open>
+          <summary className="cursor-pointer text-xs font-bold text-ink-2">Ordre des matchs ({t.where}) : organisez-vous sur les terrains</summary>
+          <ol className="mt-1 text-sm space-y-0.5">
+            {t.order.map((o, i) => (
+              <li key={i} className={cx("flex justify-between gap-2 px-1 rounded", o.mine && "bg-brand-soft font-bold", o.status === "played" && "text-ink-3")}>
+                <span className="min-w-0 truncate"><span className="text-ink-3 text-xs tabular-nums">{o.round ? `R${o.round}` : "Ratt."}</span> {o.a}{o.b ? <> – {o.b}</> : <span className="text-ink-3"> · repos</span>}</span>
+                <span className="whitespace-nowrap text-xs">{o.status === "played" ? `✅ ${o.score ?? ""}` : o.status === "live" ? "🔴 en cours" : o.status === "disputed" ? "⚠️" : o.status === "bye" ? "" : "⏳"}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
       )}
       {t.table && <details>
         <summary className="cursor-pointer text-xs font-bold text-ink-2">{t.where === "tous contre tous" ? "Classement" : "Classement de ma poule"}</summary>

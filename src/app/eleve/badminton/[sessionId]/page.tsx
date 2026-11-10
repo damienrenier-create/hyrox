@@ -54,7 +54,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const p = mine.pairing;
         const meA = p?.a === me.id;
         const opp = p ? (meA ? p.b : p.a) : null;
-        tourCard = { ...base, where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank };
+        tourCard = { ...base, where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank, order: null };
       }
     } else {
       const mine = mineOf(poolsOf(tour.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
@@ -66,10 +66,10 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         tourCard = {
           ...base,
           where: mine.pool.players.length === tour.players.length ? "tous contre tous" : `poule ${mine.pool.name}`,
-          round: mine.pool.current,
+          round: mine.round?.n ?? null,
           rounds: mine.pool.rounds.length,
-          // Retardataire : son prochain rattrapage, sinon il a fini ; les autres : la ronde en cours, sinon fini (rattrapages a part).
-          status: mine.late ? p?.status ?? "done" : mine.pool.done || !mine.pool.current ? "done" : p?.status ?? "bye",
+          // Mon prochain match (rattrapage pour un retardataire) ; plus aucun : j'ai fini (rattrapages des autres a part).
+          status: p?.status ?? "done",
           opponent: opp ? tref(opp) : null,
           sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null,
           rank: mine.rank,
@@ -79,6 +79,15 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
           late: mine.late,
           extra: mine.extra.map((x) => tref(x.a)),
           poolDone: mine.pool.done,
+          // L'ordre de tous les matchs de ma poule, pour que chacun s'organise sur les terrains.
+          order: [...mine.pool.rounds.flatMap((r) => r.pairings.map((x) => ({ round: r.n as number | null, x }))), ...mine.pool.catchUp.map((x) => ({ round: null as number | null, x }))].map(({ round, x }) => ({
+            round,
+            a: tref(x.a).name,
+            b: x.b ? tref(x.b).name : null,
+            status: x.status,
+            score: x.sets ? x.sets.map(([s1, s2]) => `${s1}-${s2}`).join(" ") : null,
+            mine: x.a === me.id || x.b === me.id,
+          })),
         };
       }
     }
