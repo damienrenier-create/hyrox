@@ -49,7 +49,7 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 
 export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; eloPerPoint: number };
 export const TOUR_POOL_SIZES = [3, 4, 5, 6, 0] as const; // 0 = une seule poule (toute la classe)
-export const TOUR_POINTS = [11, 15, 21] as const;
+export const TOUR_POINTS = [11, 13, 15, 21] as const; // 13 : Sartay 10/11
 export const TOUR_ELO_PER_POINT = [10, 15, 20, 25, 30, 40, 50] as const;
 export const HANDICAP_ELO_PER_POINT = 20;
 export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSettings {
