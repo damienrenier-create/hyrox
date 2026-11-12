@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
@@ -187,7 +187,7 @@ const BM_TARGETS = [11, 13, 15, 21, 0] as const; // 0 = sans limite (match au te
 // `initialTarget` : points du set d'un match de tournoi (sinon le dernier choix de ce telephone, 21 par defaut).
 // `rule` : regle de fin de set d'un match de tournoi (12/11 : par defaut le premier a l'objectif gagne ; option 2 points
 // d'ecart, eventuellement plafonnee). Sans regle (match ordinaire) : 2 points d'ecart, plafond 30 en 21 (sinon objectif + 4).
-export type LiveRule = { deuce: boolean; cap: number };
+export type LiveRule = { deuce: boolean; cap: number; sets?: 1 | 2 | 3 }; // sets : format du match de tournoi (balle de match)
 export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
@@ -243,6 +243,23 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const cap = rule ? rule.cap : target === 21 ? 30 : target + 4;
   const hi = Math.max(cur[0], cur[1]);
   const setWinner = target > 0 && (deuce ? (hi >= target && Math.abs(cur[0] - cur[1]) >= 2) || (cap > target && hi >= cap) : hi >= target) ? (cur[0] > cur[1] ? 0 : 1) : null;
+  // Balle de set / de match (Sartay 12/11 : « l'arbitre reçoit une petite notif quand il encode la balle de match ») : un
+  // point de plus fait gagner le set ; c'est une balle de MATCH si ce set termine le match (format du tournoi : 1 set,
+  // 2e set gagnant au meilleur des 3, ou dernier des 2 sets). Match hors tournoi : format inconnu, « balle de set ».
+  const setPoint = (side: 0 | 1) => {
+    if (target <= 0 || setWinner !== null) return false;
+    const me = cur[side] + 1;
+    const op = cur[side === 0 ? 1 : 0];
+    return deuce ? (me >= target && me - op >= 2) || (cap > target && me >= cap) : me >= target;
+  };
+  const setsWon = (side: 0 | 1) => sets.slice(0, -1).filter(([x, y]) => (side === 0 ? x > y : y > x)).length;
+  const matchPoint = (side: 0 | 1) => (rule?.sets === 1 ? true : rule?.sets === 3 ? setsWon(side) >= 1 : rule?.sets === 2 ? sets.length >= 2 : false);
+  const alerts = ([0, 1] as const).filter(setPoint).map((side) => ({ side, match: matchPoint(side) }));
+  const alertKey = alerts.map((x) => `${x.side}${x.match ? "m" : "s"}`).join(",");
+  useEffect(() => {
+    if (!alertKey) return;
+    try { navigator.vibrate?.(alertKey.includes("m") ? [120, 80, 120] : 120); } catch { /* vibreur absent */ }
+  }, [alertKey]);
   const names = [aName, bName];
   // Fin du match a tout moment (Sartay 10/11 : « l'arbitre doit pouvoir mettre fin au match meme si le score n'est pas
   // atteint : eleve blesse, cours termine… ; ajoute juste une petite confirmation »).
@@ -259,7 +276,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     });
   }
   const panel = (side: 0 | 1) => (
-    <div className={cx("rounded-3xl p-3 text-white flex flex-col gap-2", side === 0 ? "bg-brand" : "bg-sea")}>
+    <div className={cx("rounded-3xl p-3 text-white flex flex-col gap-2", side === 0 ? "bg-brand" : "bg-sea", alerts.some((x) => x.side === side) && "ring-4 ring-red-500")}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-display text-lg font-extrabold truncate">{names[side]}</span>
         {server === side && <span className="text-xs font-bold bg-white/25 rounded-full px-2 py-0.5 whitespace-nowrap">🏸 au service</span>}
@@ -287,6 +304,11 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
           ))}
         </div>
         {error && <p className={ui.alertErr}>{error}</p>}
+        {alerts.length > 0 && (
+          <div className="rounded-2xl bg-red-600 text-white text-center font-display text-lg font-extrabold px-3 py-2 animate-pulse" role="status">
+            {alerts.map((x) => `🔥 Balle de ${x.match ? "match" : "set"} pour ${names[x.side]}`).join(" · ")}
+          </div>
+        )}
         {panel(0)}
         {panel(1)}
         {setWinner !== null && sets.length < BM_MAX_SETS && (

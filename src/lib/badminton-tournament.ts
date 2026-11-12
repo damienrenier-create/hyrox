@@ -78,12 +78,12 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints) };
 }
 // Regle de fin de set d'une rencontre : son objectif (match, sinon poule, sinon tournoi), 2 points d'ecart ou pas, plafond.
-export type TourRule = { points: number; deuce: boolean; cap: number };
+export type TourRule = { points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3 };
 export const pairKey = (a: string, b: string) => [a, b].sort().join("|");
 export function ruleFor(s: TourSettings, players: TourPlayer[], a: string, b: string): TourRule {
   const pool = players.find((p) => p.studentId === a)?.pool;
   const points = s.matchPoints[pairKey(a, b)] ?? (pool && s.poolPoints[pool]) ?? s.points;
-  return { points, deuce: s.deuce, cap: s.deuce && s.cap > points ? s.cap : 0 };
+  return { points, deuce: s.deuce, cap: s.deuce && s.cap > points ? s.cap : 0, sets: s.sets };
 }
 export const ruleText = (r: TourRule) => (r.deuce ? `${r.points} points, 2 points d'écart${r.cap ? ` (max ${r.cap})` : ""}` : `${r.points} points, le premier à ${r.points} gagne`);
 // « 1 set de 15 points », « 2 sets de 11 points, 2 points d'écart (max 15) », « 2 sets gagnants (au meilleur des 3) de 21 points ».

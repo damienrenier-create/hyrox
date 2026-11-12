@@ -44,7 +44,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const tour = activeTournament(await loadTournaments(sessionId));
   let tourCard: TourCardData | null = null;
   // Regle de chaque match de tournoi de la seance (pour reprendre un arbitrage en direct avec le bon objectif).
-  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => { const r = ruleFor(tour.settings, tour.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap }]; }) : []);
+  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => { const r = ruleFor(tour.settings, tour.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap, sets: r.sets }]; }) : []);
   if (tour) {
     const tm = await loadTournamentMatches(tour.id);
     const tp = await peopleOf(tm, tour.players.map((p) => p.studentId));

@@ -143,7 +143,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const rosterIds = new Set(roster.map((p) => p.id));
   const elsewhere = active ? [] : (await loadTournaments(null)).filter((t) => t.sessionId !== session.id && t.players.some((p) => rosterIds.has(p.studentId)));
   // Regle de chaque match du tournoi en cours (le prof qui reprend un arbitrage en direct garde l'objectif du match).
-  const liveRules = Object.fromEntries(active ? matches.filter((m) => m.tournamentId === active.id).map((m) => { const r = ruleFor(active.settings, active.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap }]; }) : []);
+  const liveRules = Object.fromEntries(active ? matches.filter((m) => m.tournamentId === active.id).map((m) => { const r = ruleFor(active.settings, active.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap, sets: r.sets }]; }) : []);
   const tour: BmTourProps = {
     entrants: roster
       .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)))

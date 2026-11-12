@@ -20,7 +20,7 @@ import { toMs } from "@/lib/scheduling";
 // `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance ; `target` (match de
 // tournoi) : les points du set du tournoi, proposes d'office au tableau de score de l'arbitre.
 // `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number } } | { duplicate: { matchId: string; text: string } };
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3 } } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -66,7 +66,7 @@ function done(sessionId: string | null) {
 
 // Tournoi en cours de la seance (09/11) : un match entre deux joueurs qui doivent s'y affronter lui est rattache.
 // Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
-async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number } | null> {
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3 } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
@@ -444,7 +444,7 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap } } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {
