@@ -185,7 +185,10 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
 // suivent pendant un envoi, seul le dernier score est renvoye (c'est une photo du score : rien ne se perd).
 const BM_TARGETS = [11, 13, 15, 21, 0] as const; // 0 = sans limite (match au temps) ; 13 : Sartay 10/11
 // `initialTarget` : points du set d'un match de tournoi (sinon le dernier choix de ce telephone, 21 par defaut).
-export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; onClose: () => void }) {
+// `rule` : regle de fin de set d'un match de tournoi (12/11 : par defaut le premier a l'objectif gagne ; option 2 points
+// d'ecart, eventuellement plafonnee). Sans regle (match ordinaire) : 2 points d'ecart, plafond 30 en 21 (sinon objectif + 4).
+export type LiveRule = { deuce: boolean; cap: number };
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
@@ -236,8 +239,10 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, o
   }
   const pickTarget = (t: number) => { setTarget(t); try { localStorage.setItem("reps_bm_target", String(t)); } catch { /* stockage indisponible */ } };
   // Set gagne (rappel seulement, l'arbitre decide) : la cible atteinte avec 2 points d'avance, ou le plafond (30 a 21 points).
-  const cap = target === 21 ? 30 : target + 4;
-  const setWinner = target > 0 && ((Math.max(cur[0], cur[1]) >= target && Math.abs(cur[0] - cur[1]) >= 2) || Math.max(cur[0], cur[1]) >= cap) ? (cur[0] > cur[1] ? 0 : 1) : null;
+  const deuce = rule ? rule.deuce : true;
+  const cap = rule ? rule.cap : target === 21 ? 30 : target + 4;
+  const hi = Math.max(cur[0], cur[1]);
+  const setWinner = target > 0 && (deuce ? (hi >= target && Math.abs(cur[0] - cur[1]) >= 2) || (cap > target && hi >= cap) : hi >= target) ? (cur[0] > cur[1] ? 0 : 1) : null;
   const names = [aName, bName];
   // Fin du match a tout moment (Sartay 10/11 : « l'arbitre doit pouvoir mettre fin au match meme si le score n'est pas
   // atteint : eleve blesse, cours termine… ; ajoute juste une petite confirmation »).
@@ -294,7 +299,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, o
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <span className={ui.hint}>Set en</span>
+          <span className={ui.hint}>{rule ? (rule.deuce ? `Tournoi : 2 points d'écart${rule.cap ? ` (max ${rule.cap})` : ""} · ` : "Tournoi : le premier au score gagne · ") : ""}Set en</span>
           {BM_TARGETS.map((t) => (
             <button key={t} type="button" onClick={() => pickTarget(t)} className={cx(ui.chip, target === t ? ui.chipBrand : ui.chipMuted, "py-1")}>{t ? `${t} points` : "sans limite"}</button>
           ))}

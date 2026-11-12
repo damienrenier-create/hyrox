@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
-import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction } from "@/app/eleve/badminton-actions";
+import { TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
+import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
@@ -11,7 +11,7 @@ import { btn, cx, ui } from "@/lib/ui";
 // le tournoi avant de lancer ; puis le suivre et le clore. Regles : src/lib/badminton-tournament.ts.
 
 export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean };
-export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }>; gone: string[] };
+export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }>; gone: string[]; settings: TourSettings; players: TourPlayer[] };
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
 export type TourCandidate = { id: string; name: string; className: string | null };
@@ -61,11 +61,14 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   const [sets, setSets] = useState<1 | 2 | 3>(1);
   const [points, setPoints] = useState(15);
   const [eloPerPoint, setEloPerPoint] = useState(20);
+  // Fin du set (12/11) : par defaut le premier a l'objectif gagne ; option 2 points d'ecart, plafond facultatif.
+  const [deuce, setDeuce] = useState(false);
+  const [cap, setCap] = useState(0);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const poolSize = poolSizes[kind];
   const poolCount = poolCounts[kind];
-  const settings = readTourSettings({ sets, points, poolSize, poolCount, eloPerPoint }, kind);
+  const settings = readTourSettings({ sets, points, poolSize, poolCount, eloPerPoint, deuce, cap }, kind);
   const byId = useMemo(() => new Map(entrants.map((e) => [e.id, e])), [entrants]);
   const chosen = entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo }));
   const preview = makePlayers(kind, chosen, settings);
@@ -76,7 +79,7 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   function launch() {
     setError("");
     start(async () => {
-      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, poolCount, sets: settings.sets, points, eloPerPoint });
+      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, poolCount, sets: settings.sets, points, eloPerPoint, deuce, cap: settings.cap });
       if ("error" in res) { setError(res.error); return; }
       router.refresh();
     });
@@ -117,6 +120,19 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
         <div>
           <span className={ui.label}>Points par set</span>
           <div className={ui.segmented}>{TOUR_POINTS.map((n) => <button key={n} type="button" onClick={() => setPoints(n)} className={seg(points === n)}>{n}</button>)}</div>
+        </div>
+        <div>
+          <span className={ui.label}>Fin du set</span>
+          <div className={ui.segmented}>
+            <button type="button" onClick={() => setDeuce(false)} className={seg(!deuce)}>Premier à {points}</button>
+            <button type="button" onClick={() => setDeuce(true)} className={seg(deuce)}>2 points d&apos;écart</button>
+          </div>
+          {deuce && (
+            <select value={settings.cap} onChange={(e) => setCap(Number(e.target.value))} className={`${ui.input} mt-1`} aria-label="Plafond">
+              <option value={0}>sans plafond</option>
+              {TOUR_CAPS.filter((c) => c > points).map((c) => <option key={c} value={c}>max {c}</option>)}
+            </select>
+          )}
         </div>
         {kind === "HANDICAP" && (
           <div>
@@ -205,6 +221,15 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
     });
   }
   const [goneId, setGoneId] = useState("");
+  // Score final (12/11) : regle par defaut du tournoi, objectif d'une poule ou d'un match.
+  function setRule(patch: Parameters<typeof setTournamentRuleAction>[1]) {
+    setError("");
+    start(async () => {
+      const res = await setTournamentRuleAction(t.id, patch);
+      if ("error" in res) setError(res.error);
+      else router.refresh();
+    });
+  }
   function setGone(id: string, gone: boolean) {
     if (!id) return;
     if (gone && !confirm(`${t.names[id]?.name ?? "Ce joueur"} quitte le tournoi ? Ses matchs pas encore joués sortent de l'ordre ; ses matchs joués restent. Vous pourrez le remettre s'il revient.`)) return;
@@ -239,6 +264,24 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
       </div>
       {!closed && (
         <div className={`${ui.cardPad} space-y-1`}>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-bold">🎯 Score final :</span>
+            <select value={t.settings.points} disabled={pending} onChange={(e) => setRule({ points: Number(e.target.value) })} className={`${ui.input} w-auto`} aria-label="Score final par défaut">
+              {TOUR_POINTS.map((n) => <option key={n} value={n}>{n} points</option>)}
+            </select>
+            <label className="flex items-center gap-1"><input type="checkbox" className={ui.check} checked={t.settings.deuce} disabled={pending} onChange={(e) => setRule({ deuce: e.target.checked })} /> 2 points d&apos;écart</label>
+            {t.settings.deuce && (
+              <select value={t.settings.cap} disabled={pending} onChange={(e) => setRule({ cap: Number(e.target.value) })} className={`${ui.input} w-auto`} aria-label="Plafond du tournoi">
+                <option value={0}>sans plafond</option>
+                {TOUR_CAPS.filter((c) => c > t.settings.points).map((c) => <option key={c} value={c}>max {c}</option>)}
+              </select>
+            )}
+          </div>
+          <p className={ui.hint}>Pour tous les matchs du tournoi ; une poule ou un match peut avoir son propre score (menus « pts » ci-dessous). Les matchs déjà joués ne changent pas.</p>
+        </div>
+      )}
+      {!closed && (
+        <div className={`${ui.cardPad} space-y-1`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold text-sm">🚪 Joueur parti :</span>
             <select value={goneId} onChange={(e) => setGoneId(e.target.value)} className={`${ui.input} w-auto`} aria-label="Joueur parti">
@@ -270,20 +313,36 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
-      {t.bracket ? <BracketBoard b={t.bracket} names={t.names} /> : <PoolsBoard pools={pools} names={t.names} />}
+      {t.bracket ? <BracketBoard b={t.bracket} names={t.names} t={t} onRule={closed ? undefined : setRule} /> : <PoolsBoard pools={pools} names={t.names} t={t} onRule={closed ? undefined : setRule} />}
     </section>
   );
 }
 
 const tagOf = (status: string) => (status === "gone" ? "🚪 parti" : status === "played" ? "✅" : status === "live" ? "🔴 en direct" : status === "disputed" ? "⚠️ contesté" : status === "tie" ? "⚖️ égalité : à départager" : status === "wait" ? "" : "⏳");
 
-function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["names"] }) {
+// Objectif d'un match a part : menu « pts » (valeur vide = celui de la poule ou du tournoi).
+type OnRule = (patch: Parameters<typeof setTournamentRuleAction>[1]) => void;
+function MatchPoints({ t, a, b, onRule }: { t: TourView; a: string; b: string; onRule?: OnRule }) {
+  const own = t.settings.matchPoints[pairKey(a, b)];
+  const pool = t.players.find((p) => p.studentId === a)?.pool;
+  const base = (pool && t.settings.poolPoints[pool]) || t.settings.points;
+  if (!onRule) return own ? <span className="text-xs text-accent-ink"> · {own} pts</span> : null;
+  return (
+    <select value={own ?? ""} onChange={(e) => onRule({ match: { a, b, points: e.target.value ? Number(e.target.value) : null } })} className={cx("ml-1 text-xs rounded border px-1 py-0", own ? "border-accent text-accent-ink font-bold" : "border-line text-ink-3")} aria-label="Score final de ce match">
+      <option value="">{base} pts</option>
+      {TOUR_POINTS.filter((n) => n !== base).map((n) => <option key={n} value={n}>{n} pts</option>)}
+    </select>
+  );
+}
+
+function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
+  const editable = (p: TourPairing) => !!p.b && p.status !== "played" && p.status !== "bye" && p.status !== "gone";
   const line = (p: TourPairing) => {
     if (p.status === "bye") return <><b>{nm(p.a)}</b> <span className="text-ink-3">· repos</span></>;
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     const h = p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]})</span> : null;
-    return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span></>;
+    return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}</>;
   };
   return (
     <>
@@ -291,7 +350,14 @@ function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["name
         {pools.map((p) => (
           <div key={p.name} className={`${ui.cardPad} space-y-2`}>
             <div className="flex items-center justify-between gap-2">
-              <p className="font-display text-lg font-extrabold">{pools.length > 1 ? `Poule ${p.name}` : "Tous les joueurs"}</p>
+              <p className="font-display text-lg font-extrabold">{pools.length > 1 ? `Poule ${p.name}` : "Tous les joueurs"}
+                {onRule ? (
+                  <select value={t.settings.poolPoints[p.name] ?? ""} onChange={(e) => onRule({ pool: { name: p.name, points: e.target.value ? Number(e.target.value) : null } })} className={cx("ml-2 text-xs font-sans font-normal rounded border px-1 py-0.5 align-middle", t.settings.poolPoints[p.name] ? "border-accent text-accent-ink font-bold" : "border-line text-ink-3")} aria-label={`Score final de la poule ${p.name}`}>
+                    <option value="">{t.settings.points} pts (tournoi)</option>
+                    {TOUR_POINTS.filter((n) => n !== t.settings.points).map((n) => <option key={n} value={n}>{n} pts</option>)}
+                  </select>
+                ) : t.settings.poolPoints[p.name] ? <span className="ml-2 text-xs font-sans text-accent-ink">{t.settings.poolPoints[p.name]} pts</span> : null}
+              </p>
               <span className={cx(ui.chip, p.done ? ui.chipOk : ui.chipWarn)}>{p.done ? "terminée" : `ronde ${p.current}/${p.rounds.length}`}</span>
             </div>
             <table className="w-full text-sm">
@@ -333,12 +399,12 @@ function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["name
   );
 }
 
-function BracketBoard({ b, names }: { b: Bracket; names: TourView["names"] }) {
+function BracketBoard({ b, names, t, onRule }: { b: Bracket; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null | undefined) => (id ? names[id]?.name ?? "?" : id === null ? "exempt" : "…");
   const line = (p: BracketPairing) => {
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{nm(p.a ?? p.b)}</b> passe (exempt)</>}</span>;
-    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span></>;
+    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span>{p.a && p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={p.status === "todo" || p.status === "live" || p.status === "disputed" || p.status === "tie" ? onRule : undefined} />}</>;
   };
   return (
     <div className="space-y-3">

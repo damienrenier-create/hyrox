@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
-import { bracketMineOf, bracketOf, formatText, mineOf, poolsOf } from "@/lib/badminton-tournament";
+import { bracketMineOf, bracketOf, formatText, mineOf, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
@@ -43,10 +43,14 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   // Tournoi en cours (09/11) : mon prochain adversaire (poule ou tableau), le handicap, mon classement.
   const tour = activeTournament(await loadTournaments(sessionId));
   let tourCard: TourCardData | null = null;
+  // Regle de chaque match de tournoi de la seance (pour reprendre un arbitrage en direct avec le bon objectif).
+  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => { const r = ruleFor(tour.settings, tour.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap }]; }) : []);
   if (tour) {
     const tm = await loadTournamentMatches(tour.id);
     const tp = await peopleOf(tm, tour.players.map((p) => p.studentId));
     const tref = (id: string): BmPersonRef => { const p = tp.get(id) ?? people.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
+    // Format affiche : celui de MON prochain match (objectif du match, de la poule ou du tournoi).
+    const fmt = (a: string | null | undefined, b: string | null | undefined) => (a && b ? formatText(tour.settings, ruleFor(tour.settings, tour.players, a, b).points) : formatText(tour.settings));
     const base = { kind: tour.kind, label: tour.label, format: formatText(tour.settings) };
     if (tour.kind === "BRACKET") {
       const mine = bracketMineOf(bracketOf(tour.players, tm), me.id);
@@ -54,7 +58,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const p = mine.pairing;
         const meA = p?.a === me.id;
         const opp = p ? (meA ? p.b : p.a) : null;
-        tourCard = { ...base, where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank, order: null };
+        tourCard = { ...base, format: fmt(p?.a, p?.b), where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank, order: null };
       }
     } else {
       const mine = mineOf(poolsOf(tour.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
@@ -65,6 +69,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const h = p?.handicap;
         tourCard = {
           ...base,
+          format: fmt(p?.a, p?.b),
           where: mine.pool.players.length === tour.players.length ? "tous contre tous" : `poule ${mine.pool.name}`,
           round: mine.round?.n ?? null,
           rounds: mine.pool.rounds.length,
@@ -87,6 +92,8 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             status: x.status,
             score: x.sets ? x.sets.map(([s1, s2]) => `${s1}-${s2}`).join(" ") : null,
             mine: x.a === me.id || x.b === me.id,
+            // objectif a part (match ou poule) : affiche a cote de la rencontre
+            points: x.b && ruleFor(tour.settings, tour.players, x.a, x.b).points !== tour.settings.points ? ruleFor(tour.settings, tour.players, x.a, x.b).points : null,
           })),
         };
       }
@@ -108,6 +115,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         mine={mine}
         refereed={refereed}
         tour={tourCard}
+        liveRules={liveRules}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>

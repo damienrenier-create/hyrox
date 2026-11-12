@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
 import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-actions";
-import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../_components/BadmintonParts";
+import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
 import { usePulse } from "../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
@@ -21,7 +21,7 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
 // `tour` : le tournoi par poules de la seance (09/11), absent pour les matchs libres.
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps }) {
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {} }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   usePulse(pulse, 10000, !refLive);
@@ -61,7 +61,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
   return (
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} onClose={() => setRefLive(null)} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} onClose={() => setRefLive(null)} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi label="Matchs encodés" value={live} />
         <Kpi label="Validés" value={count("VALIDATED")} tone="ok" />

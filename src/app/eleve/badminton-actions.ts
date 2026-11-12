@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pendingPairing, readGone, readLate, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -19,7 +19,8 @@ import { toMs } from "@/lib/scheduling";
 
 // `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance ; `target` (match de
 // tournoi) : les points du set du tournoi, proposes d'office au tableau de score de l'arbitre.
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number } | { duplicate: { matchId: string; text: string } };
+// `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number } } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -65,13 +66,14 @@ function done(sessionId: string | null) {
 
 // Tournoi en cours de la seance (09/11) : un match entre deux joueurs qui doivent s'y affronter lui est rattache.
 // Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
-async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number } | null> {
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
-  if (t.kind !== "HANDICAP") return { id: t.id, start: null, points: t.settings.points };
+  const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
+  if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
   const elo = (id: string) => t.players.find((p) => p.studentId === id)?.elo ?? 0;
-  return { id: t.id, start: handicapOf(elo(a), elo(b), t.settings), points: t.settings.points };
+  return { id: t.id, start: handicapOf(elo(a), elo(b), { ...t.settings, points: rule.points }), ...rule };
 }
 
 // Match libre : les temoins demandes a la saisie (au plus 2, ni joueurs, ni celui qui encode).
@@ -269,14 +271,14 @@ export async function attestMatchAction(matchId: string, saw: boolean): Promise<
 }
 
 // ===== Tournois (Sartay 09/11) : le prof lance un tournoi par poules dans sa seance, puis le clot (rien n'est efface) =====
-export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number }): Promise<BmResult> {
+export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number; deuce?: boolean; cap?: number }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
   if (!c.session) return { error: "Un tournoi se lance dans une séance." };
   if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance : clos-le d'abord." };
   const kind = readTourKind(input.kind);
-  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: input.eloPerPoint }, kind);
+  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: input.eloPerPoint, deuce: input.deuce, cap: input.cap }, kind);
   const roster = new Set((await badmintonRoster(c.session)).filter((p) => !p.staff).map((p) => p.id));
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
@@ -329,6 +331,36 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
       await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), late: [...readLate(row.settings), id] } });
     });
   }
+  done(row.sessionId);
+  return { ok: true };
+}
+
+// Score final d'un tournoi en cours (12/11) : objectif par defaut, 2 points d'ecart et plafond ; objectif d'une poule ou
+// d'un match (points null = revenir a l'objectif par defaut). Les matchs deja joues ne changent pas.
+export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null } }): Promise<BmResult> {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(row.sessionId);
+  if ("error" in c) return c;
+  if (!c.staff) return { error: "Réservé aux profs." };
+  const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
+  const cur = (row.settings ?? {}) as Record<string, unknown>;
+  const s = t.settings;
+  const poolPoints = { ...s.poolPoints };
+  const matchPoints = { ...s.matchPoints };
+  if (patch.pool) {
+    if (!t.players.some((p) => p.pool === patch.pool!.name)) return { error: "Poule introuvable." };
+    if (patch.pool.points) poolPoints[patch.pool.name] = patch.pool.points;
+    else delete poolPoints[patch.pool.name];
+  }
+  if (patch.match) {
+    const { a, b } = patch.match;
+    if (!t.players.some((p) => p.studentId === a) || !t.players.some((p) => p.studentId === b)) return { error: "Ces joueurs ne sont pas dans le tournoi." };
+    if (patch.match.points) matchPoints[pairKey(a, b)] = patch.match.points;
+    else delete matchPoints[pairKey(a, b)];
+  }
+  const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints }, t.kind);
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints } });
   done(row.sessionId);
   return { ok: true };
 }
@@ -412,7 +444,7 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {

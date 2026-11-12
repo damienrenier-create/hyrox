@@ -53,7 +53,12 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 
 // poolCount (12/11, « je veux pouvoir choisir le nombre de poules, en plus du nombre de joueurs dans chaque poule ») :
 // s'il est donne (> 0), il l'emporte sur poolSize.
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number };
+// Score final (12/11 : « par defaut, tous les matchs d'un tournoi ont le meme objectif final ; il faut pouvoir, par poule,
+// changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
+// option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
+// matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number> };
+export const TOUR_CAPS = [13, 15, 17, 21, 25, 30] as const;
 export const TOUR_POOL_SIZES = [3, 4, 5, 6, 0] as const; // 0 = une seule poule (toute la classe)
 export const TOUR_POOL_COUNTS = [2, 3, 4, 5, 6, 8] as const;
 export const TOUR_POINTS = [11, 13, 15, 21] as const; // 13 : Sartay 10/11
@@ -67,10 +72,22 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   const poolSize = TOUR_POOL_SIZES.includes(Number(o.poolSize) as never) ? Number(o.poolSize) : kind === "HANDICAP" ? 0 : 4;
   const eloPerPoint = TOUR_ELO_PER_POINT.includes(Number(o.eloPerPoint) as never) ? Number(o.eloPerPoint) : HANDICAP_ELO_PER_POINT;
   const poolCount = TOUR_POOL_COUNTS.includes(Number(o.poolCount) as never) ? Number(o.poolCount) : 0;
-  return { sets, points, poolSize, poolCount, eloPerPoint };
+  const deuce = o.deuce === true;
+  const cap = deuce && TOUR_CAPS.includes(Number(o.cap) as never) && Number(o.cap) > points ? Number(o.cap) : 0;
+  const pointsMap = (v: unknown): Record<string, number> => Object.fromEntries(Object.entries(v && typeof v === "object" ? (v as Record<string, unknown>) : {}).filter(([, n]) => TOUR_POINTS.includes(Number(n) as never)).map(([k, n]) => [k, Number(n)]));
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints) };
 }
-// « 1 set de 15 points », « 2 sets de 11 points », « 2 sets gagnants (au meilleur des 3) de 21 points ».
-export const formatText = (s: TourSettings) => `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants (au meilleur des 3)"} de ${s.points} points`;
+// Regle de fin de set d'une rencontre : son objectif (match, sinon poule, sinon tournoi), 2 points d'ecart ou pas, plafond.
+export type TourRule = { points: number; deuce: boolean; cap: number };
+export const pairKey = (a: string, b: string) => [a, b].sort().join("|");
+export function ruleFor(s: TourSettings, players: TourPlayer[], a: string, b: string): TourRule {
+  const pool = players.find((p) => p.studentId === a)?.pool;
+  const points = s.matchPoints[pairKey(a, b)] ?? (pool && s.poolPoints[pool]) ?? s.points;
+  return { points, deuce: s.deuce, cap: s.deuce && s.cap > points ? s.cap : 0 };
+}
+export const ruleText = (r: TourRule) => (r.deuce ? `${r.points} points, 2 points d'écart${r.cap ? ` (max ${r.cap})` : ""}` : `${r.points} points, le premier à ${r.points} gagne`);
+// « 1 set de 15 points », « 2 sets de 11 points, 2 points d'écart (max 15) », « 2 sets gagnants (au meilleur des 3) de 21 points ».
+export const formatText = (s: TourSettings, points = s.points) => `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants (au meilleur des 3)"} de ${points} points${s.deuce ? `, 2 points d'écart${s.cap > points ? ` (max ${s.cap})` : ""}` : ""}`;
 
 export type TourEntrant = { id: string; elo: number };
 export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number; late?: boolean; gone?: boolean };
@@ -161,7 +178,8 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
       const raw = pairingOf(a, b, matches);
       // Joueur parti : sa rencontre pas encore jouee (ni en cours) sort de l'ordre.
       const p: TourPairing = b && (goneIds.has(a) || goneIds.has(b)) && (raw.status === "todo" || raw.status === "disputed") ? { ...raw, status: "gone" } : raw;
-      return handicap && b ? { ...p, handicap: handicapOf(eloOf.get(a) ?? 0, eloOf.get(b) ?? 0, handicap) } : p;
+      // Handicap proportionnel a l'objectif de CETTE rencontre (poule ou match a part).
+      return handicap && b ? { ...p, handicap: handicapOf(eloOf.get(a) ?? 0, eloOf.get(b) ?? 0, { ...handicap, points: ruleFor(handicap, players, a, b).points }) } : p;
     };
     // Rondes : les joueurs du depart seulement (un retardataire ne les change pas) ; puis ses matchs de rattrapage.
     const rounds = roundRobin(ids.filter((id) => !lateIds.includes(id))).map((pairs, i) => ({ n: i + 1, pairings: pairs.map(([a, b]) => withH(a, b)) }));

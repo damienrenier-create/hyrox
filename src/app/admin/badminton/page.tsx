@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, freeRoster, loadEloBoard, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
-import { bracketOf, formatText, poolsOf } from "@/lib/badminton-tournament";
+import { bracketOf, formatText, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
@@ -134,12 +134,16 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
       names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.className ?? null }])),
       gone: t.players.filter((p) => p.gone).map((p) => p.studentId),
+      settings: t.settings,
+      players: t.players,
     };
   };
   const active = activeTournament(tours);
   const previous = tours.find((t) => t.closedAt) ?? null;
   const rosterIds = new Set(roster.map((p) => p.id));
   const elsewhere = active ? [] : (await loadTournaments(null)).filter((t) => t.sessionId !== session.id && t.players.some((p) => rosterIds.has(p.studentId)));
+  // Regle de chaque match du tournoi en cours (le prof qui reprend un arbitrage en direct garde l'objectif du match).
+  const liveRules = Object.fromEntries(active ? matches.filter((m) => m.tournamentId === active.id).map((m) => { const r = ruleFor(active.settings, active.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap }]; }) : []);
   const tour: BmTourProps = {
     entrants: roster
       .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)))
@@ -156,7 +160,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")} · ${isSessionOpen(session) ? "séance ouverte" : "séance fermée"}`} back={back} />
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} />
       </main>
     </div>
   );
