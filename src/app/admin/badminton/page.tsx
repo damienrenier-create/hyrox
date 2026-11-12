@@ -11,7 +11,7 @@ import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
 import { gradeOfAnswers } from "@/lib/carnet";
 import { BM_FREE, matchState, pupilStats, viewOf, type BmMatch, type BmPersonRef } from "@/lib/badminton";
 import { isTestClass, notDeleted, readSessionClasses } from "@/lib/session-roles";
-import { isSessionOpen, toMs } from "@/lib/scheduling";
+import { isOnePClass, isSessionOpen, linkedClassesFor, toMs } from "@/lib/scheduling";
 import { TopBar } from "../../_components/TopBar";
 import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, type BmTourProps } from "./BadmintonStaff";
 import type { TourView } from "./TournamentPanel";
@@ -118,6 +118,10 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   // matchs d'un tournoi se lisent toutes seances confondues (il peut se continuer au cours suivant).
   const tours = await loadTournaments(session.id);
   const present = new Set(matches.flatMap((m) => [m.playerAId, m.playerBId, m.createdById]));
+  // Eleves de 1P rattaches a ces classes (ils y ont deja joue) : proposes et coches comme les eleves de la classe.
+  const oneP = roster.filter((p) => !p.staff && isOnePClass(p.className));
+  const linked = await linkedClassesFor(oneP.map((p) => p.id));
+  const attached = new Set(oneP.filter((p) => [...(linked.get(p.id) ?? [])].some((c) => classes.includes(c))).map((p) => p.id));
   const tourView = async (t: BmTournament): Promise<TourView> => {
     const tm = await loadTournamentMatches(t.id);
     const tp = await peopleOf(tm, t.players.map((p) => p.studentId));
@@ -137,12 +141,12 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const elsewhere = active ? [] : (await loadTournaments(null)).filter((t) => t.sessionId !== session.id && t.players.some((p) => rosterIds.has(p.studentId)));
   const tour: BmTourProps = {
     entrants: roster
-      .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id)))
+      .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)))
       .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
     active: active ? await tourView(active) : null,
     previous: previous ? await tourView(previous) : null,
     // Retardataires possibles : les eleves de la seance pas encore dans le tournoi en cours.
-    candidates: active ? roster.filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id)) && !active.players.some((x) => x.studentId === p.id)).map((p) => ({ id: p.id, name: p.name, className: p.className })) : [],
+    candidates: active ? roster.filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)) && !active.players.some((x) => x.studentId === p.id)).map((p) => ({ id: p.id, name: p.name, className: p.className })) : [],
     elsewhere: elsewhere.map((t) => ({ id: t.id, label: t.label, players: t.players.length, when: `le ${new Date(t.createdAt).toLocaleDateString("fr-BE", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" })}` })),
   };
 

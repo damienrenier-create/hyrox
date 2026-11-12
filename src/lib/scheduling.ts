@@ -331,16 +331,46 @@ export async function ensureAutoSessions(onlyClasses?: string[]) {
 }
 
 // Seances ouvertes visibles pour un eleve : sa classe est dans la seance, ou il y est membre/arbitre.
+// Eleves de 1P integres a d'autres classes (Sartay 12/11 : « Kalil, de 1P, est aussi en 5A » ; « les deux ») : un eleve
+// de 1P est rattache aux classes des seances ou il a deja joue (equipe, ou match de badminton comme joueur ou arbitre).
+// Il garde sa classe (il se connecte toujours par elle) et voit en plus les seances de ces classes.
+export const isOnePClass = (className: string | null | undefined) => !!className && /^1p/i.test(className.trim());
+export async function linkedClassesFor(userIds: string[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>(userIds.map((id) => [id, new Set<string>()]));
+  if (!userIds.length) return out;
+  const [members, asA, asB, asRef] = await Promise.all([
+    db.orm.public.TeamMember.where((m) => m.userId.in(userIds)).all(),
+    db.orm.public.BadmintonMatch.where((m) => m.playerAId.in(userIds)).all(),
+    db.orm.public.BadmintonMatch.where((m) => m.playerBId.in(userIds)).all(),
+    db.orm.public.BadmintonMatch.where((m) => m.createdById.in(userIds)).all(),
+  ]);
+  const teams = members.length ? await db.orm.public.Team.where((t) => t.id.in([...new Set(members.map((m) => m.teamId))])).all() : [];
+  const sessionOfTeam = new Map(teams.map((t) => [t.id, t.sessionId]));
+  const links: [string, string][] = [];
+  for (const m of members) { const sid = sessionOfTeam.get(m.teamId); if (sid) links.push([m.userId, sid]); }
+  for (const m of asA) if (m.sessionId) links.push([m.playerAId, m.sessionId]);
+  for (const m of asB) if (m.sessionId) links.push([m.playerBId, m.sessionId]);
+  for (const m of asRef) if (m.sessionId) links.push([m.createdById, m.sessionId]);
+  const sids = [...new Set(links.map(([, s]) => s))];
+  const sessions = sids.length ? (await db.orm.public.Session.where((s) => s.id.in(sids)).all()).filter(notDeleted) : [];
+  const classesOf = new Map(sessions.map((s) => [s.id, readSessionClasses(s.settings)]));
+  for (const [uid, sid] of links) for (const c of classesOf.get(sid) ?? []) if (!isOnePClass(c)) out.get(uid)?.add(c);
+  return out;
+}
+
 export async function openSessionsForStudent(userId: string, className: string | null) {
-  if (className) await ensureAutoSessions([className]);
+  // 1P : aussi les classes ou il joue deja (voir linkedClassesFor).
+  const linked = isOnePClass(className) ? [...((await linkedClassesFor([userId])).get(userId) ?? [])] : [];
+  if (className) await ensureAutoSessions([className, ...linked]);
   const open = await listOpenSessions();
   // Seance garcons / filles (01/10) : par sa classe, un eleve ne voit que la seance de son sexe (sexe inconnu : les deux).
   const me = open.some((s) => readSessionSex(s.settings)) ? await db.orm.public.User.where({ id: userId }).first() : null;
+  // (un eleve de 1P rattache voit aussi les seances de ses classes d'accueil)
   const out = [];
   for (const s of open) {
     const classes = readSessionClasses(s.settings);
     const sex = readSessionSex(s.settings);
-    if (className && classes.includes(className) && (!sex || !me?.sex || me.sex === sex)) {
+    if (className && (classes.includes(className) || classes.some((c) => linked.includes(c))) && (!sex || !me?.sex || me.sex === sex)) {
       out.push(s);
       continue;
     }
