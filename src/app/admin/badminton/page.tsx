@@ -133,6 +133,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       pools: t.kind === "BRACKET" ? null : poolsOf(t.players, tm, t.kind === "HANDICAP" ? t.settings : null),
       bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
       names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.className ?? null }])),
+      gone: t.players.filter((p) => p.gone).map((p) => p.studentId),
     };
   };
   const active = activeTournament(tours);

@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pendingPairing, readLate, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pendingPairing, readGone, readLate, readTourKind, readTourSettings } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -329,6 +329,25 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
       await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), late: [...readLate(row.settings), id] } });
     });
   }
+  done(row.sessionId);
+  return { ok: true };
+}
+
+// Joueur parti avant la fin du tournoi (12/11) : `gone` true = le retirer (ses matchs non joues sortent de l'ordre),
+// false = le remettre s'il revient. Rien n'est efface (settings.gone).
+export async function setPlayerGoneAction(tournamentId: string, studentId: string, gone: boolean): Promise<BmResult> {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(row.sessionId);
+  if ("error" in c) return c;
+  if (!c.staff) return { error: "Réservé aux profs." };
+  const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
+  const id = String(studentId ?? "");
+  if (!t.players.some((p) => p.studentId === id)) return { error: "Cet élève ne participe pas au tournoi." };
+  const list = new Set(readGone(row.settings));
+  if (gone) list.add(id);
+  else list.delete(id);
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), gone: [...list] } });
   done(row.sessionId);
   return { ok: true };
 }

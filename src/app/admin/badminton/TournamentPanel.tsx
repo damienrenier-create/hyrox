@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
-import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction } from "@/app/eleve/badminton-actions";
+import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
@@ -11,7 +11,7 @@ import { btn, cx, ui } from "@/lib/ui";
 // le tournoi avant de lancer ; puis le suivre et le clore. Regles : src/lib/badminton-tournament.ts.
 
 export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean };
-export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }> };
+export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }>; gone: string[] };
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
 export type TourCandidate = { id: string; name: string; className: string | null };
@@ -204,6 +204,17 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
       else { setLateId(""); router.refresh(); }
     });
   }
+  const [goneId, setGoneId] = useState("");
+  function setGone(id: string, gone: boolean) {
+    if (!id) return;
+    if (gone && !confirm(`${t.names[id]?.name ?? "Ce joueur"} quitte le tournoi ? Ses matchs pas encore joués sortent de l'ordre ; ses matchs joués restent. Vous pourrez le remettre s'il revient.`)) return;
+    setError("");
+    start(async () => {
+      const res = await setPlayerGoneAction(t.id, id, gone);
+      if ("error" in res) setError(res.error);
+      else { setGoneId(""); router.refresh(); }
+    });
+  }
   function close() {
     if (!confirm("Clore le tournoi ? Il restera consultable et ses matchs restent comptés ; vous pourrez en lancer un autre.")) return;
     setError("");
@@ -226,6 +237,25 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
         </div>
         {!closed && <button type="button" disabled={pending} onClick={close} className={btn.smGhost}>Clore le tournoi</button>}
       </div>
+      {!closed && (
+        <div className={`${ui.cardPad} space-y-1`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-sm">🚪 Joueur parti :</span>
+            <select value={goneId} onChange={(e) => setGoneId(e.target.value)} className={`${ui.input} w-auto`} aria-label="Joueur parti">
+              <option value="">Choisir un joueur…</option>
+              {Object.entries(t.names).filter(([id]) => !t.gone.includes(id)).sort((a, b) => a[1].name.localeCompare(b[1].name, "fr")).map(([id, n]) => <option key={id} value={id}>{n.name}{n.className ? ` (${n.className})` : ""}</option>)}
+            </select>
+            <button type="button" disabled={pending || !goneId} onClick={() => setGone(goneId, true)} className={btn.smGhost}>Retirer du tournoi</button>
+          </div>
+          {t.gone.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+              <span className={ui.hint}>Partis :</span>
+              {t.gone.map((id) => <span key={id} className={cx(ui.chip, ui.chipMuted)}>{t.names[id]?.name ?? "?"} <button type="button" disabled={pending} onClick={() => setGone(id, false)} className="underline ml-1">↩ remettre</button></span>)}
+            </div>
+          )}
+          <p className={ui.hint}>Pour un élève qui doit partir avant la fin (blessé, rendez-vous…) : ses matchs pas encore joués sortent de l&apos;ordre, plus personne ne l&apos;attend{t.bracket ? " (au tableau, son adversaire passe)" : ""}. Rien n&apos;est effacé.</p>
+        </div>
+      )}
       {!closed && candidates.length > 0 && (
         <div className={`${ui.cardPad} space-y-1`}>
           <div className="flex flex-wrap items-center gap-2">
@@ -245,7 +275,7 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
   );
 }
 
-const tagOf = (status: string) => (status === "played" ? "✅" : status === "live" ? "🔴 en direct" : status === "disputed" ? "⚠️ contesté" : status === "tie" ? "⚖️ égalité : à départager" : status === "wait" ? "" : "⏳");
+const tagOf = (status: string) => (status === "gone" ? "🚪 parti" : status === "played" ? "✅" : status === "live" ? "🔴 en direct" : status === "disputed" ? "⚠️ contesté" : status === "tie" ? "⚖️ égalité : à départager" : status === "wait" ? "" : "⏳");
 
 function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["names"] }) {
   const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
@@ -272,7 +302,7 @@ function PoolsBoard({ pools, names }: { pools: TourPool[]; names: TourView["name
                 {p.standings.map((s) => (
                   <tr key={s.id} className="border-t border-line">
                     <td className="p-1.5 tabular-nums text-ink-3">{s.rank}</td>
-                    <td className="p-1.5 font-bold">{nm(s.id)} <span className="text-ink-3 text-xs font-normal">{names[s.id]?.className} · {s.elo}</span></td>
+                    <td className={cx("p-1.5 font-bold", s.gone && "text-ink-3")}>{nm(s.id)}{s.gone && <span className={cx(ui.chip, ui.chipMuted, "ml-1 text-[10px]")}>parti</span>} <span className="text-ink-3 text-xs font-normal">{names[s.id]?.className} · {s.elo}</span></td>
                     <td className="p-1.5 text-right tabular-nums font-bold">{String(s.score).replace(".", ",")}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.won}-{s.drawn}-{s.lost}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.setsFor}-{s.setsAgainst}</td>

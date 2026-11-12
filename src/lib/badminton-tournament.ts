@@ -44,6 +44,10 @@ export const TOUR_KINDS: { id: TourKind; name: string }[] = [
   { id: "HANDICAP", name: "Championnat à handicap" },
 ];
 // Retardataires d'un tournoi de poules (settings.late : leurs identifiants).
+// Joueurs partis avant la fin du tournoi (settings.gone, 12/11 : « il part seulement avant la fin du tournoi ») : leurs
+// matchs pas encore joues sortent de l'ordre (statut « gone », plus personne ne les attend ; au tableau, l'adversaire
+// passe), leurs matchs joues restent ; on peut les remettre s'ils reviennent.
+export const readGone = (settings: unknown): string[] => { const l = (settings as { gone?: unknown } | null)?.gone; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
 export const readLate = (settings: unknown): string[] => { const l = (settings as { late?: unknown } | null)?.late; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
 export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === "HANDICAP" ? v : "POOLS");
 
@@ -69,7 +73,7 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
 export const formatText = (s: TourSettings) => `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants (au meilleur des 3)"} de ${s.points} points`;
 
 export type TourEntrant = { id: string; elo: number };
-export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number; late?: boolean };
+export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number; late?: boolean; gone?: boolean };
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 
@@ -122,11 +126,11 @@ export function handicapOf(eloA: number, eloB: number, s: TourSettings): [number
   return eloA >= eloB ? [0, pts] : [pts, 0];
 }
 
-export type PairingStatus = "todo" | "live" | "played" | "disputed" | "bye" | "wait" | "tie";
+export type PairingStatus = "todo" | "live" | "played" | "disputed" | "bye" | "wait" | "tie" | "gone";
 // Une rencontre : `sets` toujours dans le sens a puis b ; `handicap` = points d'avance [a, b] (championnat a handicap).
 export type TourPairing = { a: string; b: string | null; status: PairingStatus; matchId: string | null; sets: BmSet[] | null; winner: "A" | "B" | "DRAW" | null; handicap?: [number, number] };
 export type TourRound = { n: number; pairings: TourPairing[] };
-export type TourStanding = { id: string; rank: number; played: number; won: number; drawn: number; lost: number; score: number; setsFor: number; setsAgainst: number; pointsFor: number; pointsAgainst: number; elo: number };
+export type TourStanding = { id: string; gone?: boolean; rank: number; played: number; won: number; drawn: number; lost: number; score: number; setsFor: number; setsAgainst: number; pointsFor: number; pointsAgainst: number; elo: number };
 export type TourPool = { name: string; players: string[]; rounds: TourRound[]; catchUp: TourPairing[]; current: number | null; done: boolean; standings: TourStanding[] };
 
 const samePair = (m: BmMatch, a: string, b: string) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
@@ -152,16 +156,19 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
     const members = players.filter((p) => p.pool === name).sort((a, b) => a.seed - b.seed);
     const ids = members.map((p) => p.studentId);
     const lateIds = members.filter((p) => p.late).map((p) => p.studentId);
+    const goneIds = new Set(members.filter((p) => p.gone).map((p) => p.studentId));
     const withH = (a: string, b: string | null) => {
-      const p = pairingOf(a, b, matches);
+      const raw = pairingOf(a, b, matches);
+      // Joueur parti : sa rencontre pas encore jouee (ni en cours) sort de l'ordre.
+      const p: TourPairing = b && (goneIds.has(a) || goneIds.has(b)) && (raw.status === "todo" || raw.status === "disputed") ? { ...raw, status: "gone" } : raw;
       return handicap && b ? { ...p, handicap: handicapOf(eloOf.get(a) ?? 0, eloOf.get(b) ?? 0, handicap) } : p;
     };
     // Rondes : les joueurs du depart seulement (un retardataire ne les change pas) ; puis ses matchs de rattrapage.
     const rounds = roundRobin(ids.filter((id) => !lateIds.includes(id))).map((pairs, i) => ({ n: i + 1, pairings: pairs.map(([a, b]) => withH(a, b)) }));
     const catchUp: TourPairing[] = [];
     lateIds.forEach((l, li) => { for (const o of ids) if (o !== l && !lateIds.slice(0, li).includes(o)) catchUp.push(withH(l, o)); });
-    const open = rounds.find((r) => r.pairings.some((p) => p.status !== "played" && p.status !== "bye"));
-    const table = new Map(members.map((p) => [p.studentId, { id: p.studentId, rank: 0, played: 0, won: 0, drawn: 0, lost: 0, score: 0, setsFor: 0, setsAgainst: 0, pointsFor: 0, pointsAgainst: 0, elo: p.elo }]));
+    const open = rounds.find((r) => r.pairings.some((p) => p.status !== "played" && p.status !== "bye" && p.status !== "gone"));
+    const table = new Map(members.map((p) => [p.studentId, { id: p.studentId, gone: !!p.gone, rank: 0, played: 0, won: 0, drawn: 0, lost: 0, score: 0, setsFor: 0, setsAgainst: 0, pointsFor: 0, pointsAgainst: 0, elo: p.elo }]));
     for (const p of [...rounds.flatMap((r) => r.pairings), ...catchUp]) {
       if (p.status !== "played" || !p.b || !p.sets) continue;
       const A = table.get(p.a)!;
@@ -173,9 +180,10 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
       A.played++; B.played++;
       if (p.winner === "A") { A.won++; B.lost++; A.score += 1; } else if (p.winner === "B") { B.won++; A.lost++; B.score += 1; } else { A.drawn++; B.drawn++; A.score += 0.5; B.score += 0.5; }
     }
-    const standings = [...table.values()].sort((x, y) => y.score - x.score || (y.setsFor - y.setsAgainst) - (x.setsFor - x.setsAgainst) || (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst) || y.elo - x.elo);
+    // Un joueur parti est classe apres les autres (il n a pas fini la poule).
+    const standings = [...table.values()].sort((x, y) => Number(x.gone) - Number(y.gone) || y.score - x.score || (y.setsFor - y.setsAgainst) - (x.setsFor - x.setsAgainst) || (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst) || y.elo - x.elo);
     standings.forEach((s, i) => (s.rank = i + 1));
-    return { name, players: ids, rounds, catchUp, current: open?.n ?? null, done: !open && catchUp.every((p) => p.status === "played"), standings };
+    return { name, players: ids, rounds, catchUp, current: open?.n ?? null, done: !open && catchUp.every((p) => p.status === "played" || p.status === "gone"), standings };
   });
 }
 
@@ -200,6 +208,7 @@ export type Bracket = { size: number; rounds: BracketRound[]; ranks: BracketRank
 
 export function bracketOf(players: TourPlayer[], matches: BmMatch[]): Bracket {
   const size = bracketSize(Math.max(2, players.length));
+  const gone = new Set(players.filter((p) => p.gone).map((p) => p.studentId));
   const bySeed = new Map(players.map((p) => [p.seed, p.studentId]));
   let groups: { lo: number; slots: Slot[] }[] = [{ lo: 1, slots: seedOrder(size).map((s) => bySeed.get(s) ?? null) }];
   const where = new Map<string, { lo: number; hi: number }>();
@@ -228,11 +237,16 @@ export function bracketOf(players: TourPlayer[], matches: BmMatch[]): Bracket {
         } else {
           const p = pairingOf(a, b, matches);
           const decided = p.status === "played" && (p.winner === "A" || p.winner === "B");
-          const status: PairingStatus = p.status === "played" && !decided ? "tie" : p.status;
-          pairings.push({ a, b, status, matchId: p.matchId, sets: p.sets, winner: decided ? (p.winner as "A" | "B") : null });
+          // Joueur parti, match pas encore joue : son adversaire passe (le parti va vers le bas du tableau).
+          const forfeit = !decided && p.status !== "live" && (gone.has(a) || gone.has(b));
+          const status: PairingStatus = forfeit ? "gone" : p.status === "played" && !decided ? "tie" : p.status;
+          const winner: "A" | "B" | null = decided ? (p.winner as "A" | "B") : forfeit ? (gone.has(a) && !gone.has(b) ? "B" : "A") : null;
+          pairings.push({ a, b, status, matchId: p.matchId, sets: p.sets, winner });
           if (decided) {
             win.push(p.winner === "A" ? a : b); lose.push(p.winner === "A" ? b : a);
             tally(a, p.winner === "A"); tally(b, p.winner === "B");
+          } else if (forfeit) {
+            win.push(winner === "A" ? a : b); lose.push(winner === "A" ? b : a);
           } else { win.push(undefined); lose.push(undefined); }
         }
       }
@@ -261,6 +275,7 @@ export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: B
   const pa = players.find((p) => p.studentId === a);
   const pb = players.find((p) => p.studentId === b);
   if (!pa || !pb || pa.pool !== pb.pool) return false;
+  if (pa.gone || pb.gone) return false; // un joueur parti n'a plus de rencontre a jouer
   const st = pairingOf(a, b, matches).status;
   return st === "todo" || st === "disputed";
 }
@@ -272,7 +287,7 @@ export function mineOf(pools: TourPool[], studentId: string): TourMine | null {
   const pool = pools.find((p) => p.players.includes(studentId));
   if (!pool) return null;
   const rank = pool.standings.find((s) => s.id === studentId)?.rank ?? 0;
-  const pending = (p: TourPairing) => p.status !== "played" && p.status !== "bye";
+  const pending = (p: TourPairing) => p.status !== "played" && p.status !== "bye" && p.status !== "gone";
   const late = pool.catchUp.some((p) => p.a === studentId) && !pool.rounds.some((r) => r.pairings.some((p) => p.a === studentId || p.b === studentId));
   if (late) {
     const pairing = pool.catchUp.find((p) => (p.a === studentId || p.b === studentId) && pending(p)) ?? null;
@@ -311,7 +326,7 @@ export function bracketMineOf(b: Bracket, studentId: string): BracketMine | null
   if (!me) return null;
   for (const r of b.rounds) for (const g of r.groups) for (const p of g.pairings) {
     if (p.a !== studentId && p.b !== studentId) continue;
-    if (p.status === "played" || p.status === "bye") continue;
+    if (p.status === "played" || p.status === "bye" || p.status === "gone") continue;
     return { round: r.n, rounds: b.rounds.length, lo: g.lo, hi: g.hi, pairing: p, finished: false, rank: null, of: b.ranks.length };
   }
   // Pas de match en vue : soit j'ai fini, soit mon prochain adversaire n'est pas encore connu.

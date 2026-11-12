@@ -219,7 +219,7 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
             {t.order.map((o, i) => (
               <li key={i} className={cx("flex justify-between gap-2 px-1 rounded", o.mine && "bg-brand-soft font-bold", o.status === "played" && "text-ink-3")}>
                 <span className="min-w-0 truncate"><span className="text-ink-3 text-xs tabular-nums">{o.round ? `R${o.round}` : "Ratt."}</span> {o.a}{o.b ? <> – {o.b}</> : <span className="text-ink-3"> · repos</span>}</span>
-                <span className="whitespace-nowrap text-xs">{o.status === "played" ? `✅ ${o.score ?? ""}` : o.status === "live" ? "🔴 en cours" : o.status === "disputed" ? "⚠️" : o.status === "bye" ? "" : "⏳"}</span>
+                <span className="whitespace-nowrap text-xs">{o.status === "played" ? `✅ ${o.score ?? ""}` : o.status === "live" ? "🔴 en cours" : o.status === "disputed" ? "⚠️" : o.status === "bye" ? "" : o.status === "gone" ? "🚪 parti" : "⏳"}</span>
               </li>
             ))}
           </ol>

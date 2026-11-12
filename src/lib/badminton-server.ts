@@ -6,7 +6,7 @@ import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/l
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
-import { readLate, readTourKind, readTourSettings, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { readGone, readLate, readTourKind, readTourSettings, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -68,7 +68,7 @@ export async function loadTournaments(sessionId: string | null): Promise<BmTourn
       settings: readTourSettings(r.settings, readTourKind(r.kind)),
       createdAt: toMs(r.createdAt),
       closedAt: r.cancelledAt ? toMs(r.cancelledAt) : null,
-      players: players.filter((p) => p.tournamentId === r.id).map((p) => ({ studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo, ...(readLate(r.settings).includes(p.studentId) ? { late: true } : {}) })),
+      players: players.filter((p) => p.tournamentId === r.id).map((p) => ({ studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo, ...(readLate(r.settings).includes(p.studentId) ? { late: true } : {}), ...(readGone(r.settings).includes(p.studentId) ? { gone: true } : {}) })),
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
 }
