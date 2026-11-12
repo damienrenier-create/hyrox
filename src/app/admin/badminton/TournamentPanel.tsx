@@ -74,7 +74,7 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   const preview = makePlayers(kind, chosen, settings);
   const poolNames = [...new Set(preview.map((p) => p.pool))];
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const seg = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg", on ? ui.segOn : ui.segOff);
+  const seg = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg whitespace-nowrap", on ? ui.segOn : ui.segOff);
   const nm = (id: string | undefined) => (id ? byId.get(id)?.name ?? "?" : "");
   function launch() {
     setError("");
@@ -96,7 +96,8 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
         {kind === "BRACKET" && "Tableau à têtes de série (selon l'ELO) : à chaque tour, les gagnants jouent les places du haut, les perdants celles du bas. Chacun joue tous les tours : classement final de 1 à N."}
         {kind === "HANDICAP" && "Chacun contre chacun ; le moins bien classé commence chaque set avec des points d'avance pour rendre les matchs serrés. À l'ELO, ces matchs comptent comme entre deux joueurs de même niveau."}
       </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Reglages : ils passent a la ligne au lieu de se chevaucher (12/11 : « l onglet pour regler le nombre de sets se chevauche »). */}
+      <div className="flex flex-wrap gap-x-6 gap-y-3">
         {kind !== "BRACKET" && (
           <div>
             <span className={ui.label}>Joueurs par poule</span>
