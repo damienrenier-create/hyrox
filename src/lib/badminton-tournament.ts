@@ -47,8 +47,11 @@ export const TOUR_KINDS: { id: TourKind; name: string }[] = [
 export const readLate = (settings: unknown): string[] => { const l = (settings as { late?: unknown } | null)?.late; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
 export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === "HANDICAP" ? v : "POOLS");
 
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; eloPerPoint: number };
+// poolCount (12/11, « je veux pouvoir choisir le nombre de poules, en plus du nombre de joueurs dans chaque poule ») :
+// s'il est donne (> 0), il l'emporte sur poolSize.
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number };
 export const TOUR_POOL_SIZES = [3, 4, 5, 6, 0] as const; // 0 = une seule poule (toute la classe)
+export const TOUR_POOL_COUNTS = [2, 3, 4, 5, 6, 8] as const;
 export const TOUR_POINTS = [11, 13, 15, 21] as const; // 13 : Sartay 10/11
 export const TOUR_ELO_PER_POINT = [10, 15, 20, 25, 30, 40, 50] as const;
 export const HANDICAP_ELO_PER_POINT = 20;
@@ -59,7 +62,8 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   const points = TOUR_POINTS.includes(Number(o.points) as never) ? Number(o.points) : 15;
   const poolSize = TOUR_POOL_SIZES.includes(Number(o.poolSize) as never) ? Number(o.poolSize) : kind === "HANDICAP" ? 0 : 4;
   const eloPerPoint = TOUR_ELO_PER_POINT.includes(Number(o.eloPerPoint) as never) ? Number(o.eloPerPoint) : HANDICAP_ELO_PER_POINT;
-  return { sets, points, poolSize, eloPerPoint };
+  const poolCount = TOUR_POOL_COUNTS.includes(Number(o.poolCount) as never) ? Number(o.poolCount) : 0;
+  return { sets, points, poolSize, poolCount, eloPerPoint };
 }
 // « 1 set de 15 points », « 2 sets de 11 points », « 2 sets gagnants (au meilleur des 3) de 21 points ».
 export const formatText = (s: TourSettings) => `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants (au meilleur des 3)"} de ${s.points} points`;
@@ -69,11 +73,12 @@ export type TourPlayer = { studentId: string; pool: string; seed: number; elo: n
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 
-export function makePools(entrants: TourEntrant[], poolSize: number): TourPlayer[] {
+export function makePools(entrants: TourEntrant[], poolSize: number, poolCount = 0): TourPlayer[] {
   const sorted = [...entrants].sort(byElo);
   const n = sorted.length;
   if (!n) return [];
-  const count = poolSize <= 0 ? 1 : Math.max(1, Math.min(POOL_NAMES.length, Math.ceil(n / Math.max(2, poolSize))));
+  // Nombre de poules impose (au moins 2 joueurs par poule), sinon deduit de la taille voulue.
+  const count = poolCount > 0 ? Math.max(1, Math.min(poolCount, Math.floor(n / 2))) : poolSize <= 0 ? 1 : Math.max(1, Math.min(POOL_NAMES.length, Math.ceil(n / Math.max(2, poolSize))));
   const base = Math.floor(n / count);
   const extra = n % count; // les premieres poules ont un joueur de plus
   const out: TourPlayer[] = [];
@@ -86,7 +91,7 @@ export function makePools(entrants: TourEntrant[], poolSize: number): TourPlayer
 }
 // Grand tableau : une seule liste, tete de serie 1 = meilleur ELO.
 export const makeSeeds = (entrants: TourEntrant[]): TourPlayer[] => [...entrants].sort(byElo).map((e, i) => ({ studentId: e.id, pool: "T", seed: i + 1, elo: Math.round(e.elo) }));
-export const makePlayers = (kind: TourKind, entrants: TourEntrant[], s: TourSettings): TourPlayer[] => (kind === "BRACKET" ? makeSeeds(entrants) : makePools(entrants, s.poolSize));
+export const makePlayers = (kind: TourKind, entrants: TourEntrant[], s: TourSettings): TourPlayer[] => (kind === "BRACKET" ? makeSeeds(entrants) : makePools(entrants, s.poolSize, s.poolCount));
 
 // Chacun contre chacun (methode du polygone). `null` = repos.
 export function roundRobin(ids: string[]): [string, string | null][][] {

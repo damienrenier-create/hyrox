@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
+import { TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPool } from "@/lib/badminton-tournament";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -56,13 +56,16 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   // Toute la classe par defaut (Sartay 10/11 : « je decoche ceux qui n'y participent pas, ou qui arbitrent, et pas le contraire »).
   const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.map((e) => e.id)));
   const [poolSizes, setPoolSizes] = useState<Record<TourKind, number>>({ POOLS: 4, BRACKET: 0, HANDICAP: 0 });
+  // Nombre de poules (12/11) : s'il est choisi, il remplace « joueurs par poule » (0 = pas choisi).
+  const [poolCounts, setPoolCounts] = useState<Record<TourKind, number>>({ POOLS: 0, BRACKET: 0, HANDICAP: 0 });
   const [sets, setSets] = useState<1 | 2 | 3>(1);
   const [points, setPoints] = useState(15);
   const [eloPerPoint, setEloPerPoint] = useState(20);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const poolSize = poolSizes[kind];
-  const settings = readTourSettings({ sets, points, poolSize, eloPerPoint }, kind);
+  const poolCount = poolCounts[kind];
+  const settings = readTourSettings({ sets, points, poolSize, poolCount, eloPerPoint }, kind);
   const byId = useMemo(() => new Map(entrants.map((e) => [e.id, e])), [entrants]);
   const chosen = entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo }));
   const preview = makePlayers(kind, chosen, settings);
@@ -73,7 +76,7 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   function launch() {
     setError("");
     start(async () => {
-      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, sets: settings.sets, points, eloPerPoint });
+      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, poolCount, sets: settings.sets, points, eloPerPoint });
       if ("error" in res) { setError(res.error); return; }
       router.refresh();
     });
@@ -94,7 +97,13 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
         {kind !== "BRACKET" && (
           <div>
             <span className={ui.label}>Joueurs par poule</span>
-            <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => setPoolSizes((s) => ({ ...s, [kind]: n }))} className={seg(poolSize === n)}>{n || "Tous"}</button>)}</div>
+            <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => { setPoolSizes((s) => ({ ...s, [kind]: n })); setPoolCounts((s) => ({ ...s, [kind]: 0 })); }} className={seg(!poolCount && poolSize === n)}>{n || "Tous"}</button>)}</div>
+          </div>
+        )}
+        {kind !== "BRACKET" && (
+          <div>
+            <span className={ui.label}>… ou nombre de poules</span>
+            <div className={ui.segmented}>{TOUR_POOL_COUNTS.map((n) => <button key={n} type="button" onClick={() => setPoolCounts((s) => ({ ...s, [kind]: s[kind] === n ? 0 : n }))} className={seg(poolCount === n)}>{n}</button>)}</div>
           </div>
         )}
         <div>

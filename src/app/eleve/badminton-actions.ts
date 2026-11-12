@@ -269,14 +269,14 @@ export async function attestMatchAction(matchId: string, saw: boolean): Promise<
 }
 
 // ===== Tournois (Sartay 09/11) : le prof lance un tournoi par poules dans sa seance, puis le clot (rien n'est efface) =====
-export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; sets: number; points: number; eloPerPoint?: number }): Promise<BmResult> {
+export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
   if (!c.session) return { error: "Un tournoi se lance dans une séance." };
   if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance : clos-le d'abord." };
   const kind = readTourKind(input.kind);
-  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, eloPerPoint: input.eloPerPoint }, kind);
+  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: input.eloPerPoint }, kind);
   const roster = new Set((await badmintonRoster(c.session)).filter((p) => !p.staff).map((p) => p.id));
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
