@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
-import { BM_STAFF_ROLES, activeTournament, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, handicapOf, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
+import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
+import { TOUR_KINDS, calibrateHandicap, handicapOf, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -278,11 +278,15 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   if (!c.session) return { error: "Un tournoi se lance dans une séance." };
   if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance : clos-le d'abord." };
   const kind = readTourKind(input.kind);
-  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: input.eloPerPoint, deuce: input.deuce, cap: input.cap }, kind);
   const roster = new Set((await badmintonRoster(c.session)).filter((p) => !p.staff).map((p) => p.id));
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
   const board = await loadEloBoard();
+  // Championnat a handicap, bareme « automatique » (eloPerPoint absent ou 0) : calcule MAINTENANT sur les matchs joues.
+  const auto = kind === "HANDICAP" && !(Number(input.eloPerPoint) > 0);
+  const points = readTourSettings({ points: input.points }, kind).points;
+  const cal = auto ? calibrateHandicap(handicapSamples(board), points) : null;
+  const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: auto ? cal?.eloPerPoint : input.eloPerPoint, deuce: input.deuce, cap: input.cap, calibration: cal }, kind);
   const players = makePlayers(kind, ids.map((id) => ({ id, elo: board.entries.get(id)?.rating ?? ELO_START })), settings);
   const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   const t = await db.transaction(async (tx) => {

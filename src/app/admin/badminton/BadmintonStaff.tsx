@@ -10,13 +10,14 @@ import { btn, cx, ui } from "@/lib/ui";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fmtElo } from "@/lib/badminton-elo";
 import { TournamentPanel, type TourElsewhere, type TourEntrantRow, type TourView } from "./TournamentPanel";
+import type { HandicapCalibration } from "@/lib/badminton-tournament";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
 export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null };
 export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
 type SeCol = { id: string; short: string; label: string };
 type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder";
-export type BmTourProps = { entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: { id: string; name: string; className: string | null }[] };
+export type BmTourProps = { entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: { id: string; name: string; className: string | null }[]; calibrations?: Record<number, HandicapCalibration | null> };
 type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
@@ -100,7 +101,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "elo" && <EloTable rows={elo} groupClasses={groupClasses} />}
 
-      {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} />}
+      {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} calibrations={tour.calibrations} />}
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
     </div>

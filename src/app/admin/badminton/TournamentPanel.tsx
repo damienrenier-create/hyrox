@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
+import { HANDICAP_ELO_PER_POINT, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -15,12 +15,13 @@ export type TourView = { id: string; kind: TourKind; label: string; format: stri
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
 export type TourCandidate = { id: string; name: string; className: string | null };
-export function TournamentPanel({ sessionId, entrants, active, previous, elsewhere, candidates }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: TourCandidate[] }) {
+// calibrations : le bareme du handicap calcule sur les matchs joues, par longueur de set (apercu ; le serveur le recalcule au lancement).
+export function TournamentPanel({ sessionId, entrants, active, previous, elsewhere, candidates, calibrations = {} }: { sessionId: string; entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: TourCandidate[]; calibrations?: Record<number, HandicapCalibration | null> }) {
   if (active) return <TournamentBoard t={active} candidates={candidates} />;
   return (
     <div className="space-y-4">
       {elsewhere.length > 0 && <Elsewhere sessionId={sessionId} list={elsewhere} />}
-      <NewTournament sessionId={sessionId} entrants={entrants} />
+      <NewTournament sessionId={sessionId} entrants={entrants} calibrations={calibrations} />
       {previous && (
         <details className={`${ui.cardPad}`}>
           <summary className="cursor-pointer font-bold">Dernier tournoi clos : {previous.label}</summary>
@@ -50,7 +51,7 @@ function Elsewhere({ sessionId, list }: { sessionId: string; list: TourElsewhere
   );
 }
 
-function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: TourEntrantRow[] }) {
+function NewTournament({ sessionId, entrants, calibrations }: { sessionId: string; entrants: TourEntrantRow[]; calibrations: Record<number, HandicapCalibration | null> }) {
   const router = useRouter();
   const [kind, setKind] = useState<TourKind>("POOLS");
   // Toute la classe par defaut (Sartay 10/11 : « je decoche ceux qui n'y participent pas, ou qui arbitrent, et pas le contraire »).
@@ -60,7 +61,8 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   const [poolCounts, setPoolCounts] = useState<Record<TourKind, number>>({ POOLS: 0, BRACKET: 0, HANDICAP: 0 });
   const [sets, setSets] = useState<1 | 2 | 3>(1);
   const [points, setPoints] = useState(15);
-  const [eloPerPoint, setEloPerPoint] = useState(20);
+  // Bareme du handicap (13/11) : 0 = automatique, calcule au lancement sur les matchs joues de la meme longueur de set.
+  const [eloPerPoint, setEloPerPoint] = useState(0);
   // Fin du set (12/11) : par defaut le premier a l'objectif gagne ; option 2 points d'ecart, plafond facultatif.
   const [deuce, setDeuce] = useState(false);
   const [cap, setCap] = useState(0);
@@ -68,7 +70,9 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
   const [pending, start] = useTransition();
   const poolSize = poolSizes[kind];
   const poolCount = poolCounts[kind];
-  const settings = readTourSettings({ sets, points, poolSize, poolCount, eloPerPoint, deuce, cap }, kind);
+  const cal = calibrations[points] ?? null;
+  const settings = readTourSettings({ sets, points, poolSize, poolCount, eloPerPoint: eloPerPoint || cal?.eloPerPoint || HANDICAP_ELO_PER_POINT, deuce, cap }, kind);
+  const hc = (gap: number) => handicapOf(1000 + gap, 1000, settings)[1];
   const byId = useMemo(() => new Map(entrants.map((e) => [e.id, e])), [entrants]);
   const chosen = entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo }));
   const preview = makePlayers(kind, chosen, settings);
@@ -139,9 +143,13 @@ function NewTournament({ sessionId, entrants }: { sessionId: string; entrants: T
           <div>
             <span className={ui.label}>1 point d&apos;avance pour … d&apos;ELO d&apos;écart</span>
             <select value={eloPerPoint} onChange={(e) => setEloPerPoint(Number(e.target.value))} className={ui.input}>
-              {TOUR_ELO_PER_POINT.map((n) => <option key={n} value={n}>{n}{n === 20 ? " (d'après les 515 matchs joués)" : ""}</option>)}
+              <option value={0}>Automatique{cal ? ` : ${cal.eloPerPoint}` : ""}</option>
+              {TOUR_ELO_PER_POINT.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
-            <span className={ui.hint}>Pour un set de 15 (proportionnel en 11 ou 21) ; au plus la moitié du set.</span>
+            <span className={ui.hint}>
+              {eloPerPoint === 0 && (cal ? `Calculé sur les matchs joués, ${calibrationText(cal, points)} ; recalculé au lancement puis figé pour le tournoi. ` : "Calculé au lancement sur les matchs joués. ")}
+              Valeur pour un set de 15. En {points} points : écart de 50 d&apos;ELO → +{hc(50)}, 100 → +{hc(100)}, 200 → +{hc(200)} (au plus la moitié du set).
+            </span>
           </div>
         )}
       </div>
@@ -260,6 +268,12 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
             {t.format}
             {t.bracket ? ` · tableau de ${t.bracket.size} places · ${t.bracket.done ? "terminé" : "en cours"}` : ` · ${pools.filter((p) => p.done).length}/${pools.length} poule${pools.length > 1 ? "s" : ""} terminée${pools.length > 1 ? "s" : ""}`}
           </p>
+          {t.kind === "HANDICAP" && (
+            <p className={ui.hint}>
+              ⚖️ Handicap : 1 point d&apos;avance pour {t.settings.eloPerPoint} d&apos;ELO d&apos;écart (pour un set de 15)
+              {t.settings.calibration ? `, calculé au lancement ${calibrationText(t.settings.calibration, t.settings.points)}` : ", choisi à la main"}
+            </p>
+          )}
         </div>
         {!closed && <button type="button" disabled={pending} onClick={close} className={btn.smGhost}>Clore le tournoi</button>}
       </div>

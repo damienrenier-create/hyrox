@@ -23,7 +23,7 @@ const K_NEW_GAMES = 10;
 const MARGIN_FULL = 16;
 
 export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean }; // even : match a handicap
-export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number };
+export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
 
 export function marginFactor(r: BmResult): number {
@@ -51,8 +51,8 @@ export function computeElo(games: EloGame[]): Map<string, EloEntry> {
     const afterB = B.rating + kB * m * (1 - scoreA - (1 - expectA));
     const outA = scoreA === 1 ? "W" : scoreA === 0 ? "L" : "D";
     const outB = scoreA === 1 ? "L" : scoreA === 0 ? "W" : "D";
-    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA });
-    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB });
+    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA, ...(g.even ? { even: true } : {}) });
+    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB, ...(g.even ? { even: true } : {}) });
     for (const [p, o, r] of [[A, outA, afterA], [B, outB, afterB]] as const) {
       p.rating = r;
       p.games++;

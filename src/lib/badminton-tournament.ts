@@ -57,7 +57,7 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number> };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null };
 export const TOUR_CAPS = [13, 15, 17, 21, 25, 30] as const;
 export const TOUR_POOL_SIZES = [3, 4, 5, 6, 0] as const; // 0 = une seule poule (toute la classe)
 export const TOUR_POOL_COUNTS = [2, 3, 4, 5, 6, 8] as const;
@@ -70,12 +70,46 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   if (kind === "BRACKET" && sets === 2) sets = 1; // un tableau a besoin d'un vainqueur : pas de match en 2 sets
   const points = TOUR_POINTS.includes(Number(o.points) as never) ? Number(o.points) : 15;
   const poolSize = TOUR_POOL_SIZES.includes(Number(o.poolSize) as never) ? Number(o.poolSize) : kind === "HANDICAP" ? 0 : 4;
-  const eloPerPoint = TOUR_ELO_PER_POINT.includes(Number(o.eloPerPoint) as never) ? Number(o.eloPerPoint) : HANDICAP_ELO_PER_POINT;
+  // Bareme du handicap : un entier de 5 a 100 (calcule au lancement depuis le 13/11, ou choisi a la main).
+  const eloPerPoint = Number.isInteger(Number(o.eloPerPoint)) && Number(o.eloPerPoint) >= 5 && Number(o.eloPerPoint) <= 100 ? Number(o.eloPerPoint) : HANDICAP_ELO_PER_POINT;
+  const cal = o.calibration && typeof o.calibration === "object" ? (o.calibration as Record<string, unknown>) : null;
+  const calibration = cal && Number(cal.all) > 0 ? { eloPerPoint, near: Number(cal.near) || 0, all: Number(cal.all), lo: Number(cal.lo) || 0, hi: Number(cal.hi) || 0 } : null;
   const poolCount = TOUR_POOL_COUNTS.includes(Number(o.poolCount) as never) ? Number(o.poolCount) : 0;
   const deuce = o.deuce === true;
   const cap = deuce && TOUR_CAPS.includes(Number(o.cap) as never) && Number(o.cap) > points ? Number(o.cap) : 0;
   const pointsMap = (v: unknown): Record<string, number> => Object.fromEntries(Object.entries(v && typeof v === "object" ? (v as Record<string, unknown>) : {}).filter(([, n]) => TOUR_POINTS.includes(Number(n) as never)).map(([k, n]) => [k, Number(n)]));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints) };
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration };
+}
+
+// ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le
+// championnat » ; « est-ce que le bareme change en fonction du nombre de points dans le set ? ») =====
+// Regression sans constante de l'ecart de points d'un set sur l'ecart d'ELO avant le match, sur les sets JOUES D'UNE
+// LONGUEUR PROCHE de l'objectif (objectif ± 3 points : la proportion « set 2 fois plus long = ecart 2 fois plus grand »
+// ne se verifie pas dans les matchs joues). Avec moins de CALIBRATION_ENOUGH sets proches, l'estimation est completee
+// par TOUS les sets ramenes a la longueur de l'objectif, au prorata (45 sets proches = 45 % du poids). Le resultat est
+// exprime pour un set de 15, comme le reglage manuel (handicapOf le ramene a l'objectif).
+export const CALIBRATION_ENOUGH = 100;
+export type HandicapSample = { gap: number; margin: number; len: number };
+export type HandicapCalibration = { eloPerPoint: number; near: number; all: number; lo: number; hi: number };
+function slope(rows: HandicapSample[], margin: (s: HandicapSample) => number): number | null {
+  const den = rows.reduce((t, s) => t + s.gap * s.gap, 0);
+  return den > 0 ? rows.reduce((t, s) => t + s.gap * margin(s), 0) / den : null; // points d'ecart par point d'ELO
+}
+export function calibrateHandicap(samples: HandicapSample[], target: number): HandicapCalibration | null {
+  const lo = target - 3, hi = target + 3;
+  const near = samples.filter((s) => s.len >= lo && s.len <= hi);
+  const kAll = samples.length >= 20 ? slope(samples, (s) => (s.margin * target) / Math.max(5, s.len)) : null;
+  const kNear = near.length >= 20 ? slope(near, (s) => s.margin) : null;
+  const w = kNear === null ? 0 : kAll === null ? 1 : Math.min(1, near.length / CALIBRATION_ENOUGH);
+  const k = w === 0 ? kAll : w === 1 ? kNear : w * kNear! + (1 - w) * kAll!;
+  if (k === null || !(k > 0)) return null;
+  const eloPerPoint = Math.max(5, Math.min(100, Math.round(target / (15 * k))));
+  return { eloPerPoint, near: w > 0 ? near.length : 0, all: samples.length, lo, hi };
+}
+export function calibrationText(c: HandicapCalibration, target: number): string {
+  if (c.near >= CALIBRATION_ENOUGH) return `d'après ${c.near} sets de ${c.lo} à ${c.hi} points`;
+  if (c.near > 0) return `d'après ${c.near} sets de ${c.lo} à ${c.hi} points, complétés par les ${c.all} sets joués ramenés à ${target}`;
+  return `d'après les ${c.all} sets joués, ramenés à ${target} points`;
 }
 // Regle de fin de set d'une rencontre : son objectif (match, sinon poule, sinon tournoi), 2 points d'ecart ou pas, plafond.
 export type TourRule = { points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3 };

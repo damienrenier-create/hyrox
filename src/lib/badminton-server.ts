@@ -6,7 +6,7 @@ import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/l
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
-import { readGone, readLate, readTourKind, readTourSettings, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -108,6 +108,23 @@ export async function loadEloBoard(): Promise<EloBoard> {
     games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: !!m.tournamentId && even.has(m.tournamentId) });
   }
   return { entries: computeElo(games), people, test };
+}
+
+// Les sets joues (vraies classes) pour calculer le bareme du handicap : ecart d'ELO avant le match, ecart de points, longueur.
+export function handicapSamples(board: EloBoard): HandicapSample[] {
+  const seen = new Set<string>();
+  const out: HandicapSample[] = [];
+  for (const e of board.entries.values()) {
+    if (board.test.has(e.id)) continue;
+    for (const s of e.steps) {
+      if (seen.has(s.matchId) || s.even) continue; // un set de championnat a handicap est fait pour finir a egalite : hors calcul
+      seen.add(s.matchId);
+      const os = board.entries.get(s.opponentId)?.steps.find((x) => x.matchId === s.matchId);
+      if (!os) continue;
+      for (const [x, y] of s.sets) out.push({ gap: s.before - os.before, margin: x - y, len: Math.max(x, y) });
+    }
+  }
+  return out;
 }
 
 // Groupe de cours d'un eleve pour le classement : les classes (et le sexe, si la seance est garcons / filles) de sa
