@@ -35,7 +35,8 @@
 //   chacun des matchs de RATTRAPAGE, quand ses adversaires sont libres ; ils comptent au classement de la poule ;
 // - grand tableau : il prend la derniere tete de serie (a la place d'un exempt), tant que le joueur qui devait profiter de
 //   cet exempt n'a pas encore joue (voir lateBracketSeat).
-import { matchState, swapSets, type BmMatch, type BmSet } from "@/lib/badminton";
+import { isOfficial, matchState, swapSets, type BmMatch, type BmSet } from "@/lib/badminton";
+import { K_NEW_GAMES, computeElo, type EloGame } from "@/lib/badminton-elo";
 
 export type TourKind = "POOLS" | "BRACKET" | "HANDICAP";
 export const TOUR_KINDS: { id: TourKind; name: string }[] = [
@@ -57,7 +58,7 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap> };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number> };
 // Avance IMPOSEE par le prof pour une rencontre (13/11 : « changer l'ecart pour des matchs en particulier ») : `id` = celui
 // qui commence avec `pts` points d'avance ; pts 0 = aucune avance. Cle = pairKey.
 export type MatchHandicap = { id: string; pts: number };
@@ -86,7 +87,10 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
     const x = v && typeof v === "object" ? (v as Record<string, unknown>) : null;
     return x && typeof x.id === "string" && Number.isInteger(Number(x.pts)) && Number(x.pts) >= 0 && Number(x.pts) <= 30 ? [[k, { id: x.id, pts: Number(x.pts) }]] : [];
   }));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap };
+  // Nombre de matchs de chacun a son entree dans le tournoi (13/11) : fixe son K (40 sur ses 10 premiers matchs, puis 20).
+  const lg = o.launchGames && typeof o.launchGames === "object" ? (o.launchGames as Record<string, unknown>) : {};
+  const launchGames = Object.fromEntries(Object.entries(lg).filter(([, n]) => Number.isInteger(Number(n)) && Number(n) >= 0).map(([k, n]) => [k, Number(n)]));
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames };
 }
 
 // ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le
@@ -185,7 +189,26 @@ export function handicapOf(eloA: number, eloB: number, s: TourSettings): [number
   return eloA >= eloB ? [0, pts] : [pts, 0];
 }
 
-// Avance d'une rencontre du championnat : celle que le bareme donne (ELO fige au lancement, objectif de CETTE rencontre)…
+// ELO DU MOMENT au championnat a handicap (Sartay 13/11 : « si c'est facile d'adapter le handicap apres chaque match joue,
+// c'est mieux ») : un joueur ne change d'ELO que quand IL joue ; son ELO du moment = son ELO a l'entree dans le tournoi +
+// ses matchs du championnat deja comptes, avec la regle du classement (match a handicap = esperance ½, K 40 sur ses 10
+// premiers matchs puis 20, ecart au score). Calcule sur les seuls matchs du tournoi (deja charges partout) : leger, et le
+// meme pour le tableau du prof, la carte de l'eleve et l'ouverture du direct. Tournoi sans launchGames (avant le 13/11) :
+// K 20 pour tous.
+export function playersNow(players: TourPlayer[], matches: BmMatch[], s: TourSettings): TourPlayer[] {
+  const ids = new Set(players.map((p) => p.studentId));
+  const start = new Map(players.map((p) => [p.studentId, { rating: p.elo, games: s.launchGames[p.studentId] ?? K_NEW_GAMES }]));
+  const games: EloGame[] = matches.flatMap((m) => {
+    if (!ids.has(m.playerAId) || !ids.has(m.playerBId)) return [];
+    const st = matchState(m);
+    return isOfficial(m, st) ? [{ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: true }] : [];
+  });
+  if (!games.length) return players;
+  const now = computeElo(games, start);
+  return players.map((p) => ({ ...p, elo: Math.round(now.get(p.studentId)?.rating ?? p.elo) }));
+}
+
+// Avance d'une rencontre du championnat : celle que le bareme donne (ELO du joueur passe par playersNow, objectif de CETTE rencontre)…
 export function autoHandicap(s: TourSettings, players: TourPlayer[], a: string, b: string): [number, number] {
   const elo = (id: string) => players.find((p) => p.studentId === id)?.elo ?? 0;
   return handicapOf(elo(a), elo(b), { ...s, points: ruleFor(s, players, a, b).points });

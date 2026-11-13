@@ -19,7 +19,7 @@ export const ELO_START = 1000;
 export const ELO_PROVISIONAL_GAMES = 5;
 const K_NEW = 40;
 const K_SETTLED = 20;
-const K_NEW_GAMES = 10;
+export const K_NEW_GAMES = 10;
 const MARGIN_FULL = 16;
 
 export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean }; // even : match a handicap
@@ -31,11 +31,12 @@ export function marginFactor(r: BmResult): number {
   return 1 + Math.min(MARGIN_FULL, Math.abs(r.points[0] - r.points[1])) / (2 * MARGIN_FULL);
 }
 
-export function computeElo(games: EloGame[]): Map<string, EloEntry> {
+// start (13/11, championnat a handicap) : ELO et nombre de matchs de depart de certains joueurs (sinon 1000 et 0).
+export function computeElo(games: EloGame[], start?: Map<string, { rating: number; games: number }>): Map<string, EloEntry> {
   const out = new Map<string, EloEntry>();
   const get = (id: string) => {
     let e = out.get(id);
-    if (!e) out.set(id, (e = { id, rating: ELO_START, games: 0, won: 0, draws: 0, lost: 0, provisional: true, steps: [] }));
+    if (!e) { const s0 = start?.get(id); out.set(id, (e = { id, rating: s0?.rating ?? ELO_START, games: s0?.games ?? 0, won: 0, draws: 0, lost: 0, provisional: (s0?.games ?? 0) < ELO_PROVISIONAL_GAMES, steps: [] })); }
     return e;
   };
   for (const g of [...games].sort((x, y) => x.at - y.at)) {

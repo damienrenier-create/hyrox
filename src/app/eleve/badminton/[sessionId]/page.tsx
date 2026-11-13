@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
-import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, poolsOf, ruleFor } from "@/lib/badminton-tournament";
+import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
@@ -44,9 +44,11 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const tour = activeTournament(await loadTournaments(sessionId));
   let tourCard: TourCardData | null = null;
   // Regle de chaque match de tournoi de la seance (pour reprendre un arbitrage en direct avec le bon objectif).
-  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => [m.id, liveRuleOf(tour, m)]) : []);
-  if (tour) {
-    const tm = await loadTournamentMatches(tour.id);
+  const tm = tour ? await loadTournamentMatches(tour.id) : [];
+  // Championnat a handicap : ELO du moment (13/11), recalcule apres chaque match joue.
+  const tourNow = tour && tour.kind === "HANDICAP" ? { ...tour, players: playersNow(tour.players, tm, tour.settings) } : tour;
+  const liveRules = Object.fromEntries(tourNow ? matches.filter((m) => m.tournamentId === tourNow.id).map((m) => [m.id, liveRuleOf(tourNow, m)]) : []);
+  if (tour && tourNow) {
     const tp = await peopleOf(tm, tour.players.map((p) => p.studentId));
     const tref = (id: string): BmPersonRef => { const p = tp.get(id) ?? people.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
     // Format affiche : celui de MON prochain match (objectif du match, de la poule ou du tournoi).
@@ -61,7 +63,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         tourCard = { ...base, format: fmt(p?.a, p?.b), where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank, order: null };
       }
     } else {
-      const mine = mineOf(poolsOf(tour.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
+      const mine = mineOf(poolsOf(tourNow.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
       if (mine) {
         const p = mine.pairing;
         const meA = p?.a === me.id;

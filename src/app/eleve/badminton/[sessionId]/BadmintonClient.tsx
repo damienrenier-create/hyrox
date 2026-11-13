@@ -196,8 +196,8 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
         <div className="space-y-2">
           {t.late && <p className="text-sm">Tu es arrivé en cours de tournoi : joue tes <b>matchs de rattrapage</b> contre chacun, quand ton adversaire est libre.</p>}
           <p className="text-sm">{t.late ? "Rattrapage" : bracket ? ronde : `Ton prochain match (${ronde.toLowerCase()})`} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
-          {h && h.mine > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>tu commences chaque set avec {h.mine} point{h.mine > 1 ? "s" : ""} d&apos;avance</b> ({h.mine}-0). Compte-les dans le score final.</p>}
-          {h && h.theirs > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>{t.opponent.name.split(" ")[0]} commence chaque set avec {h.theirs} point{h.theirs > 1 ? "s" : ""} d&apos;avance</b> (0-{h.theirs}). Comptez-les dans le score final.</p>}
+          {h && h.mine > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>tu commences chaque set avec {h.mine} point{h.mine > 1 ? "s" : ""} d&apos;avance</b> ({h.mine}-0). Compte-les dans le score final. L&apos;avance change après chaque match joué.</p>}
+          {h && h.theirs > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>{t.opponent.name.split(" ")[0]} commence chaque set avec {h.theirs} point{h.theirs > 1 ? "s" : ""} d&apos;avance</b> (0-{h.theirs}). Comptez-les dans le score final. L&apos;avance change après chaque match joué.</p>}
           {canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
         </div>
       ) : t.status === "live" ? (

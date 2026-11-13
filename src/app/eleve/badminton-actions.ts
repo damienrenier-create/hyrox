@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, calibrateHandicap, handicapFor, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, calibrateHandicap, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -69,10 +69,12 @@ function done(sessionId: string | null) {
 async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3 } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
-  if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
+  const tm = t ? await loadTournamentMatches(t.id) : [];
+  if (!t || !pendingPairing(t.kind, t.players, tm, a, b)) return null;
   const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
   if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
-  return { id: t.id, start: handicapFor(t.settings, t.players, a, b), ...rule }; // bareme du moment, ou avance imposee par le prof
+  // ELO du moment (13/11) et bareme du moment, ou avance imposee par le prof.
+  return { id: t.id, start: handicapFor(t.settings, playersNow(t.players, tm, t.settings), a, b), ...rule };
 }
 
 // Match libre : les temoins demandes a la saisie (au plus 2, ni joueurs, ni celui qui encode).
@@ -289,7 +291,9 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   const players = makePlayers(kind, ids.map((id) => ({ id, elo: board.entries.get(id)?.rating ?? ELO_START })), settings);
   const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   const t = await db.transaction(async (tx) => {
-    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind, label: `${TOUR_KINDS.find((k) => k.id === kind)!.name} du ${day}`, settings, createdById: c.userId });
+    // launchGames (13/11) : matchs joues par chacun au lancement, pour le K de l'ELO du moment au championnat a handicap.
+    const launchGames = Object.fromEntries(ids.map((id) => [id, board.entries.get(id)?.games ?? 0]));
+    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind, label: `${TOUR_KINDS.find((k) => k.id === kind)!.name} du ${day}`, settings: { ...settings, launchGames }, createdById: c.userId });
     for (const p of players) await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo });
     return t;
   });
@@ -321,7 +325,8 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
   const id = String(studentId ?? "");
   if (t.players.some((p) => p.studentId === id)) return { error: "Cet élève participe déjà au tournoi." };
   if (!(await badmintonRoster(c.session)).some((p) => p.id === id && !p.staff)) return { error: "Cet élève n'est pas dans cette séance." };
-  const elo = Math.round((await loadEloBoard()).entries.get(id)?.rating ?? ELO_START);
+  const entry = (await loadEloBoard()).entries.get(id);
+  const elo = Math.round(entry?.rating ?? ELO_START);
   if (t.kind === "BRACKET") {
     const seat = lateBracketSeat(t.players, await loadTournamentMatches(t.id));
     if (!seat.ok) return { error: seat.reason };
@@ -331,7 +336,7 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
     const seed = Math.max(0, ...t.players.filter((p) => p.pool === pool).map((p) => p.seed)) + 1;
     await db.transaction(async (tx) => {
       await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: id, pool, seed, elo });
-      await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), late: [...readLate(row.settings), id] } });
+      await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), late: [...readLate(row.settings), id], launchGames: { ...t.settings.launchGames, [id]: entry?.games ?? 0 } } });
     });
   }
   done(row.sessionId);

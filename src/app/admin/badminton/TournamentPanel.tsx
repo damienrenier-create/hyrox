@@ -98,7 +98,7 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
       <p className={ui.hint}>
         {kind === "POOLS" && "Poules par niveau (A = les meilleurs ELO) : chacun contre chacun dans sa poule, ronde par ronde."}
         {kind === "BRACKET" && "Tableau à têtes de série (selon l'ELO) : à chaque tour, les gagnants jouent les places du haut, les perdants celles du bas. Chacun joue tous les tours : classement final de 1 à N."}
-        {kind === "HANDICAP" && "Chacun contre chacun ; le moins bien classé commence chaque set avec des points d'avance pour rendre les matchs serrés. À l'ELO, ces matchs comptent comme entre deux joueurs de même niveau."}
+        {kind === "HANDICAP" && "Chacun contre chacun ; le moins bien classé commence chaque set avec des points d'avance pour rendre les matchs serrés. À l'ELO, ces matchs comptent comme entre deux joueurs de même niveau. L'avance se recalcule après chaque match joué, avec l'ELO du moment."}
       </p>
       {/* Reglages : ils passent a la ligne au lieu de se chevaucher (12/11 : « l onglet pour regler le nombre de sets se chevauche »). */}
       <div className="flex flex-wrap gap-x-6 gap-y-3">
@@ -272,6 +272,7 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
             <p className={ui.hint}>
               ⚖️ Handicap : 1 point d&apos;avance pour {t.settings.eloPerPoint} d&apos;ELO d&apos;écart (pour un set de 15)
               {t.settings.calibration ? `, calculé ${calibrationText(t.settings.calibration, t.settings.points)}` : ", choisi à la main"}
+              {" "}· avec l&apos;ELO du moment, recalculé après chaque match joué
             </p>
           )}
         </div>
