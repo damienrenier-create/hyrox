@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { HANDICAP_ELO_PER_POINT, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
+import { HANDICAP_ELO_PER_POINT, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -271,7 +271,7 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
           {t.kind === "HANDICAP" && (
             <p className={ui.hint}>
               ⚖️ Handicap : 1 point d&apos;avance pour {t.settings.eloPerPoint} d&apos;ELO d&apos;écart (pour un set de 15)
-              {t.settings.calibration ? `, calculé au lancement ${calibrationText(t.settings.calibration, t.settings.points)}` : ", choisi à la main"}
+              {t.settings.calibration ? `, calculé ${calibrationText(t.settings.calibration, t.settings.points)}` : ", choisi à la main"}
             </p>
           )}
         </div>
@@ -293,6 +293,20 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
             )}
           </div>
           <p className={ui.hint}>Pour tous les matchs du tournoi ; une poule ou un match peut avoir son propre score (menus « pts » ci-dessous). Les matchs déjà joués ne changent pas.</p>
+        </div>
+      )}
+      {!closed && t.kind === "HANDICAP" && (
+        <div className={`${ui.cardPad} space-y-1`}>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-bold">⚖️ Barème :</span>
+            <span>1 point d&apos;avance pour</span>
+            <select value={t.settings.eloPerPoint} disabled={pending} onChange={(e) => setRule({ eloPerPoint: Number(e.target.value) })} className={`${ui.input} w-auto`} aria-label="Barème du handicap">
+              {[...new Set([t.settings.eloPerPoint, ...TOUR_ELO_PER_POINT])].sort((x, y) => x - y).map((n) => <option key={n} value={n}>{n}</option>)}
+              <option value={0}>↻ recalculer sur les matchs joués</option>
+            </select>
+            <span>d&apos;ELO d&apos;écart (pour un set de 15)</span>
+          </div>
+          <p className={ui.hint}>Pour tous les matchs pas encore commencés (un barème plus petit = plus d&apos;avance). Un match peut avoir son avance imposée (menus « ⚖️ » ci-dessous).</p>
         </div>
       )}
       {!closed && (
@@ -350,13 +364,37 @@ function MatchPoints({ t, a, b, onRule }: { t: TourView; a: string; b: string; o
   );
 }
 
+// Avance d'un match du championnat a handicap (13/11) : celle du bareme par defaut, ou imposee (aucune, +n pour l'un).
+function MatchHandicapPick({ t, a, b, nm, onRule }: { t: TourView; a: string; b: string; nm: (id: string | null) => string; onRule: OnRule }) {
+  const o = t.settings.matchHandicap[pairKey(a, b)];
+  const auto = autoHandicap(t.settings, t.players, a, b);
+  const max = Math.max(1, (t.settings.matchPoints[pairKey(a, b)] ?? t.settings.points) - 1);
+  const first = (id: string) => nm(id).split(" ")[0];
+  const label = (x: number, y: number) => (x ? `+${x} pour ${first(a)}` : y ? `+${y} pour ${first(b)}` : "sans avance");
+  const value = o ? `${o.id === a ? "a" : "b"}:${o.pts}` : "";
+  const pick = (v: string) => {
+    if (!v) return onRule({ handicap: { a, b, to: null, pts: 0 } });
+    const [side, n] = v.split(":");
+    onRule({ handicap: { a, b, to: side === "a" ? a : b, pts: Number(n) } });
+  };
+  const range = Array.from({ length: max }, (_, i) => i + 1);
+  return (
+    <select value={value} onChange={(e) => pick(e.target.value)} className={cx("ml-1 text-xs rounded border px-1 py-0", o ? "border-accent text-accent-ink font-bold" : "border-line text-ink-3")} aria-label="Avance de ce match">
+      <option value="">⚖️ {label(auto[0], auto[1])} (barème)</option>
+      <option value="a:0">⚖️ sans avance</option>
+      {range.map((n) => <option key={`a${n}`} value={`a:${n}`}>⚖️ +{n} pour {first(a)}</option>)}
+      {range.map((n) => <option key={`b${n}`} value={`b:${n}`}>⚖️ +{n} pour {first(b)}</option>)}
+    </select>
+  );
+}
+
 function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
   const editable = (p: TourPairing) => !!p.b && p.status !== "played" && p.status !== "bye" && p.status !== "gone";
   const line = (p: TourPairing) => {
     if (p.status === "bye") return <><b>{nm(p.a)}</b> <span className="text-ink-3">· repos</span></>;
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
-    const h = p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]})</span> : null;
+    const h = t.kind === "HANDICAP" && p.b && onRule && (p.status === "todo" || p.status === "disputed") ? <MatchHandicapPick t={t} a={p.a} b={p.b} nm={nm} onRule={onRule} /> : p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]}{p.handicapForced ? ", imposé" : ""})</span> : p.handicapForced ? <span className="text-xs text-accent-ink"> (sans avance, imposé)</span> : null;
     return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}</>;
   };
   return (

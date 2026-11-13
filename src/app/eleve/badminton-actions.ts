@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, calibrateHandicap, handicapOf, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, calibrateHandicap, handicapFor, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -72,8 +72,7 @@ async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string
   if (!t || !pendingPairing(t.kind, t.players, await loadTournamentMatches(t.id), a, b)) return null;
   const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
   if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
-  const elo = (id: string) => t.players.find((p) => p.studentId === id)?.elo ?? 0;
-  return { id: t.id, start: handicapOf(elo(a), elo(b), { ...t.settings, points: rule.points }), ...rule };
+  return { id: t.id, start: handicapFor(t.settings, t.players, a, b), ...rule }; // bareme du moment, ou avance imposee par le prof
 }
 
 // Match libre : les temoins demandes a la saisie (au plus 2, ni joueurs, ni celui qui encode).
@@ -341,7 +340,10 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
 
 // Score final d'un tournoi en cours (12/11) : objectif par defaut, 2 points d'ecart et plafond ; objectif d'une poule ou
 // d'un match (points null = revenir a l'objectif par defaut). Les matchs deja joues ne changent pas.
-export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null } }): Promise<BmResult> {
+// eloPerPoint (13/11) : changer le bareme du championnat a handicap en cours (0 = le recalculer sur les matchs joues) ;
+// handicap : imposer l'avance d'une rencontre (to = celui qui a l'avance, pts 0 = aucune ; to null = revenir au bareme).
+// Les deux valent pour les matchs pas encore commences : un match en direct garde le score de depart de son ouverture.
+export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number } }): Promise<BmResult> {
   const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
   if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
   const c = await context(row.sessionId);
@@ -363,8 +365,32 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
     if (patch.match.points) matchPoints[pairKey(a, b)] = patch.match.points;
     else delete matchPoints[pairKey(a, b)];
   }
-  const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints }, t.kind);
-  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints } });
+  const matchHandicap = { ...s.matchHandicap };
+  let eloPerPoint = s.eloPerPoint;
+  let calibration = s.calibration;
+  if (patch.handicap) {
+    if (t.kind !== "HANDICAP") return { error: "Ce tournoi n'est pas un championnat à handicap." };
+    const { a, b, to } = patch.handicap;
+    if (!t.players.some((p) => p.studentId === a) || !t.players.some((p) => p.studentId === b)) return { error: "Ces joueurs ne sont pas dans le tournoi." };
+    const pts = Math.round(Number(patch.handicap.pts));
+    if (to === null) delete matchHandicap[pairKey(a, b)];
+    else if ((to !== a && to !== b) || !(pts >= 0 && pts <= 30)) return { error: "Avance impossible." };
+    else matchHandicap[pairKey(a, b)] = { id: to, pts };
+  }
+  if (patch.eloPerPoint !== undefined) {
+    if (t.kind !== "HANDICAP") return { error: "Ce tournoi n'est pas un championnat à handicap." };
+    if (Number(patch.eloPerPoint) > 0) {
+      eloPerPoint = Math.round(Number(patch.eloPerPoint));
+      calibration = null;
+    } else {
+      const cal = calibrateHandicap(handicapSamples(await loadEloBoard()), s.points);
+      if (!cal) return { error: "Pas assez de matchs joués pour calculer le barème." };
+      eloPerPoint = cal.eloPerPoint;
+      calibration = cal;
+    }
+  }
+  const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints, eloPerPoint, calibration, matchHandicap }, t.kind);
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap })) });
   done(row.sessionId);
   return { ok: true };
 }
@@ -448,7 +474,7 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets } } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}) } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {

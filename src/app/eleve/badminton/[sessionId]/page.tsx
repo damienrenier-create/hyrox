@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
-import { bracketMineOf, bracketOf, formatText, mineOf, poolsOf, ruleFor } from "@/lib/badminton-tournament";
+import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
@@ -44,7 +44,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const tour = activeTournament(await loadTournaments(sessionId));
   let tourCard: TourCardData | null = null;
   // Regle de chaque match de tournoi de la seance (pour reprendre un arbitrage en direct avec le bon objectif).
-  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => { const r = ruleFor(tour.settings, tour.players, m.playerAId, m.playerBId); return [m.id, { target: r.points, deuce: r.deuce, cap: r.cap, sets: r.sets }]; }) : []);
+  const liveRules = Object.fromEntries(tour ? matches.filter((m) => m.tournamentId === tour.id).map((m) => [m.id, liveRuleOf(tour, m)]) : []);
   if (tour) {
     const tm = await loadTournamentMatches(tour.id);
     const tp = await peopleOf(tm, tour.players.map((p) => p.studentId));
