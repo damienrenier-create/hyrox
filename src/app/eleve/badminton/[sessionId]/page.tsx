@@ -63,7 +63,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         tourCard = { ...base, format: fmt(p?.a, p?.b), where: mine.lo === mine.hi ? `place ${mine.lo}` : `places ${mine.lo} à ${mine.hi}`, round: mine.round, rounds: mine.rounds, status: mine.finished ? "done" : p?.status ?? "wait", opponent: opp ? tref(opp) : null, sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null, rank: mine.rank, of: mine.of, table: null, headStart: null, late: false, extra: [], poolDone: !!mine.rank, order: null };
       }
     } else {
-      const mine = mineOf(poolsOf(tourNow.players, tm, tour.kind === "HANDICAP" ? tour.settings : null), me.id);
+      const mine = mineOf(poolsOf(tourNow.players, tm, tour.kind === "HANDICAP" ? tour.settings : null, tour.settings.poolLegs), me.id);
       if (mine) {
         const p = mine.pairing;
         const meA = p?.a === me.id;

@@ -131,7 +131,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       kind: t.kind,
       label: t.label,
       format: formatText(t.settings),
-      pools: t.kind === "BRACKET" ? null : poolsOf(now, tm, t.kind === "HANDICAP" ? t.settings : null),
+      pools: t.kind === "BRACKET" ? null : poolsOf(now, tm, t.kind === "HANDICAP" ? t.settings : null, t.settings.poolLegs),
       bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
       names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.className ?? null }])),
       gone: t.players.filter((p) => p.gone).map((p) => p.studentId),

@@ -58,7 +58,7 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number> };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number> };
 // Avance IMPOSEE par le prof pour une rencontre (13/11 : « changer l'ecart pour des matchs en particulier ») : `id` = celui
 // qui commence avec `pts` points d'avance ; pts 0 = aucune avance. Cle = pairKey.
 export type MatchHandicap = { id: string; pts: number };
@@ -90,7 +90,10 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   // Nombre de matchs de chacun a son entree dans le tournoi (13/11) : fixe son K (40 sur ses 10 premiers matchs, puis 20).
   const lg = o.launchGames && typeof o.launchGames === "object" ? (o.launchGames as Record<string, unknown>) : {};
   const launchGames = Object.fromEntries(Object.entries(lg).filter(([, n]) => Number.isInteger(Number(n)) && Number(n) >= 0).map(([k, n]) => [k, Number(n)]));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames };
+  // Matchs retour (13/11) : poolLegs[poule] = 2 → chaque paire de la poule se rencontre deux fois.
+  const pl = o.poolLegs && typeof o.poolLegs === "object" ? (o.poolLegs as Record<string, unknown>) : {};
+  const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2).map(([k]) => [k, 2]));
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs };
 }
 
 // ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le
@@ -238,10 +241,12 @@ export type TourPool = { name: string; players: string[]; rounds: TourRound[]; c
 
 const samePair = (m: BmMatch, a: string, b: string) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
 
-// La rencontre a-b dans les matchs du tournoi : le dernier match non annule entre eux.
-function pairingOf(a: string, b: string | null, matches: BmMatch[]): TourPairing {
+// La rencontre a-b dans les matchs du tournoi : le dernier match non annule entre eux. leg (matchs retour, 13/11) :
+// 0 = le 1er match non annule entre eux (aller), 1 = le 2e (retour) ; null = une seule rencontre (regle d'avant).
+function pairingOf(a: string, b: string | null, matches: BmMatch[], leg: number | null = null): TourPairing {
   if (b === null) return { a, b, status: "bye", matchId: null, sets: null, winner: null };
-  const m = [...matches].filter((x) => samePair(x, a, b) && matchState(x).status !== "CANCELLED").sort((x, y) => y.createdAt - x.createdAt)[0];
+  const all = [...matches].filter((x) => samePair(x, a, b) && matchState(x).status !== "CANCELLED");
+  const m = leg === null ? all.sort((x, y) => y.createdAt - x.createdAt)[0] : all.sort((x, y) => x.createdAt - y.createdAt)[leg];
   if (!m) return { a, b, status: "todo", matchId: null, sets: null, winner: null };
   const st = matchState(m);
   const flip = m.playerAId !== a;
@@ -252,22 +257,25 @@ function pairingOf(a: string, b: string | null, matches: BmMatch[]): TourPairing
   return { a, b, status, matchId: m.id, sets, winner: status === "played" ? winner : null };
 }
 
-export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: TourSettings | null = null): TourPool[] {
+// legs : poolLegs des reglages (poule → 2 = matchs retour : les rondes sont rejouees une 2e fois, a la suite).
+export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: TourSettings | null = null, legs: Record<string, number> = {}): TourPool[] {
   const names = [...new Set(players.map((p) => p.pool))].sort();
   return names.map((name) => {
     const members = players.filter((p) => p.pool === name).sort((a, b) => a.seed - b.seed);
     const ids = members.map((p) => p.studentId);
     const lateIds = members.filter((p) => p.late).map((p) => p.studentId);
     const goneIds = new Set(members.filter((p) => p.gone).map((p) => p.studentId));
-    const withH = (a: string, b: string | null) => {
-      const raw = pairingOf(a, b, matches);
+    const twice = legs[name] === 2;
+    const withH = (a: string, b: string | null, leg: number | null = null) => {
+      const raw = pairingOf(a, b, matches, leg);
       // Joueur parti : sa rencontre pas encore jouee (ni en cours) sort de l'ordre.
       const p: TourPairing = b && (goneIds.has(a) || goneIds.has(b)) && (raw.status === "todo" || raw.status === "disputed") ? { ...raw, status: "gone" } : raw;
       // Handicap proportionnel a l'objectif de CETTE rencontre (poule ou match a part).
       return handicap && b ? { ...p, handicap: handicapFor(handicap, players, a, b), ...(handicap.matchHandicap[pairKey(a, b)] ? { handicapForced: true } : {}) } : p;
     };
     // Rondes : les joueurs du depart seulement (un retardataire ne les change pas) ; puis ses matchs de rattrapage.
-    const rounds = roundRobin(ids.filter((id) => !lateIds.includes(id))).map((pairs, i) => ({ n: i + 1, pairings: pairs.map(([a, b]) => withH(a, b)) }));
+    const base = roundRobin(ids.filter((id) => !lateIds.includes(id)));
+    const rounds = (twice ? [0, 1] : [null]).flatMap((leg) => base.map((pairs, i) => ({ n: (leg ?? 0) * base.length + i + 1, pairings: pairs.map(([a, b]) => withH(a, b, leg)) })));
     const catchUp: TourPairing[] = [];
     lateIds.forEach((l, li) => { for (const o of ids) if (o !== l && !lateIds.slice(0, li).includes(o)) catchUp.push(withH(l, o)); });
     const open = rounds.find((r) => r.pairings.some((p) => p.status !== "played" && p.status !== "bye" && p.status !== "gone"));
@@ -371,7 +379,7 @@ const L1 = (groups: { slots: Slot[] }[]) => groups.every((g) => g.slots.length <
 
 // ===== Rattachement d'un match saisi, et ce qu'un joueur voit =====
 // Le match a-b est-il une rencontre du tournoi encore a jouer ?
-export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: BmMatch[], a: string, b: string): boolean {
+export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: BmMatch[], a: string, b: string, legs: Record<string, number> = {}): boolean {
   if (kind === "BRACKET") {
     return bracketOf(players, matches).rounds.some((r) => r.groups.some((g) => g.pairings.some((p) => ((p.a === a && p.b === b) || (p.a === b && p.b === a)) && (p.status === "todo" || p.status === "disputed"))));
   }
@@ -379,8 +387,10 @@ export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: B
   const pb = players.find((p) => p.studentId === b);
   if (!pa || !pb || pa.pool !== pb.pool) return false;
   if (pa.gone || pb.gone) return false; // un joueur parti n'a plus de rencontre a jouer
-  const st = pairingOf(a, b, matches).status;
-  return st === "todo" || st === "disputed";
+  // Matchs retour : la paire doit encore jouer tant que l'aller ou le retour n'est pas joue.
+  const late = pa.late || pb.late;
+  const legList = legs[pa.pool] === 2 && !late ? [0, 1] : [null];
+  return legList.some((leg) => { const st = pairingOf(a, b, matches, leg).status; return st === "todo" || st === "disputed"; });
 }
 
 // Poules / handicap : ma poule, la ronde en cours et ma rencontre dans cette ronde ; un retardataire : son prochain match

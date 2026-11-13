@@ -70,7 +70,7 @@ async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   const tm = t ? await loadTournamentMatches(t.id) : [];
-  if (!t || !pendingPairing(t.kind, t.players, tm, a, b)) return null;
+  if (!t || !pendingPairing(t.kind, t.players, tm, a, b, t.settings.poolLegs)) return null;
   const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
   if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
   // ELO du moment (13/11) et bareme du moment, ou avance imposee par le prof.
@@ -348,7 +348,8 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
 // eloPerPoint (13/11) : changer le bareme du championnat a handicap en cours (0 = le recalculer sur les matchs joues) ;
 // handicap : imposer l'avance d'une rencontre (to = celui qui a l'avance, pts 0 = aucune ; to null = revenir au bareme).
 // Les deux valent pour les matchs pas encore commences : un match en direct garde le score de depart de son ouverture.
-export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number } }): Promise<BmResult> {
+// poolLegs (13/11) : matchs retour dans UNE poule (legs 2) ; revenir a 1 seul match n'est possible que si aucun retour n'a ete joue.
+export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number }; poolLegs?: { name: string; legs: number } }): Promise<BmResult> {
   const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
   if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
   const c = await context(row.sessionId);
@@ -369,6 +370,19 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
     if (!t.players.some((p) => p.studentId === a) || !t.players.some((p) => p.studentId === b)) return { error: "Ces joueurs ne sont pas dans le tournoi." };
     if (patch.match.points) matchPoints[pairKey(a, b)] = patch.match.points;
     else delete matchPoints[pairKey(a, b)];
+  }
+  const poolLegs = { ...s.poolLegs };
+  if (patch.poolLegs) {
+    const { name } = patch.poolLegs;
+    const ids = t.players.filter((p) => p.pool === name).map((p) => p.studentId);
+    if (!ids.length || t.kind === "BRACKET") return { error: "Poule introuvable." };
+    if (patch.poolLegs.legs === 2) poolLegs[name] = 2;
+    else {
+      const tm = await loadTournamentMatches(t.id);
+      const n = (x: string, y: string) => tm.filter((m) => ((m.playerAId === x && m.playerBId === y) || (m.playerAId === y && m.playerBId === x)) && matchState(m).status !== "CANCELLED").length;
+      if (ids.some((x) => ids.some((y) => x < y && n(x, y) >= 2))) return { error: "Des matchs retour ont déjà été joués dans cette poule : on les garde." };
+      delete poolLegs[name];
+    }
   }
   const matchHandicap = { ...s.matchHandicap };
   let eloPerPoint = s.eloPerPoint;
@@ -394,8 +408,8 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
       calibration = cal;
     }
   }
-  const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints, eloPerPoint, calibration, matchHandicap }, t.kind);
-  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap })) });
+  const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints, eloPerPoint, calibration, matchHandicap, poolLegs }, t.kind);
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap, poolLegs: norm.poolLegs })) });
   done(row.sessionId);
   return { ok: true };
 }
