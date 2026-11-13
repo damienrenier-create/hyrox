@@ -9,6 +9,9 @@ import { TopBar } from "../../../_components/TopBar";
 import { resetStudentPinAction, setStudentObsWatchAction, updateStudentAction } from "../actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { isWinterArc } from "@/lib/winter-arc";
+import { notesOf, todayKeyBxl } from "@/lib/student-notes-server";
+import { fmtDay, noteActive, noteIcon } from "@/lib/student-notes";
+import { NoteToggle } from "../../notes/NotesClient";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,9 @@ export default async function EleveFichePage({ params, searchParams }: { params:
   const refBy = new Map(refereeRows.map((r) => [r.sessionId, r]));
   const colorOf = (code: string | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
   const dob = s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : "";
+  const myNotes = await notesOf(user.id, s.id); // notes perso (13/11) : seul l'auteur les voit
+  const today = todayKeyBxl();
+  const nday = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Brussels" });
 
   return (
     <div className={ui.page}>
@@ -92,6 +98,23 @@ export default async function EleveFichePage({ params, searchParams }: { params:
             </form>
             <p className={`${ui.hint} mt-1`}>Coché d&apos;office dans chaque séance Eval où il joue : le tirage le donne d&apos;abord aux arbitres élèves, sans qu&apos;ils le sachent.</p>
           </div>
+        </section>
+
+        <section className={`${ui.cardPad} space-y-2`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className={ui.h2}>📝 Mes notes sur cet élève</h2>
+            <Link href={`/admin/notes?eleve=${s.id}#nouvelle`} className={btn.smPrimary}>＋ Ajouter une note</Link>
+          </div>
+          {myNotes.length === 0 ? <p className={ui.muted}>Aucune note. Vous seul verrez celles que vous écrivez ; elles s&apos;affichent au début de ses cours.</p> : myNotes.map((n) => (
+            <div key={n.id} className={cx("flex flex-wrap items-start gap-2", !noteActive({ hiddenAt: n.hiddenAt, until: n.until }, today) && "opacity-70")}>
+              <span className="text-lg" aria-hidden>{noteIcon(n.category)}</span>
+              <div className="flex-1 min-w-[12rem]">
+                <p className="whitespace-pre-wrap">{n.text}</p>
+                <p className={ui.hint}>notée le {nday(n.createdAt)}{n.until ? ` · jusqu'au ${fmtDay(n.until)}` : ""}{n.hiddenAt ? ` · masquée le ${nday(n.hiddenAt)}` : ""}</p>
+              </div>
+              <NoteToggle id={n.id} hidden={!!n.hiddenAt} />
+            </div>
+          ))}
         </section>
 
         <section className={ui.cardPad}>

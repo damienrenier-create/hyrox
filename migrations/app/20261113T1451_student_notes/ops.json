@@ -1,0 +1,197 @@
+[
+  {
+    "id": "table.notePeriod",
+    "label": "Create table \"notePeriod\"",
+    "summary": "Creates table \"notePeriod\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "notePeriod"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"notePeriod\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"notePeriod\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"notePeriod\"",
+        "sql": "CREATE TABLE \"public\".\"notePeriod\" (\n  \"authorId\" text NOT NULL,\n  \"cancelledAt\" timestamptz,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"endDate\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"label\" text,\n  \"seenAt\" timestamptz,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"notePeriod\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"notePeriod\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.studentNote",
+    "label": "Create table \"studentNote\"",
+    "summary": "Creates table \"studentNote\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "studentNote"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"studentNote\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"studentNote\"",
+        "sql": "CREATE TABLE \"public\".\"studentNote\" (\n  \"authorId\" text NOT NULL,\n  \"category\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"hiddenAt\" timestamptz,\n  \"id\" text NOT NULL,\n  \"seenAt\" timestamptz,\n  \"seenSessionId\" text,\n  \"studentId\" text NOT NULL,\n  \"text\" text NOT NULL,\n  \"until\" text,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"studentNote\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.notePeriod.notePeriod_authorId_idx_e47547ed",
+    "label": "Create index \"notePeriod_authorId_idx_e47547ed\" on \"notePeriod\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "notePeriod_authorId_idx_e47547ed",
+        "table": "notePeriod"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"notePeriod_authorId_idx_e47547ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"notePeriod_authorId_idx_e47547ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"notePeriod_authorId_idx_e47547ed\"",
+        "sql": "CREATE INDEX \"notePeriod_authorId_idx_e47547ed\" ON \"public\".\"notePeriod\" (\"authorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"notePeriod_authorId_idx_e47547ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"notePeriod_authorId_idx_e47547ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.studentNote.studentNote_authorId_idx_e47547ed",
+    "label": "Create index \"studentNote_authorId_idx_e47547ed\" on \"studentNote\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "studentNote_authorId_idx_e47547ed",
+        "table": "studentNote"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"studentNote_authorId_idx_e47547ed\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote_authorId_idx_e47547ed\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"studentNote_authorId_idx_e47547ed\"",
+        "sql": "CREATE INDEX \"studentNote_authorId_idx_e47547ed\" ON \"public\".\"studentNote\" (\"authorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"studentNote_authorId_idx_e47547ed\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote_authorId_idx_e47547ed\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.studentNote.studentNote_studentId_idx_bf255322",
+    "label": "Create index \"studentNote_studentId_idx_bf255322\" on \"studentNote\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "studentNote_studentId_idx_bf255322",
+        "table": "studentNote"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"studentNote_studentId_idx_bf255322\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote_studentId_idx_bf255322\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"studentNote_studentId_idx_bf255322\"",
+        "sql": "CREATE INDEX \"studentNote_studentId_idx_bf255322\" ON \"public\".\"studentNote\" (\"studentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"studentNote_studentId_idx_bf255322\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"studentNote_studentId_idx_bf255322\""
+        ]
+      }
+    ]
+  }
+]

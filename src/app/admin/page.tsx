@@ -22,6 +22,9 @@ import { readCoTeachers, readQuizOpen } from "@/lib/session-roles";
 import { TopBar } from "../_components/TopBar";
 import { LogoutButton } from "../_components/LogoutButton";
 import { btn, cx, ui } from "@/lib/ui";
+import { NotesPopup } from "../_components/NotesPopup";
+import { dueReminder, notesForSessions, periodsOf } from "@/lib/student-notes-server";
+import { fmtDay as fmtNoteDay } from "@/lib/student-notes";
 
 async function runGenerateGhostFleets(sessionId: string) {
   "use server";
@@ -46,12 +49,17 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
 
   await ensureAutoSessions();
   const open = await listOpenSessions();
+  // Notes perso en DEBUT DE COURS (13/11) : les seances ouvertes de CE prof (titulaire, co-prof, ou seance sans prof).
+  const mine = open.filter((s) => s.teacherId === user.id || readCoTeachers(s.settings).includes(user.id) || !s.teacherId);
+  const notesNow = await notesForSessions(user.id, mine);
+  const notesTitle = mine.filter((s) => notesNow.some((n) => n.sessionId === s.id)).map((s) => readSessionClasses(s.settings).join(" + ")).join(" · ");
   // Vue semaine du lundi au vendredi : cette semaine par defaut (la suivante des le samedi), ?w=1 pour la suivante.
   const wk = Math.min(4, Math.max(0, parseInt(w ?? "0", 10) || 0));
   const todayZ = Temporal.Now.zonedDateTimeISO(TZ);
   const monday = todayZ.subtract({ days: todayZ.dayOfWeek - 1 }).add({ weeks: (todayZ.dayOfWeek > 5 ? 1 : 0) + wk });
   const weekDays = [0, 1, 2, 3, 4].map((i) => monday.add({ days: i }).toPlainDate().toString());
   const todayKey = todayZ.toPlainDate().toString();
+  const reminder = dueReminder(await periodsOf(user.id), todayKey); // fin de periode de bulletin (13/11)
   const daysAhead = Math.max(1, Math.round((monday.add({ days: 5 }).epochMilliseconds - todayZ.epochMilliseconds) / 86_400_000) + 1);
   const upcoming = (await upcomingSessions(80, daysAhead)).filter((u) => weekDays.includes(u.dateKey));
   const byDay = weekDays.map((dk) => upcoming.filter((u) => u.dateKey === dk));
@@ -152,6 +160,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
             <Link href="/admin/eleves" className={btn.smGhost}>Élèves</Link>
+            <Link href="/admin/notes" className={btn.smGhost}>📝 Mes notes</Link>
             <Link href="/admin/qr" className={btn.smGhost} title="Le QR à projeter pour que les élèves se connectent">📱 QR élèves</Link>
             <Link href="/admin/voir-eleve" className={btn.smGhost}>👁 Se connecter en tant que…</Link>
             <Link href="/admin/level" className={btn.smGhost}>🧗 Level</Link>
@@ -164,6 +173,13 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
       />
 
       <main className={`${ui.container} py-6 space-y-5`}>
+        <NotesPopup notes={notesNow} title={notesTitle} />
+        {reminder && (
+          <div className={`${ui.alertInfo} flex flex-wrap items-center gap-2`}>
+            <span>📝 Fin de période le <b>{fmtNoteDay(reminder.endDate)}</b>{reminder.label ? ` (${reminder.label})` : ""} : relisez le récapitulatif de vos notes sur les élèves.</span>
+            <Link href={`/admin/notes?periode=${reminder.id}`} className={`${btn.smPrimary} ml-auto`}>Voir le récapitulatif</Link>
+          </div>
+        )}
         {ok && (
           <div className={`${ui.alertOk} flex flex-wrap items-center gap-2`}>
             <span>✅ {ok}</span>

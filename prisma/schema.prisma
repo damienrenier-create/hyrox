@@ -633,3 +633,37 @@ model LevelLoss {
 
   @@index([sessionId])
 }
+
+// Notes perso d'un prof sur un eleve (Sartay 13/11 : « des notes perso qui pop en debut de cours, jusqu'a ce que je
+// clique sur me le rappeler au prochain cours ou je ne veux plus voir cette notification » ; « certificat medical
+// jusqu'a X », « pas en ordre administratif », « pas sa tenue »). SEUL L'AUTEUR les voit. Jamais effacees (regle d'or) :
+// « Ne plus me la montrer » = hiddenAt (reactivable) ; la note reste dans l'historique et le recapitulatif de fin de periode.
+model StudentNote {
+  id            String    @id @default(uuid())
+  authorId      String    // le prof (User.id)
+  studentId     String
+  category      String?   // MEDICAL | ADMIN | TENUE | AUTRE
+  text          String
+  until         String?   // AAAA-MM-JJ : apres cette date, plus d'affichage en debut de cours (la note reste)
+  createdAt     DateTime  @default(now())
+  seenSessionId String?   // « Me le rappeler au prochain cours » : deja vue pour CETTE seance
+  seenAt        DateTime?
+  hiddenAt      DateTime? // « Ne plus me la montrer »
+
+  @@index([authorId])
+  @@index([studentId])
+}
+
+// Fins de periode de bulletin d'un prof (Sartay 13/11 : « l'app garde en memoire toutes les notifs et me les remontre a
+// chaque fin de periode ») : un rappel quelques jours avant, puis le recapitulatif de ses notes de la periode.
+model NotePeriod {
+  id          String    @id @default(uuid())
+  authorId    String
+  endDate     String    // AAAA-MM-JJ
+  label       String?
+  createdAt   DateTime  @default(now())
+  seenAt      DateTime? // recapitulatif ouvert : le rappel ne s'affiche plus
+  cancelledAt DateTime? // date retiree (jamais effacee)
+
+  @@index([authorId])
+}

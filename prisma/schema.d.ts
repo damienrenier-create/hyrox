@@ -34,9 +34,9 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'dcf0ff645ab157d57f3e21e899f09ea159fb617e23e4a42012db62b91cbb4bc4'>;
+  StorageHashBase<'12e7bd47585309ae974de39aa9d59091068882aa4ef5507758e8407a91d9a7af'>;
 export type ExecutionHash =
-  ExecutionHashBase<'178eb95fffc8c1c4ec221c396bfaa1a099100244f9ee3d35afb4805ba603a3b4'>;
+  ExecutionHashBase<'2e470564331a03438610ae48a9f76181d15d9e6d884277c0da3c1a20df5a41c1'>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
 
@@ -403,6 +403,15 @@ export type FieldOutputTypes = {
       readonly evaluationId: CodecTypes['pg/text@1']['output'] | null;
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
+    readonly NotePeriod: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly authorId: CodecTypes['pg/text@1']['output'];
+      readonly endDate: CodecTypes['pg/text@1']['output'];
+      readonly label: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    };
     readonly Observation: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
@@ -551,6 +560,18 @@ export type FieldOutputTypes = {
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly stationId: CodecTypes['pg/text@1']['output'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
+    readonly StudentNote: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly authorId: CodecTypes['pg/text@1']['output'];
+      readonly studentId: CodecTypes['pg/text@1']['output'];
+      readonly category: CodecTypes['pg/text@1']['output'] | null;
+      readonly text: CodecTypes['pg/text@1']['output'];
+      readonly until: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly seenSessionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     };
     readonly Team: {
       readonly id: CodecTypes['pg/text@1']['output'];
@@ -758,6 +779,15 @@ export type FieldInputTypes = {
       readonly evaluationId: CodecTypes['pg/text@1']['input'] | null;
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
+    readonly NotePeriod: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly authorId: CodecTypes['pg/text@1']['input'];
+      readonly endDate: CodecTypes['pg/text@1']['input'];
+      readonly label: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+    };
     readonly Observation: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
@@ -906,6 +936,18 @@ export type FieldInputTypes = {
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly stationId: CodecTypes['pg/text@1']['input'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+    };
+    readonly StudentNote: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly authorId: CodecTypes['pg/text@1']['input'];
+      readonly studentId: CodecTypes['pg/text@1']['input'];
+      readonly category: CodecTypes['pg/text@1']['input'] | null;
+      readonly text: CodecTypes['pg/text@1']['input'];
+      readonly until: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly seenSessionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
     };
     readonly Team: {
       readonly id: CodecTypes['pg/text@1']['input'];
@@ -1113,6 +1155,15 @@ export type StorageColumnTypes = {
       readonly row: CodecTypes['pg/int4@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
     };
+    readonly notePeriod: {
+      readonly authorId: CodecTypes['pg/text@1']['output'];
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly endDate: CodecTypes['pg/text@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly label: CodecTypes['pg/text@1']['output'] | null;
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    };
     readonly observation: {
       readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly endsAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
@@ -1261,6 +1312,18 @@ export type StorageColumnTypes = {
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly stationId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
+    };
+    readonly studentNote: {
+      readonly authorId: CodecTypes['pg/text@1']['output'];
+      readonly category: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly seenSessionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly studentId: CodecTypes['pg/text@1']['output'];
+      readonly text: CodecTypes['pg/text@1']['output'];
+      readonly until: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly team: {
       readonly color: CodecTypes['pg/text@1']['output'] | null;
@@ -1468,6 +1531,15 @@ export type StorageColumnInputTypes = {
       readonly row: CodecTypes['pg/int4@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
     };
+    readonly notePeriod: {
+      readonly authorId: CodecTypes['pg/text@1']['input'];
+      readonly cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly endDate: CodecTypes['pg/text@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly label: CodecTypes['pg/text@1']['input'] | null;
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+    };
     readonly observation: {
       readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly endsAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
@@ -1616,6 +1688,18 @@ export type StorageColumnInputTypes = {
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly stationId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
+    };
+    readonly studentNote: {
+      readonly authorId: CodecTypes['pg/text@1']['input'];
+      readonly category: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly seenSessionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly studentId: CodecTypes['pg/text@1']['input'];
+      readonly text: CodecTypes['pg/text@1']['input'];
+      readonly until: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly team: {
       readonly color: CodecTypes['pg/text@1']['input'] | null;
@@ -2132,6 +2216,29 @@ export namespace Models {
     session: public_Session;
     readonly [RelationKeys]?: 'session';
   };
+  export type public_StudentNote = {
+    id: CodecTypes['pg/text@1']['output'];
+    authorId: CodecTypes['pg/text@1']['output'];
+    studentId: CodecTypes['pg/text@1']['output'];
+    category: CodecTypes['pg/text@1']['output'] | null;
+    text: CodecTypes['pg/text@1']['output'];
+    until: CodecTypes['pg/text@1']['output'] | null;
+    createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    seenSessionId: CodecTypes['pg/text@1']['output'] | null;
+    seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_NotePeriod = {
+    id: CodecTypes['pg/text@1']['output'];
+    authorId: CodecTypes['pg/text@1']['output'];
+    endDate: CodecTypes['pg/text@1']['output'];
+    label: CodecTypes['pg/text@1']['output'] | null;
+    createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    cancelledAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    readonly [RelationKeys]?: never;
+  };
 }
 
 export declare const models: {
@@ -2170,6 +2277,8 @@ export declare const models: {
     MineBoard: Models.public_MineBoard;
     MineReveal: Models.public_MineReveal;
     LevelLoss: Models.public_LevelLoss;
+    StudentNote: Models.public_StudentNote;
+    NotePeriod: Models.public_NotePeriod;
   };
 };
 
@@ -3324,6 +3433,57 @@ type ContractBase = Omit<
                 },
               ];
             };
+            readonly notePeriod: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly authorId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly endDate: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly label: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly seenAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+                readonly cancelledAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'notePeriod_authorId_idx_e47547ed';
+                  readonly prefix: 'notePeriod_authorId_idx';
+                  readonly columns: readonly ['authorId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [];
+            };
             readonly observation: {
               columns: {
                 readonly id: {
@@ -4447,6 +4607,78 @@ type ContractBase = Omit<
                 },
               ];
             };
+            readonly studentNote: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly authorId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly studentId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly category: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly text: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly until: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly seenSessionId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly seenAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+                readonly hiddenAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'studentNote_authorId_idx_e47547ed';
+                  readonly prefix: 'studentNote_authorId_idx';
+                  readonly columns: readonly ['authorId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'studentNote_studentId_idx_bf255322';
+                  readonly prefix: 'studentNote_studentId_idx';
+                  readonly columns: readonly ['studentId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [];
+            };
             readonly team: {
               columns: {
                 readonly id: {
@@ -4885,6 +5117,14 @@ type ContractBase = Omit<
       readonly model: 'MineReveal';
     };
     readonly levelLoss: { readonly namespace: 'public' & NamespaceId; readonly model: 'LevelLoss' };
+    readonly studentNote: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'StudentNote';
+    };
+    readonly notePeriod: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'NotePeriod';
+    };
   };
   readonly domain: {
     readonly namespaces: {
@@ -5958,6 +6198,61 @@ type ContractBase = Omit<
                 readonly col: { readonly column: 'col' };
                 readonly evaluationId: { readonly column: 'evaluationId' };
                 readonly at: { readonly column: 'at' };
+              };
+            };
+          };
+          readonly NotePeriod: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly authorId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly endDate: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly label: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly seenAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly cancelledAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'notePeriod';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly authorId: { readonly column: 'authorId' };
+                readonly endDate: { readonly column: 'endDate' };
+                readonly label: { readonly column: 'label' };
+                readonly createdAt: { readonly column: 'createdAt' };
+                readonly seenAt: { readonly column: 'seenAt' };
+                readonly cancelledAt: { readonly column: 'cancelledAt' };
               };
             };
           };
@@ -7147,6 +7442,76 @@ type ContractBase = Omit<
               };
             };
           };
+          readonly StudentNote: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly authorId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly studentId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly category: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly text: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly until: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly seenSessionId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly seenAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly hiddenAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'studentNote';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly authorId: { readonly column: 'authorId' };
+                readonly studentId: { readonly column: 'studentId' };
+                readonly category: { readonly column: 'category' };
+                readonly text: { readonly column: 'text' };
+                readonly until: { readonly column: 'until' };
+                readonly createdAt: { readonly column: 'createdAt' };
+                readonly seenSessionId: { readonly column: 'seenSessionId' };
+                readonly seenAt: { readonly column: 'seenAt' };
+                readonly hiddenAt: { readonly column: 'hiddenAt' };
+              };
+            };
+          };
           readonly Team: {
             readonly fields: {
               readonly id: {
@@ -7721,6 +8086,14 @@ type ContractBase = Omit<
         {
           readonly ref: {
             readonly namespace: 'public';
+            readonly table: 'notePeriod';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
             readonly table: 'observation';
             readonly column: 'id';
           };
@@ -7826,6 +8199,14 @@ type ContractBase = Omit<
           readonly ref: {
             readonly namespace: 'public';
             readonly table: 'stationEvent';
+            readonly column: 'id';
+          };
+          readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };
+        },
+        {
+          readonly ref: {
+            readonly namespace: 'public';
+            readonly table: 'studentNote';
             readonly column: 'id';
           };
           readonly onCreate: { readonly kind: 'generator'; readonly id: 'uuidv4' };

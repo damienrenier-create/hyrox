@@ -68,6 +68,10 @@
       "model": "MineReveal",
       "namespace": "public"
     },
+    "notePeriod": {
+      "model": "NotePeriod",
+      "namespace": "public"
+    },
     "observation": {
       "model": "Observation",
       "namespace": "public"
@@ -122,6 +126,10 @@
     },
     "stationEvent": {
       "model": "StationEvent",
+      "namespace": "public"
+    },
+    "studentNote": {
+      "model": "StudentNote",
       "namespace": "public"
     },
     "team": {
@@ -1987,6 +1995,87 @@
               "table": "mineReveal"
             }
           },
+          "NotePeriod": {
+            "fields": {
+              "authorId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "cancelledAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "endDate": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "label": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "seenAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "authorId": {
+                  "column": "authorId"
+                },
+                "cancelledAt": {
+                  "column": "cancelledAt"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "endDate": {
+                  "column": "endDate"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "label": {
+                  "column": "label"
+                },
+                "seenAt": {
+                  "column": "seenAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "notePeriod"
+            }
+          },
           "Observation": {
             "fields": {
               "endedAt": {
@@ -3840,6 +3929,117 @@
               },
               "namespaceId": "public",
               "table": "stationEvent"
+            }
+          },
+          "StudentNote": {
+            "fields": {
+              "authorId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "category": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "hiddenAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "seenAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "seenSessionId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "studentId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "text": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "until": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "authorId": {
+                  "column": "authorId"
+                },
+                "category": {
+                  "column": "category"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "hiddenAt": {
+                  "column": "hiddenAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "seenAt": {
+                  "column": "seenAt"
+                },
+                "seenSessionId": {
+                  "column": "seenSessionId"
+                },
+                "studentId": {
+                  "column": "studentId"
+                },
+                "text": {
+                  "column": "text"
+                },
+                "until": {
+                  "column": "until"
+                }
+              },
+              "namespaceId": "public",
+              "table": "studentNote"
             }
           },
           "Team": {
@@ -5868,6 +6068,66 @@
                 }
               ]
             },
+            "notePeriod": {
+              "columns": {
+                "authorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "cancelledAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "endDate": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "label": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "seenAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "authorId"
+                  ],
+                  "name": "notePeriod_authorId_idx_e47547ed",
+                  "prefix": "notePeriod_authorId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "observation": {
               "columns": {
                 "endedAt": {
@@ -7299,6 +7559,89 @@
               },
               "uniques": []
             },
+            "studentNote": {
+              "columns": {
+                "authorId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "category": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "hiddenAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "seenAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "seenSessionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "studentId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "text": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "until": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "authorId"
+                  ],
+                  "name": "studentNote_authorId_idx_e47547ed",
+                  "prefix": "studentNote_authorId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "studentId"
+                  ],
+                  "name": "studentNote_studentId_idx_bf255322",
+                  "prefix": "studentNote_studentId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "team": {
               "columns": {
                 "color": {
@@ -7760,10 +8103,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "dcf0ff645ab157d57f3e21e899f09ea159fb617e23e4a42012db62b91cbb4bc4"
+    "storageHash": "12e7bd47585309ae974de39aa9d59091068882aa4ef5507758e8407a91d9a7af"
   },
   "execution": {
-    "executionHash": "178eb95fffc8c1c4ec221c396bfaa1a099100244f9ee3d35afb4805ba603a3b4",
+    "executionHash": "2e470564331a03438610ae48a9f76181d15d9e6d884277c0da3c1a20df5a41c1",
     "mutations": {
       "defaults": [
         {
@@ -7950,6 +8293,17 @@
           "ref": {
             "column": "id",
             "namespace": "public",
+            "table": "notePeriod"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
             "table": "observation"
           }
         },
@@ -8094,6 +8448,17 @@
             "column": "id",
             "namespace": "public",
             "table": "stationEvent"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "id",
+            "namespace": "public",
+            "table": "studentNote"
           }
         },
         {

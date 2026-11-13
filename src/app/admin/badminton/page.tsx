@@ -16,6 +16,8 @@ import { TopBar } from "../../_components/TopBar";
 import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, type BmTourProps } from "./BadmintonStaff";
 import type { TourView } from "./TournamentPanel";
 import { cx, ui } from "@/lib/ui";
+import { NotesPopup } from "../../_components/NotesPopup";
+import { notesForSessions } from "@/lib/student-notes-server";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +166,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")} · ${isSessionOpen(session) ? "séance ouverte" : "séance fermée"}`} back={back} />
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
+        <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
         <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} />
       </main>
     </div>
