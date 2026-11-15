@@ -10,6 +10,7 @@ import { btn, cx, ui } from "@/lib/ui";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fmtElo } from "@/lib/badminton-elo";
 import { TournamentPanel, type TourElsewhere, type TourEntrantRow, type TourView } from "./TournamentPanel";
+import { NotedProvider, StudentName } from "../../_components/StudentName";
 import type { HandicapCalibration } from "@/lib/badminton-tournament";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
@@ -22,7 +23,7 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
 // `tour` : le tournoi par poules de la seance (09/11), absent pour les matchs libres.
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {} }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [] }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   usePulse(pulse, 10000, !refLive);
@@ -61,6 +62,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
   }
 
   return (
+    <NotedProvider ids={noted}>
     <div className="space-y-4">
       {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} onClose={() => setRefLive(null)} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -105,6 +107,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
     </div>
+    </NotedProvider>
   );
 }
 
@@ -136,7 +139,7 @@ function PupilsTable({ rows }: { rows: BmPupilRow[] }) {
               const none = s.played + s.pending + s.disputed === 0;
               return (
                 <tr key={r.id} className={cx("border-t border-line", none && "text-ink-3")}>
-                  <td className="p-2 font-bold">{r.name}</td>
+                  <td className="p-2 font-bold"><StudentName id={r.id} name={r.name} /></td>
                   <td className="p-2">{r.className ?? ""}</td>
                   <td className="p-2 text-right tabular-nums">{s.played}</td>
                   <td className="p-2 text-right tabular-nums">{s.won}</td>
@@ -178,7 +181,7 @@ function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] })
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className={cx("border-t border-line", !r.answers && "text-ink-3")}>
-                <td className="p-2 font-bold">{r.name}</td>
+                <td className="p-2 font-bold"><StudentName id={r.id} name={r.name} /></td>
                 <td className="p-2">{r.className ?? ""}</td>
                 {cols.map((c) => <td key={c.id} className={cx("p-2 text-center font-black", color(r.answers?.[c.id]))}>{r.answers?.[c.id] ?? "—"}</td>)}
                 <td className="p-2 text-right tabular-nums font-bold">{r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")}</td>
@@ -217,7 +220,7 @@ function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: stri
               {list.map((r, i) => (
                 <tr key={r.id} className="border-t border-line">
                   <td className="p-2 text-right tabular-nums text-ink-3">{i + 1}</td>
-                  <td className="p-2 font-bold">{r.name}{r.provisional && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5 text-[10px]")}>provisoire</span>}</td>
+                  <td className="p-2 font-bold"><StudentName id={r.id} name={r.name} />{r.provisional && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5 text-[10px]")}>provisoire</span>}</td>
                   <td className="p-2">{r.className ?? ""}</td>
                   <td className="p-2 text-right tabular-nums font-display font-extrabold">{fmtElo(r.rating)}</td>
                   <td className="p-2 text-right tabular-nums">{r.games}</td>

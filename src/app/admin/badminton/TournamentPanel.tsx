@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { HANDICAP_ELO_PER_POINT, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
+import { StudentName } from "../../_components/StudentName";
 
 // Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
 // handicap), les participants (coches d'office : ceux qui ont deja joue ou arbitre dans la seance) et les reglages, voir
@@ -391,12 +392,13 @@ function MatchHandicapPick({ t, a, b, nm, onRule }: { t: TourView; a: string; b:
 
 function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
+  const who = (id: string | null) => (id && names[id] ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11)
   const editable = (p: TourPairing) => !!p.b && p.status !== "played" && p.status !== "bye" && p.status !== "gone";
   const line = (p: TourPairing) => {
-    if (p.status === "bye") return <><b>{nm(p.a)}</b> <span className="text-ink-3">· repos</span></>;
+    if (p.status === "bye") return <><b>{who(p.a)}</b> <span className="text-ink-3">· repos</span></>;
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     const h = t.kind === "HANDICAP" && p.b && onRule && (p.status === "todo" || p.status === "disputed") ? <MatchHandicapPick t={t} a={p.a} b={p.b} nm={nm} onRule={onRule} /> : p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]}{p.handicapForced ? ", imposé" : ""})</span> : p.handicapForced ? <span className="text-xs text-accent-ink"> (sans avance, imposé)</span> : null;
-    return <><span className={cx(p.winner === "A" && "font-bold")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{nm(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}</>;
+    return <><span className={cx(p.winner === "A" && "font-bold")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{who(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}</>;
   };
   return (
     <>
@@ -428,7 +430,7 @@ function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: Tou
                 {p.standings.map((s) => (
                   <tr key={s.id} className="border-t border-line">
                     <td className="p-1.5 tabular-nums text-ink-3">{s.rank}</td>
-                    <td className={cx("p-1.5 font-bold", s.gone && "text-ink-3")}>{nm(s.id)}{s.gone && <span className={cx(ui.chip, ui.chipMuted, "ml-1 text-[10px]")}>parti</span>} <span className="text-ink-3 text-xs font-normal">{names[s.id]?.className} · {s.elo}</span></td>
+                    <td className={cx("p-1.5 font-bold", s.gone && "text-ink-3")}>{who(s.id)}{s.gone && <span className={cx(ui.chip, ui.chipMuted, "ml-1 text-[10px]")}>parti</span>} <span className="text-ink-3 text-xs font-normal">{names[s.id]?.className} · {s.elo}</span></td>
                     <td className="p-1.5 text-right tabular-nums font-bold">{String(s.score).replace(".", ",")}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.won}-{s.drawn}-{s.lost}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.setsFor}-{s.setsAgainst}</td>
@@ -461,10 +463,11 @@ function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: Tou
 
 function BracketBoard({ b, names, t, onRule }: { b: Bracket; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null | undefined) => (id ? names[id]?.name ?? "?" : id === null ? "exempt" : "…");
+  const who = (id: string | null | undefined) => (id && names[id] ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11)
   const line = (p: BracketPairing) => {
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
-    if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{nm(p.a ?? p.b)}</b> passe (exempt)</>}</span>;
-    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{nm(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span>{p.a && p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={p.status === "todo" || p.status === "live" || p.status === "disputed" || p.status === "tie" ? onRule : undefined} />}</>;
+    if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{who(p.a ?? p.b)}</b> passe (exempt)</>}</span>;
+    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span>{p.a && p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={p.status === "todo" || p.status === "live" || p.status === "disputed" || p.status === "tie" ? onRule : undefined} />}</>;
   };
   return (
     <div className="space-y-3">
@@ -473,7 +476,7 @@ function BracketBoard({ b, names, t, onRule }: { b: Bracket; names: TourView["na
         <ol className="grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {b.ranks.map((r) => (
             <li key={r.id} className="flex justify-between gap-2">
-              <span className="truncate"><span className="tabular-nums text-ink-3">{r.rank ?? (r.lo === r.hi ? r.lo : `${r.lo}-${r.hi}`)}.</span> <b>{nm(r.id)}</b> <span className="text-ink-3 text-xs">{names[r.id]?.className} · tête de série {r.seed}</span></span>
+              <span className="truncate"><span className="tabular-nums text-ink-3">{r.rank ?? (r.lo === r.hi ? r.lo : `${r.lo}-${r.hi}`)}.</span> <b>{who(r.id)}</b> <span className="text-ink-3 text-xs">{names[r.id]?.className} · tête de série {r.seed}</span></span>
               <span className="tabular-nums text-xs text-ink-2 whitespace-nowrap">{r.won}/{r.played} gagnés</span>
             </li>
           ))}

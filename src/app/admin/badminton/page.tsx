@@ -17,7 +17,7 @@ import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, typ
 import type { TourView } from "./TournamentPanel";
 import { cx, ui } from "@/lib/ui";
 import { NotesPopup } from "../../_components/NotesPopup";
-import { notesForSessions } from "@/lib/student-notes-server";
+import { notedIdsOf, notesForSessions } from "@/lib/student-notes-server";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +74,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
         <main className={`${ui.container} py-5 space-y-4`}>
           {nav}
           <p className={ui.hint}>Un match libre compte au classement quand il est officiel : 2 élèves l&apos;ont attesté (l&apos;arbitre en est un), ou un prof l&apos;a validé (« Valider (officiel) »).</p>
-          <BadmintonStaff sessionId={BM_FREE} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={[]} seCols={[]} elo={eloRows(board, false)} groupClasses={[]} free />
+          <BadmintonStaff sessionId={BM_FREE} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={[]} seCols={[]} elo={eloRows(board, false)} groupClasses={[]} free noted={await notedIdsOf(user.id)} />
         </main>
       </div>
     );
@@ -167,7 +167,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
         <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} />
       </main>
     </div>
   );

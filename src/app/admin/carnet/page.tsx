@@ -10,6 +10,8 @@ import { listTeachers } from "@/lib/staff";
 import { TopBar } from "../../_components/TopBar";
 import { ExportCsvButton } from "../resultats/ExportCsvButton";
 import { btn, cx, ui } from "@/lib/ui";
+import { NotedProvider, StudentName } from "../../_components/StudentName";
+import { notedIdsOf } from "@/lib/student-notes-server";
 
 type Params = Record<string, string | string[] | undefined>;
 const many = (v: string | string[] | undefined) => (Array.isArray(v) ? v : v ? [v] : []).flatMap((s) => s.split(",")).map((s) => s.trim()).filter(Boolean);
@@ -94,6 +96,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
       </TopBar>
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <NotedProvider ids={await notedIdsOf(user.id)}>
         {/* ===== Choix du groupe / de la classe ===== */}
         <section className={`${ui.cardPad} space-y-3`}>
           <div>
@@ -180,7 +183,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
                 {carnet.rows.map((r) => (
                   <tr key={r.studentId} className={ui.tr}>
                     <td className="p-2 sticky left-0 bg-card z-10 whitespace-nowrap">
-                      <Link href={`/admin/eleves/${r.studentId}`} className="font-semibold hover:underline">{r.lastName} {r.firstName}</Link>
+                      <StudentName id={r.studentId} name={`${r.firstName} ${r.lastName}`} className="font-semibold">{r.lastName} {r.firstName}</StudentName>
                       {selected.length > 1 && <span className={`${ui.chip} ${ui.chipMuted} ml-2`}>{r.className}</span>}
                     </td>
                     {carnet.columns.map((c) => {
@@ -217,6 +220,7 @@ export default async function CarnetPage({ searchParams }: { searchParams: Promi
             </table>
           </section>
         )}
+        </NotedProvider>
       </main>
     </div>
   );

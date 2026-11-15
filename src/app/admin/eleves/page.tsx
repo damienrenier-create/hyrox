@@ -4,6 +4,8 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { TopBar } from "../../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
+import { NotedProvider, StudentName } from "../../_components/StudentName";
+import { notedIdsOf } from "@/lib/student-notes-server";
 import { createStudentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
     <div className={ui.page}>
       <TopBar title="Élèves" subtitle={`${students.length} élèves · ${classes.length} classes`} back={user.role === "MASTER_ADMIN" ? { href: "/admin", label: "Console" } : undefined} />
       <main className={`${ui.container} py-6 space-y-4`}>
+        <NotedProvider ids={await notedIdsOf(user.id)}>
         {msg && <p className={ui.alertErr}>⚠️ {msg}</p>}
         <form className={`${ui.cardPad} grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end`}>
           <label className="text-xs">
@@ -78,7 +81,7 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
               <tbody>
                 {shown.map((s) => (
                   <tr key={s.id} className={ui.tr}>
-                    <td className="p-2 font-bold whitespace-nowrap">{s.lastName} {s.firstName}</td>
+                    <td className="p-2 font-bold whitespace-nowrap"><StudentName id={s.id} name={`${s.firstName ?? ""} ${s.lastName ?? ""}`.trim()}>{s.lastName} {s.firstName}</StudentName></td>
                     <td className="p-2 text-ink-2">{s.className ?? "—"}</td>
                     <td className="p-2 text-ink-2">{s.sex ?? "—"}</td>
                     <td className="p-2 text-ink-2 whitespace-nowrap">{s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10).split("-").reverse().join("/") : "—"}</td>
@@ -91,6 +94,7 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
             </table>
           </div>
         )}
+        </NotedProvider>
       </main>
     </div>
   );

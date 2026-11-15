@@ -22,8 +22,9 @@ async function people(ids: string[]): Promise<Map<string, Who>> {
 
 // Les notes a montrer EN DEBUT DE COURS a un prof pour ces seances : ses notes actives sur les eleves de ces seances (leurs
 // classes, le bon sexe si la seance est garcons/filles, les eleves de 1P rattaches a ces classes), sauf celles deja
-// reportees « au prochain cours » pendant CETTE seance. Une note n'apparait qu'une fois (pour la 1re seance concernee).
-export async function notesForSessions(authorId: string, sessions: { id: string; settings: unknown }[]): Promise<NoteView[]> {
+// reportees « au prochain cours » pendant CETTE seance, et celles ECRITES PENDANT ce cours (15/11 : elles s'affichent au
+// cours suivant). Une note n'apparait qu'une fois (pour la 1re seance concernee).
+export async function notesForSessions(authorId: string, sessions: { id: string; settings: unknown; opensAt?: unknown; createdAt?: unknown }[]): Promise<NoteView[]> {
   if (!sessions.length) return [];
   const today = todayKeyBxl();
   const notes = (await db.orm.public.StudentNote.where({ authorId }).all()).filter((n) => noteActive({ hiddenAt: n.hiddenAt, until: n.until ?? null }, today));
@@ -35,8 +36,10 @@ export async function notesForSessions(authorId: string, sessions: { id: string;
   for (const s of sessions) {
     const classes = readSessionClasses(s.settings);
     const sex = readSessionSex(s.settings);
+    const start = s.opensAt ? toMs(s.opensAt) : s.createdAt ? toMs(s.createdAt) : 0; // debut du cours
     for (const n of notes) {
       if (n.seenSessionId === s.id || out.some((x) => x.id === n.id)) continue;
+      if (start && toMs(n.createdAt) >= start) continue; // ecrite pendant ce cours : au cours suivant
       const u = who.get(n.studentId);
       if (!u) continue;
       const inClass = (!!u.className && classes.includes(u.className)) || [...(linked.get(u.id) ?? [])].some((c) => classes.includes(c));
@@ -52,6 +55,12 @@ export async function notesOf(authorId: string, studentId?: string): Promise<Not
   const rows = (await db.orm.public.StudentNote.where(studentId ? { authorId, studentId } : { authorId }).all());
   const who = await people(rows.map((n) => n.studentId));
   return rows.map((n) => view(n, who.get(n.studentId))).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// Les eleves sur qui ce prof a une note ACTIVE (le petit 📝 a cote des noms cliquables).
+export async function notedIdsOf(authorId: string): Promise<string[]> {
+  const today = todayKeyBxl();
+  return [...new Set((await db.orm.public.StudentNote.where({ authorId }).all()).filter((n) => noteActive({ hiddenAt: n.hiddenAt, until: n.until ?? null }, today)).map((n) => n.studentId))];
 }
 
 // Fins de periode de bulletin (dates retirees exclues), dans l'ordre.

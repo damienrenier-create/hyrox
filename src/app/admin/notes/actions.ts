@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
-import { isDateKey, readCategory } from "@/lib/student-notes";
+import { isDateKey, readCategory, type NoteView } from "@/lib/student-notes";
+import { notesOf } from "@/lib/student-notes-server";
 
 // Notes perso des profs sur leurs eleves (Sartay 13/11, voir src/lib/student-notes.ts). Seul l'AUTEUR agit sur ses notes ;
 // rien n'est jamais efface : « Ne plus me la montrer » = hiddenAt, une date de fin de periode retiree = cancelledAt.
@@ -22,6 +23,15 @@ function refresh() {
 async function ownNote(noteId: string, userId: string) {
   const n = await db.orm.public.StudentNote.where({ id: String(noteId ?? "") }).first();
   return n && n.authorId === userId ? n : null;
+}
+
+// Mes notes sur UN eleve (fenetre du nom cliquable, 15/11), masquees comprises.
+export async function studentNotesAction(studentId: string): Promise<{ error: string } | { ok: true; student: { id: string; name: string; className: string | null }; notes: NoteView[] }> {
+  const u = await staff();
+  if (!u) return { error: "Réservé aux profs." };
+  const s = await db.orm.public.User.where({ id: String(studentId ?? ""), role: "STUDENT" }).first();
+  if (!s) return { error: "Ce n'est pas un élève : pas de notes possibles." };
+  return { ok: true, student: { id: s.id, name: s.name, className: s.className ?? null }, notes: await notesOf(u.id, s.id) };
 }
 
 export async function addNoteAction(input: { studentId: string; category?: string | null; text: string; until?: string | null }): Promise<R> {

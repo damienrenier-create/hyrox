@@ -38,7 +38,7 @@ export function NotesPopup({ notes, title, auto = true }: { notes: NoteView[]; t
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={btn.smGhost} title="Mes notes sur les élèves de ce cours">📝 {left.length}</button>;
   const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start sm:items-center justify-center p-3 overflow-auto" role="dialog" aria-modal="true" aria-label="Mes notes sur les élèves">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start sm:items-center justify-center p-3 overflow-auto" role="dialog" aria-modal="true" aria-label="Notes du début de cours">
       <div className={`${ui.cardPad} w-full max-w-lg space-y-3`}>
         <div className="flex items-start justify-between gap-2">
           <div>

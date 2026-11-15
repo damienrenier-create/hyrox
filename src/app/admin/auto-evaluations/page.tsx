@@ -9,6 +9,8 @@ import { querySelfEvaluations, readLevelParams, PAGE_SIZE, type SelfEvalSort } f
 import { TopBar } from "../../_components/TopBar";
 import { ReviewButton } from "../ReviewPanel";
 import { btn, cx, ui } from "@/lib/ui";
+import { NotedProvider, StudentName } from "../../_components/StudentName";
+import { notedIdsOf } from "@/lib/student-notes-server";
 import { notDeleted } from "@/lib/session-roles";
 
 type Params = Record<string, string | string[] | undefined>;
@@ -60,6 +62,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
       />
 
       <main className={`${ui.container} py-6 space-y-4`}>
+        <NotedProvider ids={await notedIdsOf(user.id)}>
         {/* ===== Filtres (une seule soumission, tout en parametres d'URL) ===== */}
         <form className={`${ui.cardPad} space-y-3`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -157,7 +160,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
               {res.rows.map((r) => (
                 <tr key={r.key} className={ui.tr}>
                   <td className="p-2 text-xs text-ink-3 whitespace-nowrap">{new Date(r.submittedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}</td>
-                  <td className="p-2 font-bold whitespace-nowrap">{r.lastName} {r.firstName}</td>
+                  <td className="p-2 font-bold whitespace-nowrap"><StudentName id={r.studentId} name={`${r.firstName} ${r.lastName}`}>{r.lastName} {r.firstName}</StudentName></td>
                   <td className="p-2 text-ink-2">{r.className}</td>
                   <td className="p-2 text-ink-2 whitespace-nowrap">{r.sessionLabel}</td>
                   <td className="p-2 text-ink-2">{r.teamName}</td>
@@ -211,6 +214,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
             <span key={l.code}><b className={l.color}>{l.code}</b> = {l.label}</span>
           ))}
         </div>
+        </NotedProvider>
       </main>
     </div>
   );

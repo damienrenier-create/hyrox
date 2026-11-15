@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
+import { StudentName } from "./StudentName";
 import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveScoreAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -103,6 +104,9 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
   const left = v.meSide ? (staff ? (flip ? v.b : v.a).name : "Toi") : v.a.name;
   const right = v.meSide ? (flip ? v.a : v.b).name : v.b.name;
   const leftClass = v.meSide ? (flip ? v.b : v.a).className : v.a.className;
+  // Prof (15/11) : les noms ouvrent ses notes perso sur l'eleve.
+  const leftId = staff && !v.meSide ? v.a.id : null;
+  const rightId = staff && !v.meSide ? v.b.id : null;
   const rightClass = v.meSide ? (flip ? v.a : v.b).className : v.b.className;
   const shownSets = v.sets ? (flip ? swapSets(v.sets) : v.sets) : null;
   const [draft, setDraft] = useState<BmSet[]>(() => shownSets ?? emptySets());
@@ -125,9 +129,9 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
       <div className="space-y-1.5">
         <div className={cx("min-w-0", v.status === "CANCELLED" && "line-through")}>
           <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-bold">{left}{leftClass && (staff || !v.meSide) && <span className="text-ink-3 text-xs font-semibold"> {leftClass}</span>}</span>
+            <span className="font-bold">{leftId ? <StudentName id={leftId} name={left} /> : left}{leftClass && (staff || !v.meSide) && <span className="text-ink-3 text-xs font-semibold"> {leftClass}</span>}</span>
             <span className="font-display text-xl font-extrabold tabular-nums">{shownSets ? shownSets.map(([a, b]) => `${a}–${b}`).join("  ") : "—"}</span>
-            <span className="font-bold">{right}{rightClass && <span className="text-ink-3 text-xs font-semibold"> {rightClass}</span>}</span>
+            <span className="font-bold">{rightId ? <StudentName id={rightId} name={right} /> : right}{rightClass && <span className="text-ink-3 text-xs font-semibold"> {rightClass}</span>}</span>
           </div>
           {!v.meSide && !staff && <p className={ui.hint}>{v.createdBy.id === viewerId ? "Arbitré par toi" : "On te demande d'attester ce match"}</p>}
         </div>

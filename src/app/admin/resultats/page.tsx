@@ -9,6 +9,8 @@ import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { ExportCsvButton } from "./ExportCsvButton";
 import { TopBar } from "../../_components/TopBar";
 import { btn, cx, ui } from "@/lib/ui";
+import { NotedProvider, StudentName } from "../../_components/StudentName";
+import { notedIdsOf } from "@/lib/student-notes-server";
 import { notDeleted } from "@/lib/session-roles";
 
 type Params = Record<string, string | string[] | undefined>;
@@ -91,6 +93,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <NotedProvider ids={await notedIdsOf(user.id)}>
         {/* ===== Filtres (une seule soumission, tout en parametres d'URL) ===== */}
         <form className={`${ui.cardPad} space-y-3`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -206,7 +209,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
                   <td className="p-2 text-ink-2">{new Date(r.sessionDate).toLocaleDateString("fr-BE", { timeZone: "Europe/Brussels" })}</td>
                   <td className="p-2">{r.sessionLabel}{r.cycleName ? <span className="text-ink-3"> · {r.cycleName}</span> : null}</td>
                   <td className="p-2 text-ink-2">{r.className}</td>
-                  <td className="p-2 font-bold">{r.lastName} {r.firstName}</td>
+                  <td className="p-2 font-bold"><StudentName id={r.studentId} name={`${r.firstName} ${r.lastName}`}>{r.lastName} {r.firstName}</StudentName></td>
                   <td className="p-2">
                     {r.role === "participant" ? "💪" : r.role === "arbitre" ? "🏴‍☠️" : "💪🏴‍☠️"}
                     {r.refereeNote && <span className="text-ink-2"> {r.refereeNote}</span>}
@@ -257,6 +260,7 @@ export default async function ResultatsPage({ searchParams }: { searchParams: Pr
           <span>·</span>
           {QUALITY_LEVELS.map((l) => <span key={l.code}><b className={l.color}>{l.code}</b> {l.label}</span>)}
         </div>
+        </NotedProvider>
       </main>
     </div>
   );
