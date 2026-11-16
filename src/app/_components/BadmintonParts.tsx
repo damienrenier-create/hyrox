@@ -193,6 +193,8 @@ const BM_TARGETS = [11, 13, 15, 21, 0] as const; // 0 = sans limite (match au te
 // d'ecart, eventuellement plafonnee). Sans regle (match ordinaire) : 2 points d'ecart, plafond 30 en 21 (sinon objectif + 4).
 // sets : format du match de tournoi (balle de match) ; head : score de depart de chaque set (championnat a handicap, 13/11).
 export type LiveRule = { deuce: boolean; cap: number; sets?: 1 | 2 | 3; head?: BmSet };
+// Points d'avance du championnat a handicap, EN ROUGE ET EN GRAS (Sartay 16/11 : « plusieurs eleves sont passes a cote »).
+export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
 export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
@@ -314,7 +316,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
         {error && <p className={ui.alertErr}>{error}</p>}
         {(head[0] > 0 || head[1] > 0) && (
           <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-center px-3 py-2 dark:bg-amber-950 dark:text-amber-100" aria-label="Handicap">
-            ⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> ({head[0]}-{head[1]})
+            ⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b>
           </div>
         )}
         {alerts.length > 0 && (
