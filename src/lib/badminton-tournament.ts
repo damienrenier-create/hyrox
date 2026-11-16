@@ -90,9 +90,10 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   // Nombre de matchs de chacun a son entree dans le tournoi (13/11) : fixe son K (40 sur ses 10 premiers matchs, puis 20).
   const lg = o.launchGames && typeof o.launchGames === "object" ? (o.launchGames as Record<string, unknown>) : {};
   const launchGames = Object.fromEntries(Object.entries(lg).filter(([, n]) => Number.isInteger(Number(n)) && Number(n) >= 0).map(([k, n]) => [k, Number(n)]));
-  // Matchs retour (13/11) : poolLegs[poule] = 2 → chaque paire de la poule se rencontre deux fois.
+  // Matchs retour (13/11) : poolLegs[poule] = 2 → chaque paire de la poule se rencontre deux fois ; 1 (16/11) = un seul
+  // match, choisi par le prof (pas de revanche automatique) ; absent = automatique (revanches quand la poule a fini).
   const pl = o.poolLegs && typeof o.poolLegs === "object" ? (o.poolLegs as Record<string, unknown>) : {};
-  const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2).map(([k]) => [k, 2]));
+  const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2 || Number(n) === 1).map(([k, n]) => [k, Number(n)]));
   return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs };
 }
 
@@ -237,7 +238,8 @@ export type PairingStatus = "todo" | "live" | "played" | "disputed" | "bye" | "w
 export type TourPairing = { a: string; b: string | null; status: PairingStatus; matchId: string | null; sets: BmSet[] | null; winner: "A" | "B" | "DRAW" | null; handicap?: [number, number]; handicapForced?: boolean };
 export type TourRound = { n: number; pairings: TourPairing[] };
 export type TourStanding = { id: string; gone?: boolean; rank: number; played: number; won: number; drawn: number; lost: number; score: number; setsFor: number; setsAgainst: number; pointsFor: number; pointsAgainst: number; elo: number };
-export type TourPool = { name: string; players: string[]; rounds: TourRound[]; catchUp: TourPairing[]; current: number | null; done: boolean; standings: TourStanding[] };
+// twice : la poule se joue en aller-retour ; auto : parce que son aller est fini (revanches automatiques, 16/11).
+export type TourPool = { name: string; players: string[]; rounds: TourRound[]; catchUp: TourPairing[]; current: number | null; done: boolean; standings: TourStanding[]; twice: boolean; auto: boolean };
 
 const samePair = (m: BmMatch, a: string, b: string) => (m.playerAId === a && m.playerBId === b) || (m.playerAId === b && m.playerBId === a);
 
@@ -257,15 +259,31 @@ function pairingOf(a: string, b: string | null, matches: BmMatch[], leg: number 
   return { a, b, status, matchId: m.id, sets, winner: status === "played" ? winner : null };
 }
 
-// legs : poolLegs des reglages (poule → 2 = matchs retour : les rondes sont rejouees une 2e fois, a la suite).
-export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: TourSettings | null = null, legs: Record<string, number> = {}): TourPool[] {
+// legs : poolLegs des reglages (poule → 2 = matchs retour : les rondes sont rejouees une 2e fois, a la suite ; 1 = un seul
+// match). REVANCHES AUTOMATIQUES (16/11, Sartay : « pour les poules qui sont terminees, permets toujours une revanche s'il
+// reste du temps ») : sans choix du prof, une poule dont l'aller est fini passe d'elle-meme en aller-retour. `auto` false
+// (tournoi clos) : on montre la poule telle qu'elle a ete jouee.
+export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: TourSettings | null = null, legs: Record<string, number> = {}, auto = true): TourPool[] {
   const names = [...new Set(players.map((p) => p.pool))].sort();
+  const settled = (p: TourPairing) => p.status === "played" || p.status === "bye" || p.status === "gone";
   return names.map((name) => {
+    if (legs[name] === 2 || legs[name] === 1) return poolOf(players, matches, handicap, name, legs[name] === 2, false);
+    const single = poolOf(players, matches, handicap, name, false, false);
+    if (!single.rounds.some((r) => r.pairings.some((p) => p.b))) return single;
+    // L'aller se lit sur le PREMIER match de chaque paire (une revanche en direct ne le defait pas) ; une revanche deja
+    // jouee garde la poule en aller-retour (tournoi clos compris).
+    const twice = poolOf(players, matches, handicap, name, true, true);
+    const half = twice.rounds.length / 2;
+    const allerDone = twice.rounds.slice(0, half).every((r) => r.pairings.every(settled)) && twice.catchUp.every(settled);
+    const replayed = twice.rounds.slice(half).some((r) => r.pairings.some((p) => p.b && p.status !== "todo" && p.status !== "gone"));
+    return (auto && allerDone) || replayed ? twice : single;
+  });
+}
+function poolOf(players: TourPlayer[], matches: BmMatch[], handicap: TourSettings | null, name: string, twice: boolean, autoTwice: boolean): TourPool {
     const members = players.filter((p) => p.pool === name).sort((a, b) => a.seed - b.seed);
     const ids = members.map((p) => p.studentId);
     const lateIds = members.filter((p) => p.late).map((p) => p.studentId);
     const goneIds = new Set(members.filter((p) => p.gone).map((p) => p.studentId));
-    const twice = legs[name] === 2;
     const withH = (a: string, b: string | null, leg: number | null = null) => {
       const raw = pairingOf(a, b, matches, leg);
       // Joueur parti : sa rencontre pas encore jouee (ni en cours) sort de l'ordre.
@@ -294,8 +312,7 @@ export function poolsOf(players: TourPlayer[], matches: BmMatch[], handicap: Tou
     // Un joueur parti est classe apres les autres (il n a pas fini la poule).
     const standings = [...table.values()].sort((x, y) => Number(x.gone) - Number(y.gone) || y.score - x.score || (y.setsFor - y.setsAgainst) - (x.setsFor - x.setsAgainst) || (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst) || y.elo - x.elo);
     standings.forEach((s, i) => (s.rank = i + 1));
-    return { name, players: ids, rounds, catchUp, current: open?.n ?? null, done: !open && catchUp.every((p) => p.status === "played" || p.status === "gone"), standings };
-  });
+    return { name, players: ids, rounds, catchUp, current: open?.n ?? null, done: !open && catchUp.every((p) => p.status === "played" || p.status === "gone"), standings, twice, auto: autoTwice };
 }
 
 // ===== Grand tableau =====
@@ -387,10 +404,11 @@ export function pendingPairing(kind: TourKind, players: TourPlayer[], matches: B
   const pb = players.find((p) => p.studentId === b);
   if (!pa || !pb || pa.pool !== pb.pool) return false;
   if (pa.gone || pb.gone) return false; // un joueur parti n'a plus de rencontre a jouer
-  // Matchs retour : la paire doit encore jouer tant que l'aller ou le retour n'est pas joue.
-  const late = pa.late || pb.late;
-  const legList = legs[pa.pool] === 2 && !late ? [0, 1] : [null];
-  return legList.some((leg) => { const st = pairingOf(a, b, matches, leg).status; return st === "todo" || st === "disputed"; });
+  // Les rencontres de la poule telles que les voient le prof et les eleves (matchs retour, choisis ou automatiques,
+  // rattrapages des retardataires) : la paire doit encore jouer tant qu'une de ses rencontres n'est pas jouee.
+  const pool = poolsOf(players, matches, null, legs).find((p) => p.name === pa.pool);
+  if (!pool) return false;
+  return [...pool.rounds.flatMap((r) => r.pairings), ...pool.catchUp].some((p) => ((p.a === a && p.b === b) || (p.a === b && p.b === a)) && (p.status === "todo" || p.status === "disputed"));
 }
 
 // Poules / handicap : ma poule, la ronde en cours et ma rencontre dans cette ronde ; un retardataire : son prochain match

@@ -382,7 +382,7 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
       const tm = await loadTournamentMatches(t.id);
       const n = (x: string, y: string) => tm.filter((m) => ((m.playerAId === x && m.playerBId === y) || (m.playerAId === y && m.playerBId === x)) && matchState(m).status !== "CANCELLED").length;
       if (ids.some((x) => ids.some((y) => x < y && n(x, y) >= 2))) return { error: "Des matchs retour ont déjà été joués dans cette poule : on les garde." };
-      delete poolLegs[name];
+      poolLegs[name] = 1; // un seul match, CHOISI : plus de revanche automatique dans cette poule (16/11)
     }
   }
   const matchHandicap = { ...s.matchHandicap };

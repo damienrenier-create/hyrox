@@ -461,10 +461,10 @@ function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: Tou
                     {TOUR_POINTS.filter((n) => n !== t.settings.points).map((n) => <option key={n} value={n}>{n} pts</option>)}
                   </select>
                 ) : t.settings.poolPoints[p.name] ? <span className="ml-2 text-xs font-sans text-accent-ink">{t.settings.poolPoints[p.name]} pts</span> : null}
-                {t.settings.poolLegs[p.name] === 2 && <span className="ml-2 text-xs font-sans font-bold text-accent-ink">🔁 aller-retour</span>}
+                {p.twice && <span className="ml-2 text-xs font-sans font-bold text-accent-ink">{p.auto ? "🔁 revanches (poule finie)" : "🔁 aller-retour"}</span>}
                 {onRule && (
-                  <button type="button" onClick={() => { const on = t.settings.poolLegs[p.name] === 2; if (confirm(on ? `Revenir à un seul match par paire dans la poule ${p.name} ?` : `Ajouter les matchs RETOUR dans la poule ${p.name} ? Chaque paire se rencontre une 2e fois (les joueurs partis sont exclus).`)) onRule({ poolLegs: { name: p.name, legs: on ? 1 : 2 } }); }} className="ml-2 text-xs font-sans font-normal rounded border border-line px-1.5 py-0.5 align-middle text-ink-2 hover:bg-paper">
-                    {t.settings.poolLegs[p.name] === 2 ? "↩︎ un seul match" : "🔁 Matchs retour"}
+                  <button type="button" onClick={() => { const on = p.twice; if (confirm(on ? `Revenir à un seul match par paire dans la poule ${p.name} (pas de revanche) ?` : `Ajouter les matchs RETOUR dans la poule ${p.name} dès maintenant ? Chaque paire se rencontre une 2e fois (les joueurs partis sont exclus). Sinon, ils s'ouvrent d'eux-mêmes quand la poule a fini.`)) onRule({ poolLegs: { name: p.name, legs: on ? 1 : 2 } }); }} className="ml-2 text-xs font-sans font-normal rounded border border-line px-1.5 py-0.5 align-middle text-ink-2 hover:bg-paper">
+                    {p.twice ? "↩︎ un seul match" : "🔁 Matchs retour"}
                   </button>
                 )}
               </p>
