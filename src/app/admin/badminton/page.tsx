@@ -10,7 +10,7 @@ import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
 import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
 import { gradeOfAnswers } from "@/lib/carnet";
 import { BM_FREE, matchState, pupilStats, viewOf, type BmMatch, type BmPersonRef } from "@/lib/badminton";
-import { isTestClass, notDeleted, readSessionClasses } from "@/lib/session-roles";
+import { isTestClass, notDeleted, readCoTeachers, readSessionClasses } from "@/lib/session-roles";
 import { isOnePClass, isSessionOpen, linkedClassesFor, toMs } from "@/lib/scheduling";
 import { TopBar } from "../../_components/TopBar";
 import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, type BmTourProps } from "./BadmintonStaff";
@@ -135,7 +135,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       format: formatText(t.settings),
       pools: t.kind === "BRACKET" ? null : poolsOf(now, tm, t.kind === "HANDICAP" ? t.settings : null, t.settings.poolLegs),
       bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
-      names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.className ?? null }])),
+      names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.staff ? "prof" : tp.get(p.studentId)?.className ?? null }])),
       gone: t.players.filter((p) => p.gone).map((p) => p.studentId),
       settings: t.settings,
       players: now,
@@ -143,19 +143,29 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   };
   const active = activeTournament(tours);
   const previous = tours.find((t) => t.closedAt) ?? null;
-  const rosterIds = new Set(roster.map((p) => p.id));
+  // Eleves seulement : un prof est dans toutes les listes de joueurs, il ne doit pas faire remonter ses tournois partout.
+  const rosterIds = new Set(roster.filter((p) => !p.staff).map((p) => p.id));
   const elsewhere = active ? [] : (await loadTournaments(null)).filter((t) => t.sessionId !== session.id && t.players.some((p) => rosterIds.has(p.studentId)));
+  // Profs de la seance (16/11, Sartay : « par defaut dans tous les tournois de la classe, je dois pouvoir selectionner le
+  // prof titulaire ») : titulaire, co-profs et le prof connecte, en tete des participants, PAS coches d'office.
+  const teachers = [...new Set([session.teacherId, ...readCoTeachers(session.settings), user.id].filter((x): x is string => !!x))]
+    .map((id) => roster.find((p) => p.staff && p.id === id))
+    .filter((p): p is BmPerson => !!p);
+  const teacherRow = (p: BmPerson) => ({ id: p.id, name: p.name, className: "prof", elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id), staff: true });
   // Regle de chaque match du tournoi en cours (le prof qui reprend un arbitrage en direct garde l'objectif du match).
   const activeNow = active && active.kind === "HANDICAP" ? { ...active, players: playersNow(active.players, await loadTournamentMatches(active.id), active.settings) } : active;
   const liveRules = Object.fromEntries(activeNow ? matches.filter((m) => m.tournamentId === activeNow.id).map((m) => [m.id, liveRuleOf(activeNow, m)]) : []);
   const tour: BmTourProps = {
-    entrants: roster
-      .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)))
-      .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
+    entrants: [
+      ...teachers.map(teacherRow),
+      ...roster
+        .filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)))
+        .map((p) => ({ id: p.id, name: p.name, className: p.className, elo: Math.round(board.entries.get(p.id)?.rating ?? ELO_START), present: present.has(p.id) })),
+    ],
     active: active ? await tourView(active) : null,
     previous: previous ? await tourView(previous) : null,
     // Retardataires possibles : les eleves de la seance pas encore dans le tournoi en cours.
-    candidates: active ? roster.filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id)) && !active.players.some((x) => x.studentId === p.id)).map((p) => ({ id: p.id, name: p.name, className: p.className })) : [],
+    candidates: active ? [...teachers.map((p) => ({ id: p.id, name: p.name, className: "prof" })), ...roster.filter((p) => !p.staff && ((p.className && classes.includes(p.className)) || present.has(p.id) || attached.has(p.id))).map((p) => ({ id: p.id, name: p.name, className: p.className }))].filter((p) => !active.players.some((x) => x.studentId === p.id)) : [],
     // Bareme du handicap par longueur de set, pour l'apercu (le serveur le recalcule au lancement).
     calibrations: active ? {} : ((s) => Object.fromEntries(TOUR_POINTS.map((p) => [p, calibrateHandicap(s, p)])))(handicapSamples(board)),
     elsewhere: elsewhere.map((t) => ({ id: t.id, label: t.label, players: t.players.length, when: `le ${new Date(t.createdAt).toLocaleDateString("fr-BE", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" })}` })),

@@ -11,7 +11,8 @@ import { StudentName } from "../../_components/StudentName";
 // handicap), les participants (coches d'office : ceux qui ont deja joue ou arbitre dans la seance) et les reglages, voir
 // le tournoi avant de lancer ; puis le suivre et le clore. Regles : src/lib/badminton-tournament.ts.
 
-export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean };
+// staff : un prof de la seance (16/11), propose en tete de liste mais pas coche d'office.
+export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean; staff?: boolean };
 export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; names: Record<string, { name: string; className: string | null }>; gone: string[]; settings: TourSettings; players: TourPlayer[] };
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
@@ -56,7 +57,8 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
   const router = useRouter();
   const [kind, setKind] = useState<TourKind>("POOLS");
   // Toute la classe par defaut (Sartay 10/11 : « je decoche ceux qui n'y participent pas, ou qui arbitrent, et pas le contraire »).
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.map((e) => e.id)));
+  // Le prof de la seance (16/11) : propose, a cocher soi-meme (« je dois pouvoir selectionner le prof titulaire »).
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(entrants.filter((e) => !e.staff).map((e) => e.id)));
   const [poolSizes, setPoolSizes] = useState<Record<TourKind, number>>({ POOLS: 4, BRACKET: 0, HANDICAP: 0 });
   // Nombre de poules (12/11) : s'il est choisi, il remplace « joueurs par poule » (0 = pas choisi).
   const [poolCounts, setPoolCounts] = useState<Record<TourKind, number>>({ POOLS: 0, BRACKET: 0, HANDICAP: 0 });
@@ -392,7 +394,7 @@ function MatchHandicapPick({ t, a, b, nm, onRule }: { t: TourView; a: string; b:
 
 function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null) => (id ? names[id]?.name ?? "?" : "");
-  const who = (id: string | null) => (id && names[id] ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11)
+  const who = (id: string | null) => (id && names[id] && names[id].className !== "prof" ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11) ; un prof : son nom seul
   const editable = (p: TourPairing) => !!p.b && p.status !== "played" && p.status !== "bye" && p.status !== "gone";
   const line = (p: TourPairing) => {
     if (p.status === "bye") return <><b>{who(p.a)}</b> <span className="text-ink-3">· repos</span></>;
@@ -463,7 +465,7 @@ function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: Tou
 
 function BracketBoard({ b, names, t, onRule }: { b: Bracket; names: TourView["names"]; t: TourView; onRule?: OnRule }) {
   const nm = (id: string | null | undefined) => (id ? names[id]?.name ?? "?" : id === null ? "exempt" : "…");
-  const who = (id: string | null | undefined) => (id && names[id] ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11)
+  const who = (id: string | null | undefined) => (id && names[id] && names[id].className !== "prof" ? <StudentName id={id} name={names[id].name} /> : nm(id)); // nom cliquable (15/11) ; un prof : son nom seul
   const line = (p: BracketPairing) => {
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{who(p.a ?? p.b)}</b> passe (exempt)</>}</span>;

@@ -279,7 +279,8 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   if (!c.session) return { error: "Un tournoi se lance dans une séance." };
   if (activeTournament(await loadTournaments(sessionId))) return { error: "Un tournoi est déjà en cours dans cette séance : clos-le d'abord." };
   const kind = readTourKind(input.kind);
-  const roster = new Set((await badmintonRoster(c.session)).filter((p) => !p.staff).map((p) => p.id));
+  // Eleves de la seance, et les profs (16/11 : le prof titulaire peut participer au tournoi de sa classe).
+  const roster = new Set((await badmintonRoster(c.session)).map((p) => p.id));
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
   const board = await loadEloBoard();
@@ -323,8 +324,8 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
   if (!c.staff || !c.session) return { error: "Réservé aux profs." };
   const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
   const id = String(studentId ?? "");
-  if (t.players.some((p) => p.studentId === id)) return { error: "Cet élève participe déjà au tournoi." };
-  if (!(await badmintonRoster(c.session)).some((p) => p.id === id && !p.staff)) return { error: "Cet élève n'est pas dans cette séance." };
+  if (t.players.some((p) => p.studentId === id)) return { error: "Ce joueur participe déjà au tournoi." };
+  if (!(await badmintonRoster(c.session)).some((p) => p.id === id)) return { error: "Ce joueur n'est pas dans cette séance." }; // eleve ou prof (16/11)
   const entry = (await loadEloBoard()).entries.get(id);
   const elo = Math.round(entry?.rating ?? ELO_START);
   if (t.kind === "BRACKET") {
