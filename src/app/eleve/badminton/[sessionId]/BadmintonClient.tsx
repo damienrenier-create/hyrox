@@ -198,6 +198,8 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
           <p className="text-sm">{t.late ? "Rattrapage" : bracket ? ronde : `Ton prochain match (${ronde.toLowerCase()})`} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
           {h && h.mine > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>tu commences chaque set avec <span className={BM_ADVANCE}>{h.mine} point{h.mine > 1 ? "s" : ""} d&apos;avance</span></b> <b className={BM_ADVANCE}>({h.mine}-0)</b>. Compte-les dans le score final. L&apos;avance change après chaque match joué.</p>}
           {h && h.theirs > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>{t.opponent.name.split(" ")[0]} commence chaque set avec <span className={BM_ADVANCE}>{h.theirs} point{h.theirs > 1 ? "s" : ""} d&apos;avance</span></b> <b className={BM_ADVANCE}>(0-{h.theirs})</b>. Comptez-les dans le score final. L&apos;avance change après chaque match joué.</p>}
+          {/* Sans avance, on le DIT (Sartay 16/11 : « si y a pas de point d'avance, signifie-le ! ») */}
+          {h && h.mine === 0 && h.theirs === 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b className={BM_ADVANCE}>aucun point d&apos;avance</b> dans ce match : <b>vous commencez tous les deux à <span className={BM_ADVANCE}>0-0</span></b>. L&apos;avance change après chaque match joué.</p>}
           {canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
         </div>
       ) : t.status === "live" ? (

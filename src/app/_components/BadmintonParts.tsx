@@ -314,9 +314,14 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
           ))}
         </div>
         {error && <p className={ui.alertErr}>{error}</p>}
-        {(head[0] > 0 || head[1] > 0) && (
+        {/* Match de championnat a handicap (rule.head) : l'avance, ou « aucun point d'avance » (Sartay 16/11 : « signifie-le ! »). */}
+        {(rule?.head || head[0] > 0 || head[1] > 0) && (
           <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-center px-3 py-2 dark:bg-amber-950 dark:text-amber-100" aria-label="Handicap">
-            ⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b>
+            {head[0] > 0 || head[1] > 0 ? (
+              <>⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b></>
+            ) : (
+              <>⚖️ Handicap : <b className={BM_ADVANCE}>aucun point d&apos;avance</b> dans ce match : les deux joueurs commencent à <b className={BM_ADVANCE}>0-0</b></>
+            )}
           </div>
         )}
         {alerts.length > 0 && (
