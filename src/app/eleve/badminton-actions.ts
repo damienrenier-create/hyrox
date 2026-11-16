@@ -418,17 +418,24 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
 // Joueur parti avant la fin du tournoi (12/11) : `gone` true = le retirer (ses matchs non joues sortent de l'ordre),
 // false = le remettre s'il revient. Rien n'est efface (settings.gone).
 export async function setPlayerGoneAction(tournamentId: string, studentId: string, gone: boolean): Promise<BmResult> {
+  return setPlayersGoneAction(tournamentId, [studentId], gone);
+}
+// Plusieurs joueurs d'un coup (16/11, Sartay : les 3GTe et 3GTf ne restent que les 50 premieres minutes, « il faudra que je
+// puisse les bouger en milieu de tournoi ») : toute une classe part, ou revient.
+export async function setPlayersGoneAction(tournamentId: string, studentIds: string[], gone: boolean): Promise<BmResult> {
   const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
   if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
   const c = await context(row.sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
   const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
-  const id = String(studentId ?? "");
-  if (!t.players.some((p) => p.studentId === id)) return { error: "Cet élève ne participe pas au tournoi." };
+  const ids = [...new Set((studentIds ?? []).map(String))].filter((id) => t.players.some((p) => p.studentId === id));
+  if (!ids.length) return { error: "Cet élève ne participe pas au tournoi." };
   const list = new Set(readGone(row.settings));
-  if (gone) list.add(id);
-  else list.delete(id);
+  for (const id of ids) {
+    if (gone) list.add(id);
+    else list.delete(id);
+  }
   await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), gone: [...list] } });
   done(row.sessionId);
   return { ok: true };

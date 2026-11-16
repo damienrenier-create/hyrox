@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HANDICAP_ELO_PER_POINT, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
-import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
+import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { StudentName } from "../../_components/StudentName";
 
@@ -81,6 +81,17 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
   const preview = makePlayers(kind, chosen, settings);
   const poolNames = [...new Set(preview.map((p) => p.pool))];
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // Cocher / decocher toute une classe (16/11 : classes invitees, ou relancer un tournoi sans elles).
+  const classList = [...new Set(entrants.filter((e) => !e.staff && e.className).map((e) => e.className as string))].sort((x, y) => x.localeCompare(y, "fr", { numeric: true }));
+  const classIds = (c: string) => entrants.filter((e) => !e.staff && e.className === c).map((e) => e.id);
+  const classOn = (c: string) => classIds(c).every((id) => selected.has(id));
+  const toggleClass = (c: string) => setSelected((s) => {
+    const n = new Set(s);
+    const ids = classIds(c);
+    const on = ids.every((id) => n.has(id));
+    for (const id of ids) { if (on) n.delete(id); else n.add(id); }
+    return n;
+  });
   const seg = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg whitespace-nowrap", on ? ui.segOn : ui.segOff);
   const nm = (id: string | undefined) => (id ? byId.get(id)?.name ?? "?" : "");
   function launch() {
@@ -166,6 +177,12 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
             <button type="button" onClick={() => setSelected(new Set())} className={btn.smGhost}>Tout décocher</button>
           </div>
         </div>
+        {classList.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <span className={ui.hint}>Par classe :</span>
+            {classList.map((c) => <button key={c} type="button" aria-pressed={classOn(c)} onClick={() => toggleClass(c)} className={cx(ui.chip, classOn(c) ? ui.chipBrand : ui.chipMuted, "text-sm py-1")}>{classOn(c) ? "✓ " : ""}{c} ({classIds(c).length})</button>)}
+          </div>
+        )}
         <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-80 overflow-auto rounded-xl border border-line p-2">
           {entrants.map((e) => (
             <label key={e.id} className={cx("flex items-center gap-2 rounded-lg px-2 py-1 text-sm cursor-pointer", selected.has(e.id) ? "bg-brand-soft" : "hover:bg-paper")}>
@@ -252,6 +269,20 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
       else { setGoneId(""); router.refresh(); }
     });
   }
+  // Toute une classe part, ou revient (16/11 : des classes invitees seulement pour une partie du cours).
+  const classesIn = [...new Set(Object.values(t.names).map((n) => n.className).filter((c): c is string => !!c && c !== "prof"))].sort((x, y) => x.localeCompare(y, "fr", { numeric: true }));
+  const idsOfClass = (c: string) => Object.entries(t.names).filter(([, n]) => n.className === c).map(([id]) => id);
+  function setClassGone(c: string, gone: boolean) {
+    const ids = idsOfClass(c).filter((id) => t.gone.includes(id) !== gone);
+    if (!ids.length) return;
+    if (gone && !confirm(`Les ${ids.length} joueurs de ${c} quittent le tournoi ? Leurs matchs pas encore joués sortent de l'ordre ; leurs matchs joués restent. Vous pourrez les remettre.`)) return;
+    setError("");
+    start(async () => {
+      const res = await setPlayersGoneAction(t.id, ids, gone);
+      if ("error" in res) setError(res.error);
+      else router.refresh();
+    });
+  }
   function close() {
     if (!confirm("Clore le tournoi ? Il restera consultable et ses matchs restent comptés ; vous pourrez en lancer un autre.")) return;
     setError("");
@@ -323,6 +354,21 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
             </select>
             <button type="button" disabled={pending || !goneId} onClick={() => setGone(goneId, true)} className={btn.smGhost}>Retirer du tournoi</button>
           </div>
+          {classesIn.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+              <span className="font-bold">🚪 Toute une classe :</span>
+              {classesIn.map((c) => {
+                const ids = idsOfClass(c);
+                const left = ids.filter((id) => !t.gone.includes(id)).length;
+                return (
+                  <span key={c} className="inline-flex gap-1">
+                    {left > 0 && <button type="button" disabled={pending} onClick={() => setClassGone(c, true)} className={btn.smGhost}>Les {c} partent ({left})</button>}
+                    {left < ids.length && <button type="button" disabled={pending} onClick={() => setClassGone(c, false)} className={btn.smGhost}>↩ Remettre les {c}</button>}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {t.gone.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-sm">
               <span className={ui.hint}>Partis :</span>
