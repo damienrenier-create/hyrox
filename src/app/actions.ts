@@ -9,7 +9,7 @@ import crypto from "crypto";
 export type LoginState = { error: string } | undefined;
 
 // Mot de passe d'un compte pseudo : connexion, et confirmation de « se connecter en tant que » (29/09 nuit).
-const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER"];
+const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER", "PIRZER"]; // PIRZER = J. Piret (17/11)
 function expectedPassword(pseudo: string): string | null {
   if (pseudo === "DAMZER") return "boss";
   if (COACHES.includes(pseudo)) return "coach";
@@ -47,7 +47,7 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   if (name === "DAMZER") {
     role = "MASTER_ADMIN";
     if (password !== expectedPassword(name)) return { error: "Mot de passe incorrect pour DAMZER." };
-  } else if (["AXEZER", "GUIZER", "SIMZER", "RACZER"].includes(name)) {
+  } else if (COACHES.includes(name)) {
     role = "ADMIN";
     if (password !== expectedPassword(name)) return { error: "Mot de passe incorrect." };
   } else if (name === "GREFFIER") {

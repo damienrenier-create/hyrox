@@ -6,6 +6,7 @@ import { HANDICAP_ELO_PER_POINT, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TO
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { StudentName } from "../../_components/StudentName";
+import { fold } from "@/lib/staff-names";
 
 // Tournois de badminton, cote prof (Sartay 09/11) : choisir le format (poules de niveau, grand tableau, championnat a
 // handicap), les participants (coches d'office : ceux qui ont deja joue ou arbitre dans la seance) et les reglages, voir
@@ -392,8 +393,72 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
+      <PlayerSearch t={t} />
       {t.bracket ? <BracketBoard b={t.bracket} names={t.names} t={t} onRule={closed ? undefined : setRule} /> : <PoolsBoard pools={pools} names={t.names} t={t} onRule={closed ? undefined : setRule} />}
     </section>
+  );
+}
+
+// Recherche par joueur (17/11, Sartay : « dans un tournoi, quand on consulte les matchs joues, il faudrait pouvoir faire
+// une recherche par joueur pour voir tous ses scores ») : tous ses matchs du tournoi, dans l'ordre, score de SON cote.
+type PlayerRow = { label: string; opp: string | null | undefined; status: string; sets: [number, number][] | null; result: "V" | "D" | "N" | null };
+function PlayerSearch({ t }: { t: TourView }) {
+  const [q, setQ] = useState("");
+  const f = fold(q.trim());
+  const hits = f.length < 2 ? [] : Object.entries(t.names).filter(([, n]) => fold(n.name).includes(f)).sort((a, b) => a[1].name.localeCompare(b[1].name, "fr")).slice(0, 6);
+  const nm = (id: string | null | undefined) => (id ? t.names[id]?.name ?? "?" : id === null ? "exempt" : "…");
+  const rowOf = (label: string, x: { a: string | null | undefined; b: string | null | undefined; status: string; sets: [number, number][] | null; winner: "A" | "B" | "DRAW" | null }, id: string): PlayerRow => {
+    const meA = x.a === id;
+    const sets = x.sets ? (meA ? x.sets : x.sets.map(([p, q2]) => [q2, p] as [number, number])) : null;
+    const played = x.status === "played" || x.status === "tie";
+    const result = !played ? null : x.winner === "DRAW" || x.winner === null ? "N" : (x.winner === "A") === meA ? "V" : "D";
+    return { label, opp: meA ? x.b : x.a, status: x.status, sets, result };
+  };
+  const rowsOf = (id: string): PlayerRow[] => {
+    const out: PlayerRow[] = [];
+    for (const p of t.pools ?? []) {
+      for (const r of p.rounds) for (const x of r.pairings) if (x.a === id || x.b === id) out.push(rowOf(`R${r.n}`, x, id));
+      for (const x of p.catchUp) if (x.a === id || x.b === id) out.push(rowOf("Ratt.", x, id));
+    }
+    for (const r of t.bracket?.rounds ?? []) for (const g of r.groups) for (const x of g.pairings) if (x.a === id || x.b === id) out.push(rowOf(`Tour ${r.n}`, { ...x, winner: x.winner }, id));
+    return out;
+  };
+  const rankOf = (id: string) => {
+    const pool = t.pools?.find((p) => p.players.includes(id));
+    if (pool) { const s = pool.standings.find((x) => x.id === id); return s ? `${t.pools!.length > 1 ? `poule ${pool.name} · ` : ""}${s.rank}e sur ${pool.standings.length}` : ""; }
+    const r = t.bracket?.ranks.find((x) => x.id === id);
+    return r ? (r.rank ? `${r.rank}e` : r.lo === r.hi ? `place ${r.lo}` : `places ${r.lo} à ${r.hi}`) : "";
+  };
+  return (
+    <div className={`${ui.cardPad} space-y-2`}>
+      <label className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-bold">🔎 Les matchs d&apos;un joueur :</span>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nom ou prénom…" className={`${ui.input} w-auto min-w-[12rem]`} aria-label="Rechercher les matchs d'un joueur" />
+      </label>
+      {f.length >= 2 && hits.length === 0 && <p className={ui.hint}>Aucun joueur du tournoi ne correspond.</p>}
+      {hits.map(([id, n]) => {
+        const rows = rowsOf(id).filter((r) => r.status !== "bye" || r.opp);
+        const won = rows.filter((r) => r.result === "V").length;
+        const lost = rows.filter((r) => r.result === "D").length;
+        const drawn = rows.filter((r) => r.result === "N").length;
+        return (
+          <div key={id} className="rounded-lg bg-paper px-2 py-1.5 text-sm" data-player={id}>
+            <p className="font-bold">{n.name} <span className="text-ink-3 text-xs font-normal">{n.className} · {rankOf(id)} · {won} V – {drawn ? `${drawn} N – ` : ""}{lost} D</span></p>
+            <ol className="mt-1 space-y-0.5">
+              {rows.map((r, i) => (
+                <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-ink-3 text-xs tabular-nums w-12">{r.label}</span>
+                  <span>contre <b>{nm(r.opp)}</b></span>
+                  <span className="tabular-nums font-bold">{r.sets ? r.sets.map(([a, b]) => `${a}-${b}`).join(" ") : ""}</span>
+                  <span className="text-xs">{r.result === "V" ? "✅ gagné" : r.result === "D" ? "❌ perdu" : r.result === "N" ? "🤝 égalité" : tagOf(r.status)}</span>
+                </li>
+              ))}
+              {rows.length === 0 && <li className={ui.hint}>Aucun match pour l&apos;instant.</li>}
+            </ol>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
