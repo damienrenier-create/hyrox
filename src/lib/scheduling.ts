@@ -1,7 +1,7 @@
 import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
-import { MAX_CLASSES, forcedSessionSex, notDeleted, readSessionClasses, readSessionSex, readCycleClasses } from "@/lib/session-roles";
+import { MAX_CLASSES, forcedSessionSex, notDeleted, readSessionClasses, readSessionGuests, readSessionSex, readCycleClasses } from "@/lib/session-roles";
 import { groupSlots, mergeCoTaught, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -371,6 +371,11 @@ export async function openSessionsForStudent(userId: string, className: string |
     const classes = readSessionClasses(s.settings);
     const sex = readSessionSex(s.settings);
     if (className && (classes.includes(className) || classes.some((c) => linked.includes(c))) && (!sex || !me?.sex || me.sex === sex)) {
+      out.push(s);
+      continue;
+    }
+    // Eleve invite dans la seance d'une autre classe (17/11).
+    if (readSessionGuests(s.settings).includes(userId)) {
       out.push(s);
       continue;
     }

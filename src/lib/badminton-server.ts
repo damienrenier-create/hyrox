@@ -2,7 +2,7 @@
 import { db } from "@/lib/db";
 import { memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
-import { isTestClass, notDeleted, readSessionClasses, readSessionSex } from "@/lib/session-roles";
+import { isTestClass, notDeleted, readSessionClasses, readSessionGuests, readSessionSex } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
@@ -172,10 +172,11 @@ export async function badmintonTabVisible(userId: string, className: string | nu
 export async function badmintonRoster(session: SessionLike): Promise<BmPerson[]> {
   const classes = readSessionClasses(session.settings);
   const sex = readSessionSex(session.settings);
+  const guests = readSessionGuests(session.settings); // eleves invites d'une autre classe (17/11)
   const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
   return [
     ...students
-      .filter((u) => u.className && (classes.includes(u.className) || /^1p/i.test(u.className)) && (!sex || !u.sex || u.sex === sex))
+      .filter((u) => guests.includes(u.id) || (u.className && (classes.includes(u.className) || /^1p/i.test(u.className)) && (!sex || !u.sex || u.sex === sex)))
       .map((u) => person(u, null))
       .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr")),
     ...(await teachersAsPlayers()),
@@ -201,6 +202,7 @@ export async function peopleOf(matches: BmMatch[], extra: string[] = []): Promis
 export async function studentInSession(session: SessionLike, userId: string, className: string | null): Promise<boolean> {
   const classes = readSessionClasses(session.settings);
   if (className && (classes.includes(className) || /^1p/i.test(className))) return true;
+  if (readSessionGuests(session.settings).includes(userId)) return true; // eleve invite (17/11)
   const mine = await db.orm.public.BadmintonMatch.where({ sessionId: session.id }).all();
   return mine.some((m) => m.playerAId === userId || m.playerBId === userId || m.createdById === userId);
 }

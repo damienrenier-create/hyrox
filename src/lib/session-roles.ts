@@ -49,6 +49,14 @@ export function readCoTeachers(settings: unknown): string[] {
   return Array.isArray(c) ? (c as unknown[]).filter((x): x is string => typeof x === "string") : [];
 }
 
+// Eleves INVITES d'une seance (17/11, Sartay : « cours des 4D, faut rajouter dans le tournoi du jour Alexis Henin (4C) ») :
+// un eleve d'une autre classe qui suit exceptionnellement ce cours (settings.guests = ids). Il voit la seance, y joue,
+// y encode, et peut etre inscrit au tournoi, sans que sa classe entiere soit ajoutee.
+export function readSessionGuests(settings: unknown): string[] {
+  const g = (settings as { guests?: unknown } | null)?.guests;
+  return Array.isArray(g) ? (g as unknown[]).filter((x): x is string => typeof x === "string") : [];
+}
+
 // QCM bonus du WOD Hyrox (01/10) : ouvert par le prof depuis la console (settings.quiz.open), ferme a la main.
 export function readQuizOpen(settings: unknown): boolean {
   return (settings as { quiz?: { open?: unknown } } | null)?.quiz?.open === true;
