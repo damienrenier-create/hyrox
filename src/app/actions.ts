@@ -9,7 +9,9 @@ import crypto from "crypto";
 export type LoginState = { error: string } | undefined;
 
 // Mot de passe d'un compte pseudo : connexion, et confirmation de « se connecter en tant que » (29/09 nuit).
-const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER", "PIRZER"]; // PIRZER = J. Piret (17/11)
+// J. Piret (17/11) : PIRZER le midi, puis JUSZER l'apres-midi (Sartay : « J. Piret, JUSZER, coach ») ; les deux
+// pseudos ouvrent le MEME compte (voir SAME_ACCOUNT plus bas), jamais un doublon.
+const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER", "JUSZER", "PIRZER"];
 function expectedPassword(pseudo: string): string | null {
   if (pseudo === "DAMZER") return "boss";
   if (COACHES.includes(pseudo)) return "coach";
@@ -23,8 +25,16 @@ const PROF_USER_NAME = "Damien Renier";
 // Les comptes pseudo + mot de passe doivent pointer sur une VRAIE ligne User : flottes, tirs et evaluations
 // portent tous une cle etrangere vers User.id. Un identifiant invente faisait echouer toute ecriture
 // (erreur serveur au placement d'un bateau) et changeait a chaque connexion.
+// Un compte, plusieurs pseudos : la ligne User existante est retrouvee quel que soit le pseudo tape (dans cet ordre).
+// DAMZER pointe sur la ligne PROF importee ; JUSZER et PIRZER sont tous deux J. Piret (ligne nommee JUSZER, ex-PIRZER).
+const SAME_ACCOUNT: Record<string, string[]> = {
+  DAMZER: [PROF_USER_NAME, "DAMZER"],
+  JUSZER: ["JUSZER", "PIRZER"],
+  PIRZER: ["JUSZER", "PIRZER"],
+};
+
 async function resolveStaffUser(pseudo: string, role: SessionPayload["role"]): Promise<string> {
-  const names = pseudo === "DAMZER" ? [PROF_USER_NAME, pseudo] : [pseudo];
+  const names = SAME_ACCOUNT[pseudo] ?? [pseudo];
   for (const name of names) {
     const found = await db.orm.public.User.where({ name }).first();
     if (found) return found.id;

@@ -8,7 +8,8 @@ const STAFF_DISPLAY: Record<string, string> = {
   AXEZER: "A. Pirlot",
   SIMZER: "S. Baugnée",
   RACZER: "Mme",
-  PIRZER: "J. Piret", // 17/11 (Sartay : « nouveau profil prof : J. PIRET, PIRZER »)
+  JUSZER: "J. Piret", // 17/11 apres-midi (Sartay : « J. Piret, JUSZER, coach ») : son pseudo de connexion
+  PIRZER: "J. Piret", // 17/11 midi, premier pseudo : il ouvre toujours le meme compte (voir SAME_ACCOUNT, app/actions.ts)
 };
 
 // Nom a afficher pour n'importe quel utilisateur : eleve = prenom + nom, prof = nom d'usage.
@@ -26,7 +27,7 @@ export function displayPseudo(pseudo: string): string {
 
 // Les profs peuvent etre encodes dans une equipe comme n'importe quel eleve, par leur NOM DE FAMILLE et
 // quelle que soit la classe : DAMZER = Renier, GUIZER = Tasquin, SIMZER = Baugnee, AXEZER = Pirlot, RACZER = Mme,
-// PIRZER = Piret.
+// JUSZER (ou PIRZER) = Piret.
 const STAFF_PERSON: Record<string, { firstName: string; lastName: string }> = {
   DAMZER: { firstName: "D.", lastName: "Renier" },
   "DAMIEN RENIER": { firstName: "D.", lastName: "Renier" },
@@ -34,6 +35,7 @@ const STAFF_PERSON: Record<string, { firstName: string; lastName: string }> = {
   AXEZER: { firstName: "A.", lastName: "Pirlot" },
   SIMZER: { firstName: "S.", lastName: "Baugnée" },
   RACZER: { firstName: "", lastName: "Mme" },
+  JUSZER: { firstName: "J.", lastName: "Piret" },
   PIRZER: { firstName: "J.", lastName: "Piret" },
 };
 
