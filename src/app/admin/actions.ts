@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { getSession } from "@/lib/session-server";
 
 // La creation/ouverture de seance vit dans cycles-actions.ts (openSessionAction) et src/lib/scheduling.ts.
 
@@ -21,6 +22,10 @@ function parseFrDate(raw?: string) {
 }
 
 export async function importUsersAction(users: ImportUserPayload[]) {
+  // Faille fermee le 18/11 : cette action n'etait reservee a personne. Seul le responsable de l'ecole importe (la page
+  // Eleves a son propre import, avec verification des doublons : eleves/actions.ts).
+  const me = await getSession();
+  if (!me || me.role !== "MASTER_ADMIN" || me.impersonatedBy) throw new Error("Accès refusé.");
   let importedCount = 0;
   await db.transaction(async (tx) => {
     for (const user of users) {

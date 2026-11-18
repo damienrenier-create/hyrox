@@ -188,6 +188,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             ))}
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
             <Link href="/admin/eleves" className={btn.smGhost}>Élèves</Link>
+            {/* Autre ecole (18/11) : collegues, greffier et mots de passe, geres par la responsable elle-meme. */}
+            {mySchool && mySchool.id !== ORIGIN_SCHOOL && !user.impersonatedBy && <Link href="/admin/comptes" className={btn.smGhost} title="Comptes des collègues et du greffier, mots de passe">👥 Comptes</Link>}
             <Link href="/admin/notes" className={btn.smGhost}>📝 Mes notes</Link>
             <Link href="/admin/qr" className={btn.smGhost} title="Le QR à projeter pour que les élèves se connectent">📱 QR élèves</Link>
             <Link href="/admin/voir-eleve" className={btn.smGhost}>👁 Se connecter en tant que…</Link>

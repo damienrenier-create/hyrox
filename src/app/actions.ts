@@ -1,7 +1,9 @@
 "use server";
 
 import { getSession as readSessionCookie, login, ON_HOLD_PSEUDOS, SessionPayload } from "@/lib/auth";
-import { loginPageSchool, ORIGIN_SCHOOL, schoolById, schoolOfPseudo, withSchool } from "@/lib/school";
+import { loginPageSchool, ORIGIN_SCHOOL, schoolById, withSchool } from "@/lib/school";
+import { secretMatches } from "@/lib/passwords";
+import { findSchoolAccount, isOriginPseudo, ORIGIN_COACHES } from "@/lib/school-accounts";
 import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -11,7 +13,7 @@ export type LoginState = { error: string } | undefined;
 
 // Mot de passe d'un compte pseudo : connexion, et confirmation de « se connecter en tant que » (29/09 nuit).
 // (J. Piret, JUSZER / PIRZER : plus un coach d'ici depuis le 18/11 — prof de SON ecole, voir loginAction.)
-const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER"];
+const COACHES = ORIGIN_COACHES;
 function expectedPassword(pseudo: string): string | null {
   if (pseudo === "DAMZER") return "boss";
   if (COACHES.includes(pseudo)) return "coach";
@@ -32,14 +34,7 @@ const SAME_ACCOUNT: Record<string, string[]> = {
   DAMZER: [PROF_USER_NAME, "DAMZER"],
 };
 
-// Mot de passe d'un compte d'une autre ecole (User.password, meme forme que les codes PIN : « sel:empreinte »).
-function secretMatches(given: string, stored: string | null | undefined): boolean {
-  const [salt, hash] = (stored ?? "").split(":");
-  if (!salt || !hash || !given) return false;
-  const a = Buffer.from(hashPin(given, salt), "hex");
-  const b = Buffer.from(hash, "hex");
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+// Mot de passe d'un compte d'une autre ecole : User.password, « sel:empreinte » (secretMatches, lib/passwords.ts).
 
 async function resolveStaffUser(pseudo: string, role: SessionPayload["role"]): Promise<string> {
   const names = SAME_ACCOUNT[pseudo] ?? [pseudo];
@@ -61,14 +56,17 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   // 18/11 : J. Piret (JUSZER / PIRZER) vient d'une autre ecole ; son compte attend son propre espace d'ecole.
   if (ON_HOLD_PSEUDOS.includes(name)) return { error: "Ce compte n'est pas encore ouvert : son espace d'école est en préparation." };
 
-  // Prof d'une AUTRE ecole (18/11, lib/school.ts) : son compte n'existe que dans son ecole, avec SON mot de passe
-  // (jamais celui des coachs d'ici), et son jeton porte son ecole : tout ce qu'il ouvre ensuite reste dans son ecole.
-  const school = schoolOfPseudo(name);
-  if (school !== ORIGIN_SCHOOL) {
-    const account = await withSchool(school, () => db.orm.public.User.where({ name }).first());
-    if (!account || account.role === "STUDENT" || !secretMatches(password, account.password)) return { error: "Mot de passe incorrect." };
-    await login({ id: account.id, role: account.role, name, school }, remember);
-    redirect(account.role === "GREFFIER" ? "/greffier" : "/admin");
+  // Prof ou greffier d'une AUTRE ecole (18/11, lib/school.ts) : son compte n'existe que dans son ecole, avec SON mot de
+  // passe (jamais celui des coachs d'ici), et son jeton porte son ecole : tout ce qu'il ouvre ensuite reste dans son
+  // ecole. Le pseudo est cherche dans les ecoles : un compte cree par la responsable de l'ecole (/admin/comptes) se
+  // connecte tout de suite, sans rien coder.
+  if (!isOriginPseudo(name)) {
+    const found = await findSchoolAccount(name);
+    if (found) {
+      if (!secretMatches(password, found.user.password)) return { error: "Mot de passe incorrect." };
+      await login({ id: found.user.id, role: found.user.role, name, school: found.school }, remember);
+      redirect(found.user.role === "GREFFIER" ? "/greffier" : "/admin");
+    }
   }
 
   let role: SessionPayload["role"] = "STUDENT";

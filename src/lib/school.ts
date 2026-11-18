@@ -19,7 +19,9 @@ export type School = {
   id: SchoolId;
   label: string; // nom montre a DAMZER (choix de l'ecole) et aux eleves de l'ecole sur la page de connexion
   link: string | null; // code du lien d'ecole : https://hyrox-delta.vercel.app/e/<link> (null = ecole d'origine)
-  pseudos: string[]; // pseudos de connexion des profs de cette ecole (mot de passe : User.password, propre a l'ecole)
+  // pseudos de la responsable de cette ecole, pour memoire. La connexion ne lit plus cette liste : elle cherche le pseudo
+  // dans les comptes des ecoles (lib/school-accounts.ts), y compris ceux crees ensuite depuis /admin/comptes.
+  pseudos: string[];
 };
 
 export const SCHOOLS: School[] = [

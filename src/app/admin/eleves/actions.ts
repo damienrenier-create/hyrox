@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { canonicalClassName, classCountsOf } from "@/lib/class-names";
+import { MAX_IMPORT_ROWS, planImport, sanitizeRow, type ExistingStudent, type PlannedRow } from "@/lib/student-import";
 
 // Fiche eleve, cote admin : identite corrigeable (nom, prenom, classe, sexe, date de naissance) et
 // remise a zero du code PIN. Jamais de suppression d'eleve ici.
@@ -92,4 +93,62 @@ export async function resetStudentPinAction(fd: FormData) {
   await db.orm.public.User.where({ id }).update({ pinCode: null });
   revalidatePath(`/admin/eleves/${id}`);
   redirect(`/admin/eleves/${id}?ok=` + encodeURIComponent("Code PIN remis à zéro : l'élève en recréera un à sa prochaine connexion (date de naissance + engagement)."));
+}
+
+// ===== Importer une liste d'eleves (Sartay 18/11 : J. Piret le fait seule, « je ne peux pas m'occuper de ça en
+// permanence ») =====
+// Reserve au responsable de l'ecole (MASTER_ADMIN). La page lit la liste collee (lib/student-import.ts) ; ici le serveur
+// relit chaque ligne, cherche les doublons parmi les eleves de l'ecole (filtre automatique de lib/db) et ne cree QUE les
+// nouveaux : un eleve deja inscrit n'est ni modifie ni efface. Classe : l'orthographe d'une classe existante est reprise.
+type ImportReply = { error: string } | { plan: PlannedRow[]; newClasses: string[]; created?: number };
+
+async function prepareImport(rows: unknown): Promise<{ error: string } | { plan: PlannedRow[]; newClasses: string[] }> {
+  const user = await getSession();
+  if (!user || user.role !== "MASTER_ADMIN" || user.impersonatedBy) return { error: "Réservé au responsable de l'école." };
+  if (!Array.isArray(rows) || rows.length === 0) return { error: "La liste est vide." };
+  if (rows.length > MAX_IMPORT_ROWS) return { error: `Trop de lignes (${rows.length}) : ${MAX_IMPORT_ROWS} au maximum par import.` };
+  const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
+  const existing: ExistingStudent[] = students.map((s) => ({
+    id: s.id, firstName: s.firstName, lastName: s.lastName, className: s.className,
+    dateOfBirth: s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : null,
+  }));
+  const counts = classCountsOf(students);
+  const known = new Set(counts.keys());
+  const plan = planImport(rows.map(sanitizeRow), existing).map((r) => {
+    if (r.status !== "new") return r;
+    const className = canonicalClassName(r.className, counts);
+    counts.set(className, (counts.get(className) ?? 0) + 1); // « 5gtb » puis « 5GTB » dans la meme liste : une seule classe
+    return { ...r, className };
+  });
+  const newClasses = [...new Set(plan.filter((r) => r.status === "new" && !known.has(r.className)).map((r) => r.className))].sort();
+  return { plan, newClasses };
+}
+
+export async function previewStudentImportAction(rows: unknown): Promise<ImportReply> {
+  return prepareImport(rows);
+}
+
+export async function importStudentsAction(rows: unknown): Promise<ImportReply> {
+  const prep = await prepareImport(rows);
+  if ("error" in prep) return prep;
+  const fresh = prep.plan.filter((r) => r.status === "new");
+  let created = 0;
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < fresh.length; i += 200) {
+      created += await tx.orm.public.User.createAndCount(
+        fresh.slice(i, i + 200).map((r) => ({
+          role: "STUDENT" as const,
+          name: `${r.firstName} ${r.lastName}`,
+          firstName: r.firstName,
+          lastName: r.lastName,
+          className: r.className,
+          sex: r.sex,
+          // Minuit UTC, comme la fiche eleve : la premiere connexion compare les 10 premiers caracteres.
+          dateOfBirth: r.dateOfBirth ? Temporal.Instant.from(`${r.dateOfBirth}T00:00:00Z`) : null,
+        }))
+      );
+    }
+  });
+  revalidatePath("/admin/eleves");
+  return { ...prep, created };
 }

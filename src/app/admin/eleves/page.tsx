@@ -7,6 +7,7 @@ import { btn, cx, ui } from "@/lib/ui";
 import { NotedProvider, StudentName } from "../../_components/StudentName";
 import { notedIdsOf } from "@/lib/student-notes-server";
 import { createStudentAction } from "./actions";
+import { ImportStudents } from "./ImportStudents";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,14 @@ export default async function ElevesPage({ searchParams }: { searchParams: Promi
           </form>
           <p className={`${ui.hint} mt-2`}>Le PIN se crée à la première connexion (date de naissance + engagement), comme pour un élève importé. Une classe commençant par 7 est une classe de test, hors statistiques.</p>
         </details>
+
+        {/* Importer une liste (18/11) : le responsable de l'ecole importe lui-meme ses eleves. */}
+        {user.role === "MASTER_ADMIN" && !user.impersonatedBy && (
+          <details className={ui.cardPad} open={students.length === 0}>
+            <summary className="cursor-pointer font-display font-extrabold text-ink">📥 Importer une liste d&apos;élèves (copier-coller depuis Excel, ou fichier .csv)</summary>
+            <ImportStudents classes={classes} />
+          </details>
+        )}
 
         {!classe && !needle && !sex ? (
           <p className={`${ui.cardPad} ${ui.muted}`}>Choisis une classe ou tape un nom pour afficher des élèves.</p>
