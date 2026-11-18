@@ -27,9 +27,9 @@ export async function encrypt(payload: SessionPayload, remember = false) {
     .sign(key);
 }
 
-// Comptes EN ATTENTE (Sartay 18/11) : J. Piret (JUSZER, ex-PIRZER) est une amie d'une AUTRE ECOLE. Tant que son
-// espace d'ecole n'est pas ouvert, la connexion de ces pseudos est refusee.
-export const ON_HOLD_PSEUDOS = ["JUSZER", "PIRZER"];
+// Pseudos REFUSES : PIRZER, premier pseudo de J. Piret (17/11). Depuis le 18/11 son ecole est ouverte : elle se
+// connecte avec JUSZER, dans SON ecole (lib/school.ts) ; PIRZER ne sert plus.
+export const ON_HOLD_PSEUDOS = ["PIRZER"];
 // Comptes VERROUILLES sur une ecole : son compte (garde en base, rien d'efface) n'est valable QU'AVEC un jeton de son
 // ecole. Tout jeton emis avant (sans ecole -> il ouvrirait l'ecole d'origine), pour elle ou pour un eleve qu'elle
 // regarderait, est traite comme un jeton invalide.
