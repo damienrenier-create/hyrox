@@ -136,6 +136,19 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const engineName = (id: string) => engines.find((e) => e.id === id)?.name ?? wodLabel(id);
   const teamSizeOf = (id: string) => engines.find((e) => e.id === id)?.teamSize ?? null; // equipes de taille fixe : nombre selon l'effectif
   const now = brusselsNow();
+  // Barre de menus (Sartay 18/11 : « carte ne doit être visible que si cette séance est en cours », « touché-coulé ne doit
+  // exister que pour la séance qui l'utilise », « level ne doit s'afficher que si la séance est sur level ») :
+  // - Carte et Touché-Coulé : seulement pendant une seance OUVERTE qui joue au Touché-Coulé (activite des dispenses
+  //   d'un WOD autre que Level et Hyrox), et ils ouvrent CETTE seance ;
+  // - la meme page sert de demineur (Level) et d'observation (Hyrox) : le bouton y garde l'acces, sous son vrai nom ;
+  //   le badminton n'en a pas (sa seance-type a l'activite des dispenses cochee par defaut, mais /touche-coule renvoie
+  //   aussitot vers la page badminton) ;
+  // - Level : une seance ouverte, ou la seance de la semaine, est un WOD Level (l'atelier reste a /admin/level).
+  const activityOpen = open.filter((s) => s.refereeMode && s.wodType !== "BADMINTON");
+  const activityName = (s: { wodType: string }) => (s.wodType === "LEVEL" ? "💣 Démineur" : s.wodType === "HYROX" ? "👁 Observation" : "🏴‍☠️ Touché-Coulé");
+  const classesOf = (s: { settings: unknown }) => (activityOpen.length > 1 ? ` · ${readSessionClasses(s.settings).join(" + ")}` : "");
+  const tcOpen = activityOpen.filter((s) => s.wodType !== "LEVEL" && s.wodType !== "HYROX");
+  const levelOn = open.some((s) => s.wodType === "LEVEL") || plans.find((p) => p.isCurrent)?.wodType === "LEVEL";
 
   // Demandes d'arbitrage en attente sur les seances ouvertes (un prof peut trancher a la place du greffier).
   const pendingRequests: { sessionId: string; sessionLabel: string; userId: string; name: string; className: string | null; note: string | null }[] = [];
@@ -157,16 +170,24 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             <Link href="/admin/journal" className={btn.smPrimary}>📅 Journal de classe</Link>
             <Link href="/admin/carnet" className={btn.smGhost}>📒 Carnet de cotes</Link>
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>
-            <Link href="/admin/carte" className={btn.smGhost}>Carte 🏴‍☠️</Link>
+            {tcOpen.map((s) => (
+              <Link key={`carte-${s.id}`} href={`/admin/carte?session=${s.id}`} className={btn.smGhost} title="Carte du Touché-Coulé de la séance en cours">Carte 🏴‍☠️{classesOf(s)}</Link>
+            ))}
             <Link href="/admin/resultats" className={btn.smGhost}>Résultats</Link>
             <Link href="/admin/eleves" className={btn.smGhost}>Élèves</Link>
             <Link href="/admin/notes" className={btn.smGhost}>📝 Mes notes</Link>
             <Link href="/admin/qr" className={btn.smGhost} title="Le QR à projeter pour que les élèves se connectent">📱 QR élèves</Link>
             <Link href="/admin/voir-eleve" className={btn.smGhost}>👁 Se connecter en tant que…</Link>
-            <Link href="/admin/level" className={btn.smGhost}>🧗 Level</Link>
-            {canDelete && <Link href="/admin/nettoyage" className={btn.smGhost}>Nettoyage</Link>}
+            {levelOn && <Link href="/admin/level" className={btn.smGhost} title="Atelier du WOD Level : exercices et échelle des niveaux">🧗 Level</Link>}
+            {canDelete && (
+              <Link href="/admin/nettoyage" className={btn.smGhost} title="Séances supprimées (restaurables), remise à zéro d'une séance, effacement des séances de test">
+                💀 Corbeille & tests
+              </Link>
+            )}
             <Link href="/greffier" className={btn.smGhost}>Greffier</Link>
-            <Link href="/touche-coule" className={btn.smSea}>Touché-Coulé</Link>
+            {activityOpen.map((s) => (
+              <Link key={`act-${s.id}`} href={`/touche-coule?session=${s.id}`} className={btn.smSea}>{activityName(s)}{classesOf(s)}</Link>
+            ))}
             <LogoutButton />
           </nav>
         }

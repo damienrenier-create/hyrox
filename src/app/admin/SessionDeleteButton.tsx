@@ -10,7 +10,7 @@ export function SessionDeleteButton({ id, label, detail, back }: { id: string; l
       action={softDeleteSessionAction}
       onSubmit={(e) => {
         const ok = confirm(
-          `💀 Supprimer la séance « ${label} » ?\n\n${detail}\n\nElle disparaît de la console, des résultats, des records, du carnet, des auto-évaluations et de l'espace des élèves.\nRien n'est effacé pour de bon : tu peux annuler tout de suite, ou la restaurer plus tard dans Nettoyage > Corbeille.`
+          `💀 Supprimer la séance « ${label} » ?\n\n${detail}\n\nElle disparaît de la console, des résultats, des records, du carnet, des auto-évaluations et de l'espace des élèves.\nRien n'est effacé pour de bon : tu peux annuler tout de suite, ou la restaurer plus tard dans « Corbeille & tests ».`
         );
         if (!ok) e.preventDefault();
       }}
@@ -20,7 +20,7 @@ export function SessionDeleteButton({ id, label, detail, back }: { id: string; l
       {back && <input type="hidden" name="back" value={back} />}
       <button
         type="submit"
-        title="Supprimer cette séance (restaurable depuis Nettoyage > Corbeille)"
+        title="Supprimer cette séance (restaurable depuis « Corbeille & tests »)"
         aria-label="Supprimer cette séance"
         className="w-7 h-7 rounded-full text-base leading-none flex items-center justify-center bg-card border border-line hover:bg-danger-soft hover:border-danger/40 transition"
       >

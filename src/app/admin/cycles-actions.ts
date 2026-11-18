@@ -344,7 +344,7 @@ export async function softDeleteDraftsAction(formData: FormData) {
   }
   revalidatePath("/admin");
   revalidatePath("/admin/seances");
-  redirect(`/admin/seances?ok=${encodeURIComponent(`💀 ${n} brouillon${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""} (restaurables dans Nettoyage › Corbeille).`)}`);
+  redirect(`/admin/seances?ok=${encodeURIComponent(`💀 ${n} brouillon${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""} (restaurables dans « Corbeille & tests »).`)}`);
 }
 export async function restoreSessionAction(formData: FormData) {
   await requireMaster();

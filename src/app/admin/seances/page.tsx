@@ -108,12 +108,12 @@ export default async function SeancesPage({ searchParams }: { searchParams: Prom
             ))}
           </div>
           <p className={ui.hint}>
-            {Object.values(STATUS).map((x) => `${x.label} = ${x.hint}`).join(" · ")}. 🔒 = jouée par de vrais élèves : elle reste toujours dans l&apos;historique. Supprimer (💀) ne détruit rien : la séance va dans Nettoyage › Corbeille.
+            {Object.values(STATUS).map((x) => `${x.label} = ${x.hint}`).join(" · ")}. 🔒 = jouée par de vrais élèves : elle reste toujours dans l&apos;historique. Supprimer (💀) ne détruit rien : la séance va dans « Corbeille & tests ».
           </p>
           {canDelete && drafts.length > 0 && (
             <form action={softDeleteDraftsAction} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="ids" value={drafts.map((r) => r.s.id).join(",")} />
-              <button type="submit" className={btn.smGhost} title="Suppression douce : restaurables une par une dans Nettoyage › Corbeille">💀 Ranger les {drafts.length} brouillon{drafts.length > 1 ? "s" : ""} dans la corbeille</button>
+              <button type="submit" className={btn.smGhost} title="Suppression douce : restaurables une par une dans « Corbeille & tests »">💀 Ranger les {drafts.length} brouillon{drafts.length > 1 ? "s" : ""} dans la corbeille</button>
               <span className={ui.hint}>(jamais lancés et ni ouverts ni programmés ; leurs équipes encodées suivent)</span>
             </form>
           )}

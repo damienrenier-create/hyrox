@@ -59,8 +59,8 @@ export default async function NettoyagePage({ searchParams }: { searchParams: Pr
   return (
     <div className={ui.page}>
       <TopBar
-        title="Nettoyage"
-        subtitle="Remise à zéro d'une séance et effacement définitif des données de test"
+        title="Corbeille & tests"
+        subtitle="Séances supprimées (restaurables), remise à zéro d'une séance, effacement définitif des séances de test"
         back={{ href: "/admin" }}
         right={<Link href="/admin" className={btn.smGhost}>Console</Link>}
       />
