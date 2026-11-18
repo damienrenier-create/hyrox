@@ -2,6 +2,7 @@ import type { Temporal as TemporalNS } from "temporal-spec";
 import { db } from "@/lib/db";
 import { getWodEngine } from "@/lib/wod-engines";
 import { MAX_CLASSES, forcedSessionSex, notDeleted, readSessionClasses, readSessionGuests, readSessionSex, readCycleClasses } from "@/lib/session-roles";
+import { currentSchool } from "@/lib/school";
 import { groupSlots, mergeCoTaught, slotsInForceAt, versionStart, type SlotGroup, type SlotRow } from "@/lib/journal";
 import { teacherNameById } from "@/lib/staff";
 
@@ -159,6 +160,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
   const now = brusselsNow();
   const today = Temporal.Now.zonedDateTimeISO(TZ);
   const out: UpcomingSlot[] = [];
+  const school = await currentSchool(); // regles « garcons seulement » : celles de l'ecole courante (18/11)
 
   for (let d = 0; d < daysAhead && out.length < limit * 3; d++) {
     const day = today.add({ days: d });
@@ -192,7 +194,7 @@ export async function upcomingSessions(limit = 10, daysAhead = 21, teacherId?: s
         numTeams: p.numTeams,
         refereeMode: p.refereeMode,
         sessionId: null,
-        sex: g.sex ?? forcedSessionSex(p.wodType, dateKey),
+        sex: g.sex ?? forcedSessionSex(p.wodType, dateKey, school),
         editable: (g.validFrom ?? null) === versionStart(slots, g.teacherId),
       });
     }
@@ -239,7 +241,7 @@ export async function openSession(input: OpenSessionInput) {
   const numTeams = engine.noTeams ? 0 : Math.min(50, Math.max(1, Math.floor(input.numTeams)));
   // Periode « garcons seulement » d'un type de seance (SESSION_SEX_RULES) : une seance mixte prend ce sexe.
   const day = (input.opensAt ?? Temporal.Now.instant()).toZonedDateTimeISO(TZ).toPlainDate().toString();
-  const forced = readSessionSex(input.settings ?? null) ? null : forcedSessionSex(input.wodType, day);
+  const forced = readSessionSex(input.settings ?? null) ? null : forcedSessionSex(input.wodType, day, await currentSchool());
   return db.transaction(async (tx) => {
     const session = await tx.orm.public.Session.create({
       wodType: input.wodType as "PYRAMIDE_CLASSIQUE",

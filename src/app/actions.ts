@@ -1,6 +1,7 @@
 "use server";
 
 import { getSession as readSessionCookie, login, ON_HOLD_PSEUDOS, SessionPayload } from "@/lib/auth";
+import { loginPageSchool, ORIGIN_SCHOOL, schoolById, schoolOfPseudo, withSchool } from "@/lib/school";
 import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -9,9 +10,8 @@ import crypto from "crypto";
 export type LoginState = { error: string } | undefined;
 
 // Mot de passe d'un compte pseudo : connexion, et confirmation de « se connecter en tant que » (29/09 nuit).
-// J. Piret (17/11) : PIRZER le midi, puis JUSZER l'apres-midi (Sartay : « J. Piret, JUSZER, coach ») ; les deux
-// pseudos ouvrent le MEME compte (voir SAME_ACCOUNT plus bas), jamais un doublon.
-const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER", "JUSZER", "PIRZER"];
+// (J. Piret, JUSZER / PIRZER : plus un coach d'ici depuis le 18/11 — prof de SON ecole, voir loginAction.)
+const COACHES = ["AXEZER", "GUIZER", "SIMZER", "RACZER"];
 function expectedPassword(pseudo: string): string | null {
   if (pseudo === "DAMZER") return "boss";
   if (COACHES.includes(pseudo)) return "coach";
@@ -26,12 +26,20 @@ const PROF_USER_NAME = "Damien Renier";
 // portent tous une cle etrangere vers User.id. Un identifiant invente faisait echouer toute ecriture
 // (erreur serveur au placement d'un bateau) et changeait a chaque connexion.
 // Un compte, plusieurs pseudos : la ligne User existante est retrouvee quel que soit le pseudo tape (dans cet ordre).
-// DAMZER pointe sur la ligne PROF importee ; JUSZER et PIRZER sont tous deux J. Piret (ligne nommee JUSZER, ex-PIRZER).
+// DAMZER pointe sur la ligne PROF importee. (JUSZER / PIRZER, J. Piret : depuis le 18/11, compte de SON ecole, voir
+// loginAction ; il ne se resout plus jamais ici.)
 const SAME_ACCOUNT: Record<string, string[]> = {
   DAMZER: [PROF_USER_NAME, "DAMZER"],
-  JUSZER: ["JUSZER", "PIRZER"],
-  PIRZER: ["JUSZER", "PIRZER"],
 };
+
+// Mot de passe d'un compte d'une autre ecole (User.password, meme forme que les codes PIN : « sel:empreinte »).
+function secretMatches(given: string, stored: string | null | undefined): boolean {
+  const [salt, hash] = (stored ?? "").split(":");
+  if (!salt || !hash || !given) return false;
+  const a = Buffer.from(hashPin(given, salt), "hex");
+  const b = Buffer.from(hash, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 async function resolveStaffUser(pseudo: string, role: SessionPayload["role"]): Promise<string> {
   const names = SAME_ACCOUNT[pseudo] ?? [pseudo];
@@ -53,6 +61,16 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   // 18/11 : J. Piret (JUSZER / PIRZER) vient d'une autre ecole ; son compte attend son propre espace d'ecole.
   if (ON_HOLD_PSEUDOS.includes(name)) return { error: "Ce compte n'est pas encore ouvert : son espace d'école est en préparation." };
 
+  // Prof d'une AUTRE ecole (18/11, lib/school.ts) : son compte n'existe que dans son ecole, avec SON mot de passe
+  // (jamais celui des coachs d'ici), et son jeton porte son ecole : tout ce qu'il ouvre ensuite reste dans son ecole.
+  const school = schoolOfPseudo(name);
+  if (school !== ORIGIN_SCHOOL) {
+    const account = await withSchool(school, () => db.orm.public.User.where({ name }).first());
+    if (!account || account.role === "STUDENT" || !secretMatches(password, account.password)) return { error: "Mot de passe incorrect." };
+    await login({ id: account.id, role: account.role, name, school }, remember);
+    redirect(account.role === "GREFFIER" ? "/greffier" : "/admin");
+  }
+
   let role: SessionPayload["role"] = "STUDENT";
 
   // Auto-détection du rôle en fonction du Pseudo
@@ -71,8 +89,9 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
     return { error: "Pseudo inconnu. Les élèves se connectent avec leur classe et leur code PIN." };
   }
 
-  // Créer la session JWT sur le VRAI identifiant en base (stable d'une connexion a l'autre).
-  await login({ id: await resolveStaffUser(name, role), role, name }, remember);
+  // Créer la session JWT sur le VRAI identifiant en base (stable d'une connexion a l'autre). Toujours dans l'ecole
+  // d'origine, meme si le telephone a retenu le lien d'une autre ecole (cookie « ecole »).
+  await login({ id: await withSchool(ORIGIN_SCHOOL, () => resolveStaffUser(name, role)), role, name }, remember);
 
   // Redirection selon le rôle. Les coachs (ADMIN) tombaient dans le `redirect` final et atterrissaient
   // sur le Touché-Coulé, qui leur generait aussitot une flotte : ils entraient dans le jeu en se
@@ -84,11 +103,19 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
 
 // ===== Login élève : classe -> recherche -> PIN, avec le vrai identifiant permanent =====
 
+// Tout le parcours de connexion des eleves (classes, recherche, date de naissance, code PIN) se fait dans l'ecole du
+// lien d'ecole retenu par le telephone (18/11), sinon dans l'ecole d'origine : jamais dans celle d'un compte deja connecte.
+async function inLoginSchool<T>(fn: () => Promise<T>): Promise<T> {
+  return withSchool(await loginPageSchool(), fn);
+}
+
 export async function listClassesAction(): Promise<string[]> {
-  const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
-  const classes = new Set<string>();
-  students.forEach((s) => { if (s.className) classes.add(s.className); });
-  return Array.from(classes).sort();
+  return inLoginSchool(async () => {
+    const students = await db.orm.public.User.where({ role: "STUDENT" }).all();
+    const classes = new Set<string>();
+    students.forEach((s) => { if (s.className) classes.add(s.className); });
+    return Array.from(classes).sort();
+  });
 }
 
 export type StudentMatch = { id: string; firstName: string; lastName: string; hasPin: boolean };
@@ -96,13 +123,15 @@ export type StudentMatch = { id: string; firstName: string; lastName: string; ha
 export async function searchStudentsAction(className: string, query: string): Promise<StudentMatch[]> {
   const q = query.trim().toLowerCase();
   if (!className || q.length < 1) return [];
-  const students = await db.orm.public.User.where({ role: "STUDENT", className }).all();
-  return students
-    .filter((s) =>
-      (s.firstName ?? "").toLowerCase().startsWith(q) || (s.lastName ?? "").toLowerCase().startsWith(q)
-    )
-    .slice(0, 8)
-    .map((s) => ({ id: s.id, firstName: s.firstName ?? "", lastName: s.lastName ?? "", hasPin: !!s.pinCode }));
+  return inLoginSchool(async () => {
+    const students = await db.orm.public.User.where({ role: "STUDENT", className }).all();
+    return students
+      .filter((s) =>
+        (s.firstName ?? "").toLowerCase().startsWith(q) || (s.lastName ?? "").toLowerCase().startsWith(q)
+      )
+      .slice(0, 8)
+      .map((s) => ({ id: s.id, firstName: s.firstName ?? "", lastName: s.lastName ?? "", hasPin: !!s.pinCode }));
+  });
 }
 
 function hashPin(pin: string, salt: string) {
@@ -119,7 +148,7 @@ function birthMatches(stored: unknown, given: string): boolean {
 // Rien n'est cree ici, et la verification est refaite a l'ecriture du code PIN : le client n'est
 // jamais cru sur parole.
 export async function verifyBirthDateAction(studentId: string, birthDate: string): Promise<{ error: string } | { ok: true }> {
-  const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  const user = await inLoginSchool(() => db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first());
   if (!user) return { error: "Élève introuvable." };
   if (user.pinCode) return { error: "Tu as déjà un code PIN : entre-le pour te connecter." };
   if (!user.dateOfBirth) return { error: "Ta date de naissance n'est pas enregistrée. Préviens ton professeur." };
@@ -140,7 +169,7 @@ export async function firstLoginAction(
   if (!confirmed) return { error: "Tu dois cocher la case pour confirmer que c'est bien toi." };
   if (!/^\d{4,8}$/.test(pin)) return { error: "Le code PIN doit contenir 4 à 8 chiffres." };
 
-  const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  const user = await inLoginSchool(() => db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first());
   if (!user) return { error: "Élève introuvable." };
   if (user.pinCode) return { error: "Tu as déjà un code PIN : entre-le pour te connecter." };
   if (!birthMatches(user.dateOfBirth, birthDate)) {
@@ -148,8 +177,8 @@ export async function firstLoginAction(
   }
 
   const salt = crypto.randomBytes(16).toString("hex");
-  await db.orm.public.User.where({ id: user.id }).update({ pinCode: `${salt}:${hashPin(pin, salt)}` });
-  await login({ id: user.id, role: "STUDENT", name: user.name, className: user.className ?? undefined }, remember);
+  await withSchool(user.schoolId ?? null, () => db.orm.public.User.where({ id: user.id }).update({ pinCode: `${salt}:${hashPin(pin, salt)}` }));
+  await login({ id: user.id, role: "STUDENT", name: user.name, className: user.className ?? undefined, school: user.schoolId ?? null }, remember);
   redirect("/eleve");
 }
 
@@ -164,7 +193,7 @@ export async function studentLoginAction(
     return { error: "Le code PIN doit contenir 4 à 8 chiffres." };
   }
 
-  const user = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
+  const user = await inLoginSchool(() => db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first());
   if (!user) return { error: "Élève introuvable." };
   if (!user.pinCode) return { error: "Première connexion : passe par ta date de naissance." };
 
@@ -177,6 +206,7 @@ export async function studentLoginAction(
       role: "STUDENT",
       name: user.name,
       className: user.className ?? undefined,
+      school: user.schoolId ?? null, // ecole de l'eleve (18/11) : tout ce qu'il ouvre ensuite reste dans son ecole
     },
     remember
   );
@@ -191,11 +221,18 @@ export async function impersonateStudentAction(studentId: string, password: stri
   const me = await getSession();
   if (!me || (me.role !== "MASTER_ADMIN" && me.role !== "ADMIN")) return { error: "Réservé aux admins." };
   if (me.impersonatedBy) return { error: "Tu regardes déjà le compte d'un élève : reviens d'abord à ton compte." };
+  // Pseudo d'ici (DAMZER, coachs, meme quand DAMZER visite une autre ecole) : son mot de passe habituel ; prof d'une
+  // autre ecole : le mot de passe de son compte (User.password).
   const expected = expectedPassword(me.name);
-  if (!expected || password.trim() !== expected) return { error: "Mot de passe incorrect." };
+  const okPassword = expected
+    ? password.trim() === expected
+    : secretMatches(password.trim(), (await db.orm.public.User.where({ id: me.id }).first())?.password);
+  if (!okPassword) return { error: "Mot de passe incorrect." };
+  // L'eleve est cherche dans l'ecole de l'admin (filtre automatique) ; le jeton garde cette ecole des deux cotes.
   const student = await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first();
   if (!student) return { error: "Élève introuvable." };
-  await login({ id: student.id, role: "STUDENT", name: student.name, className: student.className ?? undefined, impersonatedBy: { id: me.id, name: me.name, role: me.role } }, false);
+  const school = me.school ?? null;
+  await login({ id: student.id, role: "STUDENT", name: student.name, className: student.className ?? undefined, school, impersonatedBy: { id: me.id, name: me.name, role: me.role, school } }, false);
   redirect("/eleve");
 }
 
@@ -203,6 +240,21 @@ export async function stopImpersonatingAction(): Promise<void> {
   const s = await readSessionCookie();
   if (!s?.impersonatedBy) redirect("/");
   const back = s.impersonatedBy;
-  await login({ id: back.id, role: back.role, name: back.name }, false);
+  await login({ id: back.id, role: back.role, name: back.name, school: back.school ?? null }, false);
   redirect(`/admin/voir-eleve?classe=${encodeURIComponent(s.className ?? "")}`);
+}
+
+// ===== DAMZER change d'ecole (Sartay 18/11 : « Oui, DAMZER y entre aussi ») =====
+// Seul DAMZER (le boss de l'ecole d'origine) passe d'une ecole a l'autre ; dans chaque ecole il a SA ligne User (creee
+// a sa premiere visite, comme a une premiere connexion), et son jeton porte l'ecole visitee : la console, les eleves,
+// les seances, tout ce qu'il voit et fait ensuite est celui de cette ecole.
+export async function switchSchoolAction(formData: FormData): Promise<void> {
+  const me = await getSession();
+  if (!me || me.name !== "DAMZER" || me.role !== "MASTER_ADMIN" || me.impersonatedBy) redirect("/admin");
+  const wanted = String(formData.get("school") ?? "");
+  const target = schoolById(wanted === "origine" ? ORIGIN_SCHOOL : wanted);
+  if (!target) redirect("/admin");
+  const id = await withSchool(target.id, () => resolveStaffUser("DAMZER", "MASTER_ADMIN"));
+  await login({ id, role: "MASTER_ADMIN", name: "DAMZER", school: target.id }, false);
+  redirect("/admin");
 }

@@ -8,6 +8,7 @@ import type { Temporal as TemporalNS } from "temporal-spec";
 import { isBoss, readCards, MAX_CARDS, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type LevelCard, type Stars } from "@/lib/wod-engines/templates/level-engine";
 import { deriveLevel } from "@/lib/level-proposals";
 import { asFormat, asStars } from "@/lib/level";
+import { currentSchool, ORIGIN_SCHOOL } from "@/lib/school";
 
 // Catalogue d'exercices et echelle des niveaux du WOD Level. Profs, coachs ET greffier construisent ;
 // seul DAMZER supprime (regle de la console : les coachs ne suppriment rien).
@@ -17,12 +18,19 @@ const PATH = "/admin/level";
 async function requireLevelStaff() {
   const user = await getSession();
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) throw new Error("Accès refusé.");
+  await requireOriginSchool();
   return user;
 }
 async function requireMaster() {
   const user = await getSession();
   if (!user || user.role !== "MASTER_ADMIN") throw new Error("Accès refusé (réservé à DAMZER).");
+  await requireOriginSchool();
   return user;
+}
+// Echelle et catalogue COMMUNS a toutes les ecoles (18/11, lib/school.ts) : ils ne se modifient que depuis l'ecole
+// d'origine, pour qu'une autre ecole ne change jamais les lecons de D. Renier (elle s'en sert telles quelles).
+async function requireOriginSchool() {
+  if ((await currentSchool()) !== ORIGIN_SCHOOL) throw new Error("L'échelle des niveaux est commune aux écoles : elle se modifie depuis l'école d'origine.");
 }
 
 const cleanLabel = (s: string) => s.trim().replace(/\s+/g, " ").toUpperCase().slice(0, 40);

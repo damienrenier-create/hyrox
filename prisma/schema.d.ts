@@ -34,7 +34,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'12e7bd47585309ae974de39aa9d59091068882aa4ef5507758e8407a91d9a7af'>;
+  StorageHashBase<'0fe14332d401ddbfc5b757c372f0c8c2509f7768837581da1b3d98c4e854db12'>;
 export type ExecutionHash =
   ExecutionHashBase<'2e470564331a03438610ae48a9f76181d15d9e6d884277c0da3c1a20df5a41c1'>;
 export type ProfileHash =
@@ -244,6 +244,7 @@ export type FieldOutputTypes = {
   readonly public: {
     readonly BadmintonEvent: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly matchId: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly kind: CodecTypes['pg/text@1']['output'];
@@ -255,6 +256,7 @@ export type FieldOutputTypes = {
     };
     readonly BadmintonMatch: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly playerAId: CodecTypes['pg/text@1']['output'];
       readonly playerBId: CodecTypes['pg/text@1']['output'];
@@ -264,6 +266,7 @@ export type FieldOutputTypes = {
     };
     readonly BadmintonTournament: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly kind: CodecTypes['pg/text@1']['output'];
       readonly label: CodecTypes['pg/text@1']['output'];
@@ -275,6 +278,7 @@ export type FieldOutputTypes = {
     };
     readonly BadmintonTournamentPlayer: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly tournamentId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly pool: CodecTypes['pg/text@1']['output'];
@@ -283,6 +287,7 @@ export type FieldOutputTypes = {
     };
     readonly BoatPlacement: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly exerciseId: CodecTypes['pg/text@1']['output'];
@@ -292,6 +297,7 @@ export type FieldOutputTypes = {
     };
     readonly ClassSlot: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly className: CodecTypes['pg/text@1']['output'];
       readonly weekday: CodecTypes['pg/int4@1']['output'];
       readonly startMin: CodecTypes['pg/int4@1']['output'];
@@ -303,6 +309,7 @@ export type FieldOutputTypes = {
     };
     readonly Cycle: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'];
       readonly isCurrent: CodecTypes['pg/bool@1']['output'];
@@ -311,6 +318,7 @@ export type FieldOutputTypes = {
     };
     readonly CyclePlan: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly cycleId: CodecTypes['pg/text@1']['output'];
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
@@ -330,6 +338,7 @@ export type FieldOutputTypes = {
     };
     readonly Evaluation: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly evaluatorId: CodecTypes['pg/text@1']['output'];
@@ -344,6 +353,7 @@ export type FieldOutputTypes = {
     };
     readonly Lap: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -370,6 +380,7 @@ export type FieldOutputTypes = {
     };
     readonly LevelLoss: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly level: CodecTypes['pg/int4@1']['output'];
@@ -378,6 +389,7 @@ export type FieldOutputTypes = {
     };
     readonly LevelTick: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly level: CodecTypes['pg/int4@1']['output'];
@@ -387,6 +399,7 @@ export type FieldOutputTypes = {
     };
     readonly MineBoard: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly rows: CodecTypes['pg/json@1']['output'];
       readonly cols: CodecTypes['pg/json@1']['output'];
@@ -396,6 +409,7 @@ export type FieldOutputTypes = {
     };
     readonly MineReveal: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly refereeId: CodecTypes['pg/text@1']['output'];
       readonly row: CodecTypes['pg/int4@1']['output'];
@@ -405,6 +419,7 @@ export type FieldOutputTypes = {
     };
     readonly NotePeriod: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly authorId: CodecTypes['pg/text@1']['output'];
       readonly endDate: CodecTypes['pg/text@1']['output'];
       readonly label: CodecTypes['pg/text@1']['output'] | null;
@@ -414,6 +429,7 @@ export type FieldOutputTypes = {
     };
     readonly Observation: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly evaluatorId: CodecTypes['pg/text@1']['output'];
       readonly targetUserId: CodecTypes['pg/text@1']['output'];
@@ -425,6 +441,7 @@ export type FieldOutputTypes = {
     };
     readonly QuizAnswer: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly answers: CodecTypes['pg/json@1']['output'];
@@ -434,12 +451,14 @@ export type FieldOutputTypes = {
     };
     readonly RacePause: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
       readonly from: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     };
     readonly RaceState: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
@@ -455,6 +474,7 @@ export type FieldOutputTypes = {
     };
     readonly RefereeFleet: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly refereeId: CodecTypes['pg/text@1']['output'];
       readonly slot: CodecTypes['pg/int4@1']['output'];
@@ -464,6 +484,7 @@ export type FieldOutputTypes = {
     };
     readonly RefereeShip: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly fleetId: CodecTypes['pg/text@1']['output'];
       readonly size: CodecTypes['pg/int4@1']['output'];
       readonly orientation: CodecTypes['pg/text@1']['output'];
@@ -474,6 +495,7 @@ export type FieldOutputTypes = {
     };
     readonly RepEntry: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly observationId: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly evaluatorId: CodecTypes['pg/text@1']['output'];
@@ -485,12 +507,14 @@ export type FieldOutputTypes = {
     };
     readonly Score: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly points: CodecTypes['pg/int4@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly SelfEvalReview: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly answers: CodecTypes['pg/json@1']['output'];
@@ -502,6 +526,7 @@ export type FieldOutputTypes = {
     };
     readonly SelfEvaluation: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly answers: CodecTypes['pg/json@1']['output'];
@@ -509,6 +534,7 @@ export type FieldOutputTypes = {
     };
     readonly Session: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
         | 'RELAIS_SPRINT'
@@ -536,6 +562,7 @@ export type FieldOutputTypes = {
     };
     readonly SessionReferee: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
       readonly note: CodecTypes['pg/text@1']['output'] | null;
@@ -546,6 +573,7 @@ export type FieldOutputTypes = {
     };
     readonly Shot: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly refereeId: CodecTypes['pg/text@1']['output'];
       readonly targetTeamId: CodecTypes['pg/text@1']['output'];
@@ -556,6 +584,7 @@ export type FieldOutputTypes = {
     };
     readonly StationEvent: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly stationId: CodecTypes['pg/text@1']['output'];
@@ -563,6 +592,7 @@ export type FieldOutputTypes = {
     };
     readonly StudentNote: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly authorId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly category: CodecTypes['pg/text@1']['output'] | null;
@@ -575,6 +605,7 @@ export type FieldOutputTypes = {
     };
     readonly Team: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'] | null;
       readonly startExerciseId: CodecTypes['pg/text@1']['output'] | null;
@@ -585,12 +616,14 @@ export type FieldOutputTypes = {
     };
     readonly TeamMember: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
       readonly finisherPoints: CodecTypes['pg/int4@1']['output'];
     };
     readonly User: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly firstName: CodecTypes['pg/text@1']['output'] | null;
@@ -608,6 +641,7 @@ export type FieldOutputTypes = {
     };
     readonly YellowCard: {
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -620,6 +654,7 @@ export type FieldInputTypes = {
   readonly public: {
     readonly BadmintonEvent: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly matchId: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly kind: CodecTypes['pg/text@1']['input'];
@@ -631,6 +666,7 @@ export type FieldInputTypes = {
     };
     readonly BadmintonMatch: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly playerAId: CodecTypes['pg/text@1']['input'];
       readonly playerBId: CodecTypes['pg/text@1']['input'];
@@ -640,6 +676,7 @@ export type FieldInputTypes = {
     };
     readonly BadmintonTournament: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly kind: CodecTypes['pg/text@1']['input'];
       readonly label: CodecTypes['pg/text@1']['input'];
@@ -651,6 +688,7 @@ export type FieldInputTypes = {
     };
     readonly BadmintonTournamentPlayer: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly tournamentId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly pool: CodecTypes['pg/text@1']['input'];
@@ -659,6 +697,7 @@ export type FieldInputTypes = {
     };
     readonly BoatPlacement: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly exerciseId: CodecTypes['pg/text@1']['input'];
@@ -668,6 +707,7 @@ export type FieldInputTypes = {
     };
     readonly ClassSlot: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly className: CodecTypes['pg/text@1']['input'];
       readonly weekday: CodecTypes['pg/int4@1']['input'];
       readonly startMin: CodecTypes['pg/int4@1']['input'];
@@ -679,6 +719,7 @@ export type FieldInputTypes = {
     };
     readonly Cycle: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'];
       readonly isCurrent: CodecTypes['pg/bool@1']['input'];
@@ -687,6 +728,7 @@ export type FieldInputTypes = {
     };
     readonly CyclePlan: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly cycleId: CodecTypes['pg/text@1']['input'];
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
@@ -706,6 +748,7 @@ export type FieldInputTypes = {
     };
     readonly Evaluation: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly evaluatorId: CodecTypes['pg/text@1']['input'];
@@ -720,6 +763,7 @@ export type FieldInputTypes = {
     };
     readonly Lap: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -746,6 +790,7 @@ export type FieldInputTypes = {
     };
     readonly LevelLoss: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly level: CodecTypes['pg/int4@1']['input'];
@@ -754,6 +799,7 @@ export type FieldInputTypes = {
     };
     readonly LevelTick: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly level: CodecTypes['pg/int4@1']['input'];
@@ -763,6 +809,7 @@ export type FieldInputTypes = {
     };
     readonly MineBoard: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly rows: CodecTypes['pg/json@1']['input'];
       readonly cols: CodecTypes['pg/json@1']['input'];
@@ -772,6 +819,7 @@ export type FieldInputTypes = {
     };
     readonly MineReveal: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly refereeId: CodecTypes['pg/text@1']['input'];
       readonly row: CodecTypes['pg/int4@1']['input'];
@@ -781,6 +829,7 @@ export type FieldInputTypes = {
     };
     readonly NotePeriod: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly authorId: CodecTypes['pg/text@1']['input'];
       readonly endDate: CodecTypes['pg/text@1']['input'];
       readonly label: CodecTypes['pg/text@1']['input'] | null;
@@ -790,6 +839,7 @@ export type FieldInputTypes = {
     };
     readonly Observation: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly evaluatorId: CodecTypes['pg/text@1']['input'];
       readonly targetUserId: CodecTypes['pg/text@1']['input'];
@@ -801,6 +851,7 @@ export type FieldInputTypes = {
     };
     readonly QuizAnswer: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly answers: CodecTypes['pg/json@1']['input'];
@@ -810,12 +861,14 @@ export type FieldInputTypes = {
     };
     readonly RacePause: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
       readonly from: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly to: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
     };
     readonly RaceState: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly endedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
@@ -831,6 +884,7 @@ export type FieldInputTypes = {
     };
     readonly RefereeFleet: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly refereeId: CodecTypes['pg/text@1']['input'];
       readonly slot: CodecTypes['pg/int4@1']['input'];
@@ -840,6 +894,7 @@ export type FieldInputTypes = {
     };
     readonly RefereeShip: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly fleetId: CodecTypes['pg/text@1']['input'];
       readonly size: CodecTypes['pg/int4@1']['input'];
       readonly orientation: CodecTypes['pg/text@1']['input'];
@@ -850,6 +905,7 @@ export type FieldInputTypes = {
     };
     readonly RepEntry: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly observationId: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly evaluatorId: CodecTypes['pg/text@1']['input'];
@@ -861,12 +917,14 @@ export type FieldInputTypes = {
     };
     readonly Score: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly points: CodecTypes['pg/int4@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly SelfEvalReview: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly answers: CodecTypes['pg/json@1']['input'];
@@ -878,6 +936,7 @@ export type FieldInputTypes = {
     };
     readonly SelfEvaluation: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly answers: CodecTypes['pg/json@1']['input'];
@@ -885,6 +944,7 @@ export type FieldInputTypes = {
     };
     readonly Session: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
         | 'RELAIS_SPRINT'
@@ -912,6 +972,7 @@ export type FieldInputTypes = {
     };
     readonly SessionReferee: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
       readonly note: CodecTypes['pg/text@1']['input'] | null;
@@ -922,6 +983,7 @@ export type FieldInputTypes = {
     };
     readonly Shot: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly refereeId: CodecTypes['pg/text@1']['input'];
       readonly targetTeamId: CodecTypes['pg/text@1']['input'];
@@ -932,6 +994,7 @@ export type FieldInputTypes = {
     };
     readonly StationEvent: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly stationId: CodecTypes['pg/text@1']['input'];
@@ -939,6 +1002,7 @@ export type FieldInputTypes = {
     };
     readonly StudentNote: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly authorId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly category: CodecTypes['pg/text@1']['input'] | null;
@@ -951,6 +1015,7 @@ export type FieldInputTypes = {
     };
     readonly Team: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'] | null;
       readonly startExerciseId: CodecTypes['pg/text@1']['input'] | null;
@@ -961,12 +1026,14 @@ export type FieldInputTypes = {
     };
     readonly TeamMember: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
       readonly finisherPoints: CodecTypes['pg/int4@1']['input'];
     };
     readonly User: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly firstName: CodecTypes['pg/text@1']['input'] | null;
@@ -984,6 +1051,7 @@ export type FieldInputTypes = {
     };
     readonly YellowCard: {
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1001,6 +1069,7 @@ export type StorageColumnTypes = {
       readonly kind: CodecTypes['pg/text@1']['output'];
       readonly matchId: CodecTypes['pg/text@1']['output'];
       readonly role: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly sets: CodecTypes['pg/json@1']['output'] | null;
       readonly targetId: CodecTypes['pg/text@1']['output'] | null;
@@ -1011,6 +1080,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly playerAId: CodecTypes['pg/text@1']['output'];
       readonly playerBId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly tournamentId: CodecTypes['pg/text@1']['output'] | null;
     };
@@ -1022,6 +1092,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly kind: CodecTypes['pg/text@1']['output'];
       readonly label: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly settings: CodecTypes['pg/json@1']['output'];
     };
@@ -1029,6 +1100,7 @@ export type StorageColumnTypes = {
       readonly elo: CodecTypes['pg/int4@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly pool: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly seed: CodecTypes['pg/int4@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly tournamentId: CodecTypes['pg/text@1']['output'];
@@ -1038,6 +1110,7 @@ export type StorageColumnTypes = {
       readonly exerciseId: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly ownerId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly shipId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
@@ -1047,6 +1120,7 @@ export type StorageColumnTypes = {
       readonly endMin: CodecTypes['pg/int4@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly planId: CodecTypes['pg/text@1']['output'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sex: 'M' | 'F' | null;
       readonly startMin: CodecTypes['pg/int4@1']['output'];
       readonly teacherId: CodecTypes['pg/text@1']['output'] | null;
@@ -1060,6 +1134,7 @@ export type StorageColumnTypes = {
       readonly isCurrent: CodecTypes['pg/bool@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly cyclePlan: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -1070,6 +1145,7 @@ export type StorageColumnTypes = {
       readonly numTeams: CodecTypes['pg/int4@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'];
       readonly refereeMode: CodecTypes['pg/bool@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
         | 'RELAIS_SPRINT'
@@ -1090,6 +1166,7 @@ export type StorageColumnTypes = {
       readonly note: CodecTypes['pg/int4@1']['output'];
       readonly observationId: CodecTypes['pg/text@1']['output'] | null;
       readonly repsObserved: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly targetUserId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
@@ -1098,6 +1175,7 @@ export type StorageColumnTypes = {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
     };
     readonly level: {
@@ -1124,6 +1202,7 @@ export type StorageColumnTypes = {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly level: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly soft: CodecTypes['pg/bool@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
@@ -1134,6 +1213,7 @@ export type StorageColumnTypes = {
       readonly card: CodecTypes['pg/int4@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly level: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
     };
@@ -1143,6 +1223,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly mines: CodecTypes['pg/json@1']['output'];
       readonly rows: CodecTypes['pg/json@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly seed: CodecTypes['pg/text@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
     };
@@ -1153,6 +1234,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly refereeId: CodecTypes['pg/text@1']['output'];
       readonly row: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
     };
     readonly notePeriod: {
@@ -1162,6 +1244,7 @@ export type StorageColumnTypes = {
       readonly endDate: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly label: CodecTypes['pg/text@1']['output'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     };
     readonly observation: {
@@ -1170,6 +1253,7 @@ export type StorageColumnTypes = {
       readonly evaluatorId: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly mode: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly targetUserId: CodecTypes['pg/text@1']['output'];
@@ -1179,6 +1263,7 @@ export type StorageColumnTypes = {
       readonly answers: CodecTypes['pg/json@1']['output'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly score: CodecTypes['pg/int4@1']['output'];
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
@@ -1188,6 +1273,7 @@ export type StorageColumnTypes = {
       readonly from: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     };
     readonly raceState: {
@@ -1201,6 +1287,7 @@ export type StorageColumnTypes = {
       readonly penMin: CodecTypes['pg/int4@1']['output'];
       readonly rep0: CodecTypes['pg/int4@1']['output'];
       readonly runs: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly step: CodecTypes['pg/int4@1']['output'];
@@ -1210,6 +1297,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly lockedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly refereeId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly slot: CodecTypes['pg/int4@1']['output'];
       readonly status: 'PLACING' | 'LOCKED';
@@ -1220,6 +1308,7 @@ export type StorageColumnTypes = {
       readonly fleetId: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly orientation: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly size: CodecTypes['pg/int4@1']['output'];
       readonly startExerciseId: CodecTypes['pg/text@1']['output'];
       readonly startTeamId: CodecTypes['pg/text@1']['output'];
@@ -1231,6 +1320,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly observationId: CodecTypes['pg/text@1']['output'];
       readonly reps: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly targetUserId: CodecTypes['pg/text@1']['output'];
       readonly voidedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
@@ -1239,6 +1329,7 @@ export type StorageColumnTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly points: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
     };
     readonly selfEvalReview: {
@@ -1247,6 +1338,7 @@ export type StorageColumnTypes = {
       readonly commentVisible: CodecTypes['pg/bool@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly reviewerName: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -1255,6 +1347,7 @@ export type StorageColumnTypes = {
     readonly selfEvaluation: {
       readonly answers: CodecTypes['pg/json@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly studentId: CodecTypes['pg/text@1']['output'];
       readonly submittedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -1273,6 +1366,7 @@ export type StorageColumnTypes = {
       readonly planId: CodecTypes['pg/text@1']['output'] | null;
       readonly raceEndedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly refereeMode: CodecTypes['pg/bool@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly settings: CodecTypes['pg/json@1']['output'] | null;
       readonly slotKey: CodecTypes['pg/text@1']['output'] | null;
       readonly teacherId: CodecTypes['pg/text@1']['output'] | null;
@@ -1292,6 +1386,7 @@ export type StorageColumnTypes = {
       readonly decidedBy: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly note: CodecTypes['pg/text@1']['output'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly status: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
@@ -1302,6 +1397,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly phase: 'DURING_WOD' | 'POST_WOD';
       readonly refereeId: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly targetExerciseId: CodecTypes['pg/text@1']['output'];
       readonly targetTeamId: CodecTypes['pg/text@1']['output'];
@@ -1309,6 +1405,7 @@ export type StorageColumnTypes = {
     readonly stationEvent: {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly stationId: CodecTypes['pg/text@1']['output'];
       readonly teamId: CodecTypes['pg/text@1']['output'];
@@ -1319,6 +1416,7 @@ export type StorageColumnTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
       readonly seenSessionId: CodecTypes['pg/text@1']['output'] | null;
       readonly studentId: CodecTypes['pg/text@1']['output'];
@@ -1332,12 +1430,14 @@ export type StorageColumnTypes = {
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly order: CodecTypes['pg/int4@1']['output'] | null;
       readonly penalties: CodecTypes['pg/int4@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['output'];
       readonly startExerciseId: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly teamMember: {
       readonly finisherPoints: CodecTypes['pg/int4@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
       readonly userId: CodecTypes['pg/text@1']['output'];
     };
@@ -1355,6 +1455,7 @@ export type StorageColumnTypes = {
       readonly profileVisibility: 'PUBLIC' | 'PRIVATE' | 'SECRET';
       readonly reliability: CodecTypes['pg/int4@1']['output'];
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly sex: 'M' | 'F' | null;
       readonly winterArcUntil: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     };
@@ -1364,6 +1465,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly raceStateId: CodecTypes['pg/text@1']['output'];
       readonly reason: CodecTypes['pg/text@1']['output'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['output'] | null;
       readonly teamId: CodecTypes['pg/text@1']['output'];
     };
   };
@@ -1377,6 +1479,7 @@ export type StorageColumnInputTypes = {
       readonly kind: CodecTypes['pg/text@1']['input'];
       readonly matchId: CodecTypes['pg/text@1']['input'];
       readonly role: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly sets: CodecTypes['pg/json@1']['input'] | null;
       readonly targetId: CodecTypes['pg/text@1']['input'] | null;
@@ -1387,6 +1490,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly playerAId: CodecTypes['pg/text@1']['input'];
       readonly playerBId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly tournamentId: CodecTypes['pg/text@1']['input'] | null;
     };
@@ -1398,6 +1502,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly kind: CodecTypes['pg/text@1']['input'];
       readonly label: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly settings: CodecTypes['pg/json@1']['input'];
     };
@@ -1405,6 +1510,7 @@ export type StorageColumnInputTypes = {
       readonly elo: CodecTypes['pg/int4@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly pool: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly seed: CodecTypes['pg/int4@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly tournamentId: CodecTypes['pg/text@1']['input'];
@@ -1414,6 +1520,7 @@ export type StorageColumnInputTypes = {
       readonly exerciseId: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly ownerId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly shipId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
@@ -1423,6 +1530,7 @@ export type StorageColumnInputTypes = {
       readonly endMin: CodecTypes['pg/int4@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly planId: CodecTypes['pg/text@1']['input'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sex: 'M' | 'F' | null;
       readonly startMin: CodecTypes['pg/int4@1']['input'];
       readonly teacherId: CodecTypes['pg/text@1']['input'] | null;
@@ -1436,6 +1544,7 @@ export type StorageColumnInputTypes = {
       readonly isCurrent: CodecTypes['pg/bool@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly cyclePlan: {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1446,6 +1555,7 @@ export type StorageColumnInputTypes = {
       readonly numTeams: CodecTypes['pg/int4@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'];
       readonly refereeMode: CodecTypes['pg/bool@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly wodType:
         | 'PYRAMIDE_CLASSIQUE'
         | 'RELAIS_SPRINT'
@@ -1466,6 +1576,7 @@ export type StorageColumnInputTypes = {
       readonly note: CodecTypes['pg/int4@1']['input'];
       readonly observationId: CodecTypes['pg/text@1']['input'] | null;
       readonly repsObserved: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly targetUserId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
@@ -1474,6 +1585,7 @@ export type StorageColumnInputTypes = {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
     };
     readonly level: {
@@ -1500,6 +1612,7 @@ export type StorageColumnInputTypes = {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly level: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly soft: CodecTypes['pg/bool@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
@@ -1510,6 +1623,7 @@ export type StorageColumnInputTypes = {
       readonly card: CodecTypes['pg/int4@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly level: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
     };
@@ -1519,6 +1633,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly mines: CodecTypes['pg/json@1']['input'];
       readonly rows: CodecTypes['pg/json@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly seed: CodecTypes['pg/text@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
     };
@@ -1529,6 +1644,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly refereeId: CodecTypes['pg/text@1']['input'];
       readonly row: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
     };
     readonly notePeriod: {
@@ -1538,6 +1654,7 @@ export type StorageColumnInputTypes = {
       readonly endDate: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly label: CodecTypes['pg/text@1']['input'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
     };
     readonly observation: {
@@ -1546,6 +1663,7 @@ export type StorageColumnInputTypes = {
       readonly evaluatorId: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly mode: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly targetUserId: CodecTypes['pg/text@1']['input'];
@@ -1555,6 +1673,7 @@ export type StorageColumnInputTypes = {
       readonly answers: CodecTypes['pg/json@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly score: CodecTypes['pg/int4@1']['input'];
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
@@ -1564,6 +1683,7 @@ export type StorageColumnInputTypes = {
       readonly from: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly to: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
     };
     readonly raceState: {
@@ -1577,6 +1697,7 @@ export type StorageColumnInputTypes = {
       readonly penMin: CodecTypes['pg/int4@1']['input'];
       readonly rep0: CodecTypes['pg/int4@1']['input'];
       readonly runs: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly startedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly step: CodecTypes['pg/int4@1']['input'];
@@ -1586,6 +1707,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly lockedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly refereeId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly slot: CodecTypes['pg/int4@1']['input'];
       readonly status: 'PLACING' | 'LOCKED';
@@ -1596,6 +1718,7 @@ export type StorageColumnInputTypes = {
       readonly fleetId: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly orientation: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly size: CodecTypes['pg/int4@1']['input'];
       readonly startExerciseId: CodecTypes['pg/text@1']['input'];
       readonly startTeamId: CodecTypes['pg/text@1']['input'];
@@ -1607,6 +1730,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly observationId: CodecTypes['pg/text@1']['input'];
       readonly reps: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly targetUserId: CodecTypes['pg/text@1']['input'];
       readonly voidedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
@@ -1615,6 +1739,7 @@ export type StorageColumnInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly points: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
     };
     readonly selfEvalReview: {
@@ -1623,6 +1748,7 @@ export type StorageColumnInputTypes = {
       readonly commentVisible: CodecTypes['pg/bool@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly reviewerName: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1631,6 +1757,7 @@ export type StorageColumnInputTypes = {
     readonly selfEvaluation: {
       readonly answers: CodecTypes['pg/json@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly studentId: CodecTypes['pg/text@1']['input'];
       readonly submittedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -1649,6 +1776,7 @@ export type StorageColumnInputTypes = {
       readonly planId: CodecTypes['pg/text@1']['input'] | null;
       readonly raceEndedAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly refereeMode: CodecTypes['pg/bool@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly settings: CodecTypes['pg/json@1']['input'] | null;
       readonly slotKey: CodecTypes['pg/text@1']['input'] | null;
       readonly teacherId: CodecTypes['pg/text@1']['input'] | null;
@@ -1668,6 +1796,7 @@ export type StorageColumnInputTypes = {
       readonly decidedBy: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly note: CodecTypes['pg/text@1']['input'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly status: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
@@ -1678,6 +1807,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly phase: 'DURING_WOD' | 'POST_WOD';
       readonly refereeId: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly targetExerciseId: CodecTypes['pg/text@1']['input'];
       readonly targetTeamId: CodecTypes['pg/text@1']['input'];
@@ -1685,6 +1815,7 @@ export type StorageColumnInputTypes = {
     readonly stationEvent: {
       readonly at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly stationId: CodecTypes['pg/text@1']['input'];
       readonly teamId: CodecTypes['pg/text@1']['input'];
@@ -1695,6 +1826,7 @@ export type StorageColumnInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly hiddenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly seenAt: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
       readonly seenSessionId: CodecTypes['pg/text@1']['input'] | null;
       readonly studentId: CodecTypes['pg/text@1']['input'];
@@ -1708,12 +1840,14 @@ export type StorageColumnInputTypes = {
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly order: CodecTypes['pg/int4@1']['input'] | null;
       readonly penalties: CodecTypes['pg/int4@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sessionId: CodecTypes['pg/text@1']['input'];
       readonly startExerciseId: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly teamMember: {
       readonly finisherPoints: CodecTypes['pg/int4@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
       readonly userId: CodecTypes['pg/text@1']['input'];
     };
@@ -1731,6 +1865,7 @@ export type StorageColumnInputTypes = {
       readonly profileVisibility: 'PUBLIC' | 'PRIVATE' | 'SECRET';
       readonly reliability: CodecTypes['pg/int4@1']['input'];
       readonly role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly sex: 'M' | 'F' | null;
       readonly winterArcUntil: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
     };
@@ -1740,6 +1875,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly raceStateId: CodecTypes['pg/text@1']['input'];
       readonly reason: CodecTypes['pg/text@1']['input'] | null;
+      readonly schoolId: CodecTypes['pg/text@1']['input'] | null;
       readonly teamId: CodecTypes['pg/text@1']['input'];
     };
   };
@@ -1748,6 +1884,7 @@ export type StorageColumnInputTypes = {
 export namespace Models {
   export type public_User = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     role: 'MASTER_ADMIN' | 'ADMIN' | 'GREFFIER' | 'STUDENT';
     name: CodecTypes['pg/text@1']['output'];
     firstName: CodecTypes['pg/text@1']['output'] | null;
@@ -1773,6 +1910,7 @@ export namespace Models {
   };
   export type public_Cycle = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     name: CodecTypes['pg/text@1']['output'];
     order: CodecTypes['pg/int4@1']['output'];
     isCurrent: CodecTypes['pg/bool@1']['output'];
@@ -1784,6 +1922,7 @@ export namespace Models {
   };
   export type public_CyclePlan = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     cycleId: CodecTypes['pg/text@1']['output'];
     wodType:
       | 'PYRAMIDE_CLASSIQUE'
@@ -1806,6 +1945,7 @@ export namespace Models {
   };
   export type public_ClassSlot = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     className: CodecTypes['pg/text@1']['output'];
     weekday: CodecTypes['pg/int4@1']['output'];
     startMin: CodecTypes['pg/int4@1']['output'];
@@ -1818,6 +1958,7 @@ export namespace Models {
   };
   export type public_Session = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     wodType:
       | 'PYRAMIDE_CLASSIQUE'
       | 'RELAIS_SPRINT'
@@ -1878,6 +2019,7 @@ export namespace Models {
   };
   export type public_SessionReferee = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     userId: CodecTypes['pg/text@1']['output'];
     note: CodecTypes['pg/text@1']['output'] | null;
@@ -1891,6 +2033,7 @@ export namespace Models {
   };
   export type public_Team = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     name: CodecTypes['pg/text@1']['output'];
     order: CodecTypes['pg/int4@1']['output'] | null;
     startExerciseId: CodecTypes['pg/text@1']['output'] | null;
@@ -1906,6 +2049,7 @@ export namespace Models {
   };
   export type public_TeamMember = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     teamId: CodecTypes['pg/text@1']['output'];
     userId: CodecTypes['pg/text@1']['output'];
     finisherPoints: CodecTypes['pg/int4@1']['output'];
@@ -1915,6 +2059,7 @@ export namespace Models {
   };
   export type public_QuizAnswer = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     studentId: CodecTypes['pg/text@1']['output'];
     answers: CodecTypes['pg/json@1']['output'];
@@ -1925,6 +2070,7 @@ export namespace Models {
   };
   export type public_BadmintonMatch = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'] | null;
     playerAId: CodecTypes['pg/text@1']['output'];
     playerBId: CodecTypes['pg/text@1']['output'];
@@ -1937,6 +2083,7 @@ export namespace Models {
   };
   export type public_BadmintonTournament = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'] | null;
     kind: CodecTypes['pg/text@1']['output'];
     label: CodecTypes['pg/text@1']['output'];
@@ -1950,6 +2097,7 @@ export namespace Models {
   };
   export type public_BadmintonTournamentPlayer = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     tournamentId: CodecTypes['pg/text@1']['output'];
     studentId: CodecTypes['pg/text@1']['output'];
     pool: CodecTypes['pg/text@1']['output'];
@@ -1960,6 +2108,7 @@ export namespace Models {
   };
   export type public_BadmintonEvent = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     matchId: CodecTypes['pg/text@1']['output'];
     sessionId: CodecTypes['pg/text@1']['output'] | null;
     kind: CodecTypes['pg/text@1']['output'];
@@ -1973,6 +2122,7 @@ export namespace Models {
   };
   export type public_StationEvent = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     stationId: CodecTypes['pg/text@1']['output'];
@@ -1982,6 +2132,7 @@ export namespace Models {
   };
   export type public_SelfEvaluation = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     studentId: CodecTypes['pg/text@1']['output'];
     answers: CodecTypes['pg/json@1']['output'];
@@ -1992,6 +2143,7 @@ export namespace Models {
   };
   export type public_SelfEvalReview = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     studentId: CodecTypes['pg/text@1']['output'];
     answers: CodecTypes['pg/json@1']['output'];
@@ -2004,6 +2156,7 @@ export namespace Models {
   };
   export type public_Evaluation = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     evaluatorId: CodecTypes['pg/text@1']['output'];
@@ -2023,6 +2176,7 @@ export namespace Models {
   };
   export type public_Observation = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     evaluatorId: CodecTypes['pg/text@1']['output'];
     targetUserId: CodecTypes['pg/text@1']['output'];
@@ -2035,6 +2189,7 @@ export namespace Models {
   };
   export type public_RepEntry = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     observationId: CodecTypes['pg/text@1']['output'];
     sessionId: CodecTypes['pg/text@1']['output'];
     evaluatorId: CodecTypes['pg/text@1']['output'];
@@ -2047,6 +2202,7 @@ export namespace Models {
   };
   export type public_BoatPlacement = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     exerciseId: CodecTypes['pg/text@1']['output'];
@@ -2059,6 +2215,7 @@ export namespace Models {
   };
   export type public_Score = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     teamId: CodecTypes['pg/text@1']['output'];
     points: CodecTypes['pg/int4@1']['output'];
     createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -2067,6 +2224,7 @@ export namespace Models {
   };
   export type public_RefereeFleet = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     refereeId: CodecTypes['pg/text@1']['output'];
     slot: CodecTypes['pg/int4@1']['output'];
@@ -2080,6 +2238,7 @@ export namespace Models {
   };
   export type public_RefereeShip = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     fleetId: CodecTypes['pg/text@1']['output'];
     size: CodecTypes['pg/int4@1']['output'];
     orientation: CodecTypes['pg/text@1']['output'];
@@ -2093,6 +2252,7 @@ export namespace Models {
   };
   export type public_RaceState = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     startedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
     endedAt: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
@@ -2113,6 +2273,7 @@ export namespace Models {
   };
   export type public_RacePause = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     raceStateId: CodecTypes['pg/text@1']['output'];
     from: CodecTypes['pg/timestamptz-temporal@1']['output'];
     to: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
@@ -2121,6 +2282,7 @@ export namespace Models {
   };
   export type public_Lap = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     raceStateId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     at: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -2129,6 +2291,7 @@ export namespace Models {
   };
   export type public_YellowCard = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     raceStateId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     at: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -2139,6 +2302,7 @@ export namespace Models {
   };
   export type public_Shot = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     refereeId: CodecTypes['pg/text@1']['output'];
     targetTeamId: CodecTypes['pg/text@1']['output'];
@@ -2175,6 +2339,7 @@ export namespace Models {
   };
   export type public_LevelTick = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     level: CodecTypes['pg/int4@1']['output'];
@@ -2186,6 +2351,7 @@ export namespace Models {
   };
   export type public_MineBoard = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     rows: CodecTypes['pg/json@1']['output'];
     cols: CodecTypes['pg/json@1']['output'];
@@ -2197,6 +2363,7 @@ export namespace Models {
   };
   export type public_MineReveal = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     refereeId: CodecTypes['pg/text@1']['output'];
     row: CodecTypes['pg/int4@1']['output'];
@@ -2208,6 +2375,7 @@ export namespace Models {
   };
   export type public_LevelLoss = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     sessionId: CodecTypes['pg/text@1']['output'];
     teamId: CodecTypes['pg/text@1']['output'];
     level: CodecTypes['pg/int4@1']['output'];
@@ -2218,6 +2386,7 @@ export namespace Models {
   };
   export type public_StudentNote = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     authorId: CodecTypes['pg/text@1']['output'];
     studentId: CodecTypes['pg/text@1']['output'];
     category: CodecTypes['pg/text@1']['output'] | null;
@@ -2231,6 +2400,7 @@ export namespace Models {
   };
   export type public_NotePeriod = {
     id: CodecTypes['pg/text@1']['output'];
+    schoolId: CodecTypes['pg/text@1']['output'] | null;
     authorId: CodecTypes['pg/text@1']['output'];
     endDate: CodecTypes['pg/text@1']['output'];
     label: CodecTypes['pg/text@1']['output'] | null;
@@ -2306,6 +2476,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly matchId: {
                   readonly nativeType: 'text';
@@ -2387,6 +2562,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -2457,6 +2637,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -2518,6 +2703,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly tournamentId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -2575,6 +2765,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -2670,6 +2865,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly className: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -2736,6 +2936,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly name: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -2782,6 +2987,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly cycleId: {
                   readonly nativeType: 'text';
@@ -2872,6 +3082,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -3011,6 +3226,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly raceStateId: {
                   readonly nativeType: 'text';
@@ -3187,6 +3407,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3249,6 +3474,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -3316,6 +3546,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3372,6 +3607,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -3440,6 +3680,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly authorId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3490,6 +3735,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -3564,6 +3814,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3615,6 +3870,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly raceStateId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3662,6 +3922,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -3782,6 +4047,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3872,6 +4142,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly fleetId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -3940,6 +4215,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly observationId: {
                   readonly nativeType: 'text';
@@ -4014,6 +4294,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly teamId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4062,6 +4347,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -4138,6 +4428,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4209,6 +4504,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly wodType: {
                   readonly nativeType: 'text';
@@ -4354,6 +4654,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4444,6 +4749,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly sessionId: {
                   readonly nativeType: 'text';
@@ -4560,6 +4870,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly sessionId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4613,6 +4928,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly authorId: {
                   readonly nativeType: 'text';
@@ -4686,6 +5006,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly name: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4758,6 +5083,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly teamId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -4827,6 +5157,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly role: {
                   readonly nativeType: 'text';
@@ -4927,6 +5262,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly schoolId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly raceStateId: {
                   readonly nativeType: 'text';
@@ -5136,6 +5476,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly schoolId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly matchId: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -5191,6 +5535,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly matchId: { readonly column: 'matchId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly kind: { readonly column: 'kind' };
@@ -5206,6 +5551,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -5266,6 +5615,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly playerAId: { readonly column: 'playerAId' };
                 readonly playerBId: { readonly column: 'playerBId' };
@@ -5279,6 +5629,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -5338,6 +5692,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly kind: { readonly column: 'kind' };
                 readonly label: { readonly column: 'label' };
@@ -5353,6 +5708,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly tournamentId: {
@@ -5395,6 +5754,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly tournamentId: { readonly column: 'tournamentId' };
                 readonly studentId: { readonly column: 'studentId' };
                 readonly pool: { readonly column: 'pool' };
@@ -5407,6 +5767,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -5468,6 +5832,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly exerciseId: { readonly column: 'exerciseId' };
@@ -5481,6 +5846,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly className: {
@@ -5522,6 +5891,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly className: { readonly column: 'className' };
                 readonly weekday: { readonly column: 'weekday' };
                 readonly startMin: { readonly column: 'startMin' };
@@ -5537,6 +5907,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly name: {
@@ -5592,6 +5966,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly name: { readonly column: 'name' };
                 readonly order: { readonly column: 'order' };
                 readonly isCurrent: { readonly column: 'isCurrent' };
@@ -5604,6 +5979,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly cycleId: {
@@ -5672,6 +6051,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly cycleId: { readonly column: 'cycleId' };
                 readonly wodType: { readonly column: 'wodType' };
                 readonly label: { readonly column: 'label' };
@@ -5687,6 +6067,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -5783,6 +6167,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly evaluatorId: { readonly column: 'evaluatorId' };
@@ -5801,6 +6186,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly raceStateId: {
@@ -5838,6 +6227,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly raceStateId: { readonly column: 'raceStateId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly at: { readonly column: 'at' };
@@ -5964,6 +6354,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly schoolId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly sessionId: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -6007,6 +6401,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly level: { readonly column: 'level' };
@@ -6019,6 +6414,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6068,6 +6467,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly level: { readonly column: 'level' };
@@ -6081,6 +6481,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6130,6 +6534,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly rows: { readonly column: 'rows' };
                 readonly cols: { readonly column: 'cols' };
@@ -6143,6 +6548,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6192,6 +6601,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly refereeId: { readonly column: 'refereeId' };
                 readonly row: { readonly column: 'row' };
@@ -6205,6 +6615,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly authorId: {
@@ -6247,6 +6661,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly authorId: { readonly column: 'authorId' };
                 readonly endDate: { readonly column: 'endDate' };
                 readonly label: { readonly column: 'label' };
@@ -6260,6 +6675,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6310,6 +6729,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly evaluatorId: { readonly column: 'evaluatorId' };
                 readonly targetUserId: { readonly column: 'targetUserId' };
@@ -6325,6 +6745,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6361,6 +6785,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly studentId: { readonly column: 'studentId' };
                 readonly answers: { readonly column: 'answers' };
@@ -6374,6 +6799,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly raceStateId: {
@@ -6414,6 +6843,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly raceStateId: { readonly column: 'raceStateId' };
                 readonly from: { readonly column: 'from' };
                 readonly to: { readonly column: 'to' };
@@ -6424,6 +6854,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6533,6 +6967,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly startedAt: { readonly column: 'startedAt' };
                 readonly endedAt: { readonly column: 'endedAt' };
@@ -6552,6 +6987,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6624,6 +7063,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly refereeId: { readonly column: 'refereeId' };
                 readonly slot: { readonly column: 'slot' };
@@ -6637,6 +7077,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly fleetId: {
@@ -6701,6 +7145,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly fleetId: { readonly column: 'fleetId' };
                 readonly size: { readonly column: 'size' };
                 readonly orientation: { readonly column: 'orientation' };
@@ -6715,6 +7160,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly observationId: {
@@ -6762,6 +7211,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly observationId: { readonly column: 'observationId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly evaluatorId: { readonly column: 'evaluatorId' };
@@ -6777,6 +7227,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly teamId: {
@@ -6811,6 +7265,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly points: { readonly column: 'points' };
                 readonly createdAt: { readonly column: 'createdAt' };
@@ -6821,6 +7276,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6865,6 +7324,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly studentId: { readonly column: 'studentId' };
                 readonly answers: { readonly column: 'answers' };
@@ -6880,6 +7340,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -6930,6 +7394,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly studentId: { readonly column: 'studentId' };
                 readonly answers: { readonly column: 'answers' };
@@ -6941,6 +7406,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly wodType: {
@@ -7204,6 +7673,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly wodType: { readonly column: 'wodType' };
                 readonly isActive: { readonly column: 'isActive' };
                 readonly refereeMode: { readonly column: 'refereeMode' };
@@ -7227,6 +7697,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -7292,6 +7766,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly userId: { readonly column: 'userId' };
                 readonly note: { readonly column: 'note' };
@@ -7306,6 +7781,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -7380,6 +7859,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly refereeId: { readonly column: 'refereeId' };
                 readonly targetTeamId: { readonly column: 'targetTeamId' };
@@ -7394,6 +7874,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly sessionId: {
@@ -7435,6 +7919,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly sessionId: { readonly column: 'sessionId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly stationId: { readonly column: 'stationId' };
@@ -7446,6 +7931,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly authorId: {
@@ -7500,6 +7989,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly authorId: { readonly column: 'authorId' };
                 readonly studentId: { readonly column: 'studentId' };
                 readonly category: { readonly column: 'category' };
@@ -7516,6 +8006,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly name: {
@@ -7599,6 +8093,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly name: { readonly column: 'name' };
                 readonly order: { readonly column: 'order' };
                 readonly startExerciseId: { readonly column: 'startExerciseId' };
@@ -7613,6 +8108,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly teamId: {
@@ -7653,6 +8152,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly userId: { readonly column: 'userId' };
                 readonly finisherPoints: { readonly column: 'finisherPoints' };
@@ -7663,6 +8163,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly role: {
@@ -7801,6 +8305,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly role: { readonly column: 'role' };
                 readonly name: { readonly column: 'name' };
                 readonly firstName: { readonly column: 'firstName' };
@@ -7822,6 +8327,10 @@ type ContractBase = Omit<
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly schoolId: {
+                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly raceStateId: {
@@ -7867,6 +8376,7 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
+                readonly schoolId: { readonly column: 'schoolId' };
                 readonly raceStateId: { readonly column: 'raceStateId' };
                 readonly teamId: { readonly column: 'teamId' };
                 readonly at: { readonly column: 'at' };

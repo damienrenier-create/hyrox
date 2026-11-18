@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { LEVEL_STAFF, listExercises, listLevels, seedDefaultExercises } from "@/lib/level";
+import { currentSchool, ORIGIN_SCHOOL } from "@/lib/school";
 import { deriveLevel, materialize, proposalByKey } from "@/lib/level-proposals";
 import { isBoss, isStars, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type FrozenLevel, type Stars } from "@/lib/wod-engines/templates/level-engine";
 
@@ -14,6 +15,8 @@ import { isBoss, isStars, DEFAULT_FORMAT, DEFAULT_STARS, type Format, type Froze
 export async function loadProposalAction(key: string, replace = false, stars: Stars = DEFAULT_STARS, format: Format = DEFAULT_FORMAT): Promise<{ ok: true; levels: number } | { error: string }> {
   const user = await getSession();
   if (!user || !(LEVEL_STAFF as readonly string[]).includes(user.role)) return { error: "Accès refusé." };
+  // Echelle commune a toutes les ecoles (18/11) : modifiable seulement depuis l'ecole d'origine.
+  if ((await currentSchool()) !== ORIGIN_SCHOOL) return { error: "L'échelle des niveaux est commune aux écoles : elle se modifie depuis l'école d'origine." };
   const proposal = proposalByKey(key);
   if (!proposal) return { error: "Proposition inconnue." };
   if (!isStars(stars)) return { error: "Parcours inconnu." };

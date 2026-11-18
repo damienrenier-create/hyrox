@@ -13,7 +13,8 @@ import {
 import { Brand } from "./_components/Brand";
 import { btn, cx, ui } from "@/lib/ui";
 
-export default function LoginPage() {
+// schoolLabel : ecole du lien d'ecole retenu par le telephone (18/11) ; null = ecole d'origine (rien n'est affiche).
+export default function LoginPage({ schoolLabel = null }: { schoolLabel?: string | null }) {
   const [tab, setTab] = useState<"eleve" | "admin">("eleve");
 
   return (
@@ -26,6 +27,7 @@ export default function LoginPage() {
         <div className="text-center mb-6">
           <Brand size="lg" />
           <p className="text-sm text-ink-2 mt-2">Cours d&apos;éducation physique · séances, arbitrage, résultats</p>
+          {schoolLabel && <p className={`${ui.chip} mt-3 inline-flex`}>🏫 {schoolLabel}</p>}
         </div>
 
         <div className={`${ui.card} p-6 sm:p-8`}>

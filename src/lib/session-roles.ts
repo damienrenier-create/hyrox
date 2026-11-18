@@ -36,11 +36,12 @@ export function readSessionSex(settings: unknown): "M" | "F" | null {
 // Periodes ou un type de seance ne concerne qu'un sexe (Sartay 10/11 : « durant les 6 prochaines semaines de badminton,
 // seuls les garcons participent au cours ! les filles font autre chose ») : une seance MIXTE de ce type ouverte pendant
 // la periode (dates de Bruxelles, bornes comprises) devient garcons ; un creneau deja garcons / filles garde son reglage.
-export const SESSION_SEX_RULES: { wodType: string; from: string; to: string; sex: "M" | "F" }[] = [
-  { wodType: "BADMINTON", from: "2026-11-10", to: "2026-12-18", sex: "M" }, // 6 semaines, jusqu'aux conges d'hiver
+// Chaque regle est celle d'UNE ecole (18/11, lib/school.ts) : school null = l'ecole d'origine (D. Renier).
+export const SESSION_SEX_RULES: { wodType: string; from: string; to: string; sex: "M" | "F"; school: string | null }[] = [
+  { wodType: "BADMINTON", from: "2026-11-10", to: "2026-12-18", sex: "M", school: null }, // 6 semaines, jusqu'aux conges d'hiver
 ];
-export function forcedSessionSex(wodType: string, dateKey: string): "M" | "F" | null {
-  return SESSION_SEX_RULES.find((r) => r.wodType === wodType && dateKey >= r.from && dateKey <= r.to)?.sex ?? null;
+export function forcedSessionSex(wodType: string, dateKey: string, school: string | null): "M" | "F" | null {
+  return SESSION_SEX_RULES.find((r) => r.school === school && r.wodType === wodType && dateKey >= r.from && dateKey <= r.to)?.sex ?? null;
 }
 
 // Co-profs d'une seance tenue a plusieurs (settings.coTeachers, herite du creneau fusionne ; voir journal.ts mergeCoTaught).

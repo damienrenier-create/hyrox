@@ -9,8 +9,10 @@ export type SessionPayload = {
   role: "MASTER_ADMIN" | "ADMIN" | "STUDENT" | "GREFFIER";
   name: string;
   className?: string;
+  // Ecole de la session (18/11, voir lib/school.ts) : absente ou null = l'ecole d'origine (tous les jetons d'avant).
+  school?: string | null;
   // « Se connecter en tant que » : l'admin qui regarde ce compte d'eleve (lecture seule, bandeau de retour).
-  impersonatedBy?: { id: string; name: string; role: "MASTER_ADMIN" | "ADMIN" };
+  impersonatedBy?: { id: string; name: string; role: "MASTER_ADMIN" | "ADMIN"; school?: string | null };
 };
 
 const SHORT_SESSION = "24h";
@@ -26,18 +28,23 @@ export async function encrypt(payload: SessionPayload, remember = false) {
 }
 
 // Comptes EN ATTENTE (Sartay 18/11) : J. Piret (JUSZER, ex-PIRZER) est une amie d'une AUTRE ECOLE. Tant que son
-// espace d'ecole n'existe pas, son compte (garde en base, rien d'efface) n'ouvre plus rien ici : la connexion est
-// refusee, et tout jeton deja emis pour elle (ou pour un eleve qu'elle regarderait) est traite comme un jeton invalide.
-export const ON_HOLD_ACCOUNT_IDS = new Set(["38f5f615-f120-4293-90cb-999f256f3ef6"]);
+// espace d'ecole n'est pas ouvert, la connexion de ces pseudos est refusee.
 export const ON_HOLD_PSEUDOS = ["JUSZER", "PIRZER"];
+// Comptes VERROUILLES sur une ecole : son compte (garde en base, rien d'efface) n'est valable QU'AVEC un jeton de son
+// ecole. Tout jeton emis avant (sans ecole -> il ouvrirait l'ecole d'origine), pour elle ou pour un eleve qu'elle
+// regarderait, est traite comme un jeton invalide.
+export const ACCOUNT_SCHOOL_LOCK: Record<string, string> = { "38f5f615-f120-4293-90cb-999f256f3ef6": "e2" };
+export const ON_HOLD_ACCOUNT_IDS = new Set(Object.keys(ACCOUNT_SCHOOL_LOCK));
+const lockedOut = (id: string | undefined, school: string | null | undefined) =>
+  !!id && id in ACCOUNT_SCHOOL_LOCK && ACCOUNT_SCHOOL_LOCK[id] !== (school ?? null);
 
 export async function decrypt(input: string): Promise<SessionPayload> {
   const { payload } = await jwtVerify(input, key, {
     algorithms: ["HS256"],
   });
   const p = payload as SessionPayload;
-  if (ON_HOLD_ACCOUNT_IDS.has(p.id) || (p.impersonatedBy && ON_HOLD_ACCOUNT_IDS.has(p.impersonatedBy.id))) {
-    throw new Error("compte en attente");
+  if (lockedOut(p.id, p.school) || (p.impersonatedBy && lockedOut(p.impersonatedBy.id, p.impersonatedBy.school))) {
+    throw new Error("compte verrouille sur une autre ecole");
   }
   return p;
 }

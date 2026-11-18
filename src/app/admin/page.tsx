@@ -21,6 +21,8 @@ import {
 import { readCoTeachers, readQuizOpen } from "@/lib/session-roles";
 import { TopBar } from "../_components/TopBar";
 import { LogoutButton } from "../_components/LogoutButton";
+import { switchSchoolAction } from "../actions";
+import { ORIGIN_SCHOOL, SCHOOLS, schoolById } from "@/lib/school";
 import { btn, cx, ui } from "@/lib/ui";
 import { NotesPopup } from "../_components/NotesPopup";
 import { dueReminder, notesForSessions, periodsOf } from "@/lib/student-notes-server";
@@ -149,6 +151,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const classesOf = (s: { settings: unknown }) => (activityOpen.length > 1 ? ` · ${readSessionClasses(s.settings).join(" + ")}` : "");
   const tcOpen = activityOpen.filter((s) => s.wodType !== "LEVEL" && s.wodType !== "HYROX");
   const levelOn = open.some((s) => s.wodType === "LEVEL") || plans.find((p) => p.isCurrent)?.wodType === "LEVEL";
+  const mySchool = schoolById(user.school ?? null); // ecole de la session (18/11, lib/school.ts)
 
   // Demandes d'arbitrage en attente sur les seances ouvertes (un prof peut trancher a la place du greffier).
   const pendingRequests: { sessionId: string; sessionLabel: string; userId: string; name: string; className: string | null; note: string | null }[] = [];
@@ -164,9 +167,19 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
     <div className={ui.page}>
       <TopBar
         title="Console"
-        subtitle={<>Heure de Bruxelles : {WEEKDAYS[now.weekday] ?? ""} {fmtMin(now.minutes)} · cycle en cours : <b className="text-ink">{current?.name ?? "aucun"}</b>{current && <> · séance de la semaine : <b className="text-ink">{plans.find((p) => p.isCurrent)?.label ?? "aucune"}</b></>}</>}
+        subtitle={<>{mySchool && mySchool.id !== ORIGIN_SCHOOL && <><b className="text-ink">🏫 {mySchool.label}</b> · </>}Heure de Bruxelles : {WEEKDAYS[now.weekday] ?? ""} {fmtMin(now.minutes)} · cycle en cours : <b className="text-ink">{current?.name ?? "aucun"}</b>{current && <> · séance de la semaine : <b className="text-ink">{plans.find((p) => p.isCurrent)?.label ?? "aucune"}</b></>}</>}
         right={
           <nav className="flex flex-wrap gap-2">
+            {/* DAMZER passe d'une ecole a l'autre (18/11, « Oui, DAMZER y entre aussi ») : l'ecole courante est en bleu. */}
+            {user.name === "DAMZER" && SCHOOLS.length > 1 && (
+              <form action={switchSchoolAction} className="flex flex-wrap gap-2">
+                {SCHOOLS.map((s) => (
+                  <button key={s.id ?? "origine"} type="submit" name="school" value={s.id ?? "origine"} className={(user.school ?? null) === s.id ? btn.smPrimary : btn.smGhost} title="Changer d'école : élèves, séances et collègues de cette école">
+                    🏫 {s.label}
+                  </button>
+                ))}
+              </form>
+            )}
             <Link href="/admin/journal" className={btn.smPrimary}>📅 Journal de classe</Link>
             <Link href="/admin/carnet" className={btn.smGhost}>📒 Carnet de cotes</Link>
             <Link href="/admin/auto-evaluations" className={btn.smGhost}>Auto-évaluations</Link>

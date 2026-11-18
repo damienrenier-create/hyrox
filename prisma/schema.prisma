@@ -47,6 +47,7 @@ enum ShotPhase {
 
 model User {
   id                String       @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   role              Role         @default(STUDENT)
   name              String
   firstName         String?
@@ -78,6 +79,7 @@ model User {
 // Cycle pedagogique (Hyrox, Volley...) : cree/nomme par DAMZER dans la console. Un seul cycle "en cours".
 model Cycle {
   id        String      @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   name      String
   order     Int         @default(0)
   isCurrent Boolean     @default(false)
@@ -92,6 +94,7 @@ model Cycle {
 // celle qui s'ouvre automatiquement pour une classe pendant son creneau horaire.
 model CyclePlan {
   id          String      @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   cycle       Cycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   cycleId     String
   wodType     WodTemplate
@@ -113,6 +116,7 @@ model CyclePlan {
 // planId : seance-type imposee pour ce creneau ; null = la « seance de la semaine » du cycle en cours.
 model ClassSlot {
   id        String  @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   className String
   weekday   Int
   startMin  Int
@@ -131,6 +135,7 @@ model ClassSlot {
 
 model Session {
   id          String      @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   wodType     WodTemplate
   isActive    Boolean     @default(true)
   refereeMode Boolean     @default(false) // Touche-Coule actif pour cette seance, independamment du wodType
@@ -173,6 +178,7 @@ model Session {
 // un participant qui abandonne (DNF, blessure...) garde ses resultats d'equipe et devient arbitre.
 model SessionReferee {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -189,6 +195,7 @@ model SessionReferee {
 
 model Team {
   id              String       @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   name            String
   order           Int?         // position stable de l'equipe dans la grille (pour les bateaux verticaux)
   startExerciseId String?      // depart pyramide (override du round-robin par defaut)
@@ -205,6 +212,7 @@ model Team {
 
 model TeamMember {
   id             String @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   teamId         String
   userId         String
   finisherPoints Int    @default(0) // Fete Foraine : points Finisher du coureur
@@ -220,6 +228,7 @@ model TeamMember {
 // Jamais efface (regle d'or) : une seconde tentative est refusee.
 model QuizAnswer {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   sessionId String
   studentId String
   answers   Json
@@ -239,6 +248,7 @@ model QuizAnswer {
 // est une ligne de BadmintonEvent, en AJOUT SEUL (jamais d effacement) : son etat se lit sur ce journal (src/lib/badminton.ts).
 model BadmintonMatch {
   id          String           @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session     Session?         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId   String?          // null = match LIBRE (03/11 : entre classes, en dehors des heures de cours)
   playerAId   String           // l eleve qui encode son match, ou le premier nomme par l arbitre / le prof
@@ -257,6 +267,7 @@ model BadmintonMatch {
 // sur ces matchs. Rien n est jamais efface : un tournoi arrete garde cancelledAt.
 model BadmintonTournament {
   id          String                      @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   sessionId   String?                     // seance ou il a ete lance
   kind        String                      // POOLS (puis BRACKET, HANDICAP)
   label       String
@@ -272,6 +283,7 @@ model BadmintonTournament {
 
 model BadmintonTournamentPlayer {
   id           String              @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   tournament   BadmintonTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   tournamentId String
   studentId    String
@@ -284,6 +296,7 @@ model BadmintonTournamentPlayer {
 
 model BadmintonEvent {
   id        String         @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   match     BadmintonMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   matchId   String
   sessionId String?        // copie de la seance du match : le « pouls » des ecrans compte les lignes d une seance (null = match libre)
@@ -300,6 +313,7 @@ model BadmintonEvent {
 
 model StationEvent {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
   teamId    String
@@ -313,6 +327,7 @@ model StationEvent {
 // answers = { [criterionId]: "TI"|"I"|"S"|"B"|"TB"|"E" } (voir wod-engines/core/self-eval.ts)
 model SelfEvaluation {
   id          String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session     Session  @relation(fields: [sessionId], references: [id])
   sessionId   String
   student     User     @relation(fields: [studentId], references: [id])
@@ -329,6 +344,7 @@ model SelfEvaluation {
 // Table separee de SelfEvaluation : le prof peut evaluer un eleve qui n'a jamais rendu la sienne.
 model SelfEvalReview {
   id             String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   sessionId      String
   studentId      String
   answers        Json     // criterionId -> code (TI..E), memes criteres que l'auto-evaluation
@@ -345,6 +361,7 @@ model SelfEvalReview {
 
 model Evaluation {
   id           String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session      Session  @relation(fields: [sessionId], references: [id])
   sessionId    String
   team         Team     @relation(fields: [teamId], references: [id])
@@ -376,6 +393,7 @@ model Evaluation {
 // cible tiree au sort par l'appli, 5 minutes chrono (endsAt). Prof (mode STAFF) : il choisit qui, quand, combien de temps.
 model Observation {
   id           String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   sessionId    String
   evaluatorId  String
   targetUserId String
@@ -395,6 +413,7 @@ model Observation {
 // compare ces heures aux clics du greffier (l'equipe etait-elle bien a cette station a ce moment-la ?).
 model RepEntry {
   id            String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   observationId String
   sessionId     String
   evaluatorId   String
@@ -411,6 +430,7 @@ model RepEntry {
 
 model BoatPlacement {
   id           String       @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session      Session      @relation(fields: [sessionId], references: [id])
   sessionId    String
   teamId       String
@@ -427,6 +447,7 @@ model BoatPlacement {
 
 model Score {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   points    Int
@@ -435,6 +456,7 @@ model Score {
 
 model RefereeFleet {
   id         String      @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session    Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId  String
   referee    User        @relation(fields: [refereeId], references: [id])
@@ -452,6 +474,7 @@ model RefereeFleet {
 
 model RefereeShip {
   id              String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   fleet           RefereeFleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
   fleetId         String
   size            Int
@@ -468,6 +491,7 @@ model RefereeShip {
 
 model RaceState {
   id                 String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session            Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId          String    @unique
   startedAt          DateTime?
@@ -489,6 +513,7 @@ model RaceState {
 
 model RacePause {
   id          String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
   raceStateId String
   from        DateTime
@@ -499,6 +524,7 @@ model RacePause {
 
 model Lap {
   id          String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
   raceStateId String
   teamId      String
@@ -509,6 +535,7 @@ model Lap {
 
 model YellowCard {
   id          String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   raceState   RaceState @relation(fields: [raceStateId], references: [id], onDelete: Cascade)
   raceStateId String
   teamId      String
@@ -523,6 +550,7 @@ model YellowCard {
 
 model Shot {
   id               String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session          Session   @relation(fields: [sessionId], references: [id])
   sessionId        String
   referee          User      @relation(fields: [refereeId], references: [id])
@@ -578,6 +606,7 @@ model Level {
 // L'unicite rend le double-tap et deux profs qui cochent la meme fiche inoffensifs.
 model LevelTick {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
   teamId    String
@@ -594,6 +623,7 @@ model LevelTick {
 // mines = [[row, col]] — identique pour tous les arbitres, chacun ayant ses propres cases revelees.
 model MineBoard {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String   @unique
   rows      Json
@@ -606,6 +636,7 @@ model MineBoard {
 // Case revelee par un arbitre, adossee a l'evaluation individuelle encodee juste avant le « feu ».
 model MineReveal {
   id           String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId    String
   refereeId    String
@@ -622,6 +653,7 @@ model MineReveal {
 // L'equipe retombe au niveau precedent (ses fiches des niveaux >= level-1 sont effacees) et le zombie repart.
 model LevelLoss {
   id        String   @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
   teamId    String
@@ -640,6 +672,7 @@ model LevelLoss {
 // « Ne plus me la montrer » = hiddenAt (reactivable) ; la note reste dans l'historique et le recapitulatif de fin de periode.
 model StudentNote {
   id            String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   authorId      String    // le prof (User.id)
   studentId     String
   category      String?   // MEDICAL | ADMIN | TENUE | AUTRE
@@ -658,6 +691,7 @@ model StudentNote {
 // chaque fin de periode ») : un rappel quelques jours avant, puis le recapitulatif de ses notes de la periode.
 model NotePeriod {
   id          String    @id @default(uuid())
+  schoolId String? // ecole (Sartay 18/11) : null = ecole de D. Renier ; voir lib/school.ts, filtre automatique dans lib/db.ts
   authorId    String
   endDate     String    // AAAA-MM-JJ
   label       String?
