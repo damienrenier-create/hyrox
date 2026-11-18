@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getSession as readCookie, login, type SessionPayload } from "@/lib/auth";
+import { getSession as readCookie, login, ON_HOLD_ACCOUNT_IDS, ON_HOLD_PSEUDOS, type SessionPayload } from "@/lib/auth";
 
 // Lecture de session cote serveur, avec REPARATION des cookies emis avant le correctif des comptes pseudo :
 // leur identifiant etait invente (`user_<horodatage>`), donc toute ecriture echouait en cle etrangere.
@@ -13,11 +13,14 @@ export async function getSession(): Promise<SessionPayload | null> {
   const s = await readCookie();
   if (!s) return null;
   if (s.role === "STUDENT" || UUID.test(s.id)) return s;
+  // Ancien jeton sans vrai identifiant : un compte en attente (autre ecole, 18/11) n'est pas « repare » non plus.
+  if (ON_HOLD_PSEUDOS.includes((s.name ?? "").toUpperCase())) return null;
 
   const names = s.name === "DAMZER" ? [PROF_USER_NAME, s.name] : [s.name];
   for (const name of names) {
     const found = await db.orm.public.User.where({ name }).first();
     if (!found) continue;
+    if (ON_HOLD_ACCOUNT_IDS.has(found.id)) return null;
     const repaired: SessionPayload = { ...s, id: found.id };
     try {
       await login(repaired, true); // hors action serveur, Next refuse d'ecrire le cookie : on ignore

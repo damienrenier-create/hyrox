@@ -25,11 +25,21 @@ export async function encrypt(payload: SessionPayload, remember = false) {
     .sign(key);
 }
 
+// Comptes EN ATTENTE (Sartay 18/11) : J. Piret (JUSZER, ex-PIRZER) est une amie d'une AUTRE ECOLE. Tant que son
+// espace d'ecole n'existe pas, son compte (garde en base, rien d'efface) n'ouvre plus rien ici : la connexion est
+// refusee, et tout jeton deja emis pour elle (ou pour un eleve qu'elle regarderait) est traite comme un jeton invalide.
+export const ON_HOLD_ACCOUNT_IDS = new Set(["38f5f615-f120-4293-90cb-999f256f3ef6"]);
+export const ON_HOLD_PSEUDOS = ["JUSZER", "PIRZER"];
+
 export async function decrypt(input: string): Promise<SessionPayload> {
   const { payload } = await jwtVerify(input, key, {
     algorithms: ["HS256"],
   });
-  return payload as SessionPayload;
+  const p = payload as SessionPayload;
+  if (ON_HOLD_ACCOUNT_IDS.has(p.id) || (p.impersonatedBy && ON_HOLD_ACCOUNT_IDS.has(p.impersonatedBy.id))) {
+    throw new Error("compte en attente");
+  }
+  return p;
 }
 
 // remember = "se souvenir de moi" : cookie persistant 30 jours au lieu d'une session de 24h

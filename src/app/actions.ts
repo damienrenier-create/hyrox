@@ -1,6 +1,6 @@
 "use server";
 
-import { getSession as readSessionCookie, login, SessionPayload } from "@/lib/auth";
+import { getSession as readSessionCookie, login, ON_HOLD_PSEUDOS, SessionPayload } from "@/lib/auth";
 import { getSession } from "@/lib/session-server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -50,6 +50,8 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
 
   if (!rawName) return { error: "Le nom est requis." };
   const name = rawName.trim().toUpperCase();
+  // 18/11 : J. Piret (JUSZER / PIRZER) vient d'une autre ecole ; son compte attend son propre espace d'ecole.
+  if (ON_HOLD_PSEUDOS.includes(name)) return { error: "Ce compte n'est pas encore ouvert : son espace d'école est en préparation." };
 
   let role: SessionPayload["role"] = "STUDENT";
 
