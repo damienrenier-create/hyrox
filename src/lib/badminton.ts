@@ -320,6 +320,27 @@ export type BmView = {
   can: { validate: boolean; correct: boolean; dispute: boolean; cancel: boolean; referee: boolean; attest: boolean; decline: boolean; askWitness: boolean };
 };
 
+// Recherche dans la liste des matchs, cote prof (Sartay 20/11 : « une recherche par nom, par score etc. »). Chaque mot tape
+// doit se retrouver dans le match : « 15-13 » = un set a 15-13 dans un sens ou dans l'autre ; un nombre seul = un set ou
+// un joueur a ce nombre de points (ou une classe qui le contient) ; un mot = joueurs, classes, qui a encode, qui doit
+// signer, statut (« a signer », « conteste »…), sans accents ni majuscules.
+const foldText = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+export function matchesSearch(v: BmView, query: string): boolean {
+  const words = foldText(query).split(/[\s,;]+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = foldText([v.a.name, v.a.className, v.b.name, v.b.className, v.createdBy.name, v.waitingFor?.name, STATUS_TEXT[v.status], v.free ? "libre" : ""].filter(Boolean).join(" | "));
+  const sets = v.sets ?? [];
+  return words.every((w) => {
+    const score = w.match(/^(\d{1,2})[-–/:](\d{1,2})$/);
+    if (score) {
+      const [x, y] = [Number(score[1]), Number(score[2])];
+      return sets.some(([a, b]) => (a === x && b === y) || (a === y && b === x));
+    }
+    if (/^\d{1,2}$/.test(w) && sets.some(([a, b]) => a === Number(w) || b === Number(w))) return true;
+    return text.includes(w);
+  });
+}
+
 export function viewOf(m: BmMatch, viewerId: string, staff: boolean, ref: (id: string) => BmPersonRef): BmView {
   const st = matchState(m);
   const meSide = viewerId === m.playerAId ? "A" : viewerId === m.playerBId ? "B" : null;

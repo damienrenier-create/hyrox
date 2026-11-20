@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
+import { matchesSearch, setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
 import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-actions";
 import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
 import { usePulse } from "../../_components/usePulse";
@@ -29,10 +29,14 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
   usePulse(pulse, 10000, !refLive);
   const [tab, setTab] = useState<Tab>("matchs");
   const [filter, setFilter] = useState<Filter>("all");
-  const count = (s: Filter) => views.filter((v) => v.status === s).length;
+  // Recherche (20/11) : nom, classe, score « 15-13 », statut… ; les compteurs des statuts suivent la recherche.
+  const [query, setQuery] = useState("");
+  const found = useMemo(() => (query.trim() ? views.filter((v) => matchesSearch(v, query)) : views), [views, query]);
+  const count = (s: Filter) => found.filter((v) => v.status === s).length;
+  const total = (s: Filter) => views.filter((v) => v.status === s).length; // compteurs du haut : toute la seance
   const live = views.filter((v) => v.status !== "CANCELLED").length;
   const played = rows.filter((r) => r.stats.played + r.stats.pending + r.stats.disputed > 0).length;
-  const shown = filter === "all" ? views : views.filter((v) => v.status === filter);
+  const shown = filter === "all" ? found : found.filter((v) => v.status === filter);
   const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
 
   function exportCsv() {
@@ -67,9 +71,9 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
       {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} onClose={() => setRefLive(null)} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi label="Matchs encodés" value={live} />
-        <Kpi label="Validés" value={count("VALIDATED")} tone="ok" />
-        <Kpi label="À signer" value={count("PENDING")} tone={count("PENDING") ? "warn" : undefined} />
-        <Kpi label="Contestés" value={count("DISPUTED")} tone={count("DISPUTED") ? "err" : undefined} />
+        <Kpi label="Validés" value={total("VALIDATED")} tone="ok" />
+        <Kpi label="À signer" value={total("PENDING")} tone={total("PENDING") ? "warn" : undefined} />
+        <Kpi label="Contestés" value={total("DISPUTED")} tone={total("DISPUTED") ? "err" : undefined} />
         {free ? <Kpi label="Officiels (au classement)" value={views.filter((v) => v.official).length} tone="ok" /> : <Kpi label="Élèves ayant joué" value={`${played}/${rows.length}`} />}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -86,12 +90,16 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "matchs" && (
         <section className="space-y-2">
+          <div className="relative">
+            <input type="text" enterKeyHint="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="🔎 Rechercher : nom, classe, score (15-13), « à signer »…" aria-label="Rechercher un match" className={cx(ui.input, "pr-10")} autoComplete="off" />
+            {query && <button type="button" onClick={() => setQuery("")} className={cx(ui.close, "absolute right-1.5 top-1/2 -translate-y-1/2")} aria-label="Effacer la recherche">✕</button>}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {(["all", "LIVE", "PENDING", "DISPUTED", "VALIDATED", "CANCELLED"] as Filter[]).map((f) => (
-              <button key={f} type="button" onClick={() => setFilter(f)} className={cx(ui.chip, filter === f ? ui.chipBrand : ui.chipMuted, "py-1")}>{f === "all" ? `Tous · ${views.length}` : `${STATUS_TEXT[f]} · ${count(f)}`}</button>
+              <button key={f} type="button" onClick={() => setFilter(f)} className={cx(ui.chip, filter === f ? ui.chipBrand : ui.chipMuted, "py-1")}>{f === "all" ? `Tous · ${found.length}` : `${STATUS_TEXT[f]} · ${count(f)}`}</button>
             ))}
           </div>
-          {shown.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match{filter === "all" ? " encodé pour l'instant" : " dans cette catégorie"}.</p> : (
+          {shown.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match{query.trim() ? " ne correspond à cette recherche" : filter === "all" ? " encodé pour l'instant" : " dans cette catégorie"}.</p> : (
             <div className="grid gap-2 lg:grid-cols-2">{shown.map((v) => <MatchCard key={v.id} v={v} viewerId={viewerId} staff onReferee={setRefLive} />)}</div>
           )}
         </section>
