@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, calibrateHandicap, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -272,7 +272,9 @@ export async function attestMatchAction(matchId: string, saw: boolean): Promise<
 }
 
 // ===== Tournois (Sartay 09/11) : le prof lance un tournoi par poules dans sa seance, puis le clot (rien n'est efface) =====
-export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number; deuce?: boolean; cap?: number }): Promise<BmResult> {
+// pools (20/11) : poules arrangees a la main par le prof (joueurs de chaque poule, dans l'ordre A, B, C…), au lieu des
+// poules calculees par l'ELO. Poules et championnat seulement (pas le grand tableau).
+export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number; deuce?: boolean; cap?: number; pools?: string[][] }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
@@ -289,12 +291,18 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   const points = readTourSettings({ points: input.points }, kind).points;
   const cal = auto ? calibrateHandicap(handicapSamples(board), points) : null;
   const settings = readTourSettings({ sets: input.sets, points: input.points, poolSize: input.poolSize, poolCount: input.poolCount, eloPerPoint: auto ? cal?.eloPerPoint : input.eloPerPoint, deuce: input.deuce, cap: input.cap, calibration: cal }, kind);
-  const players = makePlayers(kind, ids.map((id) => ({ id, elo: board.entries.get(id)?.rating ?? ELO_START })), settings);
+  const eloOf = (id: string) => board.entries.get(id)?.rating ?? ELO_START;
+  const manual = kind !== "BRACKET" && Array.isArray(input.pools) ? input.pools.map((p) => (Array.isArray(p) ? p.map(String) : [])) : null;
+  if (manual) {
+    const bad = checkManualPools(manual, ids);
+    if (bad) return { error: bad };
+  }
+  const players = manual ? makeManualPools(manual, eloOf) : makePlayers(kind, ids.map((id) => ({ id, elo: eloOf(id) })), settings);
   const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   const t = await db.transaction(async (tx) => {
     // launchGames (13/11) : matchs joues par chacun au lancement, pour le K de l'ELO du moment au championnat a handicap.
     const launchGames = Object.fromEntries(ids.map((id) => [id, board.entries.get(id)?.games ?? 0]));
-    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind, label: `${TOUR_KINDS.find((k) => k.id === kind)!.name} du ${day}`, settings: { ...settings, launchGames }, createdById: c.userId });
+    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind, label: `${TOUR_KINDS.find((k) => k.id === kind)!.name} du ${day}`, settings: { ...settings, launchGames, ...(manual ? { manualPools: true } : {}) }, createdById: c.userId });
     for (const p of players) await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo });
     return t;
   });

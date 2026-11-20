@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { HANDICAP_ELO_PER_POINT, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, handicapOf, makePlayers, pairKey, readTourSettings, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
+import { HANDICAP_ELO_PER_POINT, POOL_NAMES, autoHandicap, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, groupsOfPlayers, handicapOf, makePlayers, pairKey, readTourSettings, reconcileGroups, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTournamentRuleAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { StudentName } from "../../_components/StudentName";
@@ -72,6 +72,9 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
   const [cap, setCap] = useState(0);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  // Poules arrangees a la main (20/11) : null = les poules automatiques (ELO). Changer la taille ou le nombre de poules
+  // repart des poules automatiques ; cocher / decocher un participant garde le reste de l'arrangement.
+  const [layout, setLayout] = useState<string[][] | null>(null);
   const poolSize = poolSizes[kind];
   const poolCount = poolCounts[kind];
   const cal = calibrations[points] ?? null;
@@ -80,7 +83,8 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
   const byId = useMemo(() => new Map(entrants.map((e) => [e.id, e])), [entrants]);
   const chosen = entrants.filter((e) => selected.has(e.id)).map((e) => ({ id: e.id, elo: e.elo }));
   const preview = makePlayers(kind, chosen, settings);
-  const poolNames = [...new Set(preview.map((p) => p.pool))];
+  const groups = kind === "BRACKET" ? [] : layout ? reconcileGroups(layout, chosen) : groupsOfPlayers(preview);
+  const tooSmall = kind !== "BRACKET" && groups.some((p) => p.length === 1);
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Cocher / decocher toute une classe (16/11 : classes invitees, ou relancer un tournoi sans elles).
   const classList = [...new Set(entrants.filter((e) => !e.staff && e.className).map((e) => e.className as string))].sort((x, y) => x.localeCompare(y, "fr", { numeric: true }));
@@ -98,7 +102,8 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
   function launch() {
     setError("");
     start(async () => {
-      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, poolCount, sets: settings.sets, points, eloPerPoint, deuce, cap: settings.cap });
+      const pools = kind !== "BRACKET" && layout ? groups.filter((p) => p.length) : undefined;
+      const res = await createTournamentAction(sessionId, { kind, playerIds: [...selected], poolSize, poolCount, sets: settings.sets, points, eloPerPoint, deuce, cap: settings.cap, pools });
       if ("error" in res) { setError(res.error); return; }
       router.refresh();
     });
@@ -120,13 +125,13 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
         {kind !== "BRACKET" && (
           <div>
             <span className={ui.label}>Joueurs par poule</span>
-            <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => { setPoolSizes((s) => ({ ...s, [kind]: n })); setPoolCounts((s) => ({ ...s, [kind]: 0 })); }} className={seg(!poolCount && poolSize === n)}>{n || "Tous"}</button>)}</div>
+            <div className={ui.segmented}>{TOUR_POOL_SIZES.map((n) => <button key={n} type="button" onClick={() => { setPoolSizes((s) => ({ ...s, [kind]: n })); setPoolCounts((s) => ({ ...s, [kind]: 0 })); setLayout(null); }} className={seg(!poolCount && poolSize === n)}>{n || "Tous"}</button>)}</div>
           </div>
         )}
         {kind !== "BRACKET" && (
           <div>
             <span className={ui.label}>… ou nombre de poules</span>
-            <div className={ui.segmented}>{TOUR_POOL_COUNTS.map((n) => <button key={n} type="button" onClick={() => setPoolCounts((s) => ({ ...s, [kind]: s[kind] === n ? 0 : n }))} className={seg(poolCount === n)}>{n}</button>)}</div>
+            <div className={ui.segmented}>{TOUR_POOL_COUNTS.map((n) => <button key={n} type="button" onClick={() => { setPoolCounts((s) => ({ ...s, [kind]: s[kind] === n ? 0 : n })); setLayout(null); }} className={seg(poolCount === n)}>{n}</button>)}</div>
           </div>
         )}
         <div>
@@ -196,26 +201,7 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
       </div>
 
       {preview.length > 1 && kind !== "BRACKET" && (
-        <div>
-          <span className={ui.label}>Aperçu : {poolNames.length} poule{poolNames.length > 1 ? "s" : ""}{poolNames.length > 1 ? " (A = les meilleurs ELO)" : ""}</span>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {poolNames.map((n) => {
-              const members = preview.filter((p) => p.pool === n);
-              const top = members[0];
-              return (
-                <div key={n} className="rounded-xl border border-line p-2 text-sm">
-                  <p className="font-display font-extrabold mb-1">Poule {n} · {members.length} joueurs, {members.length - 1 + (members.length % 2)} rondes</p>
-                  {members.map((p) => (
-                    <p key={p.studentId} className="flex justify-between gap-2">
-                      <span className="truncate">{nm(p.studentId)}</span>
-                      <span className="tabular-nums text-ink-3">{p.elo}{kind === "HANDICAP" && p !== top ? ` · +${handicapOf(top.elo, p.elo, settings)[1]} contre ${nm(top.studentId).split(" ")[0]}` : ""}</span>
-                    </p>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <PoolEditor groups={groups} manual={!!layout} onChange={setLayout} onReset={() => setLayout(null)} nm={nm} eloOf={(id) => byId.get(id)?.elo ?? 1000} handicap={kind === "HANDICAP" ? (top, me) => handicapOf(top, me, settings)[1] : null} />
       )}
       {preview.length > 1 && kind === "BRACKET" && (
         <div>
@@ -230,9 +216,98 @@ function NewTournament({ sessionId, entrants, calibrations }: { sessionId: strin
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
-      <button type="button" disabled={pending || selected.size < 2} onClick={launch} className={btn.primary}>{pending ? "Lancement…" : "🏆 Lancer le tournoi"}</button>
+      {tooSmall && <p className={ui.alertWarn}>Une poule n&apos;a qu&apos;un joueur : ajoutez-lui un adversaire, ou mettez ce joueur dans une autre poule.</p>}
+      <button type="button" disabled={pending || selected.size < 2 || tooSmall} onClick={launch} className={btn.primary}>{pending ? "Lancement…" : "🏆 Lancer le tournoi"}</button>
       <p className={ui.hint}>Chaque élève voit son prochain adversaire sur son téléphone. Les élèves encodent leurs matchs comme d&apos;habitude (ou un arbitre) ; ils comptent aussi au classement ELO.</p>
     </section>
+  );
+}
+
+// Poules modifiables avant le lancement (Sartay 20/11 : « deplacer certains noms dans d'autres poules, pour que la poule
+// la plus nombreuse soit une autre, intervertir deux joueurs… modifier les poules a mon bon vouloir avant de lancer »).
+// Souris : glisser un nom sur une autre poule = le deplacer ; sur un autre nom = les echanger. Au doigt (le glisser-deposer
+// ne marche pas sur telephone) : toucher un nom, puis un autre nom (echange) ou « ↓ Ici » (deplacement).
+function PoolEditor({ groups, manual, onChange, onReset, nm, eloOf, handicap }: { groups: string[][]; manual: boolean; onChange: (g: string[][]) => void; onReset: () => void; nm: (id: string) => string; eloOf: (id: string) => number; handicap: ((topElo: number, myElo: number) => number) | null }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const poolOf = (id: string) => groups.findIndex((p) => p.includes(id));
+  const pick = picked && poolOf(picked) >= 0 ? picked : null;
+  const move = (id: string, to: number) => {
+    const from = poolOf(id);
+    if (from < 0 || from === to) return;
+    onChange(groups.map((p, i) => (i === from ? p.filter((x) => x !== id) : i === to ? [...p, id] : p)));
+  };
+  const swap = (a: string, b: string) => {
+    const pa = poolOf(a), pb = poolOf(b);
+    if (pa < 0 || pb < 0 || pa === pb) return;
+    onChange(groups.map((p, i) => (i === pa ? p.map((x) => (x === a ? b : x)) : i === pb ? p.map((x) => (x === b ? a : x)) : p)));
+  };
+  const tap = (id: string) => {
+    if (!pick || pick === id) return setPicked(pick === id ? null : id);
+    if (poolOf(pick) === poolOf(id)) return setPicked(id); // meme poule : on change simplement de nom choisi
+    swap(pick, id);
+    setPicked(null);
+  };
+  const dropped = (e: React.DragEvent) => e.dataTransfer.getData("text/plain") || dragId;
+  const endDrag = () => { setDragId(null); setOver(null); };
+  const sizes = groups.map((p) => p.length).filter(Boolean);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={ui.label}>
+          Aperçu : {sizes.length} poule{sizes.length > 1 ? "s" : ""}
+          {manual ? <span className={cx(ui.chip, ui.chipAccent, "ml-2")}>✋ modifiées à la main</span> : sizes.length > 1 ? " (A = les meilleurs ELO)" : ""}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => onChange([...groups, []])} className={btn.smGhost}>＋ Nouvelle poule</button>
+          {manual && <button type="button" onClick={() => { setPicked(null); onReset(); }} className={btn.smGhost}>↺ Poules automatiques (ELO)</button>}
+        </div>
+      </div>
+      <p className={ui.hint}>Pour modifier : glissez un nom vers une autre poule pour le <b>déplacer</b>, ou sur un autre nom pour les <b>échanger</b>. Au doigt : touchez un nom, puis un autre nom (échange) ou « ↓ Ici » sur une poule (déplacement).</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {groups.map((g, i) => {
+          const members = [...g].sort((a, b) => eloOf(b) - eloOf(a) || a.localeCompare(b));
+          const top = members[0];
+          const n = members.length;
+          const zone = `p${i}`;
+          return (
+            <div
+              key={i}
+              onDragOver={(e) => { e.preventDefault(); if (over !== zone) setOver(zone); }}
+              onDrop={(e) => { e.preventDefault(); const id = dropped(e); if (id) move(id, i); endDrag(); }}
+              className={cx("rounded-xl border-2 p-2 text-sm transition-colors", over === zone ? "border-brand bg-brand-soft" : n === 1 ? "border-danger/60" : "border-line")}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="font-display font-extrabold">Poule {POOL_NAMES[i] ?? i + 1} · {n} joueur{n > 1 ? "s" : ""}{n >= 2 ? `, ${n - 1 + (n % 2)} rondes` : ""}</p>
+                {pick && poolOf(pick) !== i && <button type="button" onClick={() => { move(pick, i); setPicked(null); }} className={btn.smPrimary}>↓ Ici</button>}
+                {!n && !pick && <button type="button" onClick={() => onChange(groups.filter((_, j) => j !== i))} className={btn.smGhost} title="Retirer cette poule vide">✕</button>}
+              </div>
+              {members.map((id) => (
+                <button
+                  type="button"
+                  key={id}
+                  draggable
+                  onDragStart={(e) => { e.dataTransfer.setData("text/plain", id); e.dataTransfer.effectAllowed = "move"; setDragId(id); setPicked(null); }}
+                  onDragEnd={endDrag}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (over !== `j${id}`) setOver(`j${id}`); }}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const from = dropped(e); if (from && from !== id) { if (poolOf(from) === i) move(from, i); else swap(from, id); } endDrag(); }}
+                  onClick={() => tap(id)}
+                  className={cx("w-full flex justify-between gap-2 rounded-lg px-1.5 py-1 text-left cursor-grab select-none", pick === id ? "bg-brand text-white" : over === `j${id}` && dragId && poolOf(dragId) !== i ? "bg-accent-soft ring-2 ring-accent" : dragId === id ? "opacity-40" : "hover:bg-paper")}
+                  title="Glisser vers une autre poule, ou sur un autre nom pour échanger"
+                >
+                  <span className="truncate"><span className={pick === id ? "text-white/70" : "text-ink-3"} aria-hidden>⠿ </span>{nm(id)}</span>
+                  <span className={cx("tabular-nums", pick === id ? "text-white/80" : "text-ink-3")}>{Math.round(eloOf(id))}{handicap && id !== top ? ` · +${handicap(eloOf(top), eloOf(id))} contre ${nm(top).split(" ")[0]}` : ""}</span>
+                </button>
+              ))}
+              {(dragId || pick) && poolOf(dragId ?? pick ?? "") !== i && <p className="mt-1 rounded-lg border border-dashed border-line-2 px-2 py-1 text-center text-xs text-ink-3">{dragId ? "Lâchez ici pour déplacer dans cette poule" : "« ↓ Ici » pour déplacer dans cette poule"}</p>}
+              {n === 0 && !dragId && !pick && <p className={ui.hint}>Poule vide : glissez des noms ici. Restée vide, elle est ignorée au lancement.</p>}
+              {n === 1 && <p className="text-xs text-danger-ink mt-1">Un seul joueur : il en faut au moins 2.</p>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

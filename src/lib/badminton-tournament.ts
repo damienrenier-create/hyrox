@@ -141,7 +141,7 @@ export const formatText = (s: TourSettings, points = s.points) => `${s.sets === 
 
 export type TourEntrant = { id: string; elo: number };
 export type TourPlayer = { studentId: string; pool: string; seed: number; elo: number; late?: boolean; gone?: boolean };
-const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+export const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 
 export function makePools(entrants: TourEntrant[], poolSize: number, poolCount = 0): TourPlayer[] {
@@ -160,6 +160,55 @@ export function makePools(entrants: TourEntrant[], poolSize: number, poolCount =
   }
   return out;
 }
+// Poules faites A LA MAIN par le prof avant le lancement (Sartay 20/11 : « le tournoi via le classement ELO n'est pas
+// toujours la solution la plus adaptee ; je voudrais deplacer des noms dans d'autres poules, que la poule la plus nombreuse
+// soit une autre, intervertir deux joueurs »). groups = les joueurs de chaque poule, dans l'ordre des poules (A, B, C…) ;
+// une poule vide est ignoree. Dans une poule, la tete de serie suit l'ELO (1 = le meilleur), comme pour les poules automatiques.
+export const groupsOfPlayers = (players: TourPlayer[]): string[][] => {
+  const names = [...new Set(players.map((p) => p.pool))].sort();
+  return names.map((n) => players.filter((p) => p.pool === n).sort((a, b) => a.seed - b.seed).map((p) => p.studentId));
+};
+export function checkManualPools(groups: string[][], ids: string[]): string | null {
+  const g = groups.filter((p) => p.length);
+  if (!g.length) return "Aucune poule.";
+  if (g.length > POOL_NAMES.length) return `${POOL_NAMES.length} poules au maximum.`;
+  const seen = new Set<string>();
+  for (const p of g) for (const id of p) {
+    if (seen.has(id)) return "Un joueur est dans deux poules.";
+    seen.add(id);
+  }
+  const want = new Set(ids);
+  if (seen.size !== want.size || [...want].some((id) => !seen.has(id))) return "Les poules ne correspondent pas aux participants cochés : rechargez la page.";
+  if (g.some((p) => p.length < 2)) return "Chaque poule a besoin d'au moins 2 joueurs.";
+  return null;
+}
+export function makeManualPools(groups: string[][], eloOf: (id: string) => number): TourPlayer[] {
+  return groups
+    .filter((p) => p.length)
+    .flatMap((p, i) => p.map((id) => ({ id, elo: eloOf(id) })).sort(byElo).map((e, s) => ({ studentId: e.id, pool: POOL_NAMES[i], seed: s + 1, elo: Math.round(e.elo) })));
+}
+// Poules modifiees, puis participants coches ou decoches : un decoche quitte sa poule ; un nouveau coche rejoint la poule
+// dont l'ELO moyen est le plus proche du sien (comme un retardataire).
+export function reconcileGroups(groups: string[][], chosen: TourEntrant[]): string[][] {
+  const ids = new Set(chosen.map((c) => c.id));
+  const elo = new Map(chosen.map((c) => [c.id, c.elo]));
+  const out = groups.map((p) => p.filter((id) => ids.has(id)));
+  const placed = new Set(out.flat());
+  for (const c of [...chosen].sort(byElo)) {
+    if (placed.has(c.id)) continue;
+    let best = 0, gap = Infinity;
+    out.forEach((p, i) => {
+      if (!p.length) return;
+      const d = Math.abs(p.reduce((s, id) => s + (elo.get(id) ?? 0), 0) / p.length - c.elo);
+      if (d < gap) { gap = d; best = i; }
+    });
+    if (!out.length) out.push([]);
+    out[best] = [...out[best], c.id];
+    placed.add(c.id);
+  }
+  return out;
+}
+
 // Grand tableau : une seule liste, tete de serie 1 = meilleur ELO.
 export const makeSeeds = (entrants: TourEntrant[]): TourPlayer[] => [...entrants].sort(byElo).map((e, i) => ({ studentId: e.id, pool: "T", seed: i + 1, elo: Math.round(e.elo) }));
 export const makePlayers = (kind: TourKind, entrants: TourEntrant[], s: TourSettings): TourPlayer[] => (kind === "BRACKET" ? makeSeeds(entrants) : makePools(entrants, s.poolSize, s.poolCount));
