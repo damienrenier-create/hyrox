@@ -26,6 +26,10 @@ export type EloGame = { matchId: string; at: number; a: string; b: string; sets:
 export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
 
+// Score attendu de A contre B (formule ELO classique) et K d'un joueur selon son nombre de matchs deja comptes.
+export const expectedScore = (ra: number, rb: number) => 1 / (1 + 10 ** ((rb - ra) / 400));
+export const kFactor = (games: number) => (games < K_NEW_GAMES ? K_NEW : K_SETTLED);
+
 export function marginFactor(r: BmResult): number {
   if (r.winner === "DRAW") return 1;
   return 1 + Math.min(MARGIN_FULL, Math.abs(r.points[0] - r.points[1])) / (2 * MARGIN_FULL);
@@ -43,11 +47,11 @@ export function computeElo(games: EloGame[], start?: Map<string, { rating: numbe
     if (g.a === g.b) continue;
     const A = get(g.a);
     const B = get(g.b);
-    const expectA = g.even ? 0.5 : 1 / (1 + 10 ** ((B.rating - A.rating) / 400));
+    const expectA = g.even ? 0.5 : expectedScore(A.rating, B.rating);
     const scoreA = g.result.winner === "A" ? 1 : g.result.winner === "DRAW" ? 0.5 : 0;
     const m = marginFactor(g.result);
-    const kA = A.games < K_NEW_GAMES ? K_NEW : K_SETTLED;
-    const kB = B.games < K_NEW_GAMES ? K_NEW : K_SETTLED;
+    const kA = kFactor(A.games);
+    const kB = kFactor(B.games);
     const afterA = A.rating + kA * m * (scoreA - expectA);
     const afterB = B.rating + kB * m * (1 - scoreA - (1 - expectA));
     const outA = scoreA === 1 ? "W" : scoreA === 0 ? "L" : "D";

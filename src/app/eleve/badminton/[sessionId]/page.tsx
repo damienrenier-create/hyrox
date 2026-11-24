@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
+import { teamFormatText, teamMineOf, teamsOf } from "@/lib/badminton-teams";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
@@ -15,6 +16,10 @@ import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
 import { cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
+// Heure de la lecture (hors du rendu, regle react-hooks/purity) : le chrono du tournoi par equipes s'y recale.
+function currentTime(): number {
+  return Date.now();
+}
 
 // Badminton, cote eleve (Sartay 20/10) : encoder ses matchs (contre qui, le score), signer ou corriger ceux que
 // l'adversaire a encodes, encoder comme arbitre le match de deux autres eleves. Tout ce qui a ete encode reste visible.
@@ -54,7 +59,57 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
     // Format affiche : celui de MON prochain match (objectif du match, de la poule ou du tournoi).
     const fmt = (a: string | null | undefined, b: string | null | undefined) => (a && b ? formatText(tour.settings, ruleFor(tour.settings, tour.players, a, b).points) : formatText(tour.settings));
     const base = { kind: tour.kind, label: tour.label, format: formatText(tour.settings) };
-    if (tour.kind === "BRACKET") {
+    if (tour.kind === "TEAMS") {
+      // Tournoi par equipes (24/11) : mon equipe, mon prochain match, la rencontre en cours, le chrono, le classement.
+      const st = teamsOf(tour.players, tm, tour.settings);
+      const mine = teamMineOf(st, me.id);
+      const ts = tour.settings.team!;
+      if (mine) {
+        const p = mine.pairing;
+        const meA = mine.side === 0;
+        const opp = p ? (meA ? p.b : p.a) : null;
+        const oppLetter = mine.rencontre ? (mine.side === 0 ? mine.rencontre.y : mine.rencontre.x) ?? null : null;
+        const coachName = (l: string) => tref(st.teams.find((t) => t.letter === l)?.coach ?? "").name;
+        const rc = mine.rencontre && mine.rencontre.status !== "bye" && mine.rencontre.status !== "wait" ? mine.rencontre : null;
+        tourCard = {
+          ...base,
+          format: teamFormatText(tour.settings, st.teams.length),
+          where: `équipe ${mine.team.letter}`,
+          round: mine.round?.n ?? null,
+          rounds: st.rounds.length,
+          status: p ? p.status : mine.finished ? "done" : mine.waiting ? "wait" : mine.resting ? "bye" : "done",
+          opponent: opp ? tref(opp) : null,
+          sets: p?.sets ? (meA ? p.sets : swapSets(p.sets)) : null,
+          rank: mine.team.rank, of: st.teams.length, table: null, headStart: null, late: false, extra: [], poolDone: st.done, order: null,
+          team: {
+            letter: mine.team.letter,
+            coach: coachName(mine.team.letter),
+            meCoach: mine.team.coach === me.id,
+            pts: mine.team.pts,
+            myPts: mine.team.members.find((m) => m.id === me.id)?.pts ?? 0,
+            bracket: st.format === "BRACKET",
+            time: ts.mode === "TIME",
+            minutes: ts.minutes,
+            timer: ts.timer,
+            now: currentTime(),
+            wave: p?.wave ?? null,
+            roundLabel: mine.round ? `${mine.round.label}${mine.rencontre?.stage ? ` · ${mine.rencontre.stage}` : ""}` : "",
+            oppTeam: oppLetter ? { letter: oppLetter, coach: coachName(oppLetter) } : null,
+            current: rc ? {
+              pts: mine.side === 0 ? rc.pts : [rc.pts[1], rc.pts[0]],
+              status: rc.status,
+              matches: rc.matches.map((x) => {
+                const ours = mine.side === 0 ? x.a : x.b, theirs = mine.side === 0 ? x.b : x.a;
+                const sets = x.sets ? (mine.side === 0 ? x.sets : swapSets(x.sets)) : null;
+                return { ours: tref(ours).name, theirs: tref(theirs).name, wave: x.wave, status: x.status, score: sets ? sets.map(([s1, s2]) => `${s1}-${s2}`).join(" ") : null, pts: (mine.side === 0 ? x.pts : [x.pts[1], x.pts[0]]) as [number, number], me: ours === me.id };
+              }),
+            } : null,
+            table: [...st.teams].sort((x, y) => x.group - y.group || (x.rank ?? 99) - (y.rank ?? 99) || x.lo - y.lo).map((t) => ({ letter: t.letter, coach: coachName(t.letter), pts: t.pts, rank: t.rank, lo: t.lo, hi: t.hi, group: t.group, record: `${t.won}-${t.drawn}-${t.lost}`, me: t.letter === mine.team.letter })),
+            groups: st.groups,
+          },
+        };
+      }
+    } else if (tour.kind === "BRACKET") {
       const mine = bracketMineOf(bracketOf(tour.players, tm), me.id);
       if (mine) {
         const p = mine.pairing;

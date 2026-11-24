@@ -6,7 +6,8 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTourKind, readTourSettings, ruleFor } from "@/lib/badminton-tournament";
+import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
+import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -20,7 +21,8 @@ import { toMs } from "@/lib/scheduling";
 // `sets` (arbitrage en direct d'un match a handicap) : le score de depart, avec les points d'avance ; `target` (match de
 // tournoi) : les points du set du tournoi, proposes d'office au tableau de score de l'arbitre.
 // `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3 } } | { duplicate: { matchId: string; text: string } };
+// endsAt (tournoi par equipes au temps, 24/11) : fin du chrono en cours, affichee au tableau de l'arbitre.
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number } } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -66,11 +68,19 @@ function done(sessionId: string | null) {
 
 // Tournoi en cours de la seance (09/11) : un match entre deux joueurs qui doivent s'y affronter lui est rattache.
 // Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
-async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3 } | null> {
+// Tournoi par equipes (24/11) : le match doit etre un match d'une rencontre encore a jouer ; au temps, pas d'objectif
+// (le score au coup de sifflet) et la fin du chrono en cours.
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   const tm = t ? await loadTournamentMatches(t.id) : [];
-  if (!t || !pendingPairing(t.kind, t.players, tm, a, b, t.settings.poolLegs)) return null;
+  if (!t) return null;
+  if (t.kind === "TEAMS") {
+    if (!pendingTeamPairing(teamsOf(t.players, tm, t.settings), a, b)) return null;
+    if (t.settings.team?.mode === "TIME") { const run = runningTimer(t.settings.team); return { id: t.id, start: null, points: 0, deuce: false, cap: 0, sets: 1, ...(run ? { endsAt: run.endsAt } : {}) }; }
+    return { id: t.id, start: null, ...ruleFor(t.settings, t.players, a, b) };
+  }
+  if (!pendingPairing(t.kind, t.players, tm, a, b, t.settings.poolLegs)) return null;
   const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
   if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
   // ELO du moment (13/11) et bareme du moment, ou avance imposee par le prof.
@@ -274,7 +284,9 @@ export async function attestMatchAction(matchId: string, saw: boolean): Promise<
 // ===== Tournois (Sartay 09/11) : le prof lance un tournoi par poules dans sa seance, puis le clot (rien n'est efface) =====
 // pools (20/11) : poules arrangees a la main par le prof (joueurs de chaque poule, dans l'ordre A, B, C…), au lieu des
 // poules calculees par l'ELO. Poules et championnat seulement (pas le grand tableau).
-export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number; deuce?: boolean; cap?: number; pools?: string[][] }): Promise<BmResult> {
+// Tournoi par equipes (24/11) : `teams` = les joueurs de chaque equipe (dans l'ordre A, B…) tels que le prof les a vus ou
+// modifies, `coaches` = le coach de chaque equipe (null : sa tete de serie), `team` = format, jeu au score ou au temps, etc.
+export async function createTournamentAction(sessionId: string, input: { kind: string; playerIds: string[]; poolSize: number; poolCount?: number; sets: number; points: number; eloPerPoint?: number; deuce?: boolean; cap?: number; pools?: string[][]; teams?: string[][]; coaches?: (string | null)[]; team?: { count?: number; format?: string; groups?: number; mode?: string; minutes?: number; draw?: string } }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff) return { error: "Réservé aux profs." };
@@ -286,6 +298,7 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   const ids = [...new Set((input.playerIds ?? []).map(String))].filter((id) => roster.has(id));
   if (ids.length < 2) return { error: "Choisis au moins 2 participants." };
   const board = await loadEloBoard();
+  if (kind === "TEAMS") return createTeamTournament(c, sessionId, ids, input, (id) => board.entries.get(id)?.rating ?? ELO_START, (id) => board.entries.get(id)?.games ?? 0);
   // Championnat a handicap, bareme « automatique » (eloPerPoint absent ou 0) : calcule MAINTENANT sur les matchs joues.
   const auto = kind === "HANDICAP" && !(Number(input.eloPerPoint) > 0);
   const points = readTourSettings({ points: input.points }, kind).points;
@@ -308,6 +321,70 @@ export async function createTournamentAction(sessionId: string, input: { kind: s
   });
   done(sessionId);
   return { ok: true, matchId: t.id };
+}
+
+async function createTeamTournament(c: Ctx, sessionId: string, ids: string[], input: Parameters<typeof createTournamentAction>[1], eloOf: (id: string) => number, gamesOf: (id: string) => number): Promise<BmResult> {
+  const raw = input.team ?? {};
+  const count = Math.round(Number(raw.count) || 4);
+  if (count < 2) return { error: "Il faut au moins 2 équipes." };
+  if (ids.length < count) return { error: `Pas assez de participants pour ${count} équipes.` };
+  const groups = Array.isArray(input.teams) ? input.teams.map((t) => (Array.isArray(t) ? t.map(String) : [])).filter((t) => t.length) : makeTeams(ids.map((id) => ({ id, elo: eloOf(id) })), count);
+  const bad = checkTeams(groups, ids);
+  if (bad) return { error: bad };
+  const players = teamPlayers(groups, eloOf);
+  // Coach de chaque equipe : celui choisi par le prof (s'il est dans l'equipe), sinon la tete de serie.
+  const draft = readTeamSettings({ ...raw, count: groups.length });
+  const coaches = Object.fromEntries(groups.map((g, i) => {
+    const letter = POOL_NAMES[i];
+    const wanted = input.coaches?.[i];
+    return [letter, wanted && g.includes(wanted) ? wanted : coachOf({ ...draft, coaches: {} }, letter, players.filter((p) => p.pool === letter))];
+  }));
+  const team = readTeamSettings({ ...raw, count: groups.length, coaches });
+  const settings = readTourSettings({ sets: input.sets, points: input.points, deuce: input.deuce, cap: input.cap, team }, "TEAMS");
+  const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
+  const t = await db.transaction(async (tx) => {
+    const launchGames = Object.fromEntries(ids.map((id) => [id, gamesOf(id)]));
+    const t = await tx.orm.public.BadmintonTournament.create({ sessionId, kind: "TEAMS", label: `Tournoi par équipes du ${day}`, settings: JSON.parse(JSON.stringify({ ...settings, launchGames })), createdById: c.userId });
+    for (const p of players) await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: p.studentId, pool: p.pool, seed: p.seed, elo: p.elo });
+    return t;
+  });
+  done(sessionId);
+  return { ok: true, matchId: t.id };
+}
+
+// Chrono du tournoi par equipes au temps (24/11, Sartay : « tous les matchs commencent en meme temps et finissent en meme
+// temps ») : le prof lance le chrono de la ronde (vague 1 = matchs des tetes de serie, vague 2 = matchs en plus) ; tous
+// les telephones l'affichent. `minutes` : la duree, modifiable a chaque lancement. stop : arreter le chrono.
+export async function teamTimerAction(tournamentId: string, op: "start" | "stop", pick?: { round?: number; wave?: number; minutes?: number }): Promise<BmResult> {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(row.sessionId);
+  if ("error" in c) return c;
+  if (!c.staff) return { error: "Réservé aux profs." };
+  const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
+  if (t.kind !== "TEAMS" || !t.settings.team) return { error: "Ce tournoi n'est pas un tournoi par équipes." };
+  const cur = (row.settings ?? {}) as Record<string, unknown>;
+  const team = { ...((cur.team ?? {}) as Record<string, unknown>) };
+  const now = Date.now();
+  if (op === "stop") {
+    const tm = t.settings.team.timer;
+    if (!tm || tm.stoppedAt) return { ok: true };
+    team.timer = { ...tm, stoppedAt: now };
+  } else {
+    const st = teamsOf(t.players, await loadTournamentMatches(t.id), t.settings);
+    const round = Math.round(Number(pick?.round) || st.next?.round || 0);
+    const wave = Number(pick?.wave) === 2 ? 2 : pick?.wave ? 1 : st.next?.wave ?? 1;
+    if (!round || !st.rounds.some((r) => r.n === round)) return { error: "Plus aucune ronde à jouer." };
+    const minutes = Number(pick?.minutes) >= 1 && Number(pick?.minutes) <= 30 ? Number(pick?.minutes) : t.settings.team.minutes;
+    team.minutes = minutes;
+    team.timer = { round, wave, startedAt: now, endsAt: now + minutes * 60_000, stoppedAt: null };
+    const starts = { ...t.settings.team.roundStarts };
+    if (!starts[String(round)]) starts[String(round)] = now; // la ronde commence au 1er coup de sifflet
+    team.roundStarts = starts;
+  }
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
+  done(row.sessionId);
+  return { ok: true };
 }
 
 // Clore le tournoi : il reste consultable, ses matchs restent des matchs ordinaires ; un nouveau tournoi peut etre lance.
@@ -336,7 +413,21 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
   if (!(await badmintonRoster(c.session)).some((p) => p.id === id)) return { error: "Ce joueur n'est pas dans cette séance." }; // eleve ou prof (16/11)
   const entry = (await loadEloBoard()).entries.get(id);
   const elo = Math.round(entry?.rating ?? ELO_START);
-  if (t.kind === "BRACKET") {
+  if (t.kind === "TEAMS") {
+    // Tournoi par equipes (24/11) : l'equipe qui a le moins de joueurs presents (puis la plus faible) ; il joue a partir de
+    // la prochaine rencontre de son equipe pas encore commencee.
+    const st = teamsOf(t.players, await loadTournamentMatches(t.id), t.settings);
+    const pick = [...st.teams].sort((x, y) => x.members.filter((m) => !m.away).length - y.members.filter((m) => !m.away).length || x.avg - y.avg || x.letter.localeCompare(y.letter))[0];
+    if (!pick) return { error: "Aucune équipe." };
+    const seed = Math.max(0, ...t.players.filter((p) => p.pool === pick.letter).map((p) => p.seed)) + 1;
+    const cur = (row.settings ?? {}) as Record<string, unknown>;
+    const team = { ...((cur.team ?? {}) as Record<string, unknown>) };
+    team.lateAt = { ...t.settings.team!.lateAt, [id]: Date.now() };
+    await db.transaction(async (tx) => {
+      await tx.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: id, pool: pick.letter, seed, elo });
+      await tx.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team, late: [...readLate(row.settings), id], launchGames: { ...t.settings.launchGames, [id]: entry?.games ?? 0 } })) });
+    });
+  } else if (t.kind === "BRACKET") {
     const seat = lateBracketSeat(t.players, await loadTournamentMatches(t.id));
     if (!seat.ok) return { error: seat.reason };
     await db.orm.public.BadmintonTournamentPlayer.create({ tournamentId: t.id, studentId: id, pool: "T", seed: seat.seed, elo });
@@ -384,7 +475,7 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
   if (patch.poolLegs) {
     const { name } = patch.poolLegs;
     const ids = t.players.filter((p) => p.pool === name).map((p) => p.studentId);
-    if (!ids.length || t.kind === "BRACKET") return { error: "Poule introuvable." };
+    if (!ids.length || t.kind === "BRACKET" || t.kind === "TEAMS") return { error: "Poule introuvable." };
     if (patch.poolLegs.legs === 2) poolLegs[name] = 2;
     else {
       const tm = await loadTournamentMatches(t.id);
@@ -444,7 +535,23 @@ export async function setPlayersGoneAction(tournamentId: string, studentIds: str
     if (gone) list.add(id);
     else list.delete(id);
   }
-  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: { ...(row.settings as Record<string, unknown>), gone: [...list] } });
+  const cur = (row.settings ?? {}) as Record<string, unknown>;
+  // Tournoi par equipes (24/11) : on garde aussi QUAND il part et revient (settings.team.away), pour ne pas changer les
+  // rencontres deja commencees.
+  let team = cur.team as Record<string, unknown> | undefined;
+  if (t.kind === "TEAMS" && t.settings.team) {
+    const now = Date.now();
+    const away = { ...t.settings.team.away };
+    for (const id of ids) {
+      const iv = [...(away[id] ?? [])];
+      const open = iv.findIndex(([, to]) => to === null);
+      if (gone && open < 0) iv.push([now, null]);
+      if (!gone && open >= 0) iv[open] = [iv[open][0], now];
+      if (iv.length) away[id] = iv;
+    }
+    team = { ...(team ?? {}), away };
+  }
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, gone: [...list], ...(team ? { team } : {}) })) });
   done(row.sessionId);
   return { ok: true };
 }
@@ -471,7 +578,9 @@ export async function badmintonPulseAction(sessionId: string): Promise<string> {
     const n = (await db.orm.public.BadmintonEvent.where({ sessionId }).aggregate((a) => ({ n: a.count() }))).n;
     const s = await sessionOf(sessionId);
     const tours = await db.orm.public.BadmintonTournament.where({ sessionId }).all(); // lancer ou clore un tournoi rafraichit les ecrans
-    return `${n}|${s?.isActive ? 1 : 0}|${s?.closesAt ? toMs(s.closesAt) : 0}|${tours.length}.${tours.filter((t) => t.cancelledAt).length}`;
+    // Chrono d'un tournoi par equipes (24/11) : le lancer ou l'arreter rafraichit aussi les telephones.
+    const timers = tours.filter((t) => !t.cancelledAt).map((t) => { const tm = readTeamSettings((t.settings as { team?: unknown } | null)?.team).timer; return tm ? `${tm.startedAt}.${tm.stoppedAt ?? 0}` : ""; }).join(",");
+    return `${n}|${s?.isActive ? 1 : 0}|${s?.closesAt ? toMs(s.closesAt) : 0}|${tours.length}.${tours.filter((t) => t.cancelledAt).length}|${timers}`;
   } catch {
     return "";
   }
@@ -509,7 +618,7 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}) } } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}), ...(tour.endsAt ? { endsAt: tour.endsAt } : {}) } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {

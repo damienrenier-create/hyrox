@@ -38,19 +38,54 @@
 import { isOfficial, matchState, swapSets, type BmMatch, type BmSet } from "@/lib/badminton";
 import { K_NEW_GAMES, computeElo, type EloGame } from "@/lib/badminton-elo";
 
-export type TourKind = "POOLS" | "BRACKET" | "HANDICAP";
+export type TourKind = "POOLS" | "BRACKET" | "HANDICAP" | "TEAMS";
 export const TOUR_KINDS: { id: TourKind; name: string }[] = [
   { id: "POOLS", name: "Poules de niveau" },
   { id: "BRACKET", name: "Grand tableau" },
   { id: "HANDICAP", name: "Championnat à handicap" },
+  { id: "TEAMS", name: "Tournoi par équipes" },
 ];
+
+// ===== Tournoi PAR EQUIPES (Sartay 24/11 : « les meilleurs ELO sont nommes coachs ; equipes du meme nombre de joueurs,
+// total ELO le plus proche possible ; les tetes de serie de chaque equipe s'affrontent ; chaque joueur rapporte a son
+// equipe les points ELO gagnes ») : reglages propres (settings.team). Les regles sont dans src/lib/badminton-teams.ts.
+// format : LEAGUE = championnat entre equipes (chacune contre chacune, en `groups` poules d'equipes), BRACKET = tableau
+// (1/8, 1/4, 1/2, finale ; les perdants jouent les places suivantes). mode : POINTS = au score (sets / points du
+// tournoi), TIME = au temps (chrono de `minutes` lance par le prof : tous les matchs de la ronde commencent et finissent
+// ensemble). draw : HALF = a egalite, chacun rapporte la moitie de ce qu'une victoire lui aurait rapporte ; ELO = ce que
+// l'ELO donne vraiment (le moins bien classe gagne un peu, l'autre 0). coaches : lettre d'equipe → coach (sinon la tete
+// de serie). timer : le chrono en cours (ronde, vague 1 = matchs des tetes de serie, 2 = matchs en plus quand les equipes
+// n'ont pas le meme nombre de joueurs). roundStarts : 1er coup de sifflet de chaque ronde. lateAt : arrivee d'un
+// retardataire ; away : absences (depart → retour, null = toujours parti). Tout en millisecondes.
+export type TeamFormat = "LEAGUE" | "BRACKET";
+export type TeamMode = "POINTS" | "TIME";
+export type TeamDraw = "HALF" | "ELO";
+export type TeamTimer = { round: number; wave: number; startedAt: number; endsAt: number; stoppedAt: number | null };
+export type TeamSettings = { count: number; format: TeamFormat; groups: number; mode: TeamMode; minutes: number; draw: TeamDraw; coaches: Record<string, string>; timer: TeamTimer | null; roundStarts: Record<string, number>; lateAt: Record<string, number>; away: Record<string, [number, number | null][]> };
+export const TEAM_COUNTS = [2, 3, 4, 5, 6, 8] as const;
+export const TEAM_GROUPS = [1, 2, 3, 4] as const;
+export const TEAM_MINUTES = [3, 4, 5, 6, 7, 8, 10, 12, 15] as const;
+const numMap = (v: unknown): Record<string, number> => Object.fromEntries(Object.entries(v && typeof v === "object" ? (v as Record<string, unknown>) : {}).filter(([, n]) => Number.isFinite(Number(n))).map(([k, n]) => [k, Number(n)]));
+export function readTeamSettings(raw: unknown): TeamSettings {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const count = Number.isInteger(Number(o.count)) && Number(o.count) >= 2 && Number(o.count) <= 26 ? Number(o.count) : 4;
+  const groups = Number.isInteger(Number(o.groups)) && Number(o.groups) >= 1 && Number(o.groups) <= 8 ? Number(o.groups) : 1;
+  const minutes = Number.isFinite(Number(o.minutes)) && Number(o.minutes) >= 1 && Number(o.minutes) <= 30 ? Number(o.minutes) : 6;
+  const c = o.coaches && typeof o.coaches === "object" ? (o.coaches as Record<string, unknown>) : {};
+  const coaches = Object.fromEntries(Object.entries(c).filter(([, v]) => typeof v === "string")) as Record<string, string>;
+  const tm = o.timer && typeof o.timer === "object" ? (o.timer as Record<string, unknown>) : null;
+  const timer = tm && Number(tm.round) >= 1 && Number(tm.endsAt) > 0 ? { round: Number(tm.round), wave: Number(tm.wave) === 2 ? 2 : 1, startedAt: Number(tm.startedAt) || 0, endsAt: Number(tm.endsAt), stoppedAt: Number(tm.stoppedAt) > 0 ? Number(tm.stoppedAt) : null } : null;
+  const aw = o.away && typeof o.away === "object" ? (o.away as Record<string, unknown>) : {};
+  const away = Object.fromEntries(Object.entries(aw).map(([k, v]) => [k, (Array.isArray(v) ? v : []).filter((x): x is unknown[] => Array.isArray(x) && Number(x[0]) > 0).map((x) => [Number(x[0]), Number(x[1]) > 0 ? Number(x[1]) : null] as [number, number | null])]).filter(([, v]) => (v as unknown[]).length));
+  return { count, format: o.format === "BRACKET" ? "BRACKET" : "LEAGUE", groups, mode: o.mode === "TIME" ? "TIME" : "POINTS", minutes, draw: o.draw === "ELO" ? "ELO" : "HALF", coaches, timer, roundStarts: numMap(o.roundStarts), lateAt: numMap(o.lateAt), away };
+}
 // Retardataires d'un tournoi de poules (settings.late : leurs identifiants).
 // Joueurs partis avant la fin du tournoi (settings.gone, 12/11 : « il part seulement avant la fin du tournoi ») : leurs
 // matchs pas encore joues sortent de l'ordre (statut « gone », plus personne ne les attend ; au tableau, l'adversaire
 // passe), leurs matchs joues restent ; on peut les remettre s'ils reviennent.
 export const readGone = (settings: unknown): string[] => { const l = (settings as { gone?: unknown } | null)?.gone; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
 export const readLate = (settings: unknown): string[] => { const l = (settings as { late?: unknown } | null)?.late; return Array.isArray(l) ? l.filter((x): x is string => typeof x === "string") : []; };
-export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === "HANDICAP" ? v : "POOLS");
+export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === "HANDICAP" || v === "TEAMS" ? v : "POOLS");
 
 // poolCount (12/11, « je veux pouvoir choisir le nombre de poules, en plus du nombre de joueurs dans chaque poule ») :
 // s'il est donne (> 0), il l'emporte sur poolSize.
@@ -58,7 +93,7 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number> };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number>; team: TeamSettings | null };
 // Avance IMPOSEE par le prof pour une rencontre (13/11 : « changer l'ecart pour des matchs en particulier ») : `id` = celui
 // qui commence avec `pts` points d'avance ; pts 0 = aucune avance. Cle = pairKey.
 export type MatchHandicap = { id: string; pts: number };
@@ -72,6 +107,8 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   let sets: 1 | 2 | 3 = o.sets === 2 || o.sets === 3 ? o.sets : 1;
   if (kind === "BRACKET" && sets === 2) sets = 1; // un tableau a besoin d'un vainqueur : pas de match en 2 sets
+  const team = kind === "TEAMS" ? readTeamSettings(o.team) : null;
+  if (team?.mode === "TIME") sets = 1; // au temps : un seul set, le score au coup de sifflet
   const points = TOUR_POINTS.includes(Number(o.points) as never) ? Number(o.points) : 15;
   const poolSize = TOUR_POOL_SIZES.includes(Number(o.poolSize) as never) ? Number(o.poolSize) : kind === "HANDICAP" ? 0 : 4;
   // Bareme du handicap : un entier de 5 a 100 (calcule au lancement depuis le 13/11, ou choisi a la main).
@@ -94,7 +131,7 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   // match, choisi par le prof (pas de revanche automatique) ; absent = automatique (revanches quand la poule a fini).
   const pl = o.poolLegs && typeof o.poolLegs === "object" ? (o.poolLegs as Record<string, unknown>) : {};
   const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2 || Number(n) === 1).map(([k, n]) => [k, Number(n)]));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs };
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs, team };
 }
 
 // ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le
@@ -274,7 +311,10 @@ export function handicapFor(s: TourSettings, players: TourPlayer[], a: string, b
 }
 // Regle d'un match de tournoi pour l'arbitre en direct (reprise comprise) ; `head` = score de depart de CHAQUE set au
 // championnat a handicap : celui pose a l'ouverture du match (1er instantane en direct), sinon le handicap actuel.
-export function liveRuleOf(t: { kind: TourKind; settings: TourSettings; players: TourPlayer[] }, m: BmMatch): TourRule & { target: number; head?: BmSet } {
+// Tournoi par equipes au temps (24/11) : pas d'objectif (le score au coup de sifflet), et la fin du chrono en cours.
+export function liveRuleOf(t: { kind: TourKind; settings: TourSettings; players: TourPlayer[] }, m: BmMatch): TourRule & { target: number; head?: BmSet; endsAt?: number } {
+  const tm = t.settings.team;
+  if (t.kind === "TEAMS" && tm?.mode === "TIME") return { points: 0, deuce: false, cap: 0, sets: 1, target: 0, ...(tm.timer && !tm.timer.stoppedAt ? { endsAt: tm.timer.endsAt } : {}) };
   const r = ruleFor(t.settings, t.players, m.playerAId, m.playerBId);
   if (t.kind !== "HANDICAP") return { ...r, target: r.points };
   const first = [...m.events].filter((e) => e.kind === "LIVE" && e.sets?.length).sort((x, y) => x.at - y.at)[0];
@@ -294,7 +334,7 @@ const samePair = (m: BmMatch, a: string, b: string) => (m.playerAId === a && m.p
 
 // La rencontre a-b dans les matchs du tournoi : le dernier match non annule entre eux. leg (matchs retour, 13/11) :
 // 0 = le 1er match non annule entre eux (aller), 1 = le 2e (retour) ; null = une seule rencontre (regle d'avant).
-function pairingOf(a: string, b: string | null, matches: BmMatch[], leg: number | null = null): TourPairing {
+export function pairingOf(a: string, b: string | null, matches: BmMatch[], leg: number | null = null): TourPairing {
   if (b === null) return { a, b, status: "bye", matchId: null, sets: null, winner: null };
   const all = [...matches].filter((x) => samePair(x, a, b) && matchState(x).status !== "CANCELLED");
   const m = leg === null ? all.sort((x, y) => y.createdAt - x.createdAt)[0] : all.sort((x, y) => x.createdAt - y.createdAt)[leg];

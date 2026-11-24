@@ -183,6 +183,36 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
   );
 }
 
+// ===== Chrono du tournoi par equipes au temps (Sartay 24/11 : « tous les matchs commencent en meme temps et finissent en
+// meme temps ») : temps restant jusqu'a `endsAt` (heure du serveur ; `serverNow` = heure du serveur a l'affichage de la
+// page, pour corriger l'horloge du telephone). A 0 : « Temps écoulé » et une vibration. Affiche seulement apres le
+// chargement (l'heure du telephone n'existe pas cote serveur).
+export function Countdown({ endsAt, stoppedAt = null, serverNow, big = false }: { endsAt: number; stoppedAt?: number | null; serverNow?: number; big?: boolean }) {
+  const [offset] = useState(() => (serverNow ? serverNow - Date.now() : 0));
+  const [now, setNow] = useState<number | null>(null);
+  const buzzed = useRef(false);
+  useEffect(() => {
+    const tick = () => setNow(Date.now() + offset);
+    tick();
+    const h = setInterval(tick, 500);
+    return () => clearInterval(h);
+  }, [offset]);
+  // Chrono arrete : le temps qu'il restait au moment de l'arret.
+  const left = now === null ? null : Math.max(0, endsAt - (stoppedAt ?? now));
+  const over = !stoppedAt && left !== null && left <= 0;
+  useEffect(() => {
+    if (left === null) return;
+    if (left > 0) { buzzed.current = true; return; } // il tournait : on vibrera a 0
+    if (over && buzzed.current) { buzzed.current = false; try { navigator.vibrate?.([300, 150, 300, 150, 600]); } catch { /* vibreur absent */ } }
+  }, [left, over]);
+  if (left === null) return <span className={big ? "font-display text-5xl font-extrabold tabular-nums" : "font-bold tabular-nums"}>…</span>;
+  const s = Math.ceil(left / 1000);
+  const txt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (stoppedAt) return <span className={cx(big ? "font-display text-3xl font-extrabold" : "font-bold", "tabular-nums text-ink-2")}>⏸ chrono arrêté ({txt})</span>;
+  if (over) return <span className={cx(big ? "font-display text-3xl font-extrabold" : "font-bold", "text-red-600 dark:text-red-400 animate-pulse")}>⏱️ Temps écoulé !</span>;
+  return <span className={cx(big ? "font-display text-5xl font-extrabold" : "font-bold", "tabular-nums", s <= 30 && "text-red-600 dark:text-red-400")}>⏱️ {txt}</span>;
+}
+
 // ===== Arbitrage en direct (Sartay 03/11) =====
 // Tableau de score plein ecran pour l'arbitre : un gros « +1 » et un petit « −1 » par joueur, le service (celui qui vient
 // de marquer), le set suivant, la fin du match. Chaque appui part tout de suite au serveur ; si plusieurs appuis se
@@ -192,7 +222,8 @@ const BM_TARGETS = [11, 13, 15, 21, 0] as const; // 0 = sans limite (match au te
 // `rule` : regle de fin de set d'un match de tournoi (12/11 : par defaut le premier a l'objectif gagne ; option 2 points
 // d'ecart, eventuellement plafonnee). Sans regle (match ordinaire) : 2 points d'ecart, plafond 30 en 21 (sinon objectif + 4).
 // sets : format du match de tournoi (balle de match) ; head : score de depart de chaque set (championnat a handicap, 13/11).
-export type LiveRule = { deuce: boolean; cap: number; sets?: 1 | 2 | 3; head?: BmSet };
+// endsAt : fin du chrono (tournoi par equipes au temps, 24/11).
+export type LiveRule = { deuce: boolean; cap: number; sets?: 1 | 2 | 3; head?: BmSet; endsAt?: number };
 // Points d'avance du championnat a handicap, EN ROUGE ET EN GRAS (Sartay 16/11 : « plusieurs eleves sont passes a cote »).
 export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
 export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; onClose: () => void }) {
@@ -200,7 +231,8 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
   // Points par set (rappel « set gagné ? ») : retenu sur ce telephone. Le tableau n'existe que cote navigateur (ouvert au clic).
-  const [target, setTarget] = useState<number>(() => { if (initialTarget && BM_TARGETS.includes(initialTarget as never)) return initialTarget; try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
+  // 0 (« sans limite ») est un objectif de tournoi valable : match au temps (24/11).
+  const [target, setTarget] = useState<number>(() => { if (initialTarget !== undefined && BM_TARGETS.includes(initialTarget as never)) return initialTarget; try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [finishing, startFinish] = useTransition();
@@ -322,6 +354,11 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
             ) : (
               <>⚖️ Handicap : <b className={BM_ADVANCE}>aucun point d&apos;avance</b> dans ce match : les deux joueurs commencent à <b className={BM_ADVANCE}>0-0</b></>
             )}
+          </div>
+        )}
+        {rule?.endsAt && (
+          <div className="rounded-2xl border-2 border-line bg-card text-center px-3 py-2" aria-label="Chrono">
+            <Countdown endsAt={rule.endsAt} big /> <span className={`${ui.hint} block`}>Match au temps : le score au coup de sifflet compte (égalité possible).</span>
           </div>
         )}
         {alerts.length > 0 && (

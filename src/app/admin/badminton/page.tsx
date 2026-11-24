@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
+import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
@@ -20,6 +21,10 @@ import { NotesPopup } from "../../_components/NotesPopup";
 import { notedIdsOf, notesForSessions } from "@/lib/student-notes-server";
 
 export const dynamic = "force-dynamic";
+// Heure de la lecture (hors du rendu, regle react-hooks/purity) : le chrono du tournoi par equipes s'y recale.
+function currentTime(): number {
+  return Date.now();
+}
 
 // Bilan par eleve : stats sur les matchs donnes, tries par classe puis par nom (les profs ne sont pas listes).
 function pupilRows(ids: string[], people: Map<string, BmPerson>, matches: BmMatch[]): BmPupilRow[] {
@@ -128,13 +133,16 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
     const tm = await loadTournamentMatches(t.id);
     const tp = await peopleOf(tm, t.players.map((p) => p.studentId));
     const now = t.kind === "HANDICAP" ? playersNow(t.players, tm, t.settings) : t.players; // ELO du moment (13/11)
+    const teams = t.kind === "TEAMS" ? teamsOf(t.players, tm, t.settings) : null; // tournoi par equipes (24/11)
     return {
       id: t.id,
       kind: t.kind,
       label: t.label,
-      format: formatText(t.settings),
-      pools: t.kind === "BRACKET" ? null : poolsOf(now, tm, t.kind === "HANDICAP" ? t.settings : null, t.settings.poolLegs, !t.closedAt), // tournoi clos : pas de revanche automatique
+      format: teams ? teamFormatText(t.settings, teams.teams.length) : formatText(t.settings),
+      pools: t.kind === "BRACKET" || teams ? null : poolsOf(now, tm, t.kind === "HANDICAP" ? t.settings : null, t.settings.poolLegs, !t.closedAt), // tournoi clos : pas de revanche automatique
       bracket: t.kind === "BRACKET" ? bracketOf(t.players, tm) : null,
+      teams,
+      now: currentTime(),
       names: Object.fromEntries(t.players.map((p) => [p.studentId, { name: tp.get(p.studentId)?.name ?? "?", className: tp.get(p.studentId)?.staff ? "prof" : tp.get(p.studentId)?.className ?? null }])),
       gone: t.players.filter((p) => p.gone).map((p) => p.studentId),
       settings: t.settings,

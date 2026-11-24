@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
 import type { PairingStatus, TourKind } from "@/lib/badminton-tournament";
 import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "../../badminton-actions";
-import { BM_ADVANCE, LiveBoard, MatchCard, type LiveRule, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
+import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -13,7 +13,15 @@ import { btn, cx, ui } from "@/lib/ui";
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
 // Matchs libres (`free`, 03/11) : tous les eleves dans la liste, temoins a demander, « à attester » en haut.
 // Tournoi par poules (`tour`, 09/11) : en tete, mon adversaire de la ronde en cours et « Encoder ce match ».
-export type TourCardData = { kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean; order: { round: number | null; a: string; b: string | null; status: PairingStatus; score: string | null; mine: boolean; points: number | null }[] | null };
+export type TourCardData = { kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean; order: { round: number | null; a: string; b: string | null; status: PairingStatus; score: string | null; mine: boolean; points: number | null }[] | null; team?: TeamCardData };
+// Tournoi par equipes (24/11) : vu du cote de l'eleve (« ours » = joueur de mon equipe, pts = [nous, eux]).
+export type TeamCardData = {
+  letter: string; coach: string; meCoach: boolean; pts: number; myPts: number; bracket: boolean; time: boolean; minutes: number;
+  timer: { round: number; wave: number; startedAt: number; endsAt: number; stoppedAt: number | null } | null; now: number; wave: 1 | 2 | null; roundLabel: string;
+  oppTeam: { letter: string; coach: string } | null;
+  current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
+  table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
+};
 export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {} }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
@@ -29,7 +37,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
     <main className="max-w-xl mx-auto p-4 space-y-5">
       {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
-      {tour && <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />}
+      {tour && (tour.team ? <TeamCard t={tour} team={tour.team} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} /> : <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />)}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
 
       {toAttest.length > 0 && (
@@ -234,6 +242,73 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
           {t.table.map((r) => <li key={r.rank} className={cx("flex justify-between gap-2 px-1 rounded", r.me && "bg-brand-soft font-bold")}><span>{r.rank}. {r.name}</span><span className="tabular-nums">{String(r.score).replace(".", ",")} pt{r.score > 1 ? "s" : ""}</span></li>)}
         </ol>
       </details>}
+    </section>
+  );
+}
+
+// Carte du tournoi PAR EQUIPES (Sartay 24/11) : mon equipe et son coach, mon prochain match (contre qui, dans quelle
+// rencontre), le chrono quand on joue au temps, les matchs de la rencontre en cours et le classement des equipes.
+function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCardData; canPlay: boolean; onPlay: (opponentId: string) => void }) {
+  const nth = (n: number) => `${n}${n === 1 ? "re" : "e"}`;
+  const tm = team.timer;
+  const timerHere = team.time && tm && t.round === tm.round;
+  const sign = (n: number) => (n > 0 ? `+${n}` : "0");
+  const place = (r: TeamCardData["table"][number]) => (r.rank ? `${r.rank}.` : `${r.lo}-${r.hi}.`);
+  return (
+    <section className={cx(ui.card, "p-3 space-y-2 border-accent bg-accent-soft/30")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-display font-extrabold text-ink">🏆 Tournoi par équipes · Équipe {team.letter}</p>
+        <span className={ui.hint}>{t.format}</span>
+      </div>
+      <p className="text-sm">
+        {team.meCoach ? <><b>👑 Tu es le coach de l&apos;équipe {team.letter}.</b> Encourage et conseille tes joueurs : chaque victoire rapporte des points à l&apos;équipe.</> : <>Ton coach : <b>👑 {team.coach}</b>.</>}
+        {" "}Ton équipe : <b>{team.pts} pts</b>{t.rank ? <> · {nth(t.rank)} sur {t.of}</> : null} · toi : <b>{sign(team.myPts)}</b>.
+      </p>
+      {team.time && tm && (
+        <div className="rounded-xl border-2 border-line bg-card px-3 py-2 text-center">
+          <Countdown endsAt={tm.endsAt} stoppedAt={tm.stoppedAt} serverNow={team.now} big />
+          <p className={ui.hint}>Ronde {tm.round}{tm.wave === 2 ? " · matchs en plus" : ""} : tous les matchs commencent et s&apos;arrêtent ensemble. Le score au coup de sifflet compte (égalité possible).</p>
+        </div>
+      )}
+      {t.status === "done" ? (
+        <p className="text-sm"><b>{team.table.length && t.poolDone ? "Tournoi terminé !" : "Tu as joué tous tes matchs !"}</b>{t.poolDone && t.rank ? <> Ton équipe finit <b>{nth(t.rank)}</b> sur {t.of}.</> : " Encourage tes coéquipiers, ou arbitre un match."}</p>
+      ) : t.status === "wait" ? (
+        <p className="text-sm">{team.roundLabel} : <b>en attente</b> de la prochaine équipe adverse (une rencontre du tour précédent n&apos;est pas finie).</p>
+      ) : t.status === "bye" ? (
+        <p className="text-sm">{team.roundLabel} : <b>ton équipe est au repos.</b> Profites-en pour arbitrer un match !</p>
+      ) : t.opponent ? (
+        <div className="space-y-2">
+          <p className="text-sm">{team.roundLabel}{team.oppTeam ? <> · contre l&apos;équipe {team.oppTeam.letter} (👑 {team.oppTeam.coach})</> : null} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          {team.wave === 2 && <p className={ui.hint}>Match en plus : les deux équipes n&apos;ont pas le même nombre de joueurs, tu joues contre le joueur le plus proche de ton ELO{team.time ? " (au 2e coup de sifflet)" : ""}.</p>}
+          {team.time && !timerHere && <p className={ui.hint}>⏱️ Matchs de {team.minutes} min : attends le coup de sifflet du prof.</p>}
+          {t.status === "live" ? <p className="text-sm">Ton match est arbitré en direct.</p> : t.status === "disputed" ? <p className="text-sm">Ton match est contesté : ton prof va trancher.</p> : canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
+        </div>
+      ) : null}
+      <p className={ui.hint}>Une victoire rapporte à ton équipe les points ELO que tu gagnes (plus si tu bats un joueur mieux classé) ; une défaite ne coûte rien.</p>
+      {team.current && (
+        <details open>
+          <summary className="cursor-pointer text-xs font-bold text-ink-2">Rencontre en cours : équipe {team.letter} <b>{team.current.pts[0]}</b> – <b>{team.current.pts[1]}</b> équipe {team.oppTeam?.letter ?? "?"}</summary>
+          <ol className="mt-1 text-sm space-y-0.5">
+            {team.current.matches.map((m, i) => (
+              <li key={i} className={cx("flex justify-between gap-2 px-1 rounded", m.me && "bg-brand-soft font-bold", m.status === "played" && "text-ink-2")}>
+                <span className="min-w-0 truncate">{m.wave === 2 && <span className="text-xs text-accent-ink">en plus · </span>}{m.ours} – {m.theirs}</span>
+                <span className="whitespace-nowrap text-xs tabular-nums">{m.status === "played" ? `${m.score ?? ""} · ${m.pts[0] ? `+${m.pts[0]} nous` : m.pts[1] ? `+${m.pts[1]} eux` : "0"}` : m.status === "live" ? "🔴 en cours" : m.status === "disputed" ? "⚠️" : m.status === "gone" ? "🚪 parti" : "⏳"}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      <details>
+        <summary className="cursor-pointer text-xs font-bold text-ink-2">Classement des équipes</summary>
+        <ol className="mt-1 text-sm">
+          {team.table.map((r) => (
+            <li key={r.letter} className={cx("flex justify-between gap-2 px-1 rounded", r.me && "bg-brand-soft font-bold")}>
+              <span>{team.groups > 1 ? <span className="text-ink-3 text-xs">P{r.group + 1} </span> : null}{place(r)} Équipe {r.letter} <span className="text-ink-3 text-xs">👑 {r.coach}</span></span>
+              <span className="tabular-nums">{r.pts} pts{team.bracket ? "" : ` · ${r.record}`}</span>
+            </li>
+          ))}
+        </ol>
+      </details>
     </section>
   );
 }
