@@ -12,6 +12,10 @@ import { isWinterArc } from "@/lib/winter-arc";
 import { notesOf, todayKeyBxl } from "@/lib/student-notes-server";
 import { fmtDay, noteActive, noteIcon } from "@/lib/student-notes";
 import { NoteToggle } from "../../notes/NotesClient";
+import { loadEloBoard, loadPlayerScouting } from "@/lib/badminton-server";
+import { perfReport } from "@/lib/badminton-perf";
+import { BadmintonPerf } from "../../../_components/BadmintonPerf";
+import { ScoutView } from "../../../_components/ScoutView";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +44,13 @@ export default async function EleveFichePage({ params, searchParams }: { params:
   const myNotes = await notesOf(user.id, s.id); // notes perso (13/11) : seul l'auteur les voit
   const today = todayKeyBxl();
   const nday = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Brussels" });
+  // Badminton (24/11, en vue de l'evaluation) : progression ELO, meilleures et moins bonnes perfs.
+  const board = await loadEloBoard();
+  const bmEntry = board.entries.get(s.id) ?? null;
+  const bmReport = bmEntry && bmEntry.games ? perfReport(bmEntry, board.entries) : null;
+  const bmNames = bmReport ? Object.fromEntries([...new Set(bmReport.rows.map((x) => x.opponentId))].map((o) => [o, { name: board.people.get(o)?.name ?? "?", className: board.people.get(o)?.staff ? "prof" : board.people.get(o)?.className ?? null }])) : {};
+  const bmScout = await loadPlayerScouting(s.id); // scouting (24/11) : impacts notes dans ses matchs, fiches des scouts
+  const bmRank = bmEntry ?[...board.entries.values()].filter((e) => board.test.has(e.id) === board.test.has(s.id) && e.rating > bmEntry.rating).length + 1 : 0;
 
   return (
     <div className={ui.page}>
@@ -116,6 +127,19 @@ export default async function EleveFichePage({ params, searchParams }: { params:
             </div>
           ))}
         </section>
+
+        {(bmReport || bmScout.rallies.length > 0 || bmScout.sheets.length > 0) && (
+          <section id="badminton" className={`${ui.cardPad} space-y-2`}>
+            {bmReport && <h2 className={ui.h2}>🏸 Badminton : progression ELO <span className="text-ink-3 text-sm font-sans font-normal">({bmRank}e sur {[...board.entries.values()].filter((e) => board.test.has(e.id) === board.test.has(s.id)).length}, toutes classes)</span></h2>}
+            {bmReport && <BadmintonPerf report={bmReport} names={bmNames} />}
+            {(bmScout.rallies.length > 0 || bmScout.sheets.length > 0) && (
+              <div id="scouting" className="pt-2 border-t border-line space-y-2">
+                <h3 className={ui.h3}>🔭 Scouting (tous ses cours)</h3>
+                <ScoutView rallies={bmScout.rallies} sheets={bmScout.sheets} />
+              </div>
+            )}
+          </section>
+        )}
 
         <section className={ui.cardPad}>
           <h2 className={`${ui.h2} mb-3`}>Parcours <span className="text-ink-3 text-sm font-sans font-normal">({history.length} WOD)</span></h2>

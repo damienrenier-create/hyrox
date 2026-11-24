@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
+import { sessionTheme } from "@/lib/badminton-themes";
+import { readScoutConfig, sessionScoutRows, studentOwnLayer } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
@@ -165,6 +167,9 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   // Regle de chaque match du tournoi en cours (le prof qui reprend un arbitrage en direct garde l'objectif du match).
   const activeNow = active && active.kind === "HANDICAP" ? { ...active, players: playersNow(active.players, await loadTournamentMatches(active.id), active.settings) } : active;
   const liveRules = Object.fromEntries(activeNow ? matches.filter((m) => m.tournamentId === activeNow.id).map((m) => [m.id, liveRuleOf(activeNow, m)]) : []);
+  // Scouting (24/11) : reglages de la seance, et les couches particulieres des eleves (dernier reglage, toutes seances).
+  const scoutCfg = readScoutConfig(session.settings);
+  const scoutAll = await loadScoutConfigs();
   const tour: BmTourProps = {
     entrants: [
       ...teachers.map(teacherRow),
@@ -187,7 +192,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
         <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows(matches.map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
       </main>
     </div>
   );

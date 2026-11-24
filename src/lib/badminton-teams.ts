@@ -31,7 +31,8 @@
 //   son equipe pas encore commencee. JOUEUR PARTI : il sort des rencontres pas encore commencees ; dans une rencontre
 //   commencee, ses matchs pas encore joues ne rapportent rien (« parti »). Une rencontre commence a son 1er match encode,
 //   ou au 1er coup de sifflet de sa ronde (au temps).
-import { isOfficial, matchState, type BmMatch, type BmSet } from "@/lib/badminton";
+import { isOfficial, matchState, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
+import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { K_NEW_GAMES, expectedScore, kFactor, marginFactor } from "@/lib/badminton-elo";
 import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, type TeamSettings, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
@@ -154,8 +155,9 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
     if (!isOfficial(m, st) || !st.result) continue;
     const ra = rating.get(a)!, rb = rating.get(b)!;
     const ea = expectedScore(ra, rb), eb = 1 - ea;
-    const ka = kFactor(games.get(a)!), kb = kFactor(games.get(b)!);
-    const mg = marginFactor(st.result);
+    const themed = !!themeOf(m); // match a theme (24/11) : moitie de poids, sans l'ecart au score
+    const ka = kFactor(games.get(a)!) * (themed ? THEME_ELO_WEIGHT : 1), kb = kFactor(games.get(b)!) * (themed ? THEME_ELO_WEIGHT : 1);
+    const mg = themed ? 1 : marginFactor(st.result);
     const sa = st.result.winner === "A" ? 1 : st.result.winner === "DRAW" ? 0.5 : 0;
     let pa = 0, pb = 0;
     if (sa === 1) pa = ka * mg * (1 - ea);

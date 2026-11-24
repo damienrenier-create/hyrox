@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, loadMatches, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, loadMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { teamFormatText, teamMineOf, teamsOf } from "@/lib/badminton-teams";
+import { sessionTheme } from "@/lib/badminton-themes";
+import { readScoutConfig, studentLayer } from "@/lib/badminton-scout";
+import { ScoutView } from "../../../_components/ScoutView";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
 import { viewOf, type BmPersonRef } from "@/lib/badminton";
@@ -11,6 +14,7 @@ import { readSessionClasses } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
 import { TopBar } from "../../../_components/TopBar";
 import { BadmintonClient } from "./BadmintonClient";
+import { SelfEvalNudge } from "../../../_components/SelfEvalNudge";
 import { SelfEvalGrid } from "../../SelfEvalGrid";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
 import { cx, ui } from "@/lib/ui";
@@ -158,11 +162,24 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   }
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
+  // Scouting (24/11) : mes couches quand j'arbitre en direct ; les matchs que je peux observer (en direct d'abord).
+  const scoutCfg = readScoutConfig(session.settings);
+  const scoutMine = scoutCfg.on ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
+  const scoutable = views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15);
+  // Analyse de MON scouting (Sartay 24/11 : « a la fin de chaque cours, l'eleve pourra, s'il a rempli son auto-eval,
+  // demander a recevoir l'analyse de son scouting ») : ce cours, et tous mes cours ; seulement apres l'auto-evaluation.
+  const myScout = selfEval ? await loadPlayerScouting(me.id) : null;
+  const here = new Set(matches.map((m) => m.id));
+  const scoutHere = myScout ? { rallies: myScout.rallies.filter((r) => here.has(r.matchId)), sheets: myScout.sheets.filter((s) => here.has(s.matchId)) } : null;
   const closes = session.closesAt ? new Date(toMs(session.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
 
   return (
     <div className="min-h-dvh bg-paper">
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")}${session.isActive && closes ? ` · jusqu'à ${closes}` : ""}`} back={{ href: "/eleve", label: "Mon espace" }} />
+      {/* Rappel de l'auto-evaluation, 10 min avant la fin du cours (24/11). */}
+      <div className="max-w-xl mx-auto px-4 pt-4 empty:hidden">
+        <SelfEvalNudge closesAt={session.closesAt ? toMs(session.closesAt) : null} windowEnd={pupilWindowEnd(session)} serverNow={currentTime()} sent={!!selfEval} />
+      </div>
       <BadmintonClient
         sessionId={sessionId}
         meId={me.id}
@@ -173,6 +190,9 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         refereed={refereed}
         tour={tourCard}
         liveRules={liveRules}
+        theme={sessionTheme(session.settings)}
+        scout={scoutMine}
+        scoutable={scoutable}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>
@@ -193,6 +213,32 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             />
           </div>
         </details>
+      </section>
+      <section id="analyse" className="max-w-xl mx-auto px-4 pb-10 -mt-6">
+        {!myScout ? (
+          <div className={cx(ui.card, "p-3 opacity-80")}>
+            <p className="font-display font-extrabold text-ink">📊 Analyse de mon scouting 🔒</p>
+            <p className={ui.hint}>Remplis d&apos;abord ton auto-évaluation : tu pourras ensuite recevoir l&apos;analyse de ton scouting (où tu gagnes et perds tes points, ta technique vue par les scouts).</p>
+          </div>
+        ) : (
+          <details className={`${ui.card} p-3`}>
+            <summary className="cursor-pointer select-none font-display font-extrabold text-ink">📊 Recevoir l&apos;analyse de mon scouting</summary>
+            <div className="mt-3 space-y-4">
+              {scoutHere && (scoutHere.rallies.length || scoutHere.sheets.length) ? (
+                <div>
+                  <p className="font-bold mb-1">Ce cours</p>
+                  <ScoutView rallies={scoutHere.rallies} sheets={scoutHere.sheets} me />
+                </div>
+              ) : <p className={ui.muted}>Pas encore de scouting sur toi dans ce cours : aucun arbitre n&apos;a noté les impacts de tes matchs, aucun scout n&apos;a rempli ta fiche technique.</p>}
+              {(myScout.rallies.length > (scoutHere?.rallies.length ?? 0) || myScout.sheets.length > (scoutHere?.sheets.length ?? 0)) && (
+                <details>
+                  <summary className="cursor-pointer font-bold">Tous mes cours</summary>
+                  <div className="mt-2"><ScoutView rallies={myScout.rallies} sheets={myScout.sheets} me /></div>
+                </details>
+              )}
+            </div>
+          </details>
+        )}
       </section>
     </div>
   );

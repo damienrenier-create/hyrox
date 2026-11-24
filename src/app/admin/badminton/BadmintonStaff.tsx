@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { matchesSearch, setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
 import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-actions";
-import { LiveBoard, MatchCard, PersonPicker, SetsEditor, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
+import { LiveBoard, MatchCard, PersonPicker, SetsEditor, ThemePanel, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
+import type { BmTheme } from "@/lib/badminton-themes";
+import { STROKES, type ScoutConfig, type ScoutRow } from "@/lib/badminton-scout";
+import { ScoutPanel, type ScoutStudentRow } from "./ScoutPanel";
 import { usePulse } from "../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
@@ -17,13 +21,13 @@ export type BmPupilRow = { id: string; name: string; className: string | null; s
 export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null };
 export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
 type SeCol = { id: string; short: string; label: string };
-type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder";
+type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder" | "scouting";
 export type BmTourProps = { entrants: TourEntrantRow[]; active: TourView | null; previous: TourView | null; elsewhere: TourElsewhere[]; candidates: { id: string; name: string; className: string | null }[]; calibrations?: Record<number, HandicapCalibration | null> };
 type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED";
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
 // `tour` : le tournoi par poules de la seance (09/11), absent pour les matchs libres.
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [] }: { sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { sessionTheme?: BmTheme | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   usePulse(pulse, 10000, !refLive);
@@ -68,7 +72,9 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
   return (
     <NotedProvider ids={noted}>
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} onClose={() => setRefLive(null)} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={scoutCfg?.on ? { court: scoutCfg.court, level: 4 } : null} onClose={() => setRefLive(null)} />}
+      {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
+      {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi label="Matchs encodés" value={live} />
         <Kpi label="Validés" value={total("VALIDATED")} tone="ok" />
@@ -82,6 +88,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
           <button type="button" onClick={() => setTab("eleves")} className={tabBtn(tab === "eleves")}>Élèves</button>
           {!free && <button type="button" onClick={() => setTab("autoevals")} className={tabBtn(tab === "autoevals")}>Auto-évaluations · {selfEvals.filter((r) => r.answers).length}</button>}
           <button type="button" onClick={() => setTab("elo")} className={tabBtn(tab === "elo")}>Classement ELO</button>
+          {!free && <button type="button" onClick={() => setTab("scouting")} className={tabBtn(tab === "scouting")}>🔭 Scouting</button>}
           {tour && <button type="button" onClick={() => setTab("tournoi")} className={tabBtn(tab === "tournoi")}>🏆 Tournoi{tour.active ? " · en cours" : ""}</button>}
           <button type="button" onClick={() => setTab("encoder")} className={tabBtn(tab === "encoder")}>＋ Encoder un match</button>
         </div>
@@ -110,6 +117,8 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
       {tab === "autoevals" && <SelfEvalTable rows={selfEvals} cols={seCols} />}
 
       {tab === "elo" && <EloTable rows={elo} groupClasses={groupClasses} />}
+
+      {tab === "scouting" && <ScoutTable rows={rows} scout={scoutRows} />}
 
       {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} calibrations={tour.calibrations} />}
 
@@ -228,7 +237,7 @@ function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: stri
               {list.map((r, i) => (
                 <tr key={r.id} className="border-t border-line">
                   <td className="p-2 text-right tabular-nums text-ink-3">{i + 1}</td>
-                  <td className="p-2 font-bold"><StudentName id={r.id} name={r.name} />{r.provisional && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5 text-[10px]")}>provisoire</span>}</td>
+                  <td className="p-2 font-bold"><StudentName id={r.id} name={r.name} />{r.provisional && <span className={cx(ui.chip, ui.chipMuted, "ml-1.5 text-[10px]")}>provisoire</span>}{r.className && <Link href={`/admin/eleves/${r.id}#badminton`} className="ml-1.5 text-xs font-normal text-ink-3 hover:text-brand" title="Progression ELO, meilleures et moins bonnes perfs">📈</Link>}</td>
                   <td className="p-2">{r.className ?? ""}</td>
                   <td className="p-2 text-right tabular-nums font-display font-extrabold">{fmtElo(r.rating)}</td>
                   <td className="p-2 text-right tabular-nums">{r.games}</td>
@@ -283,6 +292,52 @@ function StaffEntry({ sessionId, roster, onDone }: { sessionId: string; roster: 
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
       <button type="button" disabled={pending || !ready} onClick={() => save(false)} className={btn.primary}>{pending ? "Enregistrement…" : "Enregistrer le match"}</button>
+    </section>
+  );
+}
+
+// Scouting de la seance (24/11, Sartay : « il faudra qu'on puisse analyser les stats de scouting ») : par eleve, ses
+// echanges notes, ses points gagnes et perdus, ses fautes ; le niveau moyen de chaque coup sur les fiches recues ; ce
+// qu'il a scoute lui-meme. Le detail (carte du terrain, criteres) est sur sa fiche (📈).
+function ScoutTable({ rows, scout }: { rows: BmPupilRow[]; scout: ScoutRow[] }) {
+  const by = new Map(scout.map((s) => [s.id, s]));
+  const levelColor = (code: string | null | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
+  const any = scout.some((s) => s.rallies || s.sheets || s.gaveRallies || s.gaveSheets);
+  return (
+    <section className={`${ui.cardPad} space-y-2`}>
+      {!any ? <p className={ui.muted}>Pas encore de scouting dans cette séance : activez les impacts dans « 🔭 Scouting » (en haut), et les élèves peuvent remplir des fiches techniques depuis leur page (« Scouter un joueur »).</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                <th className={ui.th}>Élève</th><th className={`${ui.th} text-right`} title="Échanges notés par un arbitre dans ses matchs">Échanges</th><th className={`${ui.th} text-right`}>Gagnés</th><th className={`${ui.th} text-right`}>Perdus</th><th className={`${ui.th} text-right`} title="Points perdus sur une faute dehors">Dehors</th><th className={`${ui.th} text-right`} title="Points perdus au filet">Filet</th>
+                {STROKES.map((s) => <th key={s.id} className={`${ui.th} text-center`} title={`${s.name} : niveau moyen sur les fiches reçues`}>{s.emoji}</th>)}
+                <th className={`${ui.th} text-right`} title="Fiches techniques reçues">Fiches</th><th className={`${ui.th} text-right`} title="Ce qu'il a scouté : impacts notés comme arbitre · fiches remplies">A scouté</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const s = by.get(r.id);
+                if (!s) return null;
+                return (
+                  <tr key={r.id} className="border-t border-line">
+                    <td className="p-1.5 font-bold whitespace-nowrap"><StudentName id={r.id} name={r.name} /> <span className="text-ink-3 text-xs font-normal">{r.className}</span> <Link href={`/admin/eleves/${r.id}#badminton`} className="text-xs font-normal text-ink-3 hover:text-brand" title="Sa fiche : carte du terrain, critères">📈</Link></td>
+                    <td className="p-1.5 text-right tabular-nums">{s.rallies || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums text-success-ink">{s.rallies ? s.won : ""}</td>
+                    <td className="p-1.5 text-right tabular-nums text-danger-ink">{s.rallies ? s.lost : ""}</td>
+                    <td className="p-1.5 text-right tabular-nums">{s.out || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums">{s.net || ""}</td>
+                    {STROKES.map((st) => <td key={st.id} className={cx("p-1.5 text-center font-display font-extrabold", levelColor(s.levels[st.id]))}>{s.levels[st.id] ?? ""}</td>)}
+                    <td className="p-1.5 text-right tabular-nums">{s.sheets || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums text-ink-2">{s.gaveRallies || s.gaveSheets ? `${s.gaveRallies} · ${s.gaveSheets}` : ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className={ui.hint}>Échanges : notés par un arbitre en direct dans ses matchs de cette séance. Coups : niveau moyen sur les fiches des scouts (0 critère = TI … 4 = TB, ❤️ = E). « A scouté » : impacts qu&apos;il a notés comme arbitre · fiches qu&apos;il a remplies.</p>
     </section>
   );
 }

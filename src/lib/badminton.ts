@@ -22,10 +22,15 @@
 //   a moins de 20 min confirme ; le match est marque REMATCH et son score d'arbitre n'est plus valide d'office : un des
 //   deux joueurs (ou un prof) doit le signer. En attendant, il ne compte pas au classement.
 
+import { readTheme, themeText, type BmTheme } from "@/lib/badminton-themes";
+
 export type BmSet = [number, number]; // points de A, points de B
 export type BmRole = "PLAYER" | "REFEREE" | "STAFF" | "WITNESS";
-export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO" | "REMATCH";
-export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number; targetId?: string | null };
+// THEME (24/11) : match a theme, parametres dans la colonne JSON (`data`, voir badminton-themes.ts). RALLY (24/11) : un
+// echange note par l arbitre en direct (scouting : impact du volant…), `data` aussi. SCOUT (24/11) : fiche technique d un joueur
+// (targetId) remplie par un scout, `data` aussi. Aucune des trois ne change le score.
+export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO" | "REMATCH" | "THEME" | "RALLY" | "SCOUT";
+export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number; targetId?: string | null; data?: unknown };
 export type BmMatch = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: number; events: BmEvent[]; tournamentId?: string | null };
 // Identifiant des matchs libres dans les liens et les actions (/eleve/badminton/libre, /admin/badminton?session=libre).
 export const BM_FREE = "libre";
@@ -38,7 +43,9 @@ export const BM_MAX_POINTS = 99;
 export const BM_DUPLICATE_MS = 20 * 60_000;
 
 const isRole = (v: unknown): v is BmRole => v === "PLAYER" || v === "REFEREE" || v === "STAFF" || v === "WITNESS";
-const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO" || v === "REMATCH";
+const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO" || v === "REMATCH" || v === "THEME" || v === "RALLY" || v === "SCOUT";
+// Theme d'un match (24/11) : celui de sa ligne THEME, sinon aucun.
+export const themeOf = (m: BmMatch): BmTheme | null => readTheme(m.events.find((e) => e.kind === "THEME")?.data);
 export const readRole = (v: unknown): BmRole => (isRole(v) ? v : "PLAYER");
 export const readKind = (v: unknown): BmKind | null => (isKind(v) ? v : null);
 
@@ -227,7 +234,8 @@ export const ROLE_TEXT: Record<BmRole, string> = { PLAYER: "joueur", REFEREE: "a
 // Historique lisible, ligne par ligne : qui a fait quoi, et quand. `nameOf` donne le nom a afficher d'un identifiant.
 export type BmHistoryLine = { at: number; icon: string; text: string };
 export function historyOf(m: BmMatch, nameOf: (id: string) => string): BmHistoryLine[] {
-  const events = [...m.events].sort((x, y) => x.at - y.at);
+  // Les echanges notes par l'arbitre (RALLY) ne s'affichent pas ici : ils sont dans le scouting.
+  const events = [...m.events].filter((e) => e.kind !== "RALLY" && e.kind !== "SCOUT").sort((x, y) => x.at - y.at);
   let first = true;
   let afterLive = false;
   const out: BmHistoryLine[] = [];
@@ -256,6 +264,7 @@ export function historyOf(m: BmMatch, nameOf: (id: string) => string): BmHistory
   return out;
 }
 function lineOf(e: BmEvent, who: string, nameOf: (id: string) => string): BmHistoryLine {
+  if (e.kind === "THEME") { const t = readTheme(e.data); return { at: e.at, icon: "🎲", text: `Match à thème : ${t ? themeText(t) : "classique"}` }; }
   if (e.kind === "REMATCH") return { at: e.at, icon: "🔁", text: `Revanche rapide confirmée par ${who} : un des deux joueurs doit la signer` };
   if (e.kind === "WITNESS_ASK") {
     const by = nameOf(e.authorId);
@@ -315,6 +324,7 @@ export type BmView = {
   needsSecond: boolean; // revanche d'un arbitre : un des deux joueurs doit encore la signer
   free: boolean; // match libre (hors seance)
   official: boolean; // compte au classement ELO
+  theme: BmTheme | null; // match a theme (24/11)
   witnesses: { count: number; needed: number; asked: BmPersonRef[]; attested: BmPersonRef[]; declined: BmPersonRef[] };
   // referee : reprendre l'arbitrage en direct ; attest / decline : temoin d'un match libre ; askWitness : demander un temoin
   can: { validate: boolean; correct: boolean; dispute: boolean; cancel: boolean; referee: boolean; attest: boolean; decline: boolean; askWitness: boolean };
@@ -367,6 +377,7 @@ export function viewOf(m: BmMatch, viewerId: string, staff: boolean, ref: (id: s
     needsSecond: st.needsSecond,
     free,
     official,
+    theme: themeOf(m),
     witnesses: { count: witnessIds.length, needed: BM_WITNESSES_NEEDED, asked: st.asked.map(ref), attested: st.attested.map((s) => ref(s.id)), declined: st.declined.map(ref) },
     can: {
       // Prof : valider un match a signer, conteste, ou encore en direct (il le termine avec le score du moment) ; match libre :

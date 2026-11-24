@@ -35,7 +35,7 @@
 //   chacun des matchs de RATTRAPAGE, quand ses adversaires sont libres ; ils comptent au classement de la poule ;
 // - grand tableau : il prend la derniere tete de serie (a la place d'un exempt), tant que le joueur qui devait profiter de
 //   cet exempt n'a pas encore joue (voir lateBracketSeat).
-import { isOfficial, matchState, swapSets, type BmMatch, type BmSet } from "@/lib/badminton";
+import { isOfficial, matchState, swapSets, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
 import { K_NEW_GAMES, computeElo, type EloGame } from "@/lib/badminton-elo";
 
 export type TourKind = "POOLS" | "BRACKET" | "HANDICAP" | "TEAMS";
@@ -291,7 +291,7 @@ export function playersNow(players: TourPlayer[], matches: BmMatch[], s: TourSet
   const games: EloGame[] = matches.flatMap((m) => {
     if (!ids.has(m.playerAId) || !ids.has(m.playerBId)) return [];
     const st = matchState(m);
-    return isOfficial(m, st) ? [{ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: true }] : [];
+    return isOfficial(m, st) ? [{ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: true, themed: !!themeOf(m) }] : [];
   });
   if (!games.length) return players;
   const now = computeElo(games, start);

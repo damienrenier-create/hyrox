@@ -3,9 +3,11 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
+import { THEME_KINDS, themeText, type BmTheme } from "@/lib/badminton-themes";
 import type { PairingStatus, TourKind } from "@/lib/badminton-tournament";
 import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "../../badminton-actions";
-import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
+import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, type LiveScout, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
+import { StrokeSheetForm } from "../../../_components/StrokeSheetForm";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -22,21 +24,24 @@ export type TeamCardData = {
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
 };
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {} }: { sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+// scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable : les matchs de la seance
+// qu'il peut observer pour remplir la fiche technique d'un joueur.
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = [] }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
-  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule } | null>(null);
+  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null } | null>(null);
   usePulse(pulse, 8000, !live);
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
   const [preset, setPreset] = useState<string | null>(null); // adversaire du tournoi, pre-rempli
   // Reprendre un direct de tournoi : avec l'objectif et la regle de ce match.
-  const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id] });
+  const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id], theme: v.theme });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
-      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} onClose={() => setLive(null)} />}
+      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} scout={scout} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
+      {theme && writable && <p className={ui.alertInfo}>🎲 <b>Matchs à thème aujourd&apos;hui : {themeText(theme)}.</b> {THEME_KINDS.find((k) => k.id === theme.kind)?.rule} Le mieux : un arbitre en direct (« J&apos;arbitre »), qui applique la règle à chaque échange.</p>}
       {tour && (tour.team ? <TeamCard t={tour} team={tour.team} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} /> : <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />)}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
 
@@ -64,6 +69,8 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
         </section>
       )}
 
+      {writable && !free && <ScoutSection matches={scoutable} onDone={() => router.refresh()} />}
+
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
         {mine.length === 0 ? <p className={`${ui.cardPad} ${ui.muted}`}>Aucun match pour l&apos;instant.</p> : mine.map((v) => <MatchCard key={v.id} v={v} viewerId={meId} roster={witnessRoster} />)}
@@ -86,7 +93,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   );
 }
 
-function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule }) => void }) {
+function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">("player");
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
@@ -112,7 +119,7 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onCl
       const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
-      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule });
+      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme });
     });
   }
   function save(force = false) {
@@ -310,5 +317,35 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
         </ol>
       </details>
     </section>
+  );
+}
+
+// Scouting (24/11) : choisir un match de la seance (en direct d'abord), puis le joueur a observer ; la fiche technique
+// (6 coups, 4 criteres chacun) s'ouvre ici. Un eleve ne remplit jamais sa propre fiche.
+function ScoutSection({ matches, onDone }: { matches: BmView[]; onDone: () => void }) {
+  const [pick, setPick] = useState<{ matchId: string; player: { id: string; name: string } } | null>(null);
+  const [sent, setSent] = useState("");
+  if (pick) return <StrokeSheetForm key={`${pick.matchId}|${pick.player.id}`} matchId={pick.matchId} player={pick.player} onClose={() => setPick(null)} onDone={() => { setSent(`Fiche de ${pick.player.name} envoyée, merci !`); setPick(null); onDone(); }} />;
+  return (
+    // Apres l'envoi d'une fiche : la section reste ouverte, avec la confirmation.
+    <details open={sent ? true : undefined} className={cx(ui.card, "p-3")}>
+      <summary className="cursor-pointer font-display font-extrabold text-ink">🔭 Scouter un joueur</summary>
+      <div className="mt-2 space-y-2">
+        {sent && <p className={ui.alertOk}>✅ {sent}</p>}
+        <p className={ui.hint}>Regarde un match et remplis la fiche technique d&apos;un des deux joueurs : service court, service long, clear, smash, drop, lob.</p>
+        {matches.length === 0 ? <p className={ui.muted}>Aucun match à observer pour l&apos;instant : il apparaît ici dès qu&apos;un arbitre l&apos;ouvre en direct ou qu&apos;il est encodé.</p> : (
+          <ul className="space-y-1.5">
+            {matches.map((v) => (
+              <li key={v.id} className="rounded-lg bg-paper px-2 py-1.5 text-sm">
+                <p><b>{v.a.name}</b> – <b>{v.b.name}</b> <span className="text-ink-3 text-xs">{v.status === "LIVE" ? "🔴 en direct" : v.sets ? v.sets.map(([x, y]) => `${x}-${y}`).join(" ") : ""}</span></p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {[v.a, v.b].map((p) => <button key={p.id} type="button" onClick={() => { setSent(""); setPick({ matchId: v.id, player: { id: p.id, name: p.name } }); }} className={btn.smGhost}>Fiche de {p.name.split(" ")[0]}</button>)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
   );
 }

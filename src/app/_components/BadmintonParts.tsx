@@ -4,8 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
+import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, needsServer, priceOf, priced, rallyOutcome, readTheme, themeText, type BmTheme, type ThemeKind } from "@/lib/badminton-themes";
 import { StudentName } from "./StudentName";
-import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveScoreAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { CourtPad } from "./BadmintonCourt";
+import type { CourtKind } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -138,6 +141,7 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
         <div className="flex flex-wrap items-center gap-1">
           <span className={cx(ui.chip, STATUS_CHIP[v.status])}>{statusText}</span>
           {won && v.status !== "CANCELLED" && <span className={cx(ui.chip, won.startsWith("🏆") ? ui.chipAccent : ui.chipMuted)}>{won}</span>}
+          {v.theme && <span className={cx(ui.chip, ui.chipMuted)} title="Match à thème : il compte pour moitié à l'ELO, sans l'écart au score">🎲 {themeText(v.theme)}</span>}
           {v.free && v.status !== "CANCELLED" && v.status !== "LIVE" && (
             <span className={cx(ui.chip, v.official ? ui.chipOk : ui.chipMuted)} title="Officiel = 2 témoins (l'arbitre en est un) ou validé par un prof : il compte au classement">{v.official ? "🏅 officiel" : `👀 témoins ${Math.min(v.witnesses.count, v.witnesses.needed)}/${v.witnesses.needed}`}</span>
           )}
@@ -224,12 +228,17 @@ const BM_TARGETS = [11, 13, 15, 21, 0] as const; // 0 = sans limite (match au te
 // sets : format du match de tournoi (balle de match) ; head : score de depart de chaque set (championnat a handicap, 13/11).
 // endsAt : fin du chrono (tournoi par equipes au temps, 24/11).
 export type LiveRule = { deuce: boolean; cap: number; sets?: 1 | 2 | 3; head?: BmSet; endsAt?: number };
+// Scouting de l'arbitre (24/11) : terrain dessine et ses couches.
+export type LiveScout = { court: CourtKind; level: number };
 // Points d'avance du championnat a handicap, EN ROUGE ET EN GRAS (Sartay 16/11 : « plusieurs eleves sont passes a cote »).
 export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
-export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; onClose: () => void }) {
+// theme (24/11) : match a theme (voir src/lib/badminton-themes.ts) ; l'arbitre clot chaque echange en l'attribuant a un
+// joueur, la regle du theme donne les points et le service.
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
+  const [exchanges, setExchanges] = useState(0); // prix de l'echange : appuis sur le bouton central
   // Points par set (rappel « set gagné ? ») : retenu sur ce telephone. Le tableau n'existe que cote navigateur (ouvert au clic).
   // 0 (« sans limite ») est un objectif de tournoi valable : match au temps (24/11).
   const [target, setTarget] = useState<number>(() => { if (initialTarget !== undefined && BM_TARGETS.includes(initialTarget as never)) return initialTarget; try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
@@ -259,7 +268,13 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   }
   function change(next: BmSet[]) { latest.current = next; setSets(next); void flush(); }
   const cur = sets[sets.length - 1];
-  const plus = (side: 0 | 1) => { const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] = Math.min(99, n[n.length - 1][side] + 1); setServer(side); change(n); };
+  // Ajoute [a, b] au set en cours (jamais sous 0, jamais au-dessus de 99).
+  const addPoints = (add: [number, number]) => { const n = sets.map(([a, b]) => [a, b] as BmSet); const last = n[n.length - 1]; last[0] = Math.max(0, Math.min(99, last[0] + add[0])); last[1] = Math.max(0, Math.min(99, last[1] + add[1])); change(n); };
+  // L'echange est gagne par `side` : la regle du theme (classique : +1) donne les points et le service.
+  const plus = (side: 0 | 1) => { const o = rallyOutcome(theme, side, server, exchanges); setServer(o.server); setExchanges(0); addPoints(o.add); };
+  // Service rate (option du theme) : le serveur perd 1 point, l'adversaire en gagne 1 et prend le service.
+  const fault = () => { if (server === null) return; const o = faultOutcome(server); setServer(o.server); setExchanges(0); addPoints(o.add); };
+  const price = priceOf(theme, exchanges);
   const minus = (side: 0 | 1) => { if (cur[side] === 0) return; const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] -= 1; setServer(null); change(n); };
   // Handicap (13/11) : chaque set repart du score de depart (0-3…), « Recommencer » aussi.
   const head: BmSet = rule?.head ?? [0, 0];
@@ -303,6 +318,9 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     try { navigator.vibrate?.(alertKey.includes("m") ? [120, 80, 120] : 120); } catch { /* vibreur absent */ }
   }, [alertKey]);
   const names = [aName, bName];
+  // Theme : il faut savoir qui sert (points au service, service rate) ; le bouton dit ce que l'echange rapporte.
+  const waitServer = needsServer(theme) && server === null;
+  const plusLabel = (side: 0 | 1) => (theme?.kind === "SERVE" && server !== null && server !== side ? "↺ service" : `+${price}`);
   // Fin du match a tout moment (Sartay 10/11 : « l'arbitre doit pouvoir mettre fin au match meme si le score n'est pas
   // atteint : eleve blesse, cours termine… ; ajoute juste une petite confirmation »).
   function finish() {
@@ -325,7 +343,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
       </div>
       <div className="flex items-stretch gap-2">
         <div className="font-display text-6xl font-extrabold tabular-nums leading-none w-24 text-center self-center">{cur[side]}</div>
-        <button type="button" onClick={() => plus(side)} disabled={finishing} className="flex-1 rounded-2xl bg-white/20 active:bg-white/35 text-4xl font-black py-6 select-none touch-manipulation" aria-label={`Un point pour ${names[side]}`}>+1</button>
+        <button type="button" onClick={() => plus(side)} disabled={finishing || waitServer} className="flex-1 rounded-2xl bg-white/20 active:bg-white/35 text-4xl font-black py-6 select-none touch-manipulation disabled:opacity-40" aria-label={`Échange gagné par ${names[side]}`}>{plusLabel(side)}</button>
         <button type="button" onClick={() => minus(side)} disabled={finishing || cur[side] === 0} className="w-14 rounded-2xl bg-black/15 active:bg-black/25 text-2xl font-black disabled:opacity-40 select-none touch-manipulation" aria-label={`Retirer un point à ${names[side]}`}>−</button>
       </div>
     </div>
@@ -367,6 +385,42 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
           </div>
         )}
         {panel(0)}
+        {theme && (
+          <div className="rounded-2xl border-2 border-line bg-card px-3 py-2 space-y-2" aria-label="Thème du match">
+            <p className="text-sm text-center">🎲 <b>{themeText(theme)}</b></p>
+            {waitServer && (
+              <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+                <b>Qui sert ?</b>
+                <button type="button" onClick={() => setServer(0)} className={btn.smPrimary}>{aName}</button>
+                <button type="button" onClick={() => setServer(1)} className={btn.smPrimary}>{bName}</button>
+              </div>
+            )}
+            {priced(theme) && (
+              <div className="flex items-stretch gap-2">
+                <button type="button" onClick={() => setExchanges((x) => x + 1)} disabled={finishing} className="flex-1 rounded-2xl bg-accent text-white text-xl font-black py-4 select-none touch-manipulation" aria-label="Un échange de plus">🏸 Échange +1</button>
+                <button type="button" onClick={() => setExchanges((x) => Math.max(0, x - 1))} disabled={finishing || exchanges === 0} className="w-12 rounded-2xl bg-black/10 text-xl font-black disabled:opacity-40" aria-label="Un échange de moins">−</button>
+                <div className="text-center self-center min-w-[5.5rem]"><div className="font-display text-3xl font-extrabold tabular-nums leading-none">{price}</div><div className="text-[11px] text-ink-2">{exchanges} échange{exchanges > 1 ? "s" : ""} · le point vaut</div></div>
+              </div>
+            )}
+            {theme.serveFault && (
+              <button type="button" onClick={fault} disabled={finishing || server === null} className={cx(btn.ghost, "w-full")}>❌ Service raté{server !== null ? ` de ${names[server]}` : ""} (−1, +1 à l&apos;autre)</button>
+            )}
+            {theme.kind === "SERVE" && server !== null && <p className={`${ui.hint} text-center`}>Seul {names[server]} (au service) peut marquer ; si l&apos;autre gagne l&apos;échange, il prend le service.</p>}
+          </div>
+        )}
+        {/* Scouting (24/11) : l'impact du volant a chaque fin d'echange ; le point est compte avec la regle du theme. */}
+        {scout && (
+          <CourtPad
+            kind={scout.court}
+            level={scout.level}
+            names={[aName, bName]}
+            disabled={finishing || waitServer}
+            onCommit={(r) => {
+              plus(r.w);
+              void liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) setError(res.error); }).catch(() => setError("Connexion perdue : cet impact n'a pas été enregistré."));
+            }}
+          />
+        )}
         {panel(1)}
         {setWinner !== null && sets.length < BM_MAX_SETS && (
           <div className={`${ui.alertInfo} flex items-center justify-between gap-2`}>
@@ -395,5 +449,61 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
         <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre l&apos;arbitrage plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
       </div>
     </div>
+  );
+}
+
+// ===== Matchs a theme : reglage du prof pour la seance (Sartay 24/11) =====
+// Le theme vaut pour les matchs crees ensuite dans la seance (ceux deja crees gardent le leur).
+export function ThemePanel({ sessionId, current }: { sessionId: string; current: BmTheme | null }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const [kind, setKind] = useState<ThemeKind>(current?.kind ?? "CLASSIC");
+  const [serveFault, setServeFault] = useState(current?.serveFault ?? false);
+  const [cap, setCap] = useState(current?.cap ?? 5);
+  const [startAt, setStartAt] = useState(current?.start ?? 10);
+  const [floor, setFloor] = useState(current?.floor ?? 1);
+  const draft = readTheme({ kind, serveFault, cap, start: startAt, floor });
+  const same = JSON.stringify(draft) === JSON.stringify(current);
+  function save() {
+    setError("");
+    start(async () => {
+      const r = await setSessionThemeAction(sessionId, draft);
+      if ("error" in r) setError(r.error);
+      else router.refresh();
+    });
+  }
+  const seg = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg whitespace-nowrap", on ? ui.segOn : ui.segOff);
+  return (
+    <details className={cx(ui.cardPad, current && "border-accent")}>
+      <summary className="cursor-pointer font-bold">🎲 Matchs à thème : {current ? themeText(current) : "aucun (classique)"}</summary>
+      <div className="mt-3 space-y-3">
+        <div className={cx(ui.segmented, "flex-wrap")}>{THEME_KINDS.map((k) => <button key={k.id} type="button" onClick={() => setKind(k.id)} className={seg(kind === k.id)}>{k.name}</button>)}</div>
+        <p className={ui.hint}>{THEME_KINDS.find((k) => k.id === kind)?.rule}</p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {kind === "PRICE_UP" && (
+            <label className="flex items-center gap-1.5">Plafond
+              <select value={cap} onChange={(e) => setCap(Number(e.target.value))} className={`${ui.input} w-auto`}>{THEME_CAPS.map((c) => <option key={c} value={c}>{c ? `${c} points` : "sans plafond"}</option>)}</select>
+            </label>
+          )}
+          {kind === "PRICE_DOWN" && (
+            <>
+              <label className="flex items-center gap-1.5">Départ
+                <select value={startAt} onChange={(e) => setStartAt(Number(e.target.value))} className={`${ui.input} w-auto`}>{THEME_STARTS.map((c) => <option key={c} value={c}>{c} points</option>)}</select>
+              </label>
+              <label className="flex items-center gap-1.5">jusqu&apos;à
+                <select value={floor} onChange={(e) => setFloor(Number(e.target.value))} className={`${ui.input} w-auto`}>{THEME_FLOORS.filter((c) => c < startAt).map((c) => <option key={c} value={c}>{c} point{c > 1 ? "s" : ""}</option>)}</select>
+              </label>
+            </>
+          )}
+          <label className="flex items-center gap-1.5"><input type="checkbox" className={ui.check} checked={serveFault} onChange={(e) => setServeFault(e.target.checked)} /> Service raté : −1 au serveur, +1 à l&apos;adversaire</label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={pending || same} onClick={save} className={btn.smPrimary}>{draft ? "Appliquer ce thème" : "Revenir aux matchs classiques"}</button>
+          {error && <span className={ui.alertErr}>{error}</span>}
+        </div>
+        <p className={ui.hint}>Pour les matchs créés ensuite dans cette séance ; l&apos;arbitre en direct applique la règle à chaque échange. Un match à thème compte pour moitié au classement ELO, sans l&apos;écart au score.</p>
+      </div>
+    </details>
   );
 }

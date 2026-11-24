@@ -7,6 +7,8 @@ import { sessionsForStudent } from "@/lib/student-sessions";
 import { badmintonGroupOf, badmintonTabVisible, loadEloBoard } from "@/lib/badminton-server";
 import { ELO_PROVISIONAL_GAMES, ELO_START, fmtDelta, fmtElo, rankElo } from "@/lib/badminton-elo";
 import { setsText } from "@/lib/badminton";
+import { perfReport } from "@/lib/badminton-perf";
+import { BadmintonPerf } from "../../_components/BadmintonPerf";
 import { TopBar } from "../../_components/TopBar";
 import { LogoutButton } from "../../_components/LogoutButton";
 import { EleveTabs } from "../EleveTabs";
@@ -48,6 +50,9 @@ export default async function ClassementPage({ searchParams }: { searchParams: P
   const classOf = (id: string) => board.people.get(id)?.className ?? "";
   const groupLabel = group.classes.length ? group.classes.join(" + ") : "ma classe";
   const steps = me ? [...me.steps].reverse().slice(0, 10) : [];
+  // Ma progression (24/11) : courbe, cours par cours, mes meilleures et moins bonnes perfs.
+  const report = me && me.games ? perfReport(me, board.entries) : null;
+  const oppNames = report ? Object.fromEntries([...new Set(report.rows.map((x) => x.opponentId))].map((o) => [o, { name: nameOf(o), className: board.people.get(o)?.staff ? "prof" : classOf(o) || null }])) : {};
 
   return (
     <div className={ui.page}>
@@ -72,6 +77,13 @@ export default async function ClassementPage({ searchParams }: { searchParams: P
             <p className="text-sm text-ink-2 mt-1">Tu n&apos;as pas encore de match qui compte. Tout le monde part à {ELO_START} : joue ton premier match pour entrer dans le classement.</p>
           )}
         </section>
+
+        {report && (
+          <section className={`${ui.card} p-3`}>
+            <h2 className={`${ui.eyebrow} mb-2`}>📈 Ma progression</h2>
+            <BadmintonPerf report={report} names={oppNames} me />
+          </section>
+        )}
 
         <Link href="/eleve/badminton/libre" className={`flex items-center justify-between gap-3 ${ui.card} hover:border-brand p-3 transition`}>
           <span>

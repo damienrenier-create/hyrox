@@ -4,9 +4,10 @@ import { memberNames } from "@/lib/staff-names";
 import { teacherNameById } from "@/lib/staff";
 import { isTestClass, notDeleted, readSessionClasses, readSessionGuests, readSessionSex } from "@/lib/session-roles";
 import { isSessionOpen, toMs } from "@/lib/scheduling";
-import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, type BmMatch } from "@/lib/badminton";
+import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, themeOf, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { myRallies, readRally, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -46,7 +47,9 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
         .filter((e) => e.matchId === m.id)
         .flatMap((e) => {
           const kind = readKind(e.kind);
-          return kind ? [{ id: e.id, kind, sets: readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null }] : [];
+          // THEME / RALLY (24/11) : leurs parametres sont dans la colonne JSON (`data`), pas des sets.
+          const raw = kind === "THEME" || kind === "RALLY" || kind === "SCOUT";
+          return kind ? [{ id: e.id, kind, sets: raw ? null : readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null, ...(raw ? { data: e.sets } : {}) }] : [];
         }),
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
@@ -105,7 +108,7 @@ export async function loadEloBoard(): Promise<EloBoard> {
   for (const m of matches) {
     const st = matchState(m);
     if (!isOfficial(m, st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
-    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: !!m.tournamentId && even.has(m.tournamentId) });
+    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: !!m.tournamentId && even.has(m.tournamentId), themed: !!themeOf(m) });
   }
   return { entries: computeElo(games), people, test };
 }
@@ -117,7 +120,7 @@ export function handicapSamples(board: EloBoard): HandicapSample[] {
   for (const e of board.entries.values()) {
     if (board.test.has(e.id)) continue;
     for (const s of e.steps) {
-      if (seen.has(s.matchId) || s.even) continue; // un set de championnat a handicap est fait pour finir a egalite : hors calcul
+      if (seen.has(s.matchId) || s.even || s.themed) continue; // un set de championnat a handicap est fait pour finir a egalite ; un match a theme ne se compte pas pareil : hors calcul
       seen.add(s.matchId);
       const os = board.entries.get(s.opponentId)?.steps.find((x) => x.matchId === s.matchId);
       if (!os) continue;
@@ -218,4 +221,34 @@ export function pupilWindowOpen(session: SessionLike, nowMs = Date.now()): boole
 export function pupilWindowEnd(session: SessionLike): number {
   const end = session.closesAt ? toMs(session.closesAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : toMs(session.createdAt) + 12 * 3600_000;
   return end + BM_AFTER_MS;
+}
+
+// ===== Scouting (24/11, regles dans src/lib/badminton-scout.ts) =====
+// Reglages de scouting de toutes les seances de badminton : les couches de chaque eleve suivent son dernier reglage.
+export async function loadScoutConfigs(): Promise<ScoutConfig[]> {
+  return (await db.orm.public.Session.where({ wodType: "BADMINTON" }).all()).filter(notDeleted).map((s) => readScoutConfig(s.settings));
+}
+// Tout le scouting d'un joueur : les echanges notes dans ses matchs (vus de son cote) et les fiches techniques remplies
+// sur lui (la plus recente de chaque scout dans chaque match). Matchs annules exclus.
+export type PlayerSheet = { sheet: StrokeSheet; by: string; at: number; matchId: string };
+export async function loadPlayerScouting(playerId: string): Promise<{ rallies: MyRally[]; sheets: PlayerSheet[]; scouts: Map<string, BmPerson> }> {
+  const rows = [...(await db.orm.public.BadmintonMatch.where({ playerAId: playerId }).all()), ...(await db.orm.public.BadmintonMatch.where({ playerBId: playerId }).all())];
+  if (!rows.length) return { rallies: [], sheets: [], scouts: new Map() };
+  const events = await db.orm.public.BadmintonEvent.where((e) => e.matchId.in(rows.map((r) => r.id))).all();
+  const matches = toMatches(rows, events).filter((m) => matchState(m).status !== "CANCELLED");
+  const raw: { matchId: string; at: number; rally: Rally; side: 0 | 1 }[] = [];
+  const latest = new Map<string, PlayerSheet>();
+  for (const m of matches) {
+    const side: 0 | 1 = m.playerAId === playerId ? 0 : 1;
+    for (const e of m.events) {
+      if (e.kind === "RALLY") { const r = readRally(e.data); if (r) raw.push({ matchId: m.id, at: e.at, rally: r, side }); }
+      if (e.kind === "SCOUT" && e.targetId === playerId) {
+        const sheet = readStrokeSheet(e.data);
+        const k = `${m.id}|${e.authorId}`;
+        if (sheet && (!latest.has(k) || latest.get(k)!.at < e.at)) latest.set(k, { sheet, by: e.authorId, at: e.at, matchId: m.id });
+      }
+    }
+  }
+  const sheets = [...latest.values()].sort((a, b) => b.at - a.at);
+  return { rallies: myRallies(raw), sheets, scouts: await peopleOf([], [...new Set(sheets.map((s) => s.by))]) };
 }

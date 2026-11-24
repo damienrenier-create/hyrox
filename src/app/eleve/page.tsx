@@ -16,8 +16,14 @@ import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
-import { badmintonTabVisible, loadMatches } from "@/lib/badminton-server";
+import { badmintonTabVisible, loadMatches, pupilWindowEnd } from "@/lib/badminton-server";
 import { BM_FREE, matchState, mustSign, pupilStats, viewOf } from "@/lib/badminton";
+import { SelfEvalNudge } from "../_components/SelfEvalNudge";
+
+// Heure de la lecture (hors du rendu, regle react-hooks/purity) : le rappel d'auto-evaluation s'y recale.
+function currentTime(): number {
+  return Date.now();
+}
 
 export default async function ElevePage() {
   const user = await getSession();
@@ -48,6 +54,8 @@ export default async function ElevePage() {
   // Badminton (Sartay 20/10) : pour chaque seance ouverte, les matchs que l'eleve doit encore signer ; et ses seances de
   // badminton passees (il n'est dans aucune equipe : elles n'apparaissent pas dans « Mes WOD »).
   const toSignBy = new Map<string, number>();
+  // Auto-evaluations deja envoyees (rappel des 10 dernieres minutes sur la carte Badminton, 24/11).
+  const selfSent = new Set((await db.orm.public.SelfEvaluation.where({ studentId: user.id }).all()).map((r) => r.sessionId));
   for (const s of openSessions.filter((x) => x.wodType === "BADMINTON")) {
     toSignBy.set(s.id, (await loadMatches(s.id)).filter((m) => mustSign(m, matchState(m), user.id)).length);
   }
@@ -100,7 +108,10 @@ export default async function ElevePage() {
                       <div className="font-display font-extrabold text-lg">🏸 Badminton</div>
                       <div className="text-xs text-ink-2">{fmtDate(s.createdAt)} · ouvert{s.closesAt ? ` jusqu'à ${new Date(toMs(s.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" })}` : ""}</div>
                     </div>
-                    {(toSignBy.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {toSignBy.get(s.id)} à signer</span>}
+                    <span className="flex flex-col items-end gap-1">
+                      {(toSignBy.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {toSignBy.get(s.id)} à signer</span>}
+                      <SelfEvalNudge chip closesAt={s.closesAt ? toMs(s.closesAt) : null} windowEnd={pupilWindowEnd(s)} serverNow={currentTime()} sent={selfSent.has(s.id)} />
+                    </span>
                   </div>
                   <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
                     Encoder mes matchs

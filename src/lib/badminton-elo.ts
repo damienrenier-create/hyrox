@@ -14,6 +14,7 @@
 // - un seul classement pour toutes les classes (inter-classes) ; l'eleve le voit dans l'onglet « Classement » de son
 //   espace (pas sur chaque match), d'abord son groupe de cours.
 import { swapSets, type BmResult, type BmSet } from "@/lib/badminton";
+import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 
 export const ELO_START = 1000;
 export const ELO_PROVISIONAL_GAMES = 5;
@@ -22,8 +23,9 @@ const K_SETTLED = 20;
 export const K_NEW_GAMES = 10;
 const MARGIN_FULL = 16;
 
-export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean }; // even : match a handicap
-export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean };
+// even : match a handicap ; themed (24/11) : match a theme, compte pour THEME_ELO_WEIGHT d'un match, sans l'ecart au score.
+export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean; themed?: boolean };
+export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean; themed?: boolean };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
 
 // Score attendu de A contre B (formule ELO classique) et K d'un joueur selon son nombre de matchs deja comptes.
@@ -49,15 +51,17 @@ export function computeElo(games: EloGame[], start?: Map<string, { rating: numbe
     const B = get(g.b);
     const expectA = g.even ? 0.5 : expectedScore(A.rating, B.rating);
     const scoreA = g.result.winner === "A" ? 1 : g.result.winner === "DRAW" ? 0.5 : 0;
-    const m = marginFactor(g.result);
-    const kA = kFactor(A.games);
-    const kB = kFactor(B.games);
+    const m = g.themed ? 1 : marginFactor(g.result);
+    const w = g.themed ? THEME_ELO_WEIGHT : 1;
+    const kA = kFactor(A.games) * w;
+    const kB = kFactor(B.games) * w;
     const afterA = A.rating + kA * m * (scoreA - expectA);
     const afterB = B.rating + kB * m * (1 - scoreA - (1 - expectA));
     const outA = scoreA === 1 ? "W" : scoreA === 0 ? "L" : "D";
     const outB = scoreA === 1 ? "L" : scoreA === 0 ? "W" : "D";
-    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA, ...(g.even ? { even: true } : {}) });
-    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB, ...(g.even ? { even: true } : {}) });
+    const flags = { ...(g.even ? { even: true } : {}), ...(g.themed ? { themed: true } : {}) };
+    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA, ...flags });
+    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB, ...flags });
     for (const [p, o, r] of [[A, outA, afterA], [B, outB, afterB]] as const) {
       p.rating = r;
       p.games++;

@@ -8,6 +8,8 @@ import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLi
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, teamPlayers, teamsOf } from "@/lib/badminton-teams";
+import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
+import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -22,7 +24,8 @@ import { toMs } from "@/lib/scheduling";
 // tournoi) : les points du set du tournoi, proposes d'office au tableau de score de l'arbitre.
 // `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
 // endsAt (tournoi par equipes au temps, 24/11) : fin du chrono en cours, affichee au tableau de l'arbitre.
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number } } | { duplicate: { matchId: string; text: string } };
+// theme (24/11) : le theme du match ouvert en direct (regle appliquee par le tableau de l'arbitre).
+export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number }; theme?: BmTheme | null } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -59,6 +62,11 @@ const dbSession = (c: Ctx) => c.session?.id ?? null;
 
 async function addEvent(matchId: string, sessionId: string | null, kind: BmKind, authorId: string, role: BmRole, sets: BmSet[] | null, targetId: string | null = null) {
   await db.orm.public.BadmintonEvent.create({ matchId, sessionId, kind, authorId, role, targetId, sets: sets ? JSON.parse(JSON.stringify(sets)) : null, at: Temporal.Now.instant() });
+}
+
+// Ligne RALLY / SCOUT / THEME (24/11) : ses parametres (un objet, pas des sets) vont dans la colonne JSON.
+async function addEventData(matchId: string, sessionId: string | null, kind: BmKind, authorId: string, role: BmRole, data: unknown, targetId: string | null = null) {
+  await db.orm.public.BadmintonEvent.create({ matchId, sessionId, kind, authorId, role, targetId, sets: JSON.parse(JSON.stringify(data)), at: Temporal.Now.instant() });
 }
 
 function done(sessionId: string | null) {
@@ -143,8 +151,10 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
 
   const sid = dbSession(c);
   const tournamentId = (await tournamentFor(c, a, b))?.id ?? null;
+  const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId });
+    if (theme) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "THEME", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(theme)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "SCORE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(sets)), at: Temporal.Now.instant() });
     if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
@@ -387,6 +397,68 @@ export async function teamTimerAction(tournamentId: string, op: "start" | "stop"
   return { ok: true };
 }
 
+// ===== Scouting (24/11, regles dans src/lib/badminton-scout.ts) =====
+// Un echange note par l'arbitre en direct : l'impact du volant (et, selon ses couches, le coup, le frappeur, gagnant ou faute).
+export async function liveRallyAction(matchId: string, raw: unknown): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const rally = readRally(raw);
+  if (!rally) return { error: "Échange illisible." };
+  await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", rally);
+  return { ok: true };
+}
+// Fiche technique d'un joueur (les 6 coups, 4 criteres chacun) remplie par un scout qui regarde son match.
+export async function scoutStrokesAction(matchId: string, playerId: string, raw: unknown): Promise<BmResult> {
+  const x = await matchCtx(matchId);
+  if ("error" in x) return x;
+  if (playerId !== x.m.playerAId && playerId !== x.m.playerBId) return { error: "Ce joueur ne joue pas ce match." };
+  if (!x.c.staff && playerId === x.c.userId) return { error: "On ne remplit pas sa propre fiche : c'est un autre élève qui t'observe." };
+  if (x.st.status === "CANCELLED") return { error: "Ce match a été annulé." };
+  const sheet = readStrokeSheet(raw);
+  if (!sheet) return { error: "Coche au moins un coup observé." };
+  await addEventData(x.m.id, x.m.sessionId, "SCOUT", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", { strokes: sheet }, playerId);
+  done(x.m.sessionId);
+  return { ok: true };
+}
+// Reglages du scouting de la seance : impacts notes ou pas, terrain dessine, couches par defaut.
+export async function setScoutConfigAction(sessionId: string, patch: { on?: boolean; court?: string; level?: number }): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  const cur = (c.session.settings ?? {}) as Record<string, unknown>;
+  const sc = readScoutConfig(cur);
+  const next = { ...sc, ...(patch.on !== undefined ? { on: !!patch.on } : {}), ...(patch.court ? { court: readCourt(patch.court) } : {}), ...(patch.level ? { level: Math.max(1, Math.min(MAX_LAYER, Math.round(Number(patch.level)))) } : {}) };
+  await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, scout: next })) });
+  done(c.session.id);
+  return { ok: true };
+}
+// Couches d'un eleve en particulier (level 0 = comme la seance) : le dernier reglage suit l'eleve dans ses seances suivantes.
+export async function setScoutLevelAction(sessionId: string, studentId: string, level: number): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  const l = Math.round(Number(level));
+  if (!(l >= 0 && l <= MAX_LAYER)) return { error: "Couche inconnue." };
+  const cur = (c.session.settings ?? {}) as Record<string, unknown>;
+  const sc = readScoutConfig(cur);
+  await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, scout: { ...sc, students: { ...sc.students, [studentId]: { level: l, at: Date.now() } } } })) });
+  done(c.session.id);
+  return { ok: true };
+}
+
+// Theme des matchs de la seance (24/11) : choisi par le prof ; chaque match cree ensuite dans la seance le garde (les
+// matchs deja crees ne changent pas). null = matchs classiques.
+export async function setSessionThemeAction(sessionId: string, raw: unknown): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  const theme = raw ? readTheme(raw) : null;
+  const cur = (c.session.settings ?? {}) as Record<string, unknown>;
+  await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, bmTheme: theme })) });
+  done(c.session.id);
+  return { ok: true };
+}
+
 // Clore le tournoi : il reste consultable, ses matchs restent des matchs ordinaires ; un nouveau tournoi peut etre lance.
 export async function closeTournamentAction(tournamentId: string): Promise<BmResult> {
   const t = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
@@ -610,15 +682,17 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   const sid = dbSession(c);
   const tour = await tournamentFor(c, a, b);
   const start: BmSet[] = [tour?.start ?? [0, 0]];
+  const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: tour?.id ?? null });
+    if (theme) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "THEME", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(theme)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "LIVE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(start)), at: Temporal.Now.instant() });
     if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}), ...(tour.endsAt ? { endsAt: tour.endsAt } : {}) } } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, theme, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}), ...(tour.endsAt ? { endsAt: tour.endsAt } : {}) } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {
