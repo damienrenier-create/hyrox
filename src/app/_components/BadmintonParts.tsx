@@ -242,6 +242,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const [server, setServer] = useState<0 | 1 | null>(null);
   const [exchanges, setExchanges] = useState(0); // prix de l'echange : appuis sur le bouton central
   const [flip, setFlip] = useState(false); // scouting : les joueurs ont change de cote
+  const [more, setMore] = useState(false); // scouting : le panneau « ⋯ » (sets, corrections, aide)
   // Impacts notes sur cet ecran (26/11 : « annuler la derniere frappe ; appui long sur un impact pour l'annuler ou donner des
   // infos ») : repere du journal (A en haut) ; add = points donnes ; set = set ou il a compte ; id = sa ligne RALLY (promesse).
   const [impacts, setImpacts] = useState<{ k: number; x: number; y: number; w: 0 | 1; add: [number, number]; set: number; stroke?: string; end?: string }[]>([]);
@@ -461,18 +462,21 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   // prendre plus de place et le scoring moins ») : le TERRAIN en grand, le score en petit. Toucher l'impact donne le point
   // au bon joueur (dans les lignes : l'adversaire de ce camp ; dehors : le joueur de ce camp ; filet : on choisit).
   // « ⇅ » : les joueurs changent de cote (le dessin suit ; le journal garde toujours A en haut).
+  // Ecran (26/11 soir, Sartay : « le terrain doit prendre plus de place sur l'ecran, le score un petit bandeau en haut ou en
+  // bas ») : une colonne pleine hauteur, rien ne defile. En haut un bandeau d'une ligne (▲ joueur du haut, ⇅, ▼ joueur du
+  // bas, ✕) ; au milieu le TERRAIN, aussi grand que l'ecran le permet ; en bas « ↶ Annuler le dernier impact », « ⋯ »
+  // (sets, point sans impact, corrections, aide) et « 🏁 Fin ». Les messages (point compte, balle de set) passent PAR-DESSUS
+  // le terrain sans le pousser.
   if (scout) {
     const top: 0 | 1 = flip ? 1 : 0;
     const bottom: 0 | 1 = flip ? 0 : 1;
     const W = courtWidth(scout.court);
+    const arrow = (side: 0 | 1) => (side === top ? "▲" : "▼");
     const scoreChip = (side: 0 | 1) => (
-      <div className={cx("flex-1 min-w-0 rounded-2xl pl-3 pr-1.5 py-1.5 text-white flex items-center gap-2", side === 0 ? "bg-brand" : "bg-sea", alerts.some((x) => x.side === side) && "ring-4 ring-red-500")}>
+      <div className={cx("flex-1 min-w-0 rounded-xl px-2.5 py-1 text-white flex items-center gap-1.5", side === 0 ? "bg-brand" : "bg-sea", alerts.some((x) => x.side === side) && "ring-4 ring-red-500")} aria-label={`${side === top ? "En haut" : "En bas"} : ${names[side]}, ${cur[side]} point${cur[side] > 1 ? "s" : ""}`}>
+        <span className="text-[10px] opacity-80">{arrow(side)}</span>
         <span className="flex-1 min-w-0 truncate font-bold text-sm">{names[side]}{server === side ? " 🏸" : ""}</span>
-        <span className="font-display text-3xl font-extrabold tabular-nums leading-none">{cur[side]}</span>
-        <span className="flex flex-col gap-0.5">
-          <button type="button" onClick={() => plus(side)} disabled={finishing || waitServer} className="rounded-lg bg-white/20 active:bg-white/35 text-xs font-black px-2 py-1 disabled:opacity-40" aria-label={`Point pour ${names[side]} (sans impact)`}>+1</button>
-          <button type="button" onClick={() => minus(side)} disabled={finishing || cur[side] === 0} className="rounded-lg bg-black/15 active:bg-black/25 text-xs font-black px-2 py-1 disabled:opacity-40" aria-label={`Retirer un point à ${names[side]}`}>−1</button>
-        </span>
+        <span className="font-display text-2xl font-extrabold tabular-nums leading-none">{cur[side]}</span>
       </div>
     );
     // Annuler un impact : il disparait du terrain, ses points sont retires (s'il est du set en cours), une ligne UNRALLY part au serveur.
@@ -493,35 +497,68 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     };
     const chip = (on: boolean) => cx(ui.chip, on ? ui.chipBrand : ui.chipMuted, "py-1 text-sm");
     const menu = menuK !== null ? impacts.find((x) => x.k === menuK) ?? null : null;
-    return overlay(
-        <div className="max-w-xl mx-auto p-3 space-y-2 pb-44">
-          {menu && (
-            <div className="fixed inset-x-0 bottom-0 z-[60] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[65vh] overflow-auto" role="dialog" aria-label="Cet impact">
-              <div className="max-w-xl mx-auto space-y-2">
-                <div className="flex items-center justify-between gap-2"><p className="font-bold">Cet impact · point pour {names[menu.w]}</p><button type="button" onClick={() => setMenuK(null)} className={ui.close} aria-label="Fermer">✕</button></div>
-                <button type="button" onClick={() => undoImpact(menu.k)} className={cx(btn.ghost, "w-full border-2 border-red-500 text-red-700 font-extrabold")}>✖ Annuler cet impact</button>
-                <p className="font-bold">Le coup</p>
-                <div className="flex flex-wrap gap-1">{END_STROKES.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { stroke: menu.stroke === x.id ? null : x.id })} className={chip(menu.stroke === x.id)}>{x.emoji} {x.name}</button>)}</div>
-                <p className="font-bold">Comment ?</p>
-                <div className="flex flex-wrap gap-1">{END_KINDS.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { end: menu.end === x.id ? null : x.id })} className={chip(menu.end === x.id)}>{x.name}</button>)}</div>
-                <button type="button" onClick={() => setMenuK(null)} className={cx(btn.primary, "w-full")}>✓ OK</button>
+    const hasHead = head[0] > 0 || head[1] > 0;
+    const undoLast = () => { const l = impacts[impacts.length - 1]; if (l) undoImpact(l.k); };
+    const shell = (content: React.ReactNode) => (typeof document === "undefined" ? null : createPortal(<div className="fixed inset-0 z-[70] bg-paper flex flex-col overflow-hidden overscroll-none">{content}</div>, document.body));
+    return shell(
+      <>
+        {menu && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[65vh] overflow-auto" role="dialog" aria-label="Cet impact">
+            <div className="max-w-xl mx-auto space-y-2">
+              <div className="flex items-center justify-between gap-2"><p className="font-bold">Cet impact · point pour {names[menu.w]}</p><button type="button" onClick={() => setMenuK(null)} className={ui.close} aria-label="Fermer">✕</button></div>
+              <button type="button" onClick={() => undoImpact(menu.k)} className={cx(btn.ghost, "w-full border-2 border-red-500 text-red-700 font-extrabold")}>✖ Annuler cet impact</button>
+              <p className="font-bold">Le coup</p>
+              <div className="flex flex-wrap gap-1">{END_STROKES.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { stroke: menu.stroke === x.id ? null : x.id })} className={chip(menu.stroke === x.id)}>{x.emoji} {x.name}</button>)}</div>
+              <p className="font-bold">Comment ?</p>
+              <div className="flex flex-wrap gap-1">{END_KINDS.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { end: menu.end === x.id ? null : x.id })} className={chip(menu.end === x.id)}>{x.name}</button>)}</div>
+              <button type="button" onClick={() => setMenuK(null)} className={cx(btn.primary, "w-full")}>✓ OK</button>
+            </div>
+          </div>
+        )}
+        {more && (
+          <div className="fixed inset-0 z-[65] bg-black/30 flex flex-col justify-end" onClick={() => setMore(false)}>
+            <div className="bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[85vh] overflow-auto" role="dialog" aria-label="Options du scouting" onClick={(e) => e.stopPropagation()}>
+              <div className="max-w-xl mx-auto space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className={ui.eyebrow}>{scouting ? "🔭 Scouting · score indicatif" : "🔭 Arbitrage + scouting"}</p>
+                    <p className="text-xs text-ink-2">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
+                  </div>
+                  <button type="button" onClick={() => setMore(false)} className={ui.close} aria-label="Fermer">✕</button>
+                </div>
+                {scouting && <p className={ui.hint}>Ce n&apos;est pas un arbitrage : ce score ne compte ni à l&apos;ELO ni au tournoi. Seuls les impacts comptent, pour l&apos;analyse des deux joueurs.</p>}
+                <p className="rounded-xl bg-accent-soft/60 px-3 py-2 leading-snug">👆 <b>Touche où le volant est tombé : le point va tout seul au bon joueur.</b> Dans le terrain : point pour l&apos;adversaire de ce camp · dehors : point pour le joueur de ce camp · sur le filet : tu choisis. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté. Appui long sur un impact : l&apos;annuler ou préciser le coup.</p>
+                <div className="space-y-1.5">
+                  <p className="font-bold">Point sans impact <span className="font-normal text-ink-2">(tu n&apos;as pas vu où il est tombé)</span></p>
+                  <div className="grid grid-cols-2 gap-1.5">{([top, bottom] as const).map((s) => <button key={s} type="button" onClick={() => plus(s)} disabled={finishing || waitServer} className={cx(btn.smGhost, "min-w-0 overflow-hidden text-ellipsis")}>+1 {arrow(s)} {names[s]}</button>)}</div>
+                  <p className="font-bold">Retirer un point</p>
+                  <div className="grid grid-cols-2 gap-1.5">{([top, bottom] as const).map((s) => <button key={s} type="button" onClick={() => minus(s)} disabled={finishing || cur[s] === 0} className={cx(btn.smGhost, "min-w-0 overflow-hidden text-ellipsis")}>−1 {arrow(s)} {names[s]}</button>)}</div>
+                </div>
+                {extras}
+                {setChips}
+                {footer}
               </div>
             </div>
-          )}
-          {header(scouting ? "🔭 Scouting · score indicatif" : "🔭 Arbitrage + scouting")}
-          {scouting && <p className={ui.hint}>Ce n&apos;est pas un arbitrage : ce score ne compte ni à l&apos;ELO ni au tournoi. Seuls les impacts comptent, pour l&apos;analyse des deux joueurs.</p>}
-          {extras}
-          {themeBlock}
+          </div>
+        )}
+        {/* Bandeau du score : une ligne. */}
+        <div className="shrink-0 bg-card border-b border-line px-2 pt-[max(0.375rem,env(safe-area-inset-top))] pb-1.5 space-y-1">
           <div className="flex items-stretch gap-1.5">
             {scoreChip(top)}
-            <button type="button" onClick={() => setFlip((f) => !f)} className="rounded-2xl border-2 border-line bg-card px-2 text-lg font-black" title="Les joueurs changent de côté" aria-label="Les joueurs changent de côté">⇅</button>
+            <button type="button" onClick={() => setFlip((f) => !f)} className="shrink-0 rounded-xl border-2 border-line bg-paper px-2 text-base font-black" title="Les joueurs changent de côté" aria-label="Les joueurs changent de côté">⇅</button>
             {scoreChip(bottom)}
+            <button type="button" onClick={() => { router.refresh(); onClose(); }} className={cx(ui.close, "shrink-0 self-center")} aria-label="Fermer (reprendre plus tard)">✕</button>
           </div>
-          <details className="rounded-xl bg-accent-soft/60 px-3 py-1.5 text-sm leading-snug">
-            <summary className="cursor-pointer">👆 <b>Touche où le volant est tombé : le point va tout seul au bon joueur.</b></summary>
-            <p className="mt-1">Dans le terrain : point pour l&apos;adversaire de ce camp · dehors : point pour le joueur de ce camp · sur le filet : tu choisis. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté.</p>
-          </details>
-          {flash && <p className="text-center font-display font-extrabold text-success-ink" role="status">{flash}</p>}
+          {(error || rule?.endsAt || hasHead) && (
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs">
+              {rule?.endsAt && <Countdown endsAt={rule.endsAt} />}
+              {hasHead && <span>⚖️ <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set à <b className={BM_ADVANCE}>{head[0]}-{head[1]}</b></span>}
+              {error && <span className="font-bold text-danger-ink">⚠️ {error}</span>}
+            </div>
+          )}
+        </div>
+        {/* Le terrain : tout le reste de l'ecran. Les messages passent par-dessus, sans bloquer les touchers. */}
+        <div className="relative flex-1 min-h-0">
           <CourtPad
             key={flip ? "flip" : "normal"}
             big
@@ -530,7 +567,6 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
             names={[names[top], names[bottom]]}
             disabled={finishing || waitServer}
             impacts={impacts.slice(-14).map((im, n, arr) => ({ ...(flip ? { x: W - im.x, y: COURT_LENGTH - im.y } : { x: im.x, y: im.y }), muted: true, last: n === arr.length - 1, k: im.k, title: `Point pour ${names[im.w]}` }))}
-            onUndo={() => { const l = impacts[impacts.length - 1]; if (l) undoImpact(l.k); }}
             onImpact={setMenuK}
             onCommit={(shown) => {
               // Le dessin est retourne si les joueurs ont change de cote : on revient au repere du journal (A en haut).
@@ -543,9 +579,38 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
               impactIds.current.set(k, liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) { setError(res.error); return null; } return "eventId" in res ? res.eventId ?? null : null; }).catch(() => { setError("Connexion perdue : cet impact n'a pas été enregistré."); return null; }));
             }}
           />
-          {setChips}
-          {footer}
+          <p className="pointer-events-none absolute left-2 top-1 text-[10px] font-bold text-ink-3">{scouting ? "🔭 score indicatif" : "🔭 arbitrage + scouting"}</p>
+          <p className="pointer-events-none absolute right-2 top-1 text-[10px] text-ink-3">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
+          {impacts.length === 0 && !flash && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+              <p className="max-w-[16rem] rounded-2xl bg-ink/85 text-white text-center text-sm font-bold px-3 py-2 shadow-lg">👆 Touche où le volant est tombé : le point va tout seul au bon joueur.<span className="block text-xs font-normal mt-1 opacity-90">Appui long sur un impact : l&apos;annuler ou préciser le coup. Aide et sets : « ⋯ ».</span></p>
+            </div>
+          )}
+          {flash && (
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center px-4" role="status">
+              <p className="rounded-full bg-success text-white font-display text-lg font-extrabold px-4 py-1.5 shadow-lg">{flash}</p>
+            </div>
+          )}
+          {alerts.length > 0 && (
+            <div className="pointer-events-none absolute inset-x-0 top-5 flex justify-center px-4" role="status">
+              <p className="rounded-full bg-red-600 text-white font-display text-sm font-extrabold px-4 py-1 shadow-lg animate-pulse">{alerts.map((x) => `🔥 Balle de ${x.match ? "match" : "set"} pour ${names[x.side]}`).join(" · ")}</p>
+            </div>
+          )}
         </div>
+        {setWinner !== null && sets.length < BM_MAX_SETS && (
+          <div className="shrink-0 mx-2 mb-1 rounded-xl bg-brand-soft text-brand-ink px-3 py-1.5 text-sm flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate">Set gagné par <b>{names[setWinner]}</b> ?</span>
+            <button type="button" onClick={nextSet} className={btn.smPrimary}>Set suivant ›</button>
+          </div>
+        )}
+        {themeBlock && <div className="shrink-0 px-2 pb-1 max-h-[35vh] overflow-auto">{themeBlock}</div>}
+        {/* Barre du bas : a portee du pouce. */}
+        <div className="shrink-0 bg-card border-t border-line px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-stretch gap-1.5">
+          <button type="button" disabled={finishing || !impacts.length} onClick={undoLast} className={cx(btn.ghost, "flex-1 min-w-0 px-2 whitespace-normal leading-tight border-2 border-accent font-extrabold")}>↶ Annuler le dernier impact</button>
+          <button type="button" onClick={() => setMore(true)} className={cx(btn.ghost, "shrink-0 font-black")} aria-label="Plus : sets, point sans impact, corrections, aide">⋯</button>
+          <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={cx(btn.success, "shrink-0")}>{finishing ? "…" : "🏁 Fin"}</button>
+        </div>
+      </>
     );
   }
   return overlay(

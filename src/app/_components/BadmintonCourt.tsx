@@ -13,14 +13,18 @@ export type CourtMark = { x: number; y: number; won?: boolean; hx?: number; hy?:
 // onLongPress (26/11, Sartay : « appuyer longtemps sur un impact pour l'annuler, donner des infos ») : un appui de plus de
 // LONG_PRESS_MS ne compte pas d'impact, il signale l'endroit (le parent ouvre le menu de l'impact le plus proche).
 const LONG_PRESS_MS = 450;
-export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPress }: { kind: CourtKind; scale: number; marks?: CourtMark[]; top?: string; bottom?: string; onTap?: (x: number, y: number) => void; onLongPress?: (x: number, y: number) => void }) {
+// mx / my (26/11 soir) : marges dessinees autour du terrain (par defaut COURT_MARGIN) ; le grand terrain du scouting les
+// elargit pour remplir l'ecran : toucher n'importe ou autour = « dehors ». Le point est ramene a COURT_MARGIN des lignes
+// (c'est ce que le serveur accepte, et ce que les cartes d'analyse dessinent).
+export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPress, mx, my }: { kind: CourtKind; scale: number; marks?: CourtMark[]; top?: string; bottom?: string; onTap?: (x: number, y: number) => void; onLongPress?: (x: number, y: number) => void; mx?: number; my?: number }) {
   const w = courtWidth(kind), L = COURT_LENGTH, M = COURT_MARGIN;
+  const MX = Math.max(M, mx ?? M), MY = Math.max(M, my ?? M);
   const ref = useRef<SVGSVGElement>(null);
   const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> | null; long: boolean } | null>(null);
   const at = (e: React.PointerEvent<SVGSVGElement>) => {
     const r = ref.current!.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * (w + 2 * M) - M;
-    const y = ((e.clientY - r.top) / r.height) * (L + 2 * M) - M;
+    const x = Math.max(-M, Math.min(w + M, ((e.clientX - r.left) / r.width) * (w + 2 * MX) - MX));
+    const y = Math.max(-M, Math.min(L + M, ((e.clientY - r.top) / r.height) * (L + 2 * MY) - MY));
     return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
   };
   const down = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -48,9 +52,9 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPr
   return (
     <svg
       ref={ref}
-      viewBox={`${-M} ${-M} ${w + 2 * M} ${L + 2 * M}`}
-      width={Math.round((w + 2 * M) * scale)}
-      height={Math.round((L + 2 * M) * scale)}
+      viewBox={`${-MX} ${-MY} ${w + 2 * MX} ${L + 2 * MY}`}
+      width={Math.round((w + 2 * MX) * scale)}
+      height={Math.round((L + 2 * MY) * scale)}
       className={cx("block select-none touch-manipulation", onTap && "cursor-crosshair")}
       role={onTap ? "button" : "img"}
       aria-label={onTap ? "Terrain : touchez l'endroit où le volant est tombé" : "Terrain et impacts du volant"}
@@ -60,7 +64,7 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPr
       onPointerCancel={onTap ? cancel : undefined}
       onContextMenu={onTap ? (e) => e.preventDefault() : undefined}
     >
-      <rect x={-M} y={-M} width={w + 2 * M} height={L + 2 * M} rx={0.3} className="fill-paper" />
+      <rect x={-MX} y={-MY} width={w + 2 * MX} height={L + 2 * MY} rx={0.3} className="fill-paper" />
       <rect x={0} y={0} width={w} height={L} className="fill-emerald-50" />
       <g className="text-emerald-800">
         <rect x={0} y={0} width={w} height={L} fill="none" stroke="currentColor" strokeWidth={0.06} />
@@ -95,20 +99,22 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPr
 // gagnant ou faute ; « ✓ Point » ferme l'echange. Couche 1 : un seul toucher (qui marque est devine d'apres l'impact ;
 // sur le filet, l'arbitre choisit).
 type Draft = { x: number; y: number; w: 0 | 1 | null; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; hitter: boolean };
-// `big` (26/11, Sartay : « le dessin du terrain pourrait prendre plus de place et le scoring moins ») : le terrain occupe la
-// largeur de l'ecran (au plus ~65 % de sa hauteur), les choix (qui marque, le coup…) s'affichent en bas de l'ecran.
-// impacts / onUndo / onImpact (26/11) : le parent tient la liste des impacts (pour les annuler et les preciser).
-export function CourtPad({ kind, level, names, disabled, onCommit, big = false, impacts, onUndo, onImpact }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean; impacts?: CourtMark[]; onUndo?: () => void; onImpact?: (k: number) => void }) {
+// `big` (26/11, Sartay : « le terrain doit prendre plus de place sur l'ecran, le score un petit bandeau en haut ou en bas ») :
+// le terrain REMPLIT son parent (largeur ET hauteur, a l'echelle), les choix (qui marque, le coup…) s'affichent en bas.
+// impacts / onImpact (26/11) : le parent tient la liste des impacts (pour les annuler et les preciser).
+export function CourtPad({ kind, level, names, disabled, onCommit, big = false, impacts, onImpact }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean; impacts?: CourtMark[]; onImpact?: (k: number) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [last, setLast] = useState<CourtMark[]>([]);
   const box = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<number | null>(null);
+  const [fit, setFit] = useState<{ s: number; mx: number; my: number } | null>(null);
   useEffect(() => {
     if (!big || !box.current) return;
     const el = box.current;
     const measure = () => {
-      const vbW = courtWidth(kind) + 2 * COURT_MARGIN, vbH = COURT_LENGTH + 2 * COURT_MARGIN;
-      setFit(Math.max(18, Math.min(el.clientWidth / vbW, (window.innerHeight * 0.6) / vbH)));
+      // Le terrain a l'echelle, aussi grand que possible ; les marges s'elargissent pour couvrir toute la zone (= dehors).
+      const cw = el.clientWidth - 4, ch = el.clientHeight - 4, w = courtWidth(kind), M = COURT_MARGIN;
+      const s = Math.max(10, Math.min(cw / (w + 2 * M), ch / (COURT_LENGTH + 2 * M)));
+      setFit({ s, mx: Math.max(M, (cw / s - w) / 2), my: Math.max(M, (ch / s - COURT_LENGTH) / 2) });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -165,16 +171,8 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
   );
   if (big) {
     return (
-      <div ref={box} className="w-full">
-        {onUndo && (
-          <div className="flex items-center gap-2 mb-2">
-            <button type="button" disabled={disabled || !impacts?.length} onClick={onUndo} className={cx(btn.ghost, "flex-1 border-2 border-accent font-extrabold")}>↶ Annuler le dernier impact</button>
-          </div>
-        )}
-        <div className="flex justify-center">
-          <CourtSvg kind={kind} scale={fit ?? 22} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} onLongPress={onImpact ? longPress : undefined} />
-        </div>
-        {onImpact && <p className={`${ui.hint} text-center mt-1`}>Appui long sur un impact : l&apos;annuler, ou préciser le coup.</p>}
+      <div ref={box} className="w-full h-full overflow-hidden flex items-center justify-center">
+        {fit !== null && <CourtSvg kind={kind} scale={fit.s} mx={fit.mx} my={fit.my} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} onLongPress={onImpact ? longPress : undefined} />}
         {draft && (
           <div className="fixed inset-x-0 bottom-0 z-[55] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[50vh] overflow-auto">
             <div className="max-w-xl mx-auto space-y-2">{controls}</div>
