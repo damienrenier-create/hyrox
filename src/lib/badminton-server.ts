@@ -85,6 +85,23 @@ export async function loadTournamentMatches(tournamentId: string): Promise<BmMat
 // Le tournoi en cours d'une seance (un seul a la fois) : le plus recent qui n'a pas ete clos.
 export const activeTournament = (list: BmTournament[]): BmTournament | null => list.find((t) => !t.closedAt) ?? null;
 
+// Plusieurs seances de badminton ouvertes pour un meme eleve (deux profs dont les creneaux n'ont pas ete fusionnes ;
+// Sartay 26/11 : « par defaut, si un prof lance un tournoi, c'est son bouton qui s'affiche sur le telephone de tous
+// les eleves, surtout si l'autre prof n'a pas lance de tournoi ») : s'il y a un tournoi en cours, seules les seances
+// a tournoi restent (d'abord celle ou l'eleve joue) ; les autres seances (Hyrox…) ne bougent pas. `tour` : le tournoi
+// en cours de chaque seance gardee, et `inTour` : l'eleve y joue (pas parti).
+export async function preferTournamentSessions<T extends { id: string; wodType: string }>(open: T[], studentId: string): Promise<{ sessions: T[]; tour: Map<string, { label: string; inTour: boolean }> }> {
+  const tour = new Map<string, { label: string; inTour: boolean }>();
+  for (const s of open.filter((x) => x.wodType === "BADMINTON")) {
+    const t = activeTournament(await loadTournaments(s.id));
+    if (t) tour.set(s.id, { label: t.label, inTour: t.players.some((p) => p.studentId === studentId && !p.gone) });
+  }
+  if (!tour.size) return { sessions: open, tour };
+  const mineIn = open.some((s) => tour.get(s.id)?.inTour);
+  const keep = (s: T) => s.wodType !== "BADMINTON" || (mineIn ? !!tour.get(s.id)?.inTour : tour.has(s.id));
+  return { sessions: open.filter(keep), tour };
+}
+
 // ===== Classement ELO (Sartay 03/11, regles dans src/lib/badminton-elo.ts) =====
 // Tous les matchs de toutes les seances de badminton et les matchs libres officiels (inter-classes), recalcules a chaque
 // affichage. La classe de test

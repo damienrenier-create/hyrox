@@ -16,7 +16,7 @@ import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
-import { badmintonTabVisible, loadMatches, pupilWindowEnd } from "@/lib/badminton-server";
+import { badmintonTabVisible, loadMatches, preferTournamentSessions, pupilWindowEnd } from "@/lib/badminton-server";
 import { BM_FREE, matchState, mustSign, pupilStats, viewOf } from "@/lib/badminton";
 import { SelfEvalNudge } from "../_components/SelfEvalNudge";
 
@@ -34,7 +34,8 @@ export default async function ElevePage() {
   const me = await db.orm.public.User.where({ id: user.id }).first();
   const birthday = isBirthdayToday(me?.dateOfBirth);
   const winterArc = isWinterArc(me?.winterArcUntil); // oui a l'interrupteur du greffier (Sartay 01/10)
-  const openSessions = await openSessionsForStudent(user.id, user.className ?? null);
+  // Deux seances de badminton ouvertes (26/11) : celle ou un tournoi est lance passe seule (voir preferTournamentSessions).
+  const { sessions: openSessions, tour: bmTour } = await preferTournamentSessions(await openSessionsForStudent(user.id, user.className ?? null), user.id);
   const mine = await sessionsForStudent(user.id);
   const openIds = new Set(openSessions.map((s) => s.id));
   // Sartay 29/09 nuit : l'eleve ne voit que les WOD qu'il a vraiment faits (equipe avec au moins un resultat),
@@ -113,10 +114,23 @@ export default async function ElevePage() {
                       <SelfEvalNudge chip closesAt={s.closesAt ? toMs(s.closesAt) : null} windowEnd={pupilWindowEnd(s)} serverNow={currentTime()} sent={selfSent.has(s.id)} />
                     </span>
                   </div>
-                  <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
-                    Encoder mes matchs
-                    <span className="block text-[11px] font-normal text-white/85 mt-1">contre qui, le score · signer les matchs de mes adversaires · arbitrer</span>
-                  </div>
+                  {/* Sartay 26/11 : « encoder mes matchs est trompeur » pendant un tournoi -> « Participer au tournoi ». */}
+                  {bmTour.get(s.id)?.inTour ? (
+                    <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
+                      🏆 Participer au tournoi
+                      <span className="block text-[11px] font-normal text-white/85 mt-1">{bmTour.get(s.id)!.label} · mon prochain match, l&apos;horaire · encoder, signer, arbitrer</span>
+                    </div>
+                  ) : bmTour.has(s.id) ? (
+                    <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
+                      🏆 Le tournoi du cours
+                      <span className="block text-[11px] font-normal text-white/85 mt-1">{bmTour.get(s.id)!.label} · demande à ton prof de t&apos;y ajouter · arbitrer, signer</span>
+                    </div>
+                  ) : (
+                    <div className="bg-brand text-white font-extrabold text-center rounded-xl py-4 px-2 leading-tight shadow-sm">
+                      Encoder mes matchs
+                      <span className="block text-[11px] font-normal text-white/85 mt-1">contre qui, le score · signer les matchs de mes adversaires · arbitrer</span>
+                    </div>
+                  )}
                 </Link>
               ) : (
                 <div key={s.id} className={`${ui.card} border-brand/40 p-4`}>
