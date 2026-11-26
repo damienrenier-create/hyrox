@@ -504,3 +504,19 @@ export function subCandidates(st: TeamsState, players: TourPlayer[], subs: TeamS
   list.sort((p, q) => Number(q.played) - Number(p.played) || Math.abs(p.elo - me.elo) - Math.abs(q.elo - me.elo));
   return { round, current, list };
 }
+
+// ===== « Pret » avant un match au temps (26/11, voir TeamReady) =====
+// La ronde / vague du prochain coup de sifflet, ses joueurs attendus (matchs pas encore joues, partis exclus, remplacants
+// compris) et ceux qui ont dit « pret ». null : pas au temps, rien a lancer, ou le chrono de cette vague tourne deja.
+export type ReadyState = { round: number; wave: 1 | 2; expected: string[]; ready: string[] };
+export function readyState(st: TeamsState, ts: TeamSettings, now = Date.now()): ReadyState | null {
+  if (ts.mode !== "TIME" || !st.next) return null;
+  const { round, wave } = st.next;
+  const run = runningTimer(ts, now);
+  if (run && run.round === round && run.wave === wave) return null;
+  const r = st.rounds.find((x) => x.n === round);
+  const expected = [...new Set((r?.rencontres ?? []).flatMap((x) => x.matches.filter((m) => m.wave === wave && m.status === "todo").flatMap((m) => [m.a, m.b])))];
+  if (!expected.length) return null;
+  const ids = ts.ready && ts.ready.round === round && ts.ready.wave === wave ? ts.ready.ids : [];
+  return { round, wave, expected, ready: expected.filter((id) => ids.includes(id)) };
+}

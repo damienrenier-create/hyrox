@@ -7,7 +7,7 @@ import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
-import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
+import { checkTeams, coachOf, makeTeams, pendingTeamPairing, readyState, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
@@ -395,6 +395,63 @@ export async function teamTimerAction(tournamentId: string, op: "start" | "stop"
   await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
   done(row.sessionId);
   return { ok: true };
+}
+
+// « Pret » (26/11, Sartay : « c'est moi qui lance, mais si tout le monde est pret alors ca lance ; quoi qu'il arrive, si je
+// lance, ca lance ») : un joueur de la prochaine vague au temps dit « pret » (ou se retracte). Plusieurs telephones peuvent
+// appuyer en meme temps : on relit apres chaque ecriture et on recommence si son « pret » a ete ecrase. Quand tous les
+// joueurs attendus sont prets, le chrono part tout seul (comme le coup de sifflet du prof).
+export async function teamReadyAction(tournamentId: string, ready: boolean): Promise<BmResult> {
+  const first = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!first || !first.sessionId || first.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(first.sessionId);
+  if ("error" in c) return c;
+  const load = async () => {
+    const t = (await loadTournaments(first.sessionId!)).find((x) => x.id === first.id);
+    if (!t || t.kind !== "TEAMS" || !t.settings.team) return null;
+    const st = teamsOf(t.players, await loadTournamentMatches(t.id), t.settings);
+    return { t, rs: readyState(st, t.settings.team) };
+  };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const x = await load();
+    if (!x) return { error: "Ce tournoi n'est pas un tournoi par équipes au temps." };
+    if (!x.rs) return { ok: true }; // le chrono tourne deja, ou plus rien a lancer
+    if (!x.rs.expected.includes(c.userId)) return { error: "Tu ne joues pas dans la prochaine vague." };
+    const has = x.rs.ready.includes(c.userId);
+    if (has === ready) {
+      // Tout le monde est pret : depart automatique (une seule fois : readyState devient null des que le chrono tourne).
+      if (ready && x.rs.expected.every((id) => x.rs!.ready.includes(id))) await startTeamTimer(x.t.id, x.rs.round, x.rs.wave, x.t.settings.team!.minutes, first.sessionId);
+      done(first.sessionId);
+      return { ok: true };
+    }
+    const row = (await db.orm.public.BadmintonTournament.where({ id: first.id }).first())!;
+    const cur = (row.settings ?? {}) as Record<string, unknown>;
+    const team = { ...((cur.team ?? {}) as Record<string, unknown>) };
+    const prev = readTeamSettings(team).ready;
+    const ids = prev && prev.round === x.rs.round && prev.wave === x.rs.wave ? prev.ids : [];
+    team.ready = { round: x.rs.round, wave: x.rs.wave, ids: ready ? [...new Set([...ids, c.userId])] : ids.filter((id) => id !== c.userId) };
+    await db.orm.public.BadmintonTournament.where({ id: first.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
+    await new Promise((r) => setTimeout(r, 60 + Math.floor(Math.random() * 180)));
+  }
+  return { error: "Beaucoup de joueurs appuient en même temps : réessaie dans un instant." };
+}
+
+// Le coup de sifflet (prof, ou depart automatique quand tout le monde est pret).
+async function startTeamTimer(tournamentId: string, round: number, wave: 1 | 2, minutes: number, sessionId: string) {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row) return;
+  const cur = (row.settings ?? {}) as Record<string, unknown>;
+  const team = { ...((cur.team ?? {}) as Record<string, unknown>) };
+  const ts = readTeamSettings(team);
+  const now = Date.now();
+  const run = runningTimer(ts, now);
+  if (run && run.round === round && run.wave === wave && now - run.startedAt < 15_000) return; // deja parti a l'instant
+  team.timer = { round, wave, startedAt: now, endsAt: now + minutes * 60_000, stoppedAt: null };
+  const starts = { ...ts.roundStarts };
+  if (!starts[String(round)]) starts[String(round)] = now;
+  team.roundStarts = starts;
+  await db.orm.public.BadmintonTournament.where({ id: row.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
+  done(sessionId);
 }
 
 // Remplacant d'un joueur parti (26/11, regles dans subCandidates, badminton-teams.ts) : il joue a sa place a partir de la

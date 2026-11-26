@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HANDICAP_ELO_PER_POINT, POOL_NAMES, autoHandicap, TEAM_COUNTS, TEAM_GROUPS, TEAM_MINUTES, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, groupsOfPlayers, handicapOf, makePlayers, pairKey, readTourSettings, reconcileGroups, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TeamDraw, type TeamFormat, type TeamMode, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
-import { makeTeams, reconcileTeams, subCandidates, type Rencontre, type TeamPairing, type TeamsState } from "@/lib/badminton-teams";
+import { makeTeams, readyState, reconcileTeams, subCandidates, type Rencontre, type TeamPairing, type TeamsState } from "@/lib/badminton-teams";
 import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTeamSubAction, setTournamentRuleAction, teamTimerAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { StudentName } from "../../_components/StudentName";
@@ -857,6 +857,13 @@ function TeamTimerPanel({ t }: { t: TourView }) {
         </select>
         <button type="button" disabled={pending || !value} onClick={() => run("start")} className={btn.smPrimary}>▶ Coup de sifflet</button>
       </div>
+      {(() => {
+        // « Pret » (26/11) : le chrono part tout seul quand tous les joueurs de la vague sont prets ; le coup de sifflet passe toujours.
+        const rs = readyState(st, tt, t.now);
+        if (!rs) return null;
+        const missing = rs.expected.filter((id) => !rs.ready.includes(id));
+        return <p className="text-sm">✋ Prêts pour la ronde {rs.round}{rs.wave === 2 ? " (matchs en plus)" : ""} : <b>{rs.ready.length}/{rs.expected.length}</b>{missing.length && missing.length <= 12 ? <span className={ui.hint}> · pas encore : {missing.map((id) => t.names[id]?.name.split(" ")[0] ?? "?").join(", ")}</span> : null}</p>;
+      })()}
       {error && <p className={ui.alertErr}>{error}</p>}
       <p className={ui.hint}>
         {st.next ? `À jouer : ${st.rounds.find((r) => r.n === st.next!.round)?.label ?? ""}${st.next.wave === 2 ? " · matchs en plus" : ""} (${st.next.matches} match${st.next.matches > 1 ? "s" : ""} pas encore encodé${st.next.matches > 1 ? "s" : ""}). ` : "Toutes les rencontres sont jouées. "}

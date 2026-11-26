@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
 import { THEME_KINDS, themeText, type BmTheme } from "@/lib/badminton-themes";
 import type { PairingStatus, TourKind } from "@/lib/badminton-tournament";
-import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction } from "../../badminton-actions";
+import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction, teamReadyAction } from "../../badminton-actions";
 import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, type LiveScout, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
 import { StrokeSheetForm } from "../../../_components/StrokeSheetForm";
 import { usePulse } from "../../../_components/usePulse";
@@ -23,6 +23,9 @@ export type TeamCardData = {
   oppTeam: { letter: string; coach: string } | null;
   // Ce qui se joue dans mon prochain match (26/11) : points rapportes selon le score, chances, ce qu'il faut pour passer devant.
   sub: boolean; // remplacant d'un joueur parti d'une autre equipe (26/11)
+  tourId: string;
+  // « Pret » avant un match au temps (26/11) : moi, et combien sur combien.
+  ready: { me: boolean; count: number; total: number } | null;
   stakes: { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; need: string | null } | null;
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
@@ -257,6 +260,34 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
   );
 }
 
+// « Je suis pret » (26/11, Sartay : « si tout le monde est pret alors ca lance ; quoi qu'il arrive, si je lance, ca lance »).
+function ReadyBox({ tourId, ready }: { tourId: string; ready: { me: boolean; count: number; total: number } }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  // Affiche tout de suite mon « pret » (le serveur confirme au rafraichissement suivant).
+  const [local, setLocal] = useState<{ base: boolean; me: boolean } | null>(null);
+  const me = local && local.base === ready.me ? local.me : ready.me;
+  const count = ready.count + (me === ready.me ? 0 : me ? 1 : -1);
+  const toggle = () => {
+    setError("");
+    const want = !me;
+    start(async () => {
+      const r = await teamReadyAction(tourId, want);
+      if ("error" in r) setError(r.error);
+      else setLocal({ base: ready.me, me: want });
+      router.refresh();
+    });
+  };
+  return (
+    <div className="rounded-xl border-2 border-accent bg-card p-2 space-y-1 text-center">
+      <button type="button" disabled={pending} onClick={toggle} className={cx(me ? btn.ghost : btn.lgPrimary, "w-full")}>{pending ? "…" : me ? "✓ Je suis prêt (annuler)" : "✋ Je suis prêt"}</button>
+      <p className={ui.hint}>Prêts : <b>{count}/{ready.total}</b> · le chrono part tout seul quand tout le monde est prêt, ou au coup de sifflet du prof.</p>
+      {error && <p className={ui.alertErr}>{error}</p>}
+    </div>
+  );
+}
+
 // Carte du tournoi PAR EQUIPES (Sartay 24/11) : mon equipe et son coach, mon prochain match (contre qui, dans quelle
 // rencontre), le chrono quand on joue au temps, les matchs de la rencontre en cours et le classement des equipes.
 function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCardData; canPlay: boolean; onPlay: (opponentId: string) => void }) {
@@ -267,6 +298,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
   const place = (r: TeamCardData["table"][number]) => (r.rank ? `${r.rank}.` : `${r.lo}-${r.hi}.`);
   return (
     <section className={cx(ui.card, "p-3 space-y-2 border-accent bg-accent-soft/30")}>
+      {team.ready && <ReadyBox tourId={team.tourId} ready={team.ready} />}
       {team.sub && <p className={ui.alertInfo}>🔁 Tu remplaces un joueur parti de l&apos;équipe <b>{team.letter}</b> : les points de ce match iront à l&apos;équipe {team.letter}.</p>}
       <div className="flex items-center justify-between gap-2">
         <p className="font-display font-extrabold text-ink">🏆 Tournoi par équipes · Équipe {team.letter}</p>

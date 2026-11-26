@@ -65,7 +65,10 @@ export type TeamTimer = { round: number; wave: number; startedAt: number; endsAt
 // la ronde `round`, `in` joue a la place de `out` (parti) dans les rencontres de l'equipe de `out` ; ses points vont a cette
 // equipe. La derniere entree pour un meme `out` compte (in vide = plus de remplacant). Voir teamsOf (badminton-teams.ts).
 export type TeamSub = { out: string; in: string | null; round: number; at: number };
-export type TeamSettings = { count: number; format: TeamFormat; groups: number; mode: TeamMode; minutes: number; draw: TeamDraw; coaches: Record<string, string>; timer: TeamTimer | null; roundStarts: Record<string, number>; lateAt: Record<string, number>; away: Record<string, [number, number | null][]>; subs: TeamSub[] };
+// ready (26/11, Sartay : « c'est moi qui lance, mais si tout le monde est pret alors ca lance ; quoi qu'il arrive, si je lance,
+// ca lance ») : les joueurs qui ont dit « pret » pour la ronde / vague du prochain coup de sifflet (au temps).
+export type TeamReady = { round: number; wave: number; ids: string[] };
+export type TeamSettings = { count: number; format: TeamFormat; groups: number; mode: TeamMode; minutes: number; draw: TeamDraw; coaches: Record<string, string>; timer: TeamTimer | null; roundStarts: Record<string, number>; lateAt: Record<string, number>; away: Record<string, [number, number | null][]>; subs: TeamSub[]; ready: TeamReady | null };
 export const TEAM_COUNTS = [2, 3, 4, 5, 6, 8] as const;
 export const TEAM_GROUPS = [1, 2, 3, 4] as const;
 export const TEAM_MINUTES = [3, 4, 5, 6, 7, 8, 10, 12, 15] as const;
@@ -85,7 +88,9 @@ export function readTeamSettings(raw: unknown): TeamSettings {
     const r = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
     return r && typeof r.out === "string" && Number(r.round) >= 1 ? [{ out: r.out, in: typeof r.in === "string" && r.in ? r.in : null, round: Math.round(Number(r.round)), at: Number(r.at) || 0 }] : [];
   });
-  return { count, format: o.format === "BRACKET" ? "BRACKET" : "LEAGUE", groups, mode: o.mode === "TIME" ? "TIME" : "POINTS", minutes, draw: o.draw === "ELO" ? "ELO" : "HALF", coaches, timer, roundStarts: numMap(o.roundStarts), lateAt: numMap(o.lateAt), away, subs };
+  const rd = o.ready && typeof o.ready === "object" ? (o.ready as Record<string, unknown>) : null;
+  const ready = rd && Number(rd.round) >= 1 ? { round: Number(rd.round), wave: Number(rd.wave) === 2 ? 2 : 1, ids: Array.isArray(rd.ids) ? [...new Set(rd.ids.filter((x): x is string => typeof x === "string"))] : [] } : null;
+  return { count, format: o.format === "BRACKET" ? "BRACKET" : "LEAGUE", groups, mode: o.mode === "TIME" ? "TIME" : "POINTS", minutes, draw: o.draw === "ELO" ? "ELO" : "HALF", coaches, timer, roundStarts: numMap(o.roundStarts), lateAt: numMap(o.lateAt), away, subs, ready };
 }
 // Retardataires d'un tournoi de poules (settings.late : leurs identifiants).
 // Joueurs partis avant la fin du tournoi (settings.gone, 12/11 : « il part seulement avant la fin du tournoi ») : leurs

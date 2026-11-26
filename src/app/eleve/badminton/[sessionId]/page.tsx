@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
-import { marginFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
+import { marginFor, readyState, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
 import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
 import { scoutQueue } from "@/lib/badminton-scout-queue";
@@ -117,6 +117,9 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             roundLabel: mine.round ? `${mine.round.label}${mine.rencontre?.stage ? ` · ${mine.rencontre.stage}` : ""}` : "",
             oppTeam: oppLetter ? { letter: oppLetter, coach: coachName(oppLetter) } : null,
             sub: !!mine.sub,
+            tourId: tour.id,
+            // « Pret » (26/11) : seulement si je joue dans la prochaine vague au temps et que son chrono n'est pas lance.
+            ready: (() => { const rs = readyState(st, ts); return rs && rs.expected.includes(me.id) ? { me: rs.ready.includes(me.id), count: rs.ready.length, total: rs.expected.length } : null; })(),
             stakes: stk ? { win: stk.win, lose: stk.lose, draw: stk.draw, chance: Math.round(stk.chance * 100), need } : null,
             current: rc ? {
               pts: mine.side === 0 ? rc.pts : [rc.pts[1], rc.pts[0]],
