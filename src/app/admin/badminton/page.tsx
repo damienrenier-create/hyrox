@@ -152,6 +152,8 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       gone: t.players.filter((p) => p.gone).map((p) => p.studentId),
       settings: t.settings,
       players: now,
+      // Contraintes de la lecon (26/11 soir) : point de depart des pastilles ⚖️ 🎯 🎲 de chaque match.
+      lesson: { handicap: !!readSessionConstraints(session.settings).handicap, bet: readSessionConstraints(session.settings).bet, theme: !!sessionTheme(session.settings) },
     };
   };
   const active = activeTournament(tours);

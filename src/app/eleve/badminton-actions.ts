@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmMatch, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, loadScoutingMatches, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { HANDICAP_ELO_PER_POINT, TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
+import { type PairRule, HANDICAP_ELO_PER_POINT, TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, readyState, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
@@ -80,19 +80,20 @@ function done(sessionId: string | null) {
 // Championnat a handicap : le match part avec les points d'avance du moins bien classe ([a, b]).
 // Tournoi par equipes (24/11) : le match doit etre un match d'une rencontre encore a jouer ; au temps, pas d'objectif
 // (le score au coup de sifflet) et la fin du chrono en cours.
-async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number } | null> {
+async function tournamentFor(c: Ctx, a: string, b: string): Promise<{ id: string; start: BmSet | null; points: number; deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number; pair?: PairRule | null; eloPerPoint?: number } | null> {
   if (!c.session) return null;
   const t = activeTournament(await loadTournaments(c.session.id));
   const tm = t ? await loadTournamentMatches(t.id) : [];
   if (!t) return null;
   if (t.kind === "TEAMS") {
     if (!pendingTeamPairing(teamsOf(t.players, tm, t.settings), a, b)) return null;
-    if (t.settings.team?.mode === "TIME") { const run = runningTimer(t.settings.team); return { id: t.id, start: null, points: 0, deuce: false, cap: 0, sets: 1, ...(run ? { endsAt: run.endsAt } : {}) }; }
-    return { id: t.id, start: null, ...ruleFor(t.settings, t.players, a, b) };
+    const pair = t.settings.pairRules[pairKey(a, b)] ?? null; // contraintes de CE match (26/11 soir)
+    if (t.settings.team?.mode === "TIME") { const run = runningTimer(t.settings.team); return { id: t.id, start: null, points: 0, deuce: false, cap: 0, sets: 1, pair, eloPerPoint: t.settings.eloPerPoint, ...(run ? { endsAt: run.endsAt } : {}) }; }
+    return { id: t.id, start: null, pair, eloPerPoint: t.settings.eloPerPoint, ...ruleFor(t.settings, t.players, a, b) };
   }
   if (!pendingPairing(t.kind, t.players, tm, a, b, t.settings.poolLegs)) return null;
   const rule = ruleFor(t.settings, t.players, a, b); // objectif du match (match, poule ou tournoi), 2 points d'ecart, plafond
-  if (t.kind !== "HANDICAP") return { id: t.id, start: null, ...rule };
+  if (t.kind !== "HANDICAP") return { id: t.id, start: null, pair: t.settings.pairRules[pairKey(a, b)] ?? null, eloPerPoint: t.settings.eloPerPoint, ...rule };
   // ELO du moment (13/11) et bareme du moment, ou avance imposee par le prof.
   return { id: t.id, start: handicapFor(t.settings, playersNow(t.players, tm, t.settings), a, b), ...rule };
 }
@@ -110,17 +111,26 @@ async function askWitnesses(c: Ctx, matchId: string, a: string, b: string, role:
 // Contraintes de la lecon (26/11 soir, src/lib/badminton-constraints.ts) pour un nouveau match entre a et b : les points
 // d'avance du handicap (ELO actuel, bareme de la lecon ; pas pour le championnat a handicap, qui a deja les siens) et les
 // mises posees AVANT (depuis le dernier match entre eux). Recopiees dans le match : la mise n'est plus secrete.
-async function constraintsFor(c: Ctx, a: string, b: string, tour: { points: number; start: BmSet | null } | null, all: BmMatch[]): Promise<{ head: BmSet | null; handicap: { head: BmSet; eloPerPoint: number; gap: number } | null; bets: BmBets | null }> {
-  if (!c.session) return { head: null, handicap: null, bets: null };
-  const k = readSessionConstraints(c.session.settings);
+// La regle d'un match de tournoi (tour.pair) passe avant celle de la lecon. Match LIBRE (26/11 soir : « en match libre, ils
+// peuvent cocher le handicap et le coef s'ils veulent ») : `free` = les options cochees par celui qui lance le direct.
+async function constraintsFor(c: Ctx, a: string, b: string, tour: { points: number; start: BmSet | null; pair?: PairRule | null; eloPerPoint?: number } | null, all: BmMatch[], free?: { handicap?: boolean; bets?: [unknown, unknown] } | null): Promise<{ head: BmSet | null; handicap: { head: BmSet; eloPerPoint: number; gap: number } | null; bets: BmBets | null }> {
+  if (!c.session && !(c.free && free)) return { head: null, handicap: null, bets: null };
+  const k = c.session ? readSessionConstraints(c.session.settings) : { handicap: null, bet: false };
+  const handicapOn = c.free ? !!free?.handicap : tour?.pair?.handicap ?? !!k.handicap;
+  const betOn = c.free ? false : tour?.pair?.bet ?? k.bet;
   let handicap: { head: BmSet; eloPerPoint: number; gap: number } | null = null;
-  if (k.handicap && !tour?.start) {
+  if (handicapOn && !tour?.start) {
     const board = await loadEloBoard();
     const ra = board.entries.get(a)?.rating ?? ELO_START, rb = board.entries.get(b)?.rating ?? ELO_START;
-    handicap = { head: headStartOf(ra, rb, k.handicap.eloPerPoint, tour?.points ?? 15), eloPerPoint: k.handicap.eloPerPoint, gap: Math.round(ra - rb) };
+    const epp = k.handicap?.eloPerPoint ?? tour?.eloPerPoint ?? HANDICAP_ELO_PER_POINT;
+    handicap = { head: headStartOf(ra, rb, epp, tour?.points ?? 15), eloPerPoint: epp, gap: Math.round(ra - rb) };
   }
   let bets: BmBets | null = null;
-  if (k.bet) {
+  if (c.free && free?.bets) {
+    const x: BmBets = [readBet(free.bets[0]), readBet(free.bets[1])];
+    bets = x[0] === null && x[1] === null ? null : x;
+  }
+  if (betOn && c.session) {
     const pair = betPair(a, b);
     const since = Math.max(0, ...all.filter((m) => betPair(m.playerAId, m.playerBId) === pair).map((m) => m.createdAt));
     const x = betsAtCreation(readPendingBets(c.session.settings), a, b, since);
@@ -176,7 +186,7 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
   const sid = dbSession(c);
   const tourRec = await tournamentFor(c, a, b);
   const tournamentId = tourRec?.id ?? null;
-  const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
+  const theme = c.session && tourRec?.pair?.theme !== false ? sessionTheme(c.session.settings) : null; // theme de la seance (24/11), sauf si le prof l'a retire pour ce match
   const k = await constraintsFor(c, a, b, tourRec, all); // handicap et mises (26/11 soir)
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId });
@@ -630,13 +640,15 @@ export async function placeBetAction(sessionId: string, opponentId: string, raw:
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (c.staff || !c.session) return { error: "Réservé aux élèves." };
-  if (!readSessionConstraints(c.session.settings).bet) return { error: "Les mises ne sont pas ouvertes pendant ce cours." };
   const bet = readBet(raw);
   if (bet === null) return { error: "Une mise va de 0 à 5." };
   const opp = String(opponentId ?? "");
   if (!opp || opp === c.userId) return { error: "Choisis ton adversaire." };
   if (!(await rosterIds(c)).has(opp)) return { error: notFound(c) };
   const pair = betPair(c.userId, opp);
+  const tourNow = activeTournament(await loadTournaments(c.session.id));
+  const rule = tourNow?.settings.pairRules[pairKey(c.userId, opp)];
+  if (!(rule?.bet ?? readSessionConstraints(c.session.settings).bet)) return { error: "Les mises ne sont pas ouvertes pour ce match." };
   if ((await loadMatches(c.session.id)).some((m) => betPair(m.playerAId, m.playerBId) === pair && matchState(m).status === "LIVE")) return { error: "Ce match a déjà commencé : la mise est fermée." };
   const at = Date.now();
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -712,7 +724,7 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
 // handicap : imposer l'avance d'une rencontre (to = celui qui a l'avance, pts 0 = aucune ; to null = revenir au bareme).
 // Les deux valent pour les matchs pas encore commences : un match en direct garde le score de depart de son ouverture.
 // poolLegs (13/11) : matchs retour dans UNE poule (legs 2) ; revenir a 1 seul match n'est possible que si aucun retour n'a ete joue.
-export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number }; poolLegs?: { name: string; legs: number } }): Promise<BmResult> {
+export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number }; poolLegs?: { name: string; legs: number }; pairRule?: { a: string; b: string; key: "handicap" | "bet" | "theme"; value: boolean | null } }): Promise<BmResult> {
   const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
   if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
   const c = await context(row.sessionId);
@@ -771,8 +783,19 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
       calibration = cal;
     }
   }
+  // Contrainte d'un match (26/11 soir) : imposee (oui / non) ou de nouveau « comme la lecon » (null).
+  const pairRules = { ...s.pairRules };
+  if (patch.pairRule) {
+    const { a, b, key, value } = patch.pairRule;
+    if (!t.players.some((p) => p.studentId === a) || !t.players.some((p) => p.studentId === b)) return { error: "Ces joueurs ne sont pas dans le tournoi." };
+    if (key !== "handicap" && key !== "bet" && key !== "theme") return { error: "Contrainte inconnue." };
+    const k = pairKey(a, b);
+    const r = { ...(pairRules[k] ?? {}) };
+    if (value === null) delete r[key]; else r[key] = value === true;
+    if (Object.keys(r).length) pairRules[k] = r; else delete pairRules[k];
+  }
   const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints, eloPerPoint, calibration, matchHandicap, poolLegs }, t.kind);
-  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap, poolLegs: norm.poolLegs })) });
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap, poolLegs: norm.poolLegs, pairRules })) });
   done(row.sessionId);
   return { ok: true };
 }
@@ -944,7 +967,8 @@ export async function endStrokeScoutAction(matchId: string): Promise<BmResult> {
   return { ok: true };
 }
 
-export async function startLiveMatchAction(sessionId: string, input: { playerAId: string; playerBId: string; force?: boolean; witnessIds?: string[] }): Promise<BmResult> {
+// options (26/11 soir) : match LIBRE seulement, cochees par l'arbitre au lancement : handicap, mises des deux joueurs.
+export async function startLiveMatchAction(sessionId: string, input: { playerAId: string; playerBId: string; force?: boolean; witnessIds?: string[]; options?: { handicap?: boolean; bets?: [unknown, unknown] } }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   const a = String(input.playerAId ?? "");
@@ -963,9 +987,9 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   }
   const sid = dbSession(c);
   const tour = await tournamentFor(c, a, b);
-  const k = await constraintsFor(c, a, b, tour, all); // handicap et mises (26/11 soir)
+  const k = await constraintsFor(c, a, b, tour, all, input.options ?? null); // handicap et mises (26/11 soir)
   const start: BmSet[] = [tour?.start ?? k.head ?? [0, 0]];
-  const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
+  const theme = c.session && tour?.pair?.theme !== false ? sessionTheme(c.session.settings) : null; // theme de la seance (24/11), sauf si retire pour ce match
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: tour?.id ?? null });
     if (theme) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "THEME", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(theme)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });

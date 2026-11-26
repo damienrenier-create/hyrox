@@ -114,7 +114,20 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number>; team: TeamSettings | null };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number>; team: TeamSettings | null; pairRules: Record<string, PairRule> };
+// Contraintes d'UN match (Sartay 26/11 soir : « un prof peut choisir pour la lecon OU pour des matchs en particulier ») :
+// true / false = impose pour ce match, absent = comme la lecon. Cle = pairKey.
+export type PairRule = { handicap?: boolean; bet?: boolean; theme?: boolean };
+export function readPairRules(v: unknown): Record<string, PairRule> {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return Object.fromEntries(Object.entries(o).flatMap(([k, x]) => {
+    const r = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+    if (!r) return [];
+    const out: PairRule = {};
+    for (const f of ["handicap", "bet", "theme"] as const) if (typeof r[f] === "boolean") out[f] = r[f] as boolean;
+    return Object.keys(out).length ? [[k, out]] : [];
+  }));
+}
 // Avance IMPOSEE par le prof pour une rencontre (13/11 : « changer l'ecart pour des matchs en particulier ») : `id` = celui
 // qui commence avec `pts` points d'avance ; pts 0 = aucune avance. Cle = pairKey.
 export type MatchHandicap = { id: string; pts: number };
@@ -152,7 +165,7 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   // match, choisi par le prof (pas de revanche automatique) ; absent = automatique (revanches quand la poule a fini).
   const pl = o.poolLegs && typeof o.poolLegs === "object" ? (o.poolLegs as Record<string, unknown>) : {};
   const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2 || Number(n) === 1).map(([k, n]) => [k, Number(n)]));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs, team };
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs, team, pairRules: readPairRules(o.pairRules) };
 }
 
 // ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le

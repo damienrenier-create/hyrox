@@ -17,7 +17,7 @@ import { fold } from "@/lib/staff-names";
 // staff : un prof de la seance (16/11), propose en tete de liste mais pas coche d'office.
 export type TourEntrantRow = { id: string; name: string; className: string | null; elo: number; present: boolean; staff?: boolean };
 // teams : tournoi par equipes (24/11) ; now : heure du serveur a l'affichage (chrono).
-export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; teams: TeamsState | null; now: number; names: Record<string, { name: string; className: string | null }>; gone: string[]; settings: TourSettings; players: TourPlayer[] };
+export type TourView = { id: string; kind: TourKind; label: string; format: string; pools: TourPool[] | null; bracket: Bracket | null; teams: TeamsState | null; now: number; names: Record<string, { name: string; className: string | null }>; gone: string[]; settings: TourSettings; players: TourPlayer[]; lesson?: { handicap: boolean; bet: boolean; theme: boolean } };
 export type TourElsewhere = { id: string; label: string; players: number; when: string };
 
 export type TourCandidate = { id: string; name: string; className: string | null };
@@ -680,6 +680,22 @@ function MatchPoints({ t, a, b, onRule }: { t: TourView; a: string; b: string; o
   );
 }
 
+// Contraintes d'UN match (Sartay 26/11 soir : « pour la lecon ou pour des matchs en particulier ») : ⚖️ handicap, 🎯 mises,
+// 🎲 theme. Pastille pleine = oui pour ce match ; un toucher inverse ; cerclee = imposee pour ce match (sinon : comme la lecon).
+function PairRulePick({ t, a, b, onRule }: { t: TourView; a: string; b: string; onRule: OnRule }) {
+  const r = t.settings.pairRules[pairKey(a, b)] ?? {};
+  const chip = (key: "handicap" | "bet" | "theme", emoji: string, name: string) => {
+    const base = !!t.lesson?.[key];
+    if (key === "theme" && !base && r.theme === undefined) return null; // pas de theme dans la lecon : rien a retirer
+    if (key === "handicap" && t.kind === "HANDICAP") return null; // le championnat a handicap a deja le sien
+    const own = r[key];
+    const on = own ?? base;
+    const flip = () => onRule({ pairRule: { a, b, key, value: !on === base ? null : !on } });
+    return <button key={key} type="button" onClick={flip} title={`${name} : ${on ? "oui" : "non"} pour ce match ${own !== undefined ? "(imposé ici)" : "(comme la leçon)"} · toucher pour changer`} aria-label={`${name} de ce match : ${on ? "oui" : "non"}`} className={cx("ml-1 text-xs rounded border px-1 py-0", on ? "border-accent bg-accent-soft" : "border-line opacity-40 grayscale", own !== undefined && "ring-2 ring-accent")}>{emoji}</button>;
+  };
+  return <>{chip("handicap", "⚖️", "Handicap")}{chip("bet", "🎯", "Mises")}{chip("theme", "🎲", "Thème")}</>;
+}
+
 // Avance d'un match du championnat a handicap (13/11) : celle du bareme par defaut, ou imposee (aucune, +n pour l'un).
 function MatchHandicapPick({ t, a, b, nm, onRule }: { t: TourView; a: string; b: string; nm: (id: string | null) => string; onRule: OnRule }) {
   const o = t.settings.matchHandicap[pairKey(a, b)];
@@ -712,7 +728,7 @@ function PoolsBoard({ pools, names, t, onRule }: { pools: TourPool[]; names: Tou
     if (p.status === "bye") return <><b>{who(p.a)}</b> <span className="text-ink-3">· repos</span></>;
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     const h = t.kind === "HANDICAP" && p.b && onRule && (p.status === "todo" || p.status === "disputed") ? <MatchHandicapPick t={t} a={p.a} b={p.b} nm={nm} onRule={onRule} /> : p.handicap && (p.handicap[0] || p.handicap[1]) ? <span className="text-xs text-accent-ink"> (+{p.handicap[0] || p.handicap[1]} pour {nm(p.handicap[0] ? p.a : p.b).split(" ")[0]}{p.handicapForced ? ", imposé" : ""})</span> : p.handicapForced ? <span className="text-xs text-accent-ink"> (sans avance, imposé)</span> : null;
-    return <><span className={cx(p.winner === "A" && "font-bold")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{who(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}</>;
+    return <><span className={cx(p.winner === "A" && "font-bold")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{score}</span> <span className={cx(p.winner === "B" && "font-bold")}>{who(p.b)}</span>{h} <span className="text-xs">{tagOf(p.status)}</span>{p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={editable(p) ? onRule : undefined} />}{p.b && onRule && (p.status === "todo" || p.status === "disputed") && <PairRulePick t={t} a={p.a} b={p.b} onRule={onRule} />}</>;
   };
   return (
     <>
@@ -781,7 +797,7 @@ function BracketBoard({ b, names, t, onRule }: { b: Bracket; names: TourView["na
   const line = (p: BracketPairing) => {
     const score = p.sets ? p.sets.map(([x, y]) => `${x}-${y}`).join(" ") : "–";
     if (p.status === "bye") return <span className="text-ink-3">{p.a === null && p.b === null ? "—" : <><b className="text-ink">{who(p.a ?? p.b)}</b> passe (exempt)</>}</span>;
-    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span>{p.a && p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={p.status === "todo" || p.status === "live" || p.status === "disputed" || p.status === "tie" ? onRule : undefined} />}</>;
+    return <><span className={cx(p.winner === "A" && "font-bold", p.a === undefined && "text-ink-3")}>{who(p.a)}</span> <span className="tabular-nums font-bold">{p.status === "wait" ? "" : score}</span> <span className={cx(p.winner === "B" && "font-bold", p.b === undefined && "text-ink-3")}>{nm(p.b)}</span> <span className="text-xs">{tagOf(p.status)}</span>{p.a && p.b && <MatchPoints t={t} a={p.a} b={p.b} onRule={p.status === "todo" || p.status === "live" || p.status === "disputed" || p.status === "tie" ? onRule : undefined} />}{onRule && p.a && p.b && p.status === "todo" && <PairRulePick t={t} a={p.a} b={p.b} onRule={onRule} />}</>;
   };
   return (
     <div className="space-y-3">
@@ -911,6 +927,7 @@ function TeamsBoard({ st, t, onRule }: { st: TeamsState; t: TourView; onRule?: O
         {p.status === "played" && (p.pts[0] || p.pts[1]) ? <span className="text-xs text-success-ink font-bold">{p.pts[0] ? `+${p.pts[0]}` : ""}{p.pts[0] && p.pts[1] ? " / " : ""}{p.pts[1] ? `+${p.pts[1]}` : ""}</span> : null}
         <span className="text-xs">{p.status === "played" ? "" : tagOf(p.status)}</span>
         {onRule && (p.status === "todo" || p.status === "disputed") && <MatchPoints t={t} a={p.a} b={p.b} onRule={onRule} />}
+        {onRule && p.status === "todo" && <PairRulePick t={t} a={p.a} b={p.b} onRule={onRule} />}
       </p>
     );
   };

@@ -10,7 +10,7 @@ import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, type LiveSc
 import { StrokeSheetForm } from "../../../_components/StrokeSheetForm";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
-import type { BmBets } from "@/lib/badminton-constraints";
+import { BET_LEVELS, BET_TEXT, multText, type BmBets } from "@/lib/badminton-constraints";
 import { BetBox, type BetData } from "./BetBox";
 import { StrokeScoutBoard, type StrokeResume } from "../../../_components/StrokeScoutBoard";
 
@@ -36,7 +36,7 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, handicapOn = false, strokeResume = [], strokeTaken = [] }: { bet?: BetData | null; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, betTour = false, betLesson = false, handicapOn = false, strokeResume = [], strokeTaken = [] }: { bet?: BetData | null; betTour?: boolean; betLesson?: boolean; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -59,7 +59,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
       {handicapOn && writable && <p className={ui.alertInfo}>⚖️ <b>Matchs à handicap aujourd&apos;hui</b> : le moins bien classé commence chaque set avec des points d&apos;avance (selon l&apos;écart d&apos;ELO) ; comptez-les dans le score final.</p>}
       {tour && (tour.team ? <TeamCard t={tour} team={tour.team} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} /> : <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />)}
       {/* Mise de certitude (26/11 soir) : sur mon prochain match de tournoi, sinon contre l'adversaire que je choisis. */}
-      {bet && writable && (tour && tour.opponent && tour.status === "todo" ? <BetBox key={tour.opponent.id} sessionId={sessionId} data={bet} opponent={tour.opponent} /> : <BetBox sessionId={sessionId} data={bet} roster={roster} />)}
+      {bet && writable && (tour && tour.opponent && tour.status === "todo" ? (betTour && <BetBox key={tour.opponent.id} sessionId={sessionId} data={bet} opponent={tour.opponent} />) : (betLesson && <BetBox sessionId={sessionId} data={bet} roster={roster} />))}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
 
       {toAttest.length > 0 && (
@@ -124,6 +124,10 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode 
   const [w1, setW1] = useState<string | null>(null);
   const [w2, setW2] = useState<string | null>(null);
   const witnessIds = free ? [w1, w2].filter((x): x is string => !!x) : undefined;
+  // Match libre en direct (26/11 soir : « en match libre, ils peuvent cocher le handicap et le coef s'ils veulent ») :
+  // handicap (selon l'ecart d'ELO) et mises des deux joueurs, annoncees avant le premier point.
+  const [fHandicap, setFHandicap] = useState(false);
+  const [fBets, setFBets] = useState<[number | null, number | null]>([null, null]);
   const nameOf = (id: string | null) => roster.find((p) => p.id === id)?.name.split(" ")[0] ?? "";
   const left = mode === "player" ? "Toi" : nameOf(a) || "Joueur 1";
   const right = mode === "player" ? nameOf(b) || "Adversaire" : nameOf(b) || "Joueur 2";
@@ -133,7 +137,7 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode 
   function startLive(force = false) {
     setError("");
     start(async () => {
-      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds });
+      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds, ...(free ? { options: { handicap: fHandicap, bets: fBets } } : {}) });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
       if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme, head: res.head ?? null, bets: res.bets ?? null });
@@ -170,6 +174,24 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode 
         <div className={cx(ui.segmented, "w-full grid grid-cols-2")}>
           <button type="button" onClick={() => setHow("live")} className={cx("py-2 rounded-lg text-sm font-bold", how === "live" ? ui.segOn : ui.segOff)}>🎯 En direct (+1 / −1)</button>
           <button type="button" onClick={() => setHow("final")} className={cx("py-2 rounded-lg text-sm font-bold", how === "final" ? ui.segOn : ui.segOff)}>✏️ Score final</button>
+        </div>
+      )}
+      {free && isLive && (
+        <div className="rounded-xl border border-line px-3 py-2 space-y-2 text-sm">
+          <p className="font-bold">⚙️ Options du match (facultatif)</p>
+          <label className="flex items-start gap-2"><input type="checkbox" className={cx(ui.check, "mt-0.5")} checked={fHandicap} onChange={(e) => setFHandicap(e.target.checked)} /> <span><b>⚖️ Handicap</b> : le moins bien classé commence chaque set avec des points d&apos;avance (selon l&apos;écart d&apos;ELO).</span></label>
+          <div>
+            <p><b>🎯 Mises de certitude</b> : chaque joueur mise de 0 à 5 sur sa victoire (ses points ELO gagnés ou perdus × 0,8 à 1,7) ; tu les annonces avant le premier point.</p>
+            {([0, 1] as const).map((i) => (
+              <label key={i} className="flex items-center gap-2 mt-1">
+                <span className="w-24 truncate">{(i === 0 ? nameOf(a) : nameOf(b)) || `Joueur ${i + 1}`}</span>
+                <select value={fBets[i] ?? ""} onChange={(e) => setFBets((x) => { const n = [...x] as [number | null, number | null]; n[i] = e.target.value === "" ? null : Number(e.target.value); return n; })} className={`${ui.input} w-auto`}>
+                  <option value="">pas de mise</option>
+                  {BET_LEVELS.map((v) => <option key={v} value={v}>{v} · {BET_TEXT[v]} ({multText(v)})</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
         </div>
       )}
       {!isLive && (
