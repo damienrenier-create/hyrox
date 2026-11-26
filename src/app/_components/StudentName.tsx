@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addNoteAction, hideNoteAction, studentNotesAction, unhideNoteAction } from "@/app/admin/notes/actions";
+import { setScoutUnlockAction } from "@/app/eleve/badminton-actions";
 import { NOTE_CATEGORIES, fmtDay, noteIcon, type NoteCategory, type NoteView } from "@/lib/student-notes";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -19,10 +20,22 @@ export function NotedProvider({ ids, children }: { ids: string[]; children: Reac
   return <NotedContext.Provider value={set}>{children}</NotedContext.Provider>;
 }
 
+// Scouting d'une seance de badminton (Sartay 26/11 : « le prof deverrouille pour certains eleves, pour le cours, en
+// cliquant sur leur profil ») : sur la page badminton du prof, la fenetre du nom propose aussi de deverrouiller (ou
+// reverrouiller) le scouting de cet eleve pour ce cours ; un petit 🔭 suit le nom des eleves deverrouilles.
+type ScoutUnlock = { sessionId: string; on: boolean; unlocked: ReadonlySet<string> } | null;
+const ScoutUnlockContext = createContext<ScoutUnlock>(null);
+// sessionId null : pas de scouting ici (matchs libres) ; la fenetre du nom ne le propose pas.
+export function ScoutUnlockProvider({ sessionId, on, unlocked, children }: { sessionId: string | null; on: boolean; unlocked: string[]; children: ReactNode }) {
+  const value = useMemo(() => (sessionId ? { sessionId, on, unlocked: new Set(unlocked) } : null), [sessionId, on, unlocked]);
+  return <ScoutUnlockContext.Provider value={value}>{children}</ScoutUnlockContext.Provider>;
+}
+
 type Loaded = { error: string } | { student: { id: string; name: string; className: string | null }; notes: NoteView[] };
 
 export function StudentName({ id, name, children, className }: { id: string; name: string; children?: ReactNode; className?: string }) {
   const noted = useContext(NotedContext).has(id);
+  const scoutOpen = useContext(ScoutUnlockContext)?.unlocked.has(id) ?? false;
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Loaded | null>(null);
   const [loading, start] = useTransition();
@@ -40,14 +53,17 @@ export function StudentName({ id, name, children, className }: { id: string; nam
       >
         {children ?? name}
         {noted && <span className="ml-0.5" aria-label="(a une note)" title="Vous avez une note sur cet élève">📝</span>}
+        {scoutOpen && <span className="ml-0.5" aria-label="(scouting déverrouillé)" title="Scouting déverrouillé pour ce cours">🔭</span>}
       </button>
-      {open && createPortal(<NotesDialog name={name} data={data} loading={loading} reload={load} onClose={() => setOpen(false)} />, document.body)}
+      {open && createPortal(<NotesDialog id={id} name={name} data={data} loading={loading} reload={load} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }
 
-function NotesDialog({ name, data, loading, reload, onClose }: { name: string; data: Loaded | null; loading: boolean; reload: () => void; onClose: () => void }) {
+function NotesDialog({ id, name, data, loading, reload, onClose }: { id: string; name: string; data: Loaded | null; loading: boolean; reload: () => void; onClose: () => void }) {
   const router = useRouter();
+  const scout = useContext(ScoutUnlockContext);
+  const scoutOpen = !!scout && (scout.on || scout.unlocked.has(id));
   const [category, setCategory] = useState<NoteCategory | null>(null);
   const [text, setText] = useState("");
   const [until, setUntil] = useState("");
@@ -56,12 +72,12 @@ function NotesDialog({ name, data, loading, reload, onClose }: { name: string; d
   const [pending, start] = useTransition();
   const student = data && "student" in data ? data.student : null;
   const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Brussels" });
-  function run(fn: () => Promise<{ ok: true } | { error: string }>, done?: () => void) {
+  function run(fn: () => Promise<object>, done?: () => void) {
     setError("");
     setSaved("");
     start(async () => {
-      const r = await fn();
-      if ("error" in r) { setError(r.error); return; }
+      const r = (await fn()) as { error?: string };
+      if (r.error) { setError(r.error); return; }
       done?.();
       reload();
       router.refresh();
@@ -82,6 +98,16 @@ function NotesDialog({ name, data, loading, reload, onClose }: { name: string; d
           </div>
           <button type="button" onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
         </div>
+        {scout && (
+          <div className={cx("rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2", scoutOpen ? "bg-accent-soft/60" : "bg-paper")}>
+            <span className="text-sm">🔭 Scouting, ce cours : <b>{scout.on ? "déverrouillé pour toute la classe" : scoutOpen ? "déverrouillé" : "verrouillé"}</b></span>
+            {!scout.on && (
+              <button type="button" disabled={pending} onClick={() => run(() => setScoutUnlockAction(scout.sessionId, id, !scoutOpen), () => setSaved(scoutOpen ? "Scouting reverrouillé." : "Scouting déverrouillé pour ce cours."))} className={scoutOpen ? btn.smGhost : btn.smPrimary}>
+                {scoutOpen ? "🔒 Reverrouiller" : "🔓 Déverrouiller le scouting"}
+              </button>
+            )}
+          </div>
+        )}
         {!data && <p className={ui.hint}>Chargement…</p>}
         {data && "error" in data && <p className={ui.alertWarn}>{data.error}</p>}
         {student && data && "notes" in data && (

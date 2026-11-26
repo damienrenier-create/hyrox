@@ -14,7 +14,8 @@ import { btn, cx, ui } from "@/lib/ui";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { fmtElo } from "@/lib/badminton-elo";
 import { TournamentPanel, type TourElsewhere, type TourEntrantRow, type TourView } from "./TournamentPanel";
-import { NotedProvider, StudentName } from "../../_components/StudentName";
+import { NotedProvider, ScoutUnlockProvider, StudentName } from "../../_components/StudentName";
+const NO_IDS: string[] = [];
 import type { HandicapCalibration } from "@/lib/badminton-tournament";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
@@ -71,8 +72,10 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
   return (
     <NotedProvider ids={noted}>
+    {/* Scouting verrouille par defaut (26/11) : le nom d un eleve permet de le deverrouiller pour ce cours. */}
+    <ScoutUnlockProvider sessionId={!free && scoutCfg ? sessionId : null} on={!!scoutCfg?.on} unlocked={!free && scoutCfg ? scoutCfg.unlocked : NO_IDS}>
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={scoutCfg?.on ? { court: scoutCfg.court, level: 4 } : null} onClose={() => setRefLive(null)} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={scoutCfg && (scoutCfg.on || scoutCfg.unlocked.length > 0) ? { court: scoutCfg.court, level: 4 } : null} onClose={() => setRefLive(null)} />}
       {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
       {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -124,6 +127,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
     </div>
+    </ScoutUnlockProvider>
     </NotedProvider>
   );
 }

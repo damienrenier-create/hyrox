@@ -5,7 +5,7 @@ import { activeTournament, badmintonRoster, loadMatches, loadPlayerScouting, loa
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { teamFormatText, teamMineOf, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
-import { readScoutConfig, studentLayer } from "@/lib/badminton-scout";
+import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
 import { ScoutView } from "../../../_components/ScoutView";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
@@ -163,9 +163,11 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
   // Scouting (24/11) : mes couches quand j'arbitre en direct ; les matchs que je peux observer (en direct d'abord).
+  // Verrouille par defaut (26/11) : seulement si le prof l'a deverrouille pour toute la classe ou pour moi, pendant ce cours.
   const scoutCfg = readScoutConfig(session.settings);
-  const scoutMine = scoutCfg.on ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
-  const scoutable = views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15);
+  const scoutOpen = scoutUnlocked(scoutCfg, me.id);
+  const scoutMine = scoutOpen ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
+  const scoutable = scoutOpen ? views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15) : null;
   // Analyse de MON scouting (Sartay 24/11 : « a la fin de chaque cours, l'eleve pourra, s'il a rempli son auto-eval,
   // demander a recevoir l'analyse de son scouting ») : ce cours, et tous mes cours ; seulement apres l'auto-evaluation.
   const myScout = selfEval ? await loadPlayerScouting(me.id) : null;

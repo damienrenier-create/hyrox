@@ -24,9 +24,9 @@ export type TeamCardData = {
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
 };
-// scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable : les matchs de la seance
+// scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = [] }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -69,7 +69,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
         </section>
       )}
 
-      {writable && !free && <ScoutSection matches={scoutable} onDone={() => router.refresh()} />}
+      {writable && !free && scoutable && <ScoutSection matches={scoutable} onDone={() => router.refresh()} />}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>

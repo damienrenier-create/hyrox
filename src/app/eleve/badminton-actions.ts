@@ -9,7 +9,7 @@ import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatche
 import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
-import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet } from "@/lib/badminton-scout";
+import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -402,6 +402,7 @@ export async function teamTimerAction(tournamentId: string, op: "start" | "stop"
 export async function liveRallyAction(matchId: string, raw: unknown): Promise<BmResult> {
   const x = await liveCtx(matchId);
   if ("error" in x) return x;
+  if (!x.c.staff && !scoutUnlocked(readScoutConfig(x.c.session?.settings), x.c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
   const rally = readRally(raw);
   if (!rally) return { error: "Échange illisible." };
   await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", rally);
@@ -413,6 +414,7 @@ export async function scoutStrokesAction(matchId: string, playerId: string, raw:
   if ("error" in x) return x;
   if (playerId !== x.m.playerAId && playerId !== x.m.playerBId) return { error: "Ce joueur ne joue pas ce match." };
   if (!x.c.staff && playerId === x.c.userId) return { error: "On ne remplit pas sa propre fiche : c'est un autre élève qui t'observe." };
+  if (!x.c.staff && !scoutUnlocked(readScoutConfig(x.c.session?.settings), x.c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
   if (x.st.status === "CANCELLED") return { error: "Ce match a été annulé." };
   const sheet = readStrokeSheet(raw);
   if (!sheet) return { error: "Coche au moins un coup observé." };
@@ -429,6 +431,19 @@ export async function setScoutConfigAction(sessionId: string, patch: { on?: bool
   const sc = readScoutConfig(cur);
   const next = { ...sc, ...(patch.on !== undefined ? { on: !!patch.on } : {}), ...(patch.court ? { court: readCourt(patch.court) } : {}), ...(patch.level ? { level: Math.max(1, Math.min(MAX_LAYER, Math.round(Number(patch.level)))) } : {}) };
   await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, scout: next })) });
+  done(c.session.id);
+  return { ok: true };
+}
+// Deverrouiller (ou reverrouiller) le scouting d'UN eleve pour CE cours (Sartay 26/11 : « en cliquant sur leur profil »).
+export async function setScoutUnlockAction(sessionId: string, studentId: string, unlock: boolean): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  if (!(await db.orm.public.User.where({ id: studentId, role: "STUDENT" }).first())) return { error: "Élève introuvable." };
+  const cur = (c.session.settings ?? {}) as Record<string, unknown>;
+  const sc = readScoutConfig(cur);
+  const unlocked = unlock ? [...new Set([...sc.unlocked, studentId])] : sc.unlocked.filter((id) => id !== studentId);
+  await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, scout: { ...sc, unlocked } })) });
   done(c.session.id);
   return { ok: true };
 }

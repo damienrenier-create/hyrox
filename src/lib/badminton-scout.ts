@@ -54,7 +54,13 @@ export const SCOUT_LAYERS: { level: number; name: string; hint: string }[] = [
   { level: 4, name: "🎯 + gagnant ou faute", hint: "Point gagnant, faute provoquée ou faute directe." },
 ];
 export const MAX_LAYER = 4;
-export type ScoutConfig = { on: boolean; court: CourtKind; level: number; students: Record<string, { level: number; at: number }> };
+// VERROU (Sartay 26/11 : « les scoutings doivent etre des options que le prof deverrouille ou pas au cours ; il peut
+// deverrouiller pour tout le monde, ou pour certains eleves (pour le cours) en cliquant sur leur profil ») : verrouille
+// par defaut ; `on` = deverrouille pour toute la classe pendant ce cours, `unlocked` = les eleves deverrouilles un par un
+// pour ce cours (leur nom, n'importe ou sur la page badminton du prof). Deverrouille = noter les impacts quand il arbitre
+// en direct, et « Scouter un joueur » (fiche technique). Recevoir l'analyse de son scouting ne depend pas du verrou.
+export type ScoutConfig = { on: boolean; court: CourtKind; level: number; students: Record<string, { level: number; at: number }>; unlocked: string[] };
+export const scoutUnlocked = (c: ScoutConfig, studentId: string) => c.on || c.unlocked.includes(studentId);
 export function readScoutConfig(settings: unknown): ScoutConfig {
   const o = ((settings as { scout?: unknown } | null)?.scout ?? {}) as Record<string, unknown>;
   const lvl = (v: unknown) => (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= MAX_LAYER ? Number(v) : null);
@@ -65,7 +71,8 @@ export function readScoutConfig(settings: unknown): ScoutConfig {
     const l = x ? (Number(x.level) === 0 ? 0 : lvl(x.level)) : null;
     return l !== null && Number(x!.at) > 0 ? [[id, { level: l, at: Number(x!.at) }]] : [];
   }));
-  return { on: o.on === true, court: readCourt(o.court), level: lvl(o.level) ?? 1, students };
+  const unlocked = Array.isArray(o.unlocked) ? [...new Set(o.unlocked.filter((x): x is string => typeof x === "string"))] : [];
+  return { on: o.on === true, court: readCourt(o.court), level: lvl(o.level) ?? 1, students, unlocked };
 }
 // Couches d'un eleve : le dernier reglage du prof pour lui (toutes seances), sinon celui de la seance.
 export function studentLayer(studentId: string, session: ScoutConfig, all: ScoutConfig[]): number {
