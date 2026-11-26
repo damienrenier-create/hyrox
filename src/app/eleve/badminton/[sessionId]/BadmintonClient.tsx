@@ -23,10 +23,11 @@ export type TeamCardData = {
   oppTeam: { letter: string; coach: string } | null;
   // Ce qui se joue dans mon prochain match (26/11) : points rapportes selon le score, chances, ce qu'il faut pour passer devant.
   sub: boolean; // remplacant d'un joueur parti d'une autre equipe (26/11)
+  scoring: "ELO" | "POINTS"; // comment l'equipe marque (26/11)
   tourId: string;
   // « Pret » avant un match au temps (26/11) : moi, et combien sur combien.
   ready: { me: boolean; count: number; total: number } | null;
-  stakes: { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; need: string | null } | null;
+  stakes: { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; need: string | null; scoring: "ELO" | "POINTS"; coef: number; target: number } | null;
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
 };
@@ -356,7 +357,15 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
           comprendre ce qui se joue et le score a atteindre pour sauver l'equipe ». */}
       <div className="rounded-xl bg-paper px-3 py-2 text-sm space-y-1">
         <p className="font-bold">🧮 Ce qui se joue{team.stakes ? " dans ton match" : ""}</p>
-        {team.stakes && (
+        {team.stakes && team.stakes.scoring === "POINTS" && (
+          <>
+            <p>Tes chances de gagner, d&apos;après l&apos;ELO : <b>{team.stakes.chance} %</b>. Chaque point que tu marques vaut <b>×{String(team.stakes.coef).replace(".", ",")}</b> pour ton équipe.</p>
+            <p>✅ Si tu gagnes {team.stakes.target || 11}-{Math.max(0, (team.stakes.target || 11) - 3)} : <b>+{team.stakes.win[0]}</b> pour ton équipe, +{team.stakes.win[1]} pour la sienne.</p>
+            <p>❌ Si tu perds {Math.max(0, (team.stakes.target || 11) - 3)}-{team.stakes.target || 11} : <b>+{team.stakes.lose[0]}</b> quand même pour ton équipe, +{team.stakes.lose[1]} pour la sienne.</p>
+            {team.stakes.need && <p className="font-bold text-accent-ink">🎯 {team.stakes.need}</p>}
+          </>
+        )}
+        {team.stakes && team.stakes.scoring !== "POINTS" && (
           <>
             <p>Tes chances de gagner, d&apos;après l&apos;ELO : <b>{team.stakes.chance} %</b>.</p>
             <p>✅ Si tu gagnes : <b>+{team.stakes.win[0]}</b> pour ton équipe{team.stakes.win[1] > team.stakes.win[0] ? <> (score serré) jusqu&apos;à <b>+{team.stakes.win[1]}</b> (16 points d&apos;écart ou plus)</> : null}.</p>
@@ -365,7 +374,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
             {team.stakes.need && <p className="font-bold text-accent-ink">🎯 {team.stakes.need}</p>}
           </>
         )}
-        <p className={ui.hint}>Comment ça marche : chaque victoire rapporte à l&apos;équipe les points ELO gagnés par le vainqueur. Battre un joueur mieux classé rapporte beaucoup, battre un joueur moins bien classé peu ; plus l&apos;écart au score est grand, plus ça rapporte (jusqu&apos;à ×1,5 à 16 points d&apos;écart). Une défaite ne rapporte rien et n&apos;enlève rien. L&apos;équipe qui a le plus de points gagne la rencontre.</p>
+        {team.stakes?.scoring === "POINTS" || team.scoring === "POINTS" ? <p className={ui.hint}>Comment ça marche : chaque point que tu marques rapporte à ton équipe, même si tu perds. Il est multiplié par un coefficient qui dépend de l&apos;écart d&apos;ELO : ×1 à ELO égal, plus si ton adversaire est plus fort, moins s&apos;il est plus faible. Une victoire ajoute un bonus de 10 (multiplié de la même façon). Un exploit contre plus fort rapporte gros, même en perdant de peu. L&apos;équipe qui a le plus de points gagne la rencontre.</p> : <p className={ui.hint}>Comment ça marche : chaque victoire rapporte à l&apos;équipe les points ELO gagnés par le vainqueur. Battre un joueur mieux classé rapporte beaucoup, battre un joueur moins bien classé peu ; plus l&apos;écart au score est grand, plus ça rapporte (jusqu&apos;à ×1,5 à 16 points d&apos;écart). Une défaite ne rapporte rien et n&apos;enlève rien. L&apos;équipe qui a le plus de points gagne la rencontre.</p>}
       </div>
     </section>
   );

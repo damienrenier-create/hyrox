@@ -349,7 +349,8 @@ async function createTeamTournament(c: Ctx, sessionId: string, ids: string[], in
     const wanted = input.coaches?.[i];
     return [letter, wanted && g.includes(wanted) ? wanted : coachOf({ ...draft, coaches: {} }, letter, players.filter((p) => p.pool === letter))];
   }));
-  const team = readTeamSettings({ ...raw, count: groups.length, coaches });
+  // Points d'equipe (26/11) : les nouveaux tournois comptent les points marques (voir TeamScoring).
+  const team = readTeamSettings({ ...raw, count: groups.length, coaches, scoring: "POINTS" });
   const settings = readTourSettings({ sets: input.sets, points: input.points, deuce: input.deuce, cap: input.cap, team }, "TEAMS");
   const day = new Date().toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Brussels" });
   const t = await db.transaction(async (tx) => {

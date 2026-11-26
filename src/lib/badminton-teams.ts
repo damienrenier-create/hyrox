@@ -34,7 +34,7 @@
 import { isOfficial, matchState, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { K_NEW_GAMES, expectedScore, kFactor, marginFactor } from "@/lib/badminton-elo";
-import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, TEAM_WIN_BONUS, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
@@ -147,6 +147,7 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
   const rating = new Map(players.map((p) => [p.studentId, p.elo]));
   const games = new Map(players.map((p) => [p.studentId, s.launchGames[p.studentId] ?? K_NEW_GAMES]));
   const draw = s.team?.draw ?? "HALF";
+  const scoring = s.team?.scoring ?? "ELO";
   const out = new Map<string, MatchPts>();
   for (const m of [...matches].sort((x, y) => x.createdAt - y.createdAt)) {
     const a = m.playerAId, b = m.playerBId;
@@ -160,7 +161,12 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
     const mg = themed ? 1 : marginFactor(st.result);
     const sa = st.result.winner === "A" ? 1 : st.result.winner === "DRAW" ? 0.5 : 0;
     let pa = 0, pb = 0;
-    if (sa === 1) pa = ka * mg * (1 - ea);
+    if (scoring === "POINTS") {
+      // Chaque point marque compte, la victoire ajoute un bonus ; le tout x 2 x (1 - chances) (x1 a ELO egal).
+      const bonusA = sa === 1 ? TEAM_WIN_BONUS : sa === 0.5 ? TEAM_WIN_BONUS / 2 : 0, bonusB = sa === 0 ? TEAM_WIN_BONUS : sa === 0.5 ? TEAM_WIN_BONUS / 2 : 0;
+      pa = (st.result.points[0] + bonusA) * 2 * (1 - ea);
+      pb = (st.result.points[1] + bonusB) * 2 * (1 - eb);
+    } else if (sa === 1) pa = ka * mg * (1 - ea);
     else if (sa === 0) pb = kb * mg * (1 - eb);
     else if (draw === "HALF") { pa = (ka * (1 - ea)) / 2; pb = (kb * (1 - eb)) / 2; }
     else { pa = Math.max(0, ka * (0.5 - ea)); pb = Math.max(0, kb * (0.5 - eb)); }
@@ -178,7 +184,8 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
 // a atteindre pour sauver l'equipe ») : avec l'ELO du moment dans le tournoi et le vrai K de chacun (meme calcul que
 // teamMatchPoints). win = ce que je rapporte si je gagne [score serre, 16 points d'ecart ou plus] ; lose = ce que mon
 // adversaire rapporte a son equipe s'il gagne ; draw = au temps, ce que chacun rapporte sur une egalite.
-export type TeamStakes = { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; base: number; themed: boolean };
+// POINTS (26/11) : coef = mon coefficient, coefOpp = celui de l'adversaire ; target = points d'un set (0 = au temps).
+export type TeamStakes = { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; base: number; themed: boolean; scoring: "ELO" | "POINTS"; coef: number; coefOpp: number; target: number };
 export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSettings, me: string, opp: string, themed: boolean): TeamStakes {
   const rating = new Map(players.map((p) => [p.studentId, p.elo]));
   const games = new Map(players.map((p) => [p.studentId, s.launchGames[p.studentId] ?? K_NEW_GAMES]));
@@ -203,7 +210,23 @@ export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSet
   const top = themed ? 1 : 1.5; // ecart au score : x1 (serre) a x1,5 (16 points d'ecart ou plus) ; theme : sans ecart
   const base = km * (1 - em);
   const draw = s.team?.mode === "TIME" ? ((s.team?.draw ?? "HALF") === "HALF" ? [Math.round(base / 2), Math.round((ko * em) / 2)] as [number, number] : [Math.round(Math.max(0, km * (0.5 - em))), Math.round(Math.max(0, ko * (em - 0.5)))] as [number, number]) : null;
-  return { win: [Math.round(base), Math.round(base * top)], lose: [Math.round(ko * em), Math.round(ko * em * top)], draw, chance: em, base, themed };
+  const scoring = s.team?.scoring ?? "ELO";
+  const coef = 2 * (1 - em), coefOpp = 2 * em;
+  const target = s.team?.mode === "TIME" ? 0 : s.points;
+  if (scoring === "POINTS") {
+    // win = [moi si je gagne target-(target-3), lui], lose = [moi si je perds (target-3)-target, lui] (exemples)
+    const t = target || 11, near = Math.max(0, t - 3);
+    const r = (n: number) => Math.round(n);
+    return { win: [r((t + TEAM_WIN_BONUS) * coef), r(near * coefOpp)], lose: [r(near * coef), r((t + TEAM_WIN_BONUS) * coefOpp)], draw: s.team?.mode === "TIME" ? [r((TEAM_WIN_BONUS / 2) * coef), r((TEAM_WIN_BONUS / 2) * coefOpp)] : null, chance: em, base, themed, scoring, coef, coefOpp, target };
+  }
+  return { win: [Math.round(base), Math.round(base * top)], lose: [Math.round(ko * em), Math.round(ko * em * top)], draw, chance: em, base, themed, scoring, coef, coefOpp, target };
+}
+// POINTS (26/11) : le score adverse le plus haut avec lequel une victoire (target points) fait gagner au moins `need` points
+// d'avance a mon equipe dans la rencontre (null : impossible, meme a target-0).
+export function scoreFor(st: TeamStakes, need: number): number | null {
+  if (!st.target) return null;
+  for (let x = st.target - 1; x >= 0; x--) if (Math.round((st.target + TEAM_WIN_BONUS) * st.coef) - Math.round(x * st.coefOpp) >= need) return x;
+  return null;
 }
 // Ecart minimal au score pour rapporter au moins `need` points (null : impossible, meme a 16 points d'ecart).
 export function marginFor(st: TeamStakes, need: number): number | null {

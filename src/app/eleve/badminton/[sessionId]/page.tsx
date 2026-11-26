@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
-import { marginFor, readyState, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
+import { marginFor, readyState, scoreFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
 import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
 import { scoutQueue } from "@/lib/badminton-scout-queue";
@@ -85,8 +85,12 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
           const ours = mine.side === 0 ? rc.pts[0] : rc.pts[1], theirs = mine.side === 0 ? rc.pts[1] : rc.pts[0];
           const others = rc.matches.filter((x) => x !== p && x.status !== "played" && x.status !== "gone").length;
           const gap = theirs - ours;
-          if (gap < 0) need = `Ton équipe mène de ${-gap} point${-gap > 1 ? "s" : ""} dans la rencontre : une victoire creuse l'écart.`;
-          else {
+          if (gap < 0) need = `Ton équipe mène de ${-gap} point${-gap > 1 ? "s" : ""} dans la rencontre : ${stk.scoring === "POINTS" ? "chaque point que tu marques creuse l'écart, même en perdant." : "une victoire creuse l'écart."}`;
+          else if (stk.scoring === "POINTS") {
+            const lead = gap === 0 ? "Les deux équipes sont à égalité" : `Ton équipe est menée de ${gap} point${gap > 1 ? "s" : ""}`;
+            const x = scoreFor(stk, gap + 1);
+            need = !stk.target ? `${lead} : chaque point que tu marques compte (×${stk.coef.toFixed(1).replace(".", ",")}), et la victoire ajoute un bonus.` : x !== null ? `${lead} : gagne ${stk.target}-${x} ou mieux pour la faire passer devant ; et même si tu perds, chaque point marqué compte.` : others ? `${lead} : même une large victoire ne suffit pas seule, il faudra aussi tes coéquipiers (${others} match${others > 1 ? "s" : ""} restant${others > 1 ? "s" : ""}) ; chaque point compte.` : `${lead} : même une large victoire ne suffira pas à passer devant, mais chaque point marqué compte${st.format === "BRACKET" ? "" : " au classement"}.`;
+          } else {
             const m = marginFor(stk, gap + 1);
             const lead = gap === 0 ? "Les deux équipes sont à égalité" : `Ton équipe est menée de ${gap} point${gap > 1 ? "s" : ""}`;
             need = m === 0 ? `${lead} : une victoire suffit pour la faire passer devant.` : m !== null ? `${lead} : gagne avec au moins ${m} point${m > 1 ? "s" : ""} d'écart pour la faire passer devant.` : others ? `${lead} : même une large victoire ne suffit pas seule, il faudra aussi des victoires de tes coéquipiers (${others} match${others > 1 ? "s" : ""} restant${others > 1 ? "s" : ""}).` : `${lead} : même une large victoire ne suffira pas à passer devant${st.format === "BRACKET" ? "" : ", mais chaque point compte au classement"}.`;
@@ -117,10 +121,11 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             roundLabel: mine.round ? `${mine.round.label}${mine.rencontre?.stage ? ` · ${mine.rencontre.stage}` : ""}` : "",
             oppTeam: oppLetter ? { letter: oppLetter, coach: coachName(oppLetter) } : null,
             sub: !!mine.sub,
+            scoring: ts.scoring,
             tourId: tour.id,
             // « Pret » (26/11) : seulement si je joue dans la prochaine vague au temps et que son chrono n'est pas lance.
             ready: (() => { const rs = readyState(st, ts); return rs && rs.expected.includes(me.id) ? { me: rs.ready.includes(me.id), count: rs.ready.length, total: rs.expected.length } : null; })(),
-            stakes: stk ? { win: stk.win, lose: stk.lose, draw: stk.draw, chance: Math.round(stk.chance * 100), need } : null,
+            stakes: stk ? { win: stk.win, lose: stk.lose, draw: stk.draw, chance: Math.round(stk.chance * 100), need, scoring: stk.scoring, coef: Math.round(stk.coef * 10) / 10, target: stk.target } : null,
             current: rc ? {
               pts: mine.side === 0 ? rc.pts : [rc.pts[1], rc.pts[0]],
               status: rc.status,
