@@ -26,7 +26,7 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -70,7 +70,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
         </section>
       )}
 
-      {writable && !free && scoutable && <ScoutSection matches={scoutable} court={!!scout} onReferee={() => { setPreset(null); setOpenAs("referee"); setOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} onDone={() => router.refresh()} />}
+      {writable && !free && scoutable && <ScoutSection matches={scoutable} picks={scoutPicks} sessionId={sessionId} onLive={(x) => { setLive(x); window.scrollTo({ top: 0 }); }} court={!!scout} onReferee={() => { setPreset(null); setOpenAs("referee"); setOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} onDone={() => router.refresh()} />}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
@@ -323,7 +323,21 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
 
 // Scouting (24/11) : choisir un match de la seance (en direct d'abord), puis le joueur a observer ; la fiche technique
 // (6 coups, 4 criteres chacun) s'ouvre ici. Un eleve ne remplit jamais sa propre fiche.
-function ScoutSection({ matches, court, onReferee, onDone }: { matches: BmView[]; court: boolean; onReferee: () => void; onDone: () => void }) {
+// Pendant un tournoi, les prochains matchs a scouter (pas encore commences), donnes par le serveur (badminton-scout-queue.ts).
+export type ScoutPickView = { a: { id: string; name: string }; b: { id: string; name: string }; label: string };
+function ScoutSection({ matches, picks, sessionId, onLive, court, onReferee, onDone }: { matches: BmView[]; picks: ScoutPickView[] | null; sessionId: string; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null }) => void; court: boolean; onReferee: () => void; onDone: () => void }) {
+  const [starting, startScout] = useTransition();
+  const [scoutErr, setScoutErr] = useState("");
+  // Ouvre en direct le match choisi (le scout tient le score en touchant les impacts).
+  const go = (p: ScoutPickView) => {
+    setScoutErr("");
+    startScout(async () => {
+      const res = await startLiveMatchAction(sessionId, { playerAId: p.a.id, playerBId: p.b.id });
+      if ("error" in res) { setScoutErr(res.error); onDone(); return; }
+      if ("duplicate" in res) { setScoutErr(`${res.duplicate.text} Prends le match suivant.`); onDone(); return; }
+      if (res.matchId) onLive({ id: res.matchId, aName: p.a.name, bName: p.b.name, sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme });
+    });
+  };
   const [pick, setPick] = useState<{ matchId: string; player: { id: string; name: string } } | null>(null);
   const [sent, setSent] = useState("");
   if (pick) return <StrokeSheetForm key={`${pick.matchId}|${pick.player.id}`} matchId={pick.matchId} player={pick.player} onClose={() => setPick(null)} onDone={() => { setSent(`Fiche de ${pick.player.name} envoyée, merci !`); setPick(null); onDone(); }} />;
@@ -335,7 +349,19 @@ function ScoutSection({ matches, court, onReferee, onDone }: { matches: BmView[]
       <div className="mt-2 space-y-2">
         {sent && <p className={ui.alertOk}>✅ {sent}</p>}
         {/* Sartay 26/11 : « le scouting le plus important, c'est d'abord ou tombent les volants » : le terrain est sur le tableau de l'arbitre en direct. */}
-        {court && (
+        {court && picks && (
+          <div className="rounded-xl bg-accent-soft/40 p-2 space-y-1.5">
+            {picks.length === 0 ? <p className={ui.muted}>📍 Aucun match du tournoi n&apos;attend de commencer pour l&apos;instant : reviens dans un moment.</p> : (
+              <>
+                <button type="button" disabled={starting} onClick={() => go(picks[0])} className={cx(btn.lgPrimary, "w-full")}>📍 Scouter le prochain match : {picks[0].a.name.split(" ")[0]} – {picks[0].b.name.split(" ")[0]}</button>
+                <p className={ui.hint}>{picks[0].label} · pas encore commencé. Tu touches où tombe chaque volant : le score se compte tout seul.</p>
+                {picks.length > 1 && <p className={ui.hint}>Ou : {picks.slice(1).map((p) => <button key={`${p.a.id}|${p.b.id}`} type="button" disabled={starting} onClick={() => go(p)} className="underline mr-2">{p.a.name.split(" ")[0]} – {p.b.name.split(" ")[0]}</button>)}</p>}
+              </>
+            )}
+            {scoutErr && <p className={ui.alertErr}>{scoutErr}</p>}
+          </div>
+        )}
+        {court && !picks && (
           <div className="rounded-xl bg-accent-soft/40 p-2 space-y-1.5">
             <button type="button" onClick={onReferee} className={cx(btn.lgPrimary, "w-full")}>📍 Noter où tombent les volants</button>
             <p className={ui.hint}>Tu arbitres un match en direct : le terrain s&apos;affiche sous le score. À la fin de chaque échange, touche l&apos;endroit où le volant est tombé.</p>

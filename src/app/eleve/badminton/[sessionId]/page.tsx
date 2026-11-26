@@ -6,6 +6,7 @@ import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, p
 import { teamFormatText, teamMineOf, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
 import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
+import { scoutQueue } from "@/lib/badminton-scout-queue";
 import { ScoutView } from "../../../_components/ScoutView";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
@@ -167,6 +168,10 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const scoutCfg = readScoutConfig(session.settings);
   const scoutOpen = scoutUnlocked(scoutCfg, me.id);
   const scoutMine = scoutOpen ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
+  // Pendant un tournoi, le scout recoit le PROCHAIN match pas encore commence (26/11, voir badminton-scout-queue.ts).
+  const scoutNext = scoutOpen && tourNow ? scoutQueue(tourNow, tm, me.id).slice(0, 4) : null;
+  const scoutNames = scoutNext?.length ? await peopleOf([], scoutNext.flatMap((p) => [p.a, p.b])) : new Map();
+  const scoutPicks = scoutNext ? scoutNext.map((p) => ({ a: { id: p.a, name: scoutNames.get(p.a)?.name ?? "?" }, b: { id: p.b, name: scoutNames.get(p.b)?.name ?? "?" }, label: p.label })) : null;
   const scoutable = scoutOpen ? views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15) : null;
   // Analyse de MON scouting (Sartay 24/11 : « a la fin de chaque cours, l'eleve pourra, s'il a rempli son auto-eval,
   // demander a recevoir l'analyse de son scouting ») : ce cours, et tous mes cours ; seulement apres l'auto-evaluation.
@@ -195,6 +200,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         theme={sessionTheme(session.settings)}
         scout={scoutMine}
         scoutable={scoutable}
+        scoutPicks={scoutPicks}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>
