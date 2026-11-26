@@ -61,7 +61,11 @@ export type TeamFormat = "LEAGUE" | "BRACKET";
 export type TeamMode = "POINTS" | "TIME";
 export type TeamDraw = "HALF" | "ELO";
 export type TeamTimer = { round: number; wave: number; startedAt: number; endsAt: number; stoppedAt: number | null };
-export type TeamSettings = { count: number; format: TeamFormat; groups: number; mode: TeamMode; minutes: number; draw: TeamDraw; coaches: Record<string, string>; timer: TeamTimer | null; roundStarts: Record<string, number>; lateAt: Record<string, number>; away: Record<string, [number, number | null][]> };
+// subs (26/11, Sartay : « un joueur d'une autre poule, du meme niveau, peut-il remplacer un joueur parti ? ») : a partir de
+// la ronde `round`, `in` joue a la place de `out` (parti) dans les rencontres de l'equipe de `out` ; ses points vont a cette
+// equipe. La derniere entree pour un meme `out` compte (in vide = plus de remplacant). Voir teamsOf (badminton-teams.ts).
+export type TeamSub = { out: string; in: string | null; round: number; at: number };
+export type TeamSettings = { count: number; format: TeamFormat; groups: number; mode: TeamMode; minutes: number; draw: TeamDraw; coaches: Record<string, string>; timer: TeamTimer | null; roundStarts: Record<string, number>; lateAt: Record<string, number>; away: Record<string, [number, number | null][]>; subs: TeamSub[] };
 export const TEAM_COUNTS = [2, 3, 4, 5, 6, 8] as const;
 export const TEAM_GROUPS = [1, 2, 3, 4] as const;
 export const TEAM_MINUTES = [3, 4, 5, 6, 7, 8, 10, 12, 15] as const;
@@ -77,7 +81,11 @@ export function readTeamSettings(raw: unknown): TeamSettings {
   const timer = tm && Number(tm.round) >= 1 && Number(tm.endsAt) > 0 ? { round: Number(tm.round), wave: Number(tm.wave) === 2 ? 2 : 1, startedAt: Number(tm.startedAt) || 0, endsAt: Number(tm.endsAt), stoppedAt: Number(tm.stoppedAt) > 0 ? Number(tm.stoppedAt) : null } : null;
   const aw = o.away && typeof o.away === "object" ? (o.away as Record<string, unknown>) : {};
   const away = Object.fromEntries(Object.entries(aw).map(([k, v]) => [k, (Array.isArray(v) ? v : []).filter((x): x is unknown[] => Array.isArray(x) && Number(x[0]) > 0).map((x) => [Number(x[0]), Number(x[1]) > 0 ? Number(x[1]) : null] as [number, number | null])]).filter(([, v]) => (v as unknown[]).length));
-  return { count, format: o.format === "BRACKET" ? "BRACKET" : "LEAGUE", groups, mode: o.mode === "TIME" ? "TIME" : "POINTS", minutes, draw: o.draw === "ELO" ? "ELO" : "HALF", coaches, timer, roundStarts: numMap(o.roundStarts), lateAt: numMap(o.lateAt), away };
+  const subs = (Array.isArray(o.subs) ? o.subs : []).flatMap((x): TeamSub[] => {
+    const r = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+    return r && typeof r.out === "string" && Number(r.round) >= 1 ? [{ out: r.out, in: typeof r.in === "string" && r.in ? r.in : null, round: Math.round(Number(r.round)), at: Number(r.at) || 0 }] : [];
+  });
+  return { count, format: o.format === "BRACKET" ? "BRACKET" : "LEAGUE", groups, mode: o.mode === "TIME" ? "TIME" : "POINTS", minutes, draw: o.draw === "ELO" ? "ELO" : "HALF", coaches, timer, roundStarts: numMap(o.roundStarts), lateAt: numMap(o.lateAt), away, subs };
 }
 // Retardataires d'un tournoi de poules (settings.late : leurs identifiants).
 // Joueurs partis avant la fin du tournoi (settings.gone, 12/11 : « il part seulement avant la fin du tournoi ») : leurs

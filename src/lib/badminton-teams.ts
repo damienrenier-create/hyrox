@@ -34,7 +34,7 @@
 import { isOfficial, matchState, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { K_NEW_GAMES, expectedScore, kFactor, marginFactor } from "@/lib/badminton-elo";
-import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, type TeamSettings, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
@@ -265,6 +265,25 @@ export function teamsOf(players: TourPlayer[], matches: BmMatch[], s: TourSettin
   });
   const initial = (l: string) => members(l).filter((p) => !ts.lateAt[p.studentId]);
   const avg0 = (l: string) => mean(initial(l).map((p) => p.elo));
+  // Remplacants (26/11) : a partir de sa ronde, le remplacant prend la place du joueur parti dans les rencontres de son
+  // equipe (meme ELO de depart, donc meme adversaire) ; ses points vont a cette equipe.
+  const subFor = (out: string, round: number): string | null => {
+    const list = ts.subs.filter((x) => x.out === out && x.round <= round).sort((p, q) => p.at - q.at);
+    return list.length ? list[list.length - 1].in : null;
+  };
+  const subsOf = (l: string, round: number, busy: Set<string>) => members(l).flatMap((p) => {
+    if (!isAwayNow(p.studentId)) return [];
+    const by = subFor(p.studentId, round);
+    return by && !busy.has(by) ? [{ out: p, by }] : [];
+  });
+  const withSubs = (l: string, xs: TourPlayer[], subs: { out: TourPlayer; by: string }[]): TourPlayer[] => {
+    let list = xs;
+    for (const { out, by } of subs) {
+      const virt = { ...out, studentId: by, pool: l, gone: false };
+      list = list.some((q) => q.studentId === out.studentId) ? list.map((q) => (q.studentId === out.studentId ? virt : q)) : [...list, virt];
+    }
+    return list;
+  };
   const pointsOf = teamMatchPoints(players, matches, s);
   const live = matches.filter((m) => matchState(m).status !== "CANCELLED");
 
@@ -272,12 +291,14 @@ export function teamsOf(players: TourPlayer[], matches: BmMatch[], s: TourSettin
     const key = `${round}:${x ?? "?"}-${y ?? "?"}`;
     if (x === undefined || y === undefined) return { key, round, x, y, stage, matches: [], pts: [0, 0], wins: [0, 0], status: "wait", winner: null, begun: null };
     if (x === null || y === null) return { key, round, x, y, stage, matches: [], pts: [0, 0], wins: [0, 0], status: "bye", winner: x === null ? (y === null ? null : "Y") : "X", begun: null };
-    const xi = new Set(members(x).map((p) => p.studentId)), yi = new Set(members(y).map((p) => p.studentId));
+    const busy = new Set([...members(x), ...members(y)].map((p) => p.studentId)); // un remplacant n'est jamais de ces deux equipes
+    const sx = subsOf(x, round, busy), sy = subsOf(y, round, busy);
+    const xi = new Set([...members(x).map((p) => p.studentId), ...sx.map((z) => z.by)]), yi = new Set([...members(y).map((p) => p.studentId), ...sy.map((z) => z.by)]);
     const times = live.filter((m) => (xi.has(m.playerAId) && yi.has(m.playerBId)) || (yi.has(m.playerAId) && xi.has(m.playerBId))).map((m) => m.createdAt);
     const start = ts.roundStarts[String(round)];
     if (start) times.push(start);
     const begun = times.length ? Math.min(...times) : null;
-    const xs = membersAt(x, begun), ys = membersAt(y, begun);
+    const xs = withSubs(x, membersAt(x, begun), sx), ys = withSubs(y, membersAt(y, begun), sy);
     const list: TeamPairing[] = pairUp(xs, ys).map(({ a, b, wave }) => {
       const raw = pairingOf(a, b, matches);
       const status: PairingStatus = (isAwayNow(a) || isAwayNow(b)) && (raw.status === "todo" || raw.status === "disputed") ? "gone" : raw.status;
@@ -407,10 +428,19 @@ export function pendingTeamPairing(st: TeamsState, a: string, b: string): boolea
 }
 
 // Ce que voit un joueur : son equipe, son prochain match (ou le match en cours), la rencontre et la ronde.
-export type TeamMine = { team: TeamRow; round: TeamRound | null; rencontre: Rencontre | null; pairing: TeamPairing | null; side: 0 | 1; waiting: boolean; resting: boolean; finished: boolean };
+export type TeamMine = { team: TeamRow; round: TeamRound | null; rencontre: Rencontre | null; pairing: TeamPairing | null; side: 0 | 1; waiting: boolean; resting: boolean; finished: boolean; sub?: boolean };
 export function teamMineOf(st: TeamsState, studentId: string): TeamMine | null {
   const team = st.teams.find((t) => t.members.some((m) => m.id === studentId));
   if (!team) return null;
+  // Remplacant (26/11) : un match a jouer pour une AUTRE equipe passe d'abord (il a deja joue le sien dans cette ronde).
+  for (const r of st.rounds) for (const x of r.rencontres) {
+    if (x.x === team.letter || x.y === team.letter || (x.status !== "todo" && x.status !== "live")) continue;
+    const p = x.matches.find((m) => (m.a === studentId || m.b === studentId) && !settled(m));
+    if (!p) continue;
+    const side: 0 | 1 = p.a === studentId ? 0 : 1;
+    const host = st.teams.find((t) => t.letter === (side === 0 ? x.x : x.y));
+    if (host) return { team: host, round: r, rencontre: x, pairing: p, side, waiting: false, resting: false, finished: false, sub: true };
+  }
   for (const r of st.rounds) for (const x of r.rencontres) {
     if (x.x !== team.letter && x.y !== team.letter) continue;
     const side: 0 | 1 = x.x === team.letter ? 0 : 1;
@@ -438,3 +468,39 @@ export const teamFormatText = (s: TourSettings, teams: number) => {
   const play = ts.mode === "TIME" ? `matchs de ${ts.minutes} min au chrono` : `${s.sets === 1 ? "1 set" : s.sets === 2 ? "2 sets" : "2 sets gagnants"} de ${s.points} points${s.deuce ? ", 2 points d'écart" : ""}`;
   return `${teams} équipes · ${fmt} · ${play}`;
 };
+
+// ===== Remplacant d'un joueur parti (Sartay 26/11 : « un joueur d'une autre poule, du meme niveau, peut-il le remplacer ?
+// il faut quelqu'un qui n'est pas dans la meme partie du tableau, et qui a deja joue son match, pour ne pas l'attendre ») =====
+// round : la ronde a partir de laquelle il remplace (la 1re ronde de l'equipe pas encore finie) ; candidats : ni de cette
+// equipe ni de son adversaire, present, dans une autre partie du tableau (places possibles qui ne se croisent pas) ou une
+// autre poule d'equipes, pas deja remplacant ; ceux qui ont deja joue leur match de la ronde d'abord, puis l'ELO le plus proche.
+export type SubCandidate = { id: string; team: string; elo: number; played: boolean };
+export function subCandidates(st: TeamsState, players: TourPlayer[], subs: TeamSub[], out: string): { round: number | null; current: string | null; list: SubCandidate[] } {
+  const me = players.find((p) => p.studentId === out);
+  if (!me) return { round: null, current: null, list: [] };
+  const l = me.pool;
+  const host = st.teams.find((t) => t.letter === l);
+  let round: number | null = null, opp: string | null | undefined = null;
+  for (const r of st.rounds) {
+    const x = r.rencontres.find((y) => (y.x === l || y.y === l) && y.status !== "done" && y.status !== "bye");
+    if (x) { round = r.n; opp = x.x === l ? x.y : x.x; break; }
+  }
+  const mine = [...subs].filter((x) => x.out === out).sort((p, q) => p.at - q.at);
+  const current = mine.length ? mine[mine.length - 1].in : null;
+  if (round === null || !host) return { round, current, list: [] };
+  const taken = new Set(subs.filter((x) => x.out !== out).map((x) => x.in).filter((x): x is string => !!x));
+  const rr = st.rounds.find((r) => r.n === round);
+  const pendingIn = (id: string) => (rr?.rencontres ?? []).some((x) => x.matches.some((m) => (m.a === id || m.b === id) && m.status !== "played" && m.status !== "gone"));
+  // Jamais quelqu'un qui a deja joue contre un joueur de l'equipe adverse : leur ancien match serait repris comme s'il etait
+  // celui de la rencontre (un meme duel ne se joue qu'une fois dans le tournoi).
+  const oppIds = new Set(st.teams.find((t) => t.letter === opp)?.members.map((m) => m.id) ?? []);
+  const met = new Set(st.rounds.flatMap((r) => r.rencontres.flatMap((x) => x.matches.filter((m) => m.status !== "todo" && m.status !== "gone").flatMap((m) => (oppIds.has(m.a) ? [m.b] : oppIds.has(m.b) ? [m.a] : [])))));
+  const list: SubCandidate[] = [];
+  for (const t of st.teams) {
+    if (t.letter === l || t.letter === opp) continue;
+    if (st.format === "BRACKET" ? !(t.hi < host.lo || t.lo > host.hi) : st.groups > 1 && t.group === host.group) continue;
+    for (const m of t.members) if (!m.away && !taken.has(m.id) && !met.has(m.id)) list.push({ id: m.id, team: t.letter, elo: m.elo, played: !pendingIn(m.id) });
+  }
+  list.sort((p, q) => Number(q.played) - Number(p.played) || Math.abs(p.elo - me.elo) - Math.abs(q.elo - me.elo));
+  return { round, current, list };
+}

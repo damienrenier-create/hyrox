@@ -7,7 +7,7 @@ import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
-import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, teamPlayers, teamsOf } from "@/lib/badminton-teams";
+import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
@@ -392,6 +392,30 @@ export async function teamTimerAction(tournamentId: string, op: "start" | "stop"
     if (!starts[String(round)]) starts[String(round)] = now; // la ronde commence au 1er coup de sifflet
     team.roundStarts = starts;
   }
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
+  done(row.sessionId);
+  return { ok: true };
+}
+
+// Remplacant d'un joueur parti (26/11, regles dans subCandidates, badminton-teams.ts) : il joue a sa place a partir de la
+// prochaine ronde de son equipe pas encore finie ; ses points vont a cette equipe. inId null = plus de remplacant.
+export async function setTeamSubAction(tournamentId: string, outId: string, inId: string | null): Promise<BmResult> {
+  const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
+  if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
+  const c = await context(row.sessionId);
+  if ("error" in c) return c;
+  if (!c.staff) return { error: "Réservé aux profs." };
+  const t = (await loadTournaments(row.sessionId)).find((x) => x.id === row.id)!;
+  if (t.kind !== "TEAMS" || !t.settings.team) return { error: "Ce tournoi n'est pas un tournoi par équipes." };
+  const out = t.players.find((p) => p.studentId === outId);
+  if (!out || !out.gone) return { error: "Marquez d'abord ce joueur comme parti." };
+  const st = teamsOf(t.players, await loadTournamentMatches(t.id), t.settings);
+  const cand = subCandidates(st, t.players, t.settings.team.subs, outId);
+  if (cand.round === null) return { error: "Son équipe n'a plus de rencontre à jouer." };
+  if (inId && !cand.list.some((x) => x.id === inId)) return { error: "Ce joueur ne peut pas le remplacer (même équipe, équipe adverse, même partie du tableau ou déjà remplaçant)." };
+  const cur = (row.settings ?? {}) as Record<string, unknown>;
+  const team = { ...((cur.team ?? {}) as Record<string, unknown>) };
+  team.subs = [...t.settings.team.subs, { out: outId, in: inId, round: cand.round, at: Date.now() }];
   await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, team })) });
   done(row.sessionId);
   return { ok: true };

@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HANDICAP_ELO_PER_POINT, POOL_NAMES, autoHandicap, TEAM_COUNTS, TEAM_GROUPS, TEAM_MINUTES, TOUR_CAPS, TOUR_ELO_PER_POINT, TOUR_KINDS, TOUR_POINTS, TOUR_POOL_COUNTS, TOUR_POOL_SIZES, bracketSize, calibrationText, groupsOfPlayers, handicapOf, makePlayers, pairKey, readTourSettings, reconcileGroups, seedOrder, type Bracket, type BracketPairing, type HandicapCalibration, type TeamDraw, type TeamFormat, type TeamMode, type TourKind, type TourPairing, type TourPlayer, type TourPool, type TourSettings } from "@/lib/badminton-tournament";
-import { makeTeams, reconcileTeams, type Rencontre, type TeamPairing, type TeamsState } from "@/lib/badminton-teams";
-import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTournamentRuleAction, teamTimerAction } from "@/app/eleve/badminton-actions";
+import { makeTeams, reconcileTeams, subCandidates, type Rencontre, type TeamPairing, type TeamsState } from "@/lib/badminton-teams";
+import { addLatePlayerAction, closeTournamentAction, createTournamentAction, moveTournamentAction, setPlayerGoneAction, setPlayersGoneAction, setTeamSubAction, setTournamentRuleAction, teamTimerAction } from "@/app/eleve/badminton-actions";
 import { btn, cx, ui } from "@/lib/ui";
 import { StudentName } from "../../_components/StudentName";
 import { Countdown } from "../../_components/BadmintonParts";
@@ -544,10 +544,10 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
           {t.gone.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-sm">
               <span className={ui.hint}>Partis :</span>
-              {t.gone.map((id) => <span key={id} className={cx(ui.chip, ui.chipMuted)}>{t.names[id]?.name ?? "?"} <button type="button" disabled={pending} onClick={() => setGone(id, false)} className="underline ml-1">↩ remettre</button></span>)}
+              {t.gone.map((id) => <span key={id} className="inline-flex flex-wrap items-center gap-1"><span className={cx(ui.chip, ui.chipMuted)}>{t.names[id]?.name ?? "?"} <button type="button" disabled={pending} onClick={() => setGone(id, false)} className="underline ml-1">↩ remettre</button></span>{t.teams && t.settings.team && <SubPicker t={t} outId={id} />}</span>)}
             </div>
           )}
-          <p className={ui.hint}>{t.teams ? "Pour un élève qui doit partir avant la fin : il sort des rencontres pas encore commencées (les matchs sont refaits sans lui) ; dans la rencontre en cours, ses matchs pas encore joués ne rapportent rien. Rien n'est effacé." : <>Pour un élève qui doit partir avant la fin (blessé, rendez-vous…) : ses matchs pas encore joués sortent de l&apos;ordre, plus personne ne l&apos;attend{t.bracket ? " (au tableau, son adversaire passe)" : ""}. Rien n&apos;est effacé.</>}</p>
+          <p className={ui.hint}>{t.teams ? "Pour un élève qui doit partir avant la fin : il sort des rencontres pas encore commencées (les matchs sont refaits sans lui) ; dans la rencontre en cours, ses matchs pas encore joués ne rapportent rien. « 🔁 Remplaçant » : un joueur d'une autre partie du tableau (ou d'une autre poule), de préférence qui a déjà joué son match et du même niveau, joue à sa place ; ses points vont à l'équipe du joueur parti. Rien n'est effacé." : <>Pour un élève qui doit partir avant la fin (blessé, rendez-vous…) : ses matchs pas encore joués sortent de l&apos;ordre, plus personne ne l&apos;attend{t.bracket ? " (au tableau, son adversaire passe)" : ""}. Rien n&apos;est effacé.</>}</p>
         </div>
       )}
       {!closed && candidates.length > 0 && (
@@ -567,6 +567,33 @@ function TournamentBoard({ t, closed = false, candidates = [] }: { t: TourView; 
       <PlayerSearch t={t} />
       {t.teams ? <TeamsBoard st={t.teams} t={t} onRule={closed || timed ? undefined : setRule} /> : t.bracket ? <BracketBoard b={t.bracket} names={t.names} t={t} onRule={closed ? undefined : setRule} /> : <PoolsBoard pools={pools} names={t.names} t={t} onRule={closed ? undefined : setRule} />}
     </section>
+  );
+}
+
+// Remplacant d'un joueur parti (26/11, Sartay : « un joueur d'une autre poule, du meme niveau, qui n'est pas dans la meme
+// partie du tableau et qui a deja joue son match ») : la liste vient de subCandidates (meilleurs choix d'abord).
+function SubPicker({ t, outId }: { t: TourView; outId: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const c = subCandidates(t.teams!, t.players, t.settings.team!.subs, outId);
+  if (c.round === null) return null;
+  const pick = (v: string) => {
+    setError("");
+    start(async () => {
+      const r = await setTeamSubAction(t.id, outId, v || null);
+      if ("error" in r) setError(r.error);
+      else router.refresh();
+    });
+  };
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <select value={c.current ?? ""} disabled={pending} onChange={(e) => pick(e.target.value)} className="text-xs rounded border border-line px-1 py-0.5 max-w-[16rem]" aria-label={`Remplaçant de ${t.names[outId]?.name ?? "?"}`}>
+        <option value="">🔁 Remplaçant (ronde {c.round})…</option>
+        {c.list.map((x) => <option key={x.id} value={x.id}>{t.names[x.id]?.name ?? "?"} · équipe {x.team} · {x.elo}{x.played ? " · a joué" : " · joue encore"}</option>)}
+      </select>
+      {error && <span className="text-xs text-danger-ink">{error}</span>}
+    </span>
   );
 }
 

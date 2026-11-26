@@ -93,7 +93,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         tourCard = {
           ...base,
           format: teamFormatText(tour.settings, st.teams.length),
-          where: `équipe ${mine.team.letter}`,
+          where: mine.sub ? `remplaçant · équipe ${mine.team.letter}` : `équipe ${mine.team.letter}`,
           round: mine.round?.n ?? null,
           rounds: st.rounds.length,
           status: p ? p.status : mine.finished ? "done" : mine.waiting ? "wait" : mine.resting ? "bye" : "done",
@@ -114,6 +114,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             wave: p?.wave ?? null,
             roundLabel: mine.round ? `${mine.round.label}${mine.rencontre?.stage ? ` · ${mine.rencontre.stage}` : ""}` : "",
             oppTeam: oppLetter ? { letter: oppLetter, coach: coachName(oppLetter) } : null,
+            sub: !!mine.sub,
             stakes: stk ? { win: stk.win, lose: stk.lose, draw: stk.draw, chance: Math.round(stk.chance * 100), need } : null,
             current: rc ? {
               pts: mine.side === 0 ? rc.pts : [rc.pts[1], rc.pts[0]],

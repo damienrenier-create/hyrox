@@ -22,6 +22,7 @@ export type TeamCardData = {
   timer: { round: number; wave: number; startedAt: number; endsAt: number; stoppedAt: number | null } | null; now: number; wave: 1 | 2 | null; roundLabel: string;
   oppTeam: { letter: string; coach: string } | null;
   // Ce qui se joue dans mon prochain match (26/11) : points rapportes selon le score, chances, ce qu'il faut pour passer devant.
+  sub: boolean; // remplacant d'un joueur parti d'une autre equipe (26/11)
   stakes: { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; need: string | null } | null;
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
@@ -266,6 +267,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
   const place = (r: TeamCardData["table"][number]) => (r.rank ? `${r.rank}.` : `${r.lo}-${r.hi}.`);
   return (
     <section className={cx(ui.card, "p-3 space-y-2 border-accent bg-accent-soft/30")}>
+      {team.sub && <p className={ui.alertInfo}>🔁 Tu remplaces un joueur parti de l&apos;équipe <b>{team.letter}</b> : les points de ce match iront à l&apos;équipe {team.letter}.</p>}
       <div className="flex items-center justify-between gap-2">
         <p className="font-display font-extrabold text-ink">🏆 Tournoi par équipes · Équipe {team.letter}</p>
         <span className={ui.hint}>{t.format}</span>
