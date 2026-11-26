@@ -8,8 +8,8 @@ import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSe
 import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, needsServer, priceOf, priced, rallyOutcome, readTheme, themeText, type BmTheme, type ThemeKind } from "@/lib/badminton-themes";
 import { StudentName } from "./StudentName";
 import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, editRallyAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, undoRallyAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
-import { CourtPad } from "./BadmintonCourt";
-import { COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, type CourtKind } from "@/lib/badminton-scout";
+import { CourtPad, HowPicker } from "./BadmintonCourt";
+import { COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, deName, howInfo, howOf, howOptions, type CourtKind, type HowOption, type RallyHow } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -243,9 +243,10 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const [exchanges, setExchanges] = useState(0); // prix de l'echange : appuis sur le bouton central
   const [flip, setFlip] = useState(false); // scouting : les joueurs ont change de cote
   const [more, setMore] = useState(false); // scouting : le panneau « ⋯ » (sets, corrections, aide)
+  const [touched, setTouched] = useState(false); // scouting : l'aide du milieu du terrain disparait au premier toucher
   // Impacts notes sur cet ecran (26/11 : « annuler la derniere frappe ; appui long sur un impact pour l'annuler ou donner des
   // infos ») : repere du journal (A en haut) ; add = points donnes ; set = set ou il a compte ; id = sa ligne RALLY (promesse).
-  const [impacts, setImpacts] = useState<{ k: number; x: number; y: number; w: 0 | 1; add: [number, number]; set: number; stroke?: string; end?: string }[]>([]);
+  const [impacts, setImpacts] = useState<{ k: number; x: number; y: number; w: 0 | 1; add: [number, number]; set: number; how?: RallyHow; stroke?: string; end?: string }[]>([]);
   const impactIds = useRef(new Map<number, Promise<string | null>>());
   const impactSeq = useRef(0);
   const [menuK, setMenuK] = useState<number | null>(null);
@@ -483,20 +484,37 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     const undoImpact = (k: number) => {
       const im = impacts.find((x) => x.k === k);
       if (!im) return;
-      setImpacts((l) => l.filter((x) => x.k !== k));
+      const rest = impacts.filter((x) => x.k !== k);
+      setImpacts(rest);
       if (im.set === sets.length - 1) addPoints([-im.add[0], -im.add[1]]);
+      // Le service revient a celui qui a marque le point precedent (regle du badminton : le gagnant sert).
+      if (!theme && impacts[impacts.length - 1]?.k === k) setServer(rest.length ? rest[rest.length - 1].w : null);
       setMenuK(null);
       showFlash(`↶ Impact annulé (point de ${names[im.w]} retiré)`);
       void (impactIds.current.get(k) ?? Promise.resolve(null)).then((id) => (id ? undoRallyAction(matchId, id).then((res) => { if ("error" in res) setError(res.error); }) : undefined));
     };
-    // Preciser un impact (le coup, gagnant ou faute) : la ligne RALLY est remplacee (l'ancienne annulee).
-    const editImpact = (k: number, patch: { stroke?: string | null; end?: string | null }) => {
-      setImpacts((l) => l.map((x) => (x.k === k ? { ...x, ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}) } : x)));
+    // Preciser un impact (le coup, gagnant ou faute ; comment le point s'est fini) : la ligne RALLY est remplacee (l'ancienne
+    // annulee). Si la maniere donne le point a l'AUTRE joueur, le score suit (set en cours) et le service aussi (dernier impact).
+    const editImpact = (k: number, patch: { stroke?: string | null; end?: string | null; how?: RallyHow; w?: 0 | 1 }) => {
+      const im = impacts.find((x) => x.k === k);
+      if (!im) return;
+      let add = im.add;
+      if (patch.w !== undefined && patch.w !== im.w) {
+        add = [im.add[1], im.add[0]];
+        if (im.set === sets.length - 1) addPoints([add[0] - im.add[0], add[1] - im.add[1]]);
+        if (!theme && impacts[impacts.length - 1]?.k === k) setServer(patch.w);
+        showFlash(`Point passé à ${names[patch.w]}`);
+      }
+      setImpacts((l) => l.map((x) => (x.k === k ? { ...x, add, ...(patch.w !== undefined ? { w: patch.w } : {}), ...(patch.how !== undefined ? { how: patch.how } : {}), ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}) } : x)));
       const prev = impactIds.current.get(k) ?? Promise.resolve(null);
       impactIds.current.set(k, prev.then((id) => (id ? editRallyAction(matchId, id, patch).then((res) => { if ("error" in res) { setError(res.error); return id; } return ("eventId" in res && res.eventId) || id; }) : null)));
     };
     const chip = (on: boolean) => cx(ui.chip, on ? ui.chipBrand : ui.chipMuted, "py-1 text-sm");
     const menu = menuK !== null ? impacts.find((x) => x.k === menuK) ?? null : null;
+    // Le menu d'un impact est dans le repere du journal (A en haut) : names[0] = A.
+    const menuHow = menu ? howOf({ court: scout.court, x: menu.x, y: menu.y, how: menu.how }) : null;
+    const pickMenuHow = (o: HowOption) => { if (!menu) return; editImpact(menu.k, { how: o.how, w: o.w, ...(o.how === "WIN" ? { end: "WIN" } : menu.end === "WIN" ? { end: null } : {}) }); };
+    const howText = (how: RallyHow, w: 0 | 1) => (how === "WIN" ? `✅ Gagné par ${names[w]}` : `${howInfo(how).emoji} ${howInfo(how).name} ${deName(names[1 - w])}`);
     const hasHead = head[0] > 0 || head[1] > 0;
     const undoLast = () => { const l = impacts[impacts.length - 1]; if (l) undoImpact(l.k); };
     const shell = (content: React.ReactNode) => (typeof document === "undefined" ? null : createPortal(<div className="fixed inset-0 z-[70] bg-paper flex flex-col overflow-hidden overscroll-none">{content}</div>, document.body));
@@ -505,12 +523,17 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
         {menu && (
           <div className="fixed inset-x-0 bottom-0 z-[60] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[65vh] overflow-auto" role="dialog" aria-label="Cet impact">
             <div className="max-w-xl mx-auto space-y-2">
-              <div className="flex items-center justify-between gap-2"><p className="font-bold">Cet impact · point pour {names[menu.w]}</p><button type="button" onClick={() => setMenuK(null)} className={ui.close} aria-label="Fermer">✕</button></div>
+              <div className="flex items-center justify-between gap-2"><p className="font-bold">Cet impact · {howText(menuHow!, menu.w)} · point pour {names[menu.w]}</p><button type="button" onClick={() => setMenuK(null)} className={ui.close} aria-label="Fermer">✕</button></div>
               <button type="button" onClick={() => undoImpact(menu.k)} className={cx(btn.ghost, "w-full border-2 border-red-500 text-red-700 font-extrabold")}>✖ Annuler cet impact</button>
-              <p className="font-bold">Le coup</p>
+              <HowPicker options={howOptions(scout.court, menu.x, menu.y, null)} names={[names[0], names[1]]} current={{ how: menuHow!, by: menuHow === "WIN" ? menu.w : ((1 - menu.w) as 0 | 1) }} onPick={pickMenuHow} />
+              <p className="font-bold">Le coup qui a fini l&apos;échange <span className="font-normal text-ink-2">(facultatif)</span></p>
               <div className="flex flex-wrap gap-1">{END_STROKES.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { stroke: menu.stroke === x.id ? null : x.id })} className={chip(menu.stroke === x.id)}>{x.emoji} {x.name}</button>)}</div>
-              <p className="font-bold">Comment ?</p>
-              <div className="flex flex-wrap gap-1">{END_KINDS.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { end: menu.end === x.id ? null : x.id })} className={chip(menu.end === x.id)}>{x.name}</button>)}</div>
+              {scout.level >= 4 && menuHow !== "WIN" && (
+                <>
+                  <p className="font-bold">Faute provoquée ou directe ?</p>
+                  <div className="flex flex-wrap gap-1">{END_KINDS.filter((x) => x.id !== "WIN").map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { end: menu.end === x.id ? null : x.id })} className={chip(menu.end === x.id)}>{x.name}</button>)}</div>
+                </>
+              )}
               <button type="button" onClick={() => setMenuK(null)} className={cx(btn.primary, "w-full")}>✓ OK</button>
             </div>
           </div>
@@ -527,7 +550,12 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
                   <button type="button" onClick={() => setMore(false)} className={ui.close} aria-label="Fermer">✕</button>
                 </div>
                 {scouting && <p className={ui.hint}>Ce n&apos;est pas un arbitrage : ce score ne compte ni à l&apos;ELO ni au tournoi. Seuls les impacts comptent, pour l&apos;analyse des deux joueurs.</p>}
-                <p className="rounded-xl bg-accent-soft/60 px-3 py-2 leading-snug">👆 <b>Touche où le volant est tombé : le point va tout seul au bon joueur.</b> Dans le terrain : point pour l&apos;adversaire de ce camp · dehors : point pour le joueur de ce camp · sur le filet : tu choisis. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté. Appui long sur un impact : l&apos;annuler ou préciser le coup.</p>
+                <div className="rounded-xl bg-accent-soft/60 px-3 py-2 leading-snug space-y-1">
+                  <p>👆 <b>À la fin de chaque point : touche où le volant est tombé, puis dis comment le point s&apos;est fini.</b> Le point va tout seul au bon joueur.</p>
+                  <p><b className="text-success-ink">A · Gagné</b> : le volant tombe dans le terrain adverse.</p>
+                  <p><b className="text-danger-ink">B · Concédé</b> : 🏸 service raté · 🕸️ dans le filet · ↗️ dehors (hors du terrain adverse) · 💨 raté (tapé à côté).</p>
+                  <p>Le choix le plus probable est proposé en premier. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté. Appui long sur un impact : l&apos;annuler ou le corriger.</p>
+                </div>
                 <div className="space-y-1.5">
                   <p className="font-bold">Point sans impact <span className="font-normal text-ink-2">(tu n&apos;as pas vu où il est tombé)</span></p>
                   <div className="grid grid-cols-2 gap-1.5">{([top, bottom] as const).map((s) => <button key={s} type="button" onClick={() => plus(s)} disabled={finishing || waitServer} className={cx(btn.smGhost, "min-w-0 overflow-hidden text-ellipsis")}>+1 {arrow(s)} {names[s]}</button>)}</div>
@@ -558,7 +586,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
           )}
         </div>
         {/* Le terrain : tout le reste de l'ecran. Les messages passent par-dessus, sans bloquer les touchers. */}
-        <div className="relative flex-1 min-h-0">
+        <div className="relative flex-1 min-h-0" onPointerDown={() => setTouched(true)}>
           <CourtPad
             key={flip ? "flip" : "normal"}
             big
@@ -566,24 +594,26 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
             level={scout.level}
             names={[names[top], names[bottom]]}
             disabled={finishing || waitServer}
-            impacts={impacts.slice(-14).map((im, n, arr) => ({ ...(flip ? { x: W - im.x, y: COURT_LENGTH - im.y } : { x: im.x, y: im.y }), muted: true, last: n === arr.length - 1, k: im.k, title: `Point pour ${names[im.w]}` }))}
+            server={server === null ? null : flip ? ((1 - server) as 0 | 1) : server}
+            impacts={impacts.slice(-14).map((im, n, arr) => ({ ...(flip ? { x: W - im.x, y: COURT_LENGTH - im.y } : { x: im.x, y: im.y }), muted: true, last: n === arr.length - 1, k: im.k, title: `${howText(howOf({ court: scout.court, x: im.x, y: im.y, how: im.how }), im.w)} · point pour ${names[im.w]}` }))}
             onImpact={setMenuK}
             onCommit={(shown) => {
               // Le dessin est retourne si les joueurs ont change de cote : on revient au repere du journal (A en haut).
               const r = flip ? { ...shown, x: W - shown.x, y: COURT_LENGTH - shown.y, ...(shown.hx !== undefined && shown.hy !== undefined ? { hx: W - shown.hx, hy: COURT_LENGTH - shown.hy } : {}), w: (shown.w === 0 ? 1 : 0) as 0 | 1 } : shown;
               const o = rallyOutcome(theme, r.w, server, exchanges);
               plus(r.w);
-              showFlash(o.add[r.w] > 0 ? `+${o.add[r.w]} pour ${names[r.w]}` : `${names[r.w]} reprend le service`);
+              // « ✅ Gagné par Arthur · +1 », « 🕸️ Filet de Stefano · +1 pour Arthur ».
+              showFlash(o.add[r.w] > 0 ? (r.how === "WIN" ? `${howText(r.how, r.w)} · +${o.add[r.w]}` : `${r.how ? `${howText(r.how, r.w)} · ` : ""}+${o.add[r.w]} pour ${names[r.w]}`) : `${names[r.w]} reprend le service`);
               const k = ++impactSeq.current;
-              setImpacts((l) => [...l, { k, x: r.x, y: r.y, w: r.w, add: o.add, set: sets.length - 1, ...(r.stroke ? { stroke: r.stroke } : {}), ...(r.end ? { end: r.end } : {}) }]);
+              setImpacts((l) => [...l, { k, x: r.x, y: r.y, w: r.w, add: o.add, set: sets.length - 1, ...(r.how ? { how: r.how } : {}), ...(r.stroke ? { stroke: r.stroke } : {}), ...(r.end ? { end: r.end } : {}) }]);
               impactIds.current.set(k, liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) { setError(res.error); return null; } return "eventId" in res ? res.eventId ?? null : null; }).catch(() => { setError("Connexion perdue : cet impact n'a pas été enregistré."); return null; }));
             }}
           />
           <p className="pointer-events-none absolute left-2 top-1 text-[10px] font-bold text-ink-3">{scouting ? "🔭 score indicatif" : "🔭 arbitrage + scouting"}</p>
           <p className="pointer-events-none absolute right-2 top-1 text-[10px] text-ink-3">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
-          {impacts.length === 0 && !flash && (
+          {impacts.length === 0 && !flash && !touched && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-              <p className="max-w-[16rem] rounded-2xl bg-ink/85 text-white text-center text-sm font-bold px-3 py-2 shadow-lg">👆 Touche où le volant est tombé : le point va tout seul au bon joueur.<span className="block text-xs font-normal mt-1 opacity-90">Appui long sur un impact : l&apos;annuler ou préciser le coup. Aide et sets : « ⋯ ».</span></p>
+              <p className="max-w-[16rem] rounded-2xl bg-ink/85 text-white text-center text-sm font-bold px-3 py-2 shadow-lg">👆 Touche où le volant est tombé, puis dis comment le point s&apos;est fini : ✅ gagné ou ❌ concédé.<span className="block text-xs font-normal mt-1 opacity-90">Appui long sur un impact : l&apos;annuler ou le corriger. Aide et sets : « ⋯ ».</span></p>
             </div>
           )}
           {flash && (

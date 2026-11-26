@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COURT_LENGTH, COURT_MARGIN, END_KINDS, END_STROKES, NET_Y, SHORT_SERVICE, DOUBLE_LONG_SERVICE, courtWidth, guessWinner, type CourtKind, type EndKind, type EndStroke, type Rally } from "@/lib/badminton-scout";
+import { COURT_LENGTH, COURT_MARGIN, END_KINDS, END_STROKES, NET_Y, SHORT_SERVICE, DOUBLE_LONG_SERVICE, courtWidth, deName, howInfo, howOptions, type CourtKind, type EndKind, type EndStroke, type HowOption, type Rally, type RallyHow } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Terrain de badminton dessine a l'echelle (Sartay 24/11 : « simple, double, demi-terrain sans couloir (par defaut) »),
@@ -95,14 +95,59 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPr
   );
 }
 
-// Pave de l'arbitre en direct (scouting) : toucher l'impact, puis, selon ses COUCHES, qui marque, le coup, le frappeur,
-// gagnant ou faute ; « ✓ Point » ferme l'echange. Couche 1 : un seul toucher (qui marque est devine d'apres l'impact ;
-// sur le filet, l'arbitre choisit).
-type Draft = { x: number; y: number; w: 0 | 1 | null; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; hitter: boolean };
+// « Comment s'est fini le point ? » (ETAPE 1 du scouting, Sartay 26/11 soir) : les manieres possibles d'apres l'endroit
+// touche, la plus probable d'abord ; chaque bouton dit qui a gagne ou concede le point, et pour qui il compte.
+// Partage par le pave (apres le toucher) et le menu d'un impact (appui long, pour corriger).
+export function HowPicker({ options, names, current = null, onPick }: { options: HowOption[]; names: [string, string]; current?: { how: RallyHow; by: 0 | 1 } | null; onPick: (o: HowOption) => void }) {
+  const won = options.filter((o) => o.how === "WIN"), gave = options.filter((o) => o.how !== "WIN");
+  // Prenoms (plus court), sauf si les deux joueurs ont le meme.
+  const first = names.map((n) => n.split(" ")[0]);
+  const nm = (i: 0 | 1) => (first[0] !== first[1] ? first[i] : names[i]);
+  const one = (o: HowOption, i: number) => {
+    const h = howInfo(o.how);
+    const on = current?.how === o.how && current.by === o.by;
+    const win = o.how === "WIN";
+    return (
+      <button
+        key={`${o.how}${o.by}`}
+        type="button"
+        onClick={() => onPick(o)}
+        aria-pressed={on}
+        className={cx(
+          "w-full min-w-0 rounded-xl border-2 px-3 py-2 text-left leading-tight transition active:scale-[0.98] select-none touch-manipulation",
+          win ? "border-success bg-success-soft text-success-ink" : "border-danger/40 bg-danger-soft text-danger-ink",
+          on && "ring-4 ring-accent",
+          i === 0 && !current && "shadow-md",
+        )}
+      >
+        <span className="block font-extrabold">{h.emoji} {win ? `Gagné par ${nm(o.by)}` : `${h.name} ${deName(nm(o.by))}`}</span>
+        <span className="block text-xs font-semibold opacity-80">{h.hint} → point pour {nm(o.w)}</span>
+      </button>
+    );
+  };
+  return (
+    <div className="space-y-1.5">
+      <p className="font-bold">Comment s&apos;est fini le point ?</p>
+      {won.length > 0 && <div className="space-y-1"><p className="text-[11px] font-bold uppercase tracking-wide text-success-ink">A · Point gagné</p>{won.map((o) => one(o, options.indexOf(o)))}</div>}
+      {gave.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-danger-ink">B · Point concédé</p>
+          <div className={cx("grid gap-1", gave.length > 2 ? "grid-cols-2" : "grid-cols-1")}>{gave.map((o) => one(o, options.indexOf(o)))}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Pave de l'arbitre en direct (scouting) : toucher l'impact, dire COMMENT le point s'est fini (ce qui donne le point au bon
+// joueur), puis, selon les COUCHES, le coup, le frappeur, faute provoquee ou directe ; « ✓ Point » ferme l'echange.
+// Couche 1 : le toucher, puis la maniere : le point est compte tout de suite.
+// server : qui servait (dans le repere du dessin, 0 = en haut), pour proposer le bon « service rate ».
+type Draft = { x: number; y: number; w: 0 | 1 | null; how?: RallyHow; by?: 0 | 1; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; hitter: boolean };
 // `big` (26/11, Sartay : « le terrain doit prendre plus de place sur l'ecran, le score un petit bandeau en haut ou en bas ») :
-// le terrain REMPLIT son parent (largeur ET hauteur, a l'echelle), les choix (qui marque, le coup…) s'affichent en bas.
+// le terrain REMPLIT son parent (largeur ET hauteur, a l'echelle), les choix (comment, le coup…) s'affichent en bas.
 // impacts / onImpact (26/11) : le parent tient la liste des impacts (pour les annuler et les preciser).
-export function CourtPad({ kind, level, names, disabled, onCommit, big = false, impacts, onImpact }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean; impacts?: CourtMark[]; onImpact?: (k: number) => void }) {
+export function CourtPad({ kind, level, names, disabled, onCommit, big = false, impacts, onImpact, server = null }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean; impacts?: CourtMark[]; onImpact?: (k: number) => void; server?: 0 | 1 | null }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [last, setLast] = useState<CourtMark[]>([]);
   const box = useRef<HTMLDivElement>(null);
@@ -123,17 +168,21 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
   }, [big, kind]);
   const commit = (d: Draft) => {
     if (d.w === null) return;
-    onCommit({ x: d.x, y: d.y, w: d.w, ...(d.stroke ? { stroke: d.stroke } : {}), ...(d.hx !== undefined && d.hy !== undefined ? { hx: d.hx, hy: d.hy } : {}), ...(d.end ? { end: d.end } : {}) });
+    onCommit({ x: d.x, y: d.y, w: d.w, ...(d.how ? { how: d.how } : {}), ...(d.stroke ? { stroke: d.stroke } : {}), ...(d.hx !== undefined && d.hy !== undefined ? { hx: d.hx, hy: d.hy } : {}), ...(d.end ? { end: d.end } : {}) });
     setLast((l) => [...l.slice(-7), { x: d.x, y: d.y, muted: true, title: `Point pour ${names[d.w!]}` }]);
     setDraft(null);
   };
   const tap = (x: number, y: number) => {
     if (disabled) return;
-    if (draft?.hitter) return setDraft({ ...draft, hx: x, hy: y, hitter: false }); // 2e toucher : le frappeur
-    const w = guessWinner(kind, x, y);
-    const d: Draft = { x, y, w, hitter: false };
-    if (level <= 1 && w !== null) return commit(d); // couche 1 : un seul toucher
-    setDraft({ ...d, hitter: level >= 3 });
+    if (draft?.hitter) return setDraft({ ...draft, hx: x, hy: y, hitter: false }); // toucher suivant : le frappeur
+    setDraft({ x, y, w: null, hitter: false }); // puis : comment le point s'est fini
+  };
+  // La maniere donne qui marque. Un point gagne est un « point gagnant » (couche 4) ; couche 1 : c'est fini.
+  const pickHow = (o: HowOption) => {
+    if (!draft) return;
+    const d: Draft = { ...draft, how: o.how, by: o.by, w: o.w, end: o.how === "WIN" ? "WIN" : draft.end === "WIN" ? undefined : draft.end };
+    if (level <= 1) return commit(d);
+    setDraft({ ...d, hitter: level >= 3 && d.hx === undefined });
   };
   // Les derniers impacts du match en gris, le toucher en cours en orange.
   const marks: CourtMark[] = [...(impacts ?? last), ...(draft ? [{ x: draft.x, y: draft.y, hx: draft.hx, hy: draft.hy, pending: true }] : [])];
@@ -144,28 +193,35 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
     if (best && Math.hypot(best.x - x, best.y - y) < 0.9) onImpact(best.k!);
   };
   const chip = (on: boolean) => cx(ui.chip, on ? ui.chipBrand : ui.chipMuted, "py-1 text-sm");
+  const options = draft ? howOptions(kind, draft.x, draft.y, server) : [];
+  const chosen = draft?.how && draft.by !== undefined ? { how: draft.how, by: draft.by } : null;
   const controls = draft && (
     <>
-      {draft.hitter && <p className="font-bold text-accent-ink">🧍 Touchez où était le joueur qui a frappé.</p>}
-      <div>
-        <p className="font-bold">Qui marque ?</p>
-        <div className="flex flex-wrap gap-1">{([0, 1] as const).map((s) => <button key={s} type="button" onClick={() => setDraft({ ...draft, w: s })} className={chip(draft.w === s)}>{names[s]}</button>)}</div>
-      </div>
-      {level >= 2 && (
-        <div>
-          <p className="font-bold">Le coup</p>
-          <div className="flex flex-wrap gap-1">{END_STROKES.map((s) => <button key={s.id} type="button" onClick={() => setDraft({ ...draft, stroke: draft.stroke === s.id ? undefined : s.id })} className={chip(draft.stroke === s.id)}>{s.emoji} {s.name}</button>)}</div>
-        </div>
-      )}
-      {level >= 4 && (
-        <div>
-          <p className="font-bold">Comment ?</p>
-          <div className="flex flex-wrap gap-1">{END_KINDS.map((k) => <button key={k.id} type="button" onClick={() => setDraft({ ...draft, end: draft.end === k.id ? undefined : k.id })} className={chip(draft.end === k.id)}>{k.name}</button>)}</div>
-        </div>
+      {!draft.how || level <= 1 ? (
+        <HowPicker options={options} names={names} onPick={pickHow} />
+      ) : (
+        <>
+          <button type="button" onClick={() => setDraft({ ...draft, how: undefined, by: undefined, w: null })} className={cx("w-full rounded-xl border-2 px-3 py-1.5 text-left text-sm font-bold", draft.how === "WIN" ? "border-success bg-success-soft text-success-ink" : "border-danger/40 bg-danger-soft text-danger-ink")}>
+            {howInfo(draft.how).emoji} {draft.how === "WIN" ? `Gagné par ${names[chosen!.by]}` : `${howInfo(draft.how).name} ${deName(names[chosen!.by])}`} <span className="font-normal opacity-80">· changer</span>
+          </button>
+          {draft.hitter && <p className="font-bold text-accent-ink">🧍 Touchez où était le joueur qui a frappé.</p>}
+          {level >= 2 && (
+            <div>
+              <p className="font-bold">Le coup</p>
+              <div className="flex flex-wrap gap-1">{END_STROKES.map((s) => <button key={s.id} type="button" onClick={() => setDraft({ ...draft, stroke: draft.stroke === s.id ? undefined : s.id })} className={chip(draft.stroke === s.id)}>{s.emoji} {s.name}</button>)}</div>
+            </div>
+          )}
+          {level >= 4 && draft.how !== "WIN" && (
+            <div>
+              <p className="font-bold">Faute provoquée ou directe ?</p>
+              <div className="flex flex-wrap gap-1">{END_KINDS.filter((k) => k.id !== "WIN").map((k) => <button key={k.id} type="button" onClick={() => setDraft({ ...draft, end: draft.end === k.id ? undefined : k.id })} className={chip(draft.end === k.id)}>{k.name}</button>)}</div>
+            </div>
+          )}
+        </>
       )}
       <div className="flex gap-1.5">
-        <button type="button" disabled={draft.w === null} onClick={() => commit(draft)} className={cx(btn.primary, "flex-1")}>✓ Point{draft.w !== null ? ` pour ${names[draft.w].split(" ")[0]}` : ""}</button>
-        <button type="button" onClick={() => setDraft(null)} className={btn.ghost} aria-label="Annuler ce toucher">✕</button>
+        {draft.how && level > 1 && <button type="button" onClick={() => commit(draft)} className={cx(btn.primary, "flex-1")}>✓ Point pour {names[draft.w!].split(" ")[0]}</button>}
+        <button type="button" onClick={() => setDraft(null)} className={cx(btn.ghost, !(draft.how && level > 1) && "flex-1")} aria-label="Annuler ce toucher">{draft.how && level > 1 ? "✕" : "✕ Pas là (annuler ce toucher)"}</button>
       </div>
     </>
   );
@@ -186,7 +242,7 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
       <div className="flex gap-3 items-start">
         <CourtSvg kind={kind} scale={kind === "HALF" ? 25 : 21} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} />
         <div className="flex-1 min-w-0 space-y-2 text-sm">
-          {!draft && <p className={ui.hint}>📍 À la fin de l&apos;échange, touchez l&apos;endroit où le volant est tombé{level <= 1 ? " : le point est compté tout de suite (dans les lignes : pour l'adversaire ; dehors : pour l'autre)." : "."}</p>}
+          {!draft && <p className={ui.hint}>📍 À la fin de l&apos;échange, touchez l&apos;endroit où le volant est tombé, puis dites comment le point s&apos;est fini.</p>}
           {controls}
         </div>
       </div>

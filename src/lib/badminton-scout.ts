@@ -7,9 +7,9 @@
 //    x = travers (0 = bord gauche du terrain dessine), y = long (0 = fond de A, 13,40 = fond de B), filet a 6,70.
 // 2. COUCHES (« parametrer en couches : par defaut le plus rapide, puis rajouter du scouting couche par couche pour que les
 //    eleves prennent le scouting en main petit a petit ; ajouter ou enlever des couches a certains eleves ») :
-//    1 = impact + qui marque (devine d'apres l'impact : dans le camp de A et dans les lignes = point pour B ; dehors = point
-//        pour A ; sur le filet = l'arbitre choisit) ; 2 = + le coup qui finit l'echange ; 3 = + ou etait le frappeur ;
-//    4 = + point gagnant, faute provoquee ou faute directe. Reglage de la seance (settings.scout.level) et, par eleve, le
+//    1 = impact + COMMENT le point finit (26/11 soir, voir HOWS : gagne, ou concede par service rate, filet, dehors, rate ;
+//        le choix le plus probable d'apres l'impact est propose en premier) ; 2 = + le coup qui finit l'echange ;
+//    3 = + ou etait le frappeur ; 4 = + faute provoquee ou directe. Reglage de la seance (settings.scout.level) et, par eleve, le
 //    dernier reglage du prof dans n'importe quelle seance (settings.scout.students[id] = { level, at }).
 // 3. FICHE TECHNIQUE (« eval simplifiee des mouvements de base : service court, service long, clear, smash, drop, lob, que
 //    les joueurs rempliraient lors d'un scouting d'un autre eleve ; comme en Hyrox, les 4 criteres les plus importants +
@@ -48,10 +48,10 @@ export function guessWinner(kind: CourtKind, x: number, y: number): 0 | 1 | null
 
 // ===== Couches =====
 export const SCOUT_LAYERS: { level: number; name: string; hint: string }[] = [
-  { level: 1, name: "📍 Impact + qui marque", hint: "Un toucher sur le terrain à la fin de chaque échange." },
+  { level: 1, name: "📍 Impact + comment le point finit", hint: "Un toucher là où le volant est tombé, puis : gagné, ou concédé (service raté, filet, dehors, raté)." },
   { level: 2, name: "🏸 + le coup", hint: "Le coup qui a fini l'échange." },
   { level: 3, name: "🧍 + le frappeur", hint: "Un 2e toucher : où était le joueur qui a frappé." },
-  { level: 4, name: "🎯 + gagnant ou faute", hint: "Point gagnant, faute provoquée ou faute directe." },
+  { level: 4, name: "🎯 + faute provoquée ou directe", hint: "Pour un point concédé : l'adversaire l'a-t-il mis en difficulté, ou est-ce une faute directe ?" },
 ];
 export const MAX_LAYER = 4;
 // VERROU (Sartay 26/11 : « les scoutings doivent etre des options que le prof deverrouille ou pas au cours ; il peut
@@ -133,9 +133,54 @@ export const END_STROKES: { id: EndStroke; name: string; emoji: string }[] = [..
 export type EndKind = "WIN" | "FORCED" | "UNFORCED";
 export const END_KINDS: { id: EndKind; name: string }[] = [{ id: "WIN", name: "Point gagnant" }, { id: "FORCED", name: "Faute provoquée" }, { id: "UNFORCED", name: "Faute directe" }];
 
+// ===== Comment le point s'est fini : ETAPE 1 du scouting (Sartay 26/11 soir) =====
+// « Quand le point est termine, expliquer pourquoi : le scout indique sur le terrain ou le volant est tombe et la maniere
+// dont le point a ete marque. A. le point a ete gagne : il tombe dans le terrain adverse. B. le point est concede : le
+// joueur a rate son service, ou dans le jeu il tape dans le filet, envoie hors du terrain adverse, ou tape a cote. »
+// WIN = point GAGNE par w ; les quatre autres = point CONCEDE par l'autre joueur (1 - w).
+export type RallyHow = "WIN" | "SERVE" | "NET" | "OUT" | "MISS";
+export const HOWS: { id: RallyHow; name: string; emoji: string; hint: string }[] = [
+  { id: "WIN", name: "Gagné", emoji: "✅", hint: "le volant tombe dans le terrain adverse" },
+  { id: "SERVE", name: "Service raté", emoji: "🏸", hint: "faute au service" },
+  { id: "NET", name: "Filet", emoji: "🕸️", hint: "le volant va dans le filet" },
+  { id: "OUT", name: "Dehors", emoji: "↗️", hint: "envoyé hors du terrain adverse" },
+  { id: "MISS", name: "Raté", emoji: "💨", hint: "tapé à côté du volant" },
+];
+export const CONCEDED: RallyHow[] = ["SERVE", "NET", "OUT", "MISS"];
+// « Filet d'Arthur », « Raté de Stefano ».
+export const deName = (n: string) => (/^[aeiouyhàâäéèêëîïôöûü]/i.test(n) ? `d'${n}` : `de ${n}`);
+export const howInfo = (h: RallyHow) => HOWS.find((x) => x.id === h)!;
+const readHow = (v: unknown): RallyHow | undefined => (HOWS.some((h) => h.id === v) ? (v as RallyHow) : undefined);
+// Echanges notes avant le 26/11 soir (sans maniere) : devinee d'apres l'endroit (dans les lignes = gagne, dehors, filet).
+export function howOf(r: { court: CourtKind; x: number; y: number; how?: RallyHow }): RallyHow {
+  if (r.how) return r.how;
+  const z = zoneOf(r.court, r.x, r.y);
+  return z.net ? "NET" : z.inBounds ? "WIN" : "OUT";
+}
+// Les manieres possibles d'apres l'endroit touche, la plus probable d'abord. by = qui GAGNE (WIN) ou qui CONCEDE ; w = qui
+// marque. X = le camp ou le volant est tombe, O = l'autre joueur. server = qui servait, si on le sait (sinon : au filet,
+// le serveur est du cote ou le volant retombe ; ailleurs, il l'a envoye dans le camp adverse).
+// - Dans le terrain de X : gagne par O · rate par X (tape a cote) · service rate.
+// - Dehors, du cote de X : dehors, envoye par O · service rate.
+// - Au filet : filet de l'un ou de l'autre · service rate.
+export type HowOption = { how: RallyHow; by: 0 | 1; w: 0 | 1 };
+export function howOptions(kind: CourtKind, x: number, y: number, server: 0 | 1 | null = null): HowOption[] {
+  const z = zoneOf(kind, x, y);
+  const X = z.side, O = (1 - X) as 0 | 1;
+  const opt = (how: RallyHow, by: 0 | 1): HowOption => ({ how, by, w: how === "WIN" ? by : ((1 - by) as 0 | 1) });
+  if (z.net) return [opt("NET", X), opt("NET", O), ...(server === null ? [opt("SERVE", X), opt("SERVE", O)] : [opt("SERVE", server)])];
+  const serve = opt("SERVE", server ?? O);
+  if (z.inBounds) return [opt("WIN", O), opt("MISS", X), serve];
+  return [opt("OUT", O), serve];
+}
+// Le coup qui finit l'echange (couche 2) : joue par le gagnant si le point est gagne ou si l'autre a tape a cote ; par
+// celui qui concede s'il a mis le volant dehors, dans le filet ou rate son service.
+export const strokeByWinner = (how: RallyHow) => how === "WIN" || how === "MISS";
+
 // ===== Un echange note (ligne RALLY) =====
 // w = qui marque (0 = A, 1 = B) ; stroke = coup qui finit l'echange ; hx/hy = position du frappeur ; end = gagnant / faute.
-export type Rally = { court: CourtKind; x: number; y: number; w: 0 | 1; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; layer: number };
+// how (26/11 soir) = comment le point s'est fini (voir HOWS) ; absent sur les echanges notes avant : howOf le devine.
+export type Rally = { court: CourtKind; x: number; y: number; w: 0 | 1; how?: RallyHow; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; layer: number };
 const num = (v: unknown, lo: number, hi: number) => (Number.isFinite(Number(v)) && Number(v) >= lo && Number(v) <= hi ? Math.round(Number(v) * 100) / 100 : null);
 export function readRally(raw: unknown): Rally | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -148,7 +193,8 @@ export function readRally(raw: unknown): Rally | null {
   const hx = num(o.hx, -COURT_MARGIN, w + COURT_MARGIN), hy = num(o.hy, -COURT_MARGIN, COURT_LENGTH + COURT_MARGIN);
   const end = END_KINDS.some((k) => k.id === o.end) ? (o.end as EndKind) : undefined;
   const layer = Number.isInteger(Number(o.layer)) ? Math.max(1, Math.min(MAX_LAYER, Number(o.layer))) : 1;
-  return { court, x, y, w: o.w, ...(stroke ? { stroke } : {}), ...(hx !== null && hy !== null ? { hx, hy } : {}), ...(end ? { end } : {}), layer };
+  const how = readHow(o.how);
+  return { court, x, y, w: o.w, ...(how ? { how } : {}), ...(stroke ? { stroke } : {}), ...(hx !== null && hy !== null ? { hx, hy } : {}), ...(end ? { end } : {}), layer };
 }
 
 // Les echanges d'un joueur, vus de SON cote : son camp en bas (on retourne le terrain s'il etait A, en haut).
@@ -195,7 +241,8 @@ export function strokeSummary(sheets: StrokeSheet[]): StrokeSummary[] {
 // ===== Analyse d'une seance, cote prof (Sartay 24/11 : « il faudra qu'on puisse analyser les stats de scouting ») =====
 // Pour chaque eleve : ses echanges notes (gagnes, perdus, ses fautes dehors / au filet), ses fiches techniques recues
 // (niveau moyen par coup), et ce qu'il a scoute lui-meme (impacts notes comme arbitre, fiches remplies).
-export type ScoutRow = { id: string; rallies: number; won: number; lost: number; out: number; net: number; sheets: number; levels: Partial<Record<StrokeId, string | null>>; gaveRallies: number; gaveSheets: number };
+// winners = ses points GAGNES (volant tombe chez l'adversaire) ; serve / net / out / miss = les points qu'il a CONCEDES.
+export type ScoutRow = { id: string; rallies: number; won: number; lost: number; winners: number; serve: number; out: number; net: number; miss: number; sheets: number; levels: Partial<Record<StrokeId, string | null>>; gaveRallies: number; gaveSheets: number };
 type EvLike = { id?: string; kind: string; authorId: string; at: number; targetId?: string | null; data?: unknown };
 // Les impacts annules d'un match (lignes UNRALLY, 26/11) : l'analyse les ignore.
 export const undoneRallies = (events: { kind: string; targetId?: string | null }[]): Set<string> => new Set(events.filter((e) => e.kind === "UNRALLY" && e.targetId).map((e) => e.targetId as string));
@@ -224,11 +271,12 @@ export function sessionScoutRows(matches: MatchLike[], ids: string[]): ScoutRow[
     }
     const mine = myRallies(raw);
     const lost = mine.filter((r) => !r.won);
+    const gave = (h: RallyHow) => lost.filter((r) => howOf(r) === h).length;
     const sum = strokeSummary([...latest.values()].map((x) => x.sheet));
     return {
       id, rallies: mine.length, won: mine.length - lost.length, lost: lost.length,
-      out: lost.filter((r) => !zoneOf(r.court, r.x, r.y).inBounds && !zoneOf(r.court, r.x, r.y).net).length,
-      net: lost.filter((r) => zoneOf(r.court, r.x, r.y).net).length,
+      winners: mine.filter((r) => r.won && howOf(r) === "WIN").length,
+      serve: gave("SERVE"), out: gave("OUT"), net: gave("NET"), miss: gave("MISS"),
       sheets: latest.size, levels: Object.fromEntries(sum.map((s) => [s.id, s.level])), gaveRallies, gaveSheets,
     };
   });

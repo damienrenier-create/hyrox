@@ -348,7 +348,7 @@ function ScoutTable({ rows, scout }: { rows: BmPupilRow[]; scout: ScoutRow[] }) 
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left">
-                <th className={ui.th}>Élève</th><th className={`${ui.th} text-right`} title="Échanges notés par un arbitre dans ses matchs">Échanges</th><th className={`${ui.th} text-right`}>Gagnés</th><th className={`${ui.th} text-right`}>Perdus</th><th className={`${ui.th} text-right`} title="Points perdus sur une faute dehors">Dehors</th><th className={`${ui.th} text-right`} title="Points perdus au filet">Filet</th>
+                <th className={ui.th}>Élève</th><th className={`${ui.th} text-right`} title="Échanges notés par un arbitre dans ses matchs">Échanges</th><th className={`${ui.th} text-right`}>Gagnés</th><th className={`${ui.th} text-right`}>Perdus</th><th className={`${ui.th} text-right`} title="Points GAGNÉS par lui : le volant tombe dans le terrain adverse">✅</th><th className={`${ui.th} text-right`} title="Points concédés : service raté">🏸</th><th className={`${ui.th} text-right`} title="Points concédés : dans le filet">🕸️</th><th className={`${ui.th} text-right`} title="Points concédés : dehors (hors du terrain adverse)">↗️</th><th className={`${ui.th} text-right`} title="Points concédés : raté (tapé à côté)">💨</th>
                 {STROKES.map((s) => <th key={s.id} className={`${ui.th} text-center`} title={`${s.name} : niveau moyen sur les fiches reçues`}>{s.emoji}</th>)}
                 <th className={`${ui.th} text-right`} title="Fiches techniques reçues">Fiches</th><th className={`${ui.th} text-right`} title="Ce qu'il a scouté : impacts notés comme arbitre · fiches remplies">A scouté</th>
               </tr>
@@ -363,8 +363,11 @@ function ScoutTable({ rows, scout }: { rows: BmPupilRow[]; scout: ScoutRow[] }) 
                     <td className="p-1.5 text-right tabular-nums">{s.rallies || ""}</td>
                     <td className="p-1.5 text-right tabular-nums text-success-ink">{s.rallies ? s.won : ""}</td>
                     <td className="p-1.5 text-right tabular-nums text-danger-ink">{s.rallies ? s.lost : ""}</td>
-                    <td className="p-1.5 text-right tabular-nums">{s.out || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums text-success-ink">{s.winners || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums">{s.serve || ""}</td>
                     <td className="p-1.5 text-right tabular-nums">{s.net || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums">{s.out || ""}</td>
+                    <td className="p-1.5 text-right tabular-nums">{s.miss || ""}</td>
                     {STROKES.map((st) => <td key={st.id} className={cx("p-1.5 text-center font-display font-extrabold", levelColor(s.levels[st.id]))}>{s.levels[st.id] ?? ""}</td>)}
                     <td className="p-1.5 text-right tabular-nums">{s.sheets || ""}</td>
                     <td className="p-1.5 text-right tabular-nums text-ink-2">{s.gaveRallies || s.gaveSheets ? `${s.gaveRallies} · ${s.gaveSheets}` : ""}</td>
@@ -375,7 +378,7 @@ function ScoutTable({ rows, scout }: { rows: BmPupilRow[]; scout: ScoutRow[] }) 
           </table>
         </div>
       )}
-      <p className={ui.hint}>Échanges : notés par un arbitre en direct dans ses matchs de cette séance. Coups : niveau moyen sur les fiches des scouts (0 critère = TI … 4 = TB, ❤️ = E). « A scouté » : impacts qu&apos;il a notés comme arbitre · fiches qu&apos;il a remplies.</p>
+      <p className={ui.hint}>Échanges : notés par un arbitre ou un scout dans ses matchs de cette séance. ✅ points qu&apos;il a gagnés (le volant tombe chez l&apos;adversaire) ; points qu&apos;il a concédés : 🏸 service raté · 🕸️ filet · ↗️ dehors · 💨 raté (tapé à côté). Coups : niveau moyen sur les fiches des scouts (0 critère = TI … 4 = TB, ❤️ = E). « A scouté » : impacts qu&apos;il a notés comme arbitre · fiches qu&apos;il a remplies.</p>
     </section>
   );
 }

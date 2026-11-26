@@ -500,14 +500,15 @@ export async function undoRallyAction(matchId: string, rallyId: string): Promise
   await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", null, rallyId);
   return { ok: true };
 }
-// Preciser un impact (appui long : le coup, gagnant ou faute) : l'ancien est annule, le nouveau le remplace (meme place).
-export async function editRallyAction(matchId: string, rallyId: string, patch: { stroke?: string | null; end?: string | null }): Promise<BmResult> {
+// Preciser un impact (appui long : le coup, gagnant ou faute ; 26/11 soir : comment le point s'est fini, donc qui l'a
+// marque) : l'ancien est annule, le nouveau le remplace (meme place).
+export async function editRallyAction(matchId: string, rallyId: string, patch: { stroke?: string | null; end?: string | null; how?: string | null; w?: 0 | 1 }): Promise<BmResult> {
   const x = await liveCtx(matchId);
   if ("error" in x) return x;
   const old = x.m.events.find((e) => e.id === rallyId && e.kind === "RALLY");
   const r = old ? readRally(old.data) : null;
   if (!old || !r || undoneRallies(x.m.events).has(rallyId)) return { error: "Impact introuvable." };
-  const next = readRally({ ...r, ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}) });
+  const next = readRally({ ...r, ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}), ...(patch.how !== undefined ? { how: patch.how ?? undefined } : {}), ...(patch.w === 0 || patch.w === 1 ? { w: patch.w } : {}) });
   if (!next) return { error: "Impact illisible." };
   await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", null, rallyId);
   const eventId = await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", next);
