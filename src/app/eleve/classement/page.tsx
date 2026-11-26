@@ -4,7 +4,8 @@ import { getSession } from "@/lib/session-server";
 import { loadSelfEvalHistory } from "@/lib/student-self-evals";
 import { evalBaremeVisible } from "@/lib/eval-bareme-server";
 import { sessionsForStudent } from "@/lib/student-sessions";
-import { badmintonGroupOf, badmintonTabVisible, loadEloBoard } from "@/lib/badminton-server";
+import { badmintonGroupOf, badmintonTabVisible, eloGate, loadEloBoard } from "@/lib/badminton-server";
+import { BM_SELF_EVAL_WINDOW_MS, timingComment } from "@/lib/self-eval-timing";
 import { ELO_PROVISIONAL_GAMES, ELO_START, fmtDelta, fmtElo, rankElo } from "@/lib/badminton-elo";
 import { setsText } from "@/lib/badminton";
 import { perfReport } from "@/lib/badminton-perf";
@@ -12,7 +13,7 @@ import { BadmintonPerf } from "../../_components/BadmintonPerf";
 import { TopBar } from "../../_components/TopBar";
 import { LogoutButton } from "../../_components/LogoutButton";
 import { EleveTabs } from "../EleveTabs";
-import { cx, ui } from "@/lib/ui";
+import { btn, cx, ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +28,42 @@ export default async function ClassementPage({ searchParams }: { searchParams: P
   const { vue } = await searchParams;
   const all = vue === "tout";
   const mine = await sessionsForStudent(user.id);
-  const [{ todo }, bareme, visible, board, group] = await Promise.all([
+  const [{ todo }, bareme, visible, board, group, gate] = await Promise.all([
     loadSelfEvalHistory(user.id, mine),
     evalBaremeVisible(user.className, mine.some((s) => s.wodType === "HYROX")),
     badmintonTabVisible(user.id, user.className ?? null),
     loadEloBoard(),
     badmintonGroupOf(user.className ?? null),
+    eloGate(user.id),
   ]);
   if (!visible) redirect("/eleve");
+  // Classement reserve a ceux qui ont rempli l'auto-evaluation de leur dernier cours (Sartay 26/11 soir).
+  if (gate) {
+    const day = (ms: number) => new Date(ms).toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Brussels" });
+    return (
+      <div className={ui.page}>
+        <TopBar title={user.name} subtitle={user.className ?? ""} right={<LogoutButton />} />
+        <main className="max-w-2xl mx-auto p-4 space-y-4">
+          <EleveTabs active="classement" todo={todo.length} bareme={bareme} classement />
+          <section className={cx(ui.card, "p-4 space-y-3 border-2", gate.open ? "border-amber-400" : "border-danger")}>
+            <p className={ui.eyebrow}>🏸 Mon classement ELO 🔒</p>
+            {gate.open ? (
+              <>
+                <p className="text-sm">Pour voir ton classement, remplis d&apos;abord ton <b>auto-évaluation du cours du {day(gate.dateMs)}</b>. Elle débloque tout de suite ton ELO, ta progression et le classement.</p>
+                <Link href={`/eleve/badminton/${gate.sessionId}?autoeval=1#auto-eval`} className={cx(btn.primary, "w-full")}>📝 Remplir mon auto-évaluation</Link>
+                <p className={ui.hint}>Ouverte jusqu&apos;au {day(gate.endMs + BM_SELF_EVAL_WINDOW_MS)}. Plus tu la remplis tôt après le cours, mieux c&apos;est !</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-danger-ink">💬 {timingComment("CLOSED", user.id, gate.sessionId)}</p>
+                <p className={ui.hint}>L&apos;auto-évaluation du cours du {day(gate.dateMs)} est fermée. Ton classement reviendra quand tu auras rempli celle de ton prochain cours.</p>
+              </>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   // Les eleves de test (7A) ne se melangent jamais aux vraies classes : chacun ne voit que son propre monde.
   const iAmTest = board.test.has(user.id) || /^7/.test(user.className ?? "");

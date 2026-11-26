@@ -3,7 +3,7 @@ import { notDeleted } from "@/lib/session-roles";
 import { sessionsForStudent, wodLabel, type StudentSessionRow } from "@/lib/student-sessions";
 import { toMs } from "@/lib/scheduling";
 import { SELF_EVAL_WINDOW_MS, selfEvalGridFor, type SelfEvalGridKey } from "@/lib/wod-engines/core/self-eval";
-import { pupilWindowOpen } from "@/lib/badminton-server";
+import { selfEvalOpen } from "@/lib/badminton-server";
 
 // Auto-evaluations d'un eleve (Sartay 29/09 nuit : onglet « Mes auto-évaluations », puis le recap de chacune).
 // Seulement ses WOD vraiment enregistres (une seance lancee sans aucun resultat reste invisible). De l'avis du prof,
@@ -60,7 +60,7 @@ export async function loadSelfEvalHistory(userId: string, known?: StudentSession
     teamId: "",
     teamName: "",
     isActive: s.isActive,
-    ended: !pupilWindowOpen(s),
+    ended: !selfEvalOpen(s),
     recorded: true,
     cycleId: null,
     cycleName: null,
@@ -92,7 +92,7 @@ export async function loadSelfEvalHistory(userId: string, known?: StudentSession
     return !!s?.raceEndedAt && now - toMs(s.raceEndedAt) <= SELF_EVAL_WINDOW_MS;
   });
   // Badminton : seances ou l'eleve peut encore encoder, ou il a joue ou arbitre un match, sans auto-evaluation.
-  const bmOpen = bmSessions.filter((s) => !done.has(s.id) && pupilWindowOpen(s));
+  const bmOpen = bmSessions.filter((s) => !done.has(s.id) && selfEvalOpen(s));
   if (bmOpen.length) {
     const matches = await db.orm.public.BadmintonMatch.where((m) => m.sessionId.in(bmOpen.map((s) => s.id))).all();
     for (const s of bmOpen) if (matches.some((m) => m.sessionId === s.id && (m.playerAId === userId || m.playerBId === userId || m.createdById === userId))) todo.push(bmRow(s));

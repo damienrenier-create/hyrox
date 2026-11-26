@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowOpen, selfEvalEnd, selfEvalOpen, sessionEndMs, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { BM_SELF_EVAL_DAYS, selfEvalTiming, timingComment } from "@/lib/self-eval-timing";
+import { AfterMatchPrompt, FormeQuick } from "./SelfEvalPrompts";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { marginFor, readyState, scoreFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -189,6 +191,16 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   }
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
+  // Auto-evaluation (26/11 soir) : ouverte pendant le cours et 3 jours apres ; le petit mot selon le moment du PREMIER envoi ;
+  // fermee sans auto-eval : le mot « trop tard » (et pas de classement ELO jusqu'a la prochaine).
+  const nowMs = currentTime();
+  const endMs = sessionEndMs(session);
+  const seOpen = selfEvalOpen(session, nowMs);
+  const sentMs = selfEval ? new Date(String(selfEval.submittedAt)).getTime() : null;
+  const timing = sentMs !== null ? selfEvalTiming(sentMs, endMs) : !seOpen && nowMs > endMs ? "CLOSED" : null;
+  const timingText = timing ? timingComment(timing, me.id, sessionId) : null;
+  // Mes matchs de ce cours qui ont un score (pour « Tu veux t'auto-evaluer maintenant ? » apres chaque match).
+  const played = involved.filter((v) => v.meSide !== null && (v.status === "PENDING" || v.status === "VALIDATED")).length;
   // Scouting (24/11) : mes couches quand j'arbitre en direct ; les matchs que je peux observer (en direct d'abord).
   // Verrouille par defaut (26/11) : seulement si le prof l'a deverrouille pour toute la classe ou pour moi, pendant ce cours.
   const scoutCfg = readScoutConfig(session.settings);
@@ -216,8 +228,11 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
       <TopBar title="🏸 Badminton" subtitle={`${readSessionClasses(session.settings).join(" + ")}${session.isActive && closes ? ` · jusqu'à ${closes}` : ""}`} back={{ href: "/eleve", label: "Mon espace" }} />
       {/* Rappel de l'auto-evaluation, 10 min avant la fin du cours (24/11). */}
       <div className="max-w-xl mx-auto px-4 pt-4 empty:hidden">
-        <SelfEvalNudge closesAt={session.closesAt ? toMs(session.closesAt) : null} windowEnd={pupilWindowEnd(session)} serverNow={currentTime()} sent={!!selfEval} />
+        <SelfEvalNudge closesAt={session.closesAt ? toMs(session.closesAt) : null} windowEnd={selfEvalEnd(session)} serverNow={nowMs} sent={!!selfEval} modalKey={`reps_bm_nudge_modal_${sessionId}`} />
       </div>
+      {/* Avant le premier match : la forme du jour (une ligne de l'auto-eval) ; apres chaque match : « maintenant ? ». */}
+      {!selfEval && writable && nowMs < endMs && <div className="max-w-xl mx-auto px-4 pt-3"><FormeQuick sessionId={sessionId} /></div>}
+      {!selfEval && seOpen && <AfterMatchPrompt sessionId={sessionId} played={played} closesAt={session.closesAt ? toMs(session.closesAt) : null} serverNow={nowMs} />}
       <BadmintonClient
         sessionId={sessionId}
         meId={me.id}
@@ -238,18 +253,22 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>
           <summary className="cursor-pointer select-none flex items-center justify-between gap-2">
             <span className="font-display font-extrabold text-ink">📝 Mon auto-évaluation</span>
-            <span className={cx(ui.chip, selfEval ? ui.chipOk : writable ? ui.chipWarn : ui.chipMuted)}>{selfEval ? "envoyée ✅" : writable ? "à remplir" : "non remplie"}</span>
+            <span className={cx(ui.chip, selfEval ? ui.chipOk : seOpen ? ui.chipWarn : ui.chipMuted)}>{selfEval ? "envoyée ✅" : seOpen ? "à remplir" : "non remplie"}</span>
           </summary>
           <div className="mt-3">
-            <p className={`${ui.hint} mb-2`}>{grid.title}. À remplir à la fin du cours (jusqu&apos;à 24 h après).</p>
+            {selfEval && timingText && <p className={cx("mb-3 rounded-xl px-3 py-2 text-sm font-semibold", timing === "TOP" || timing === "SUPER" ? "bg-success-soft text-success-ink" : timing === "HOMEWORK" || timing === "NEXT_DAY" ? "bg-warn-soft text-warn-ink" : "bg-danger-soft text-danger-ink")}>💬 {timingText}</p>}
+            <p className={`${ui.hint} mb-2`}>{grid.title}. À remplir à la fin du cours (au plus tard {BM_SELF_EVAL_DAYS} jours après). Sans elle, pas de classement ELO.</p>
             <SelfEvalGrid
               sessionId={sessionId}
               criteria={grid.criteria}
               instruction={grid.instruction}
               initial={selfEval ? (selfEval.answers as Record<string, string>) : null}
-              state={writable ? "open" : "expired"}
-              closesAt={pupilWindowEnd(session)}
-              submittedAt={selfEval ? new Date(String(selfEval.submittedAt)).getTime() : null}
+              state={seOpen ? "open" : "expired"}
+              closesAt={selfEvalEnd(session)}
+              submittedAt={sentMs}
+              draft
+              firstSent
+              expiredText={!selfEval && timingText ? timingText : `Le délai de ${BM_SELF_EVAL_DAYS} jours est écoulé.`}
             />
           </div>
         </details>

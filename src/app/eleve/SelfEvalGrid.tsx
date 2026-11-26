@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { QUALITY_LEVELS, type QualityCode } from "@/lib/wod-engines/core/quality";
+import { QUALITY_LEVELS, isQualityCode, type QualityCode } from "@/lib/wod-engines/core/quality";
 import type { SelfEvalCriterion } from "@/lib/wod-engines/core/self-eval";
 import { submitSelfEvaluationAction } from "./actions";
 import { btn, cx, ui } from "@/lib/ui";
@@ -15,7 +15,23 @@ type Props = {
   state: "open" | "notYet" | "expired";
   closesAt: number | null;
   submittedAt: number | null;
+  // Badminton (26/11 soir) : les cases cochees sont gardees sur le telephone (brouillon, `selfEvalDraftKey`) ; la forme du
+  // jour notee avant le premier match y est deja. Textes propres : delai de 3 jours, heure du premier envoi.
+  draft?: boolean;
+  expiredText?: string;
+  firstSent?: boolean;
 };
+
+// Brouillon d'auto-evaluation sur ce telephone (jamais envoye tant que l'eleve n'appuie pas sur « Envoyer »).
+export const selfEvalDraftKey = (sessionId: string) => `reps_selfeval_draft_${sessionId}`;
+export const SELF_EVAL_DRAFT_EVENT = "reps-selfeval-draft";
+export function readSelfEvalDraft(sessionId: string): Record<string, string> {
+  try { const raw = localStorage.getItem(selfEvalDraftKey(sessionId)); const o = raw ? JSON.parse(raw) : null; return o && typeof o === "object" ? (o as Record<string, string>) : {}; } catch { return {}; }
+}
+export function writeSelfEvalDraft(sessionId: string, answers: Record<string, string>) {
+  try { localStorage.setItem(selfEvalDraftKey(sessionId), JSON.stringify(answers)); } catch { /* stockage indisponible */ }
+  try { window.dispatchEvent(new CustomEvent(SELF_EVAL_DRAFT_EVENT, { detail: sessionId })); } catch { /* hors navigateur */ }
+}
 
 // Couleurs de la grille papier (TI rouge -> E bleu), version mobile : une carte par niveau, on touche pour cocher.
 const LEVEL_STYLE: Record<QualityCode, { idle: string; on: string }> = {
@@ -27,7 +43,7 @@ const LEVEL_STYLE: Record<QualityCode, { idle: string; on: string }> = {
   E: { idle: "bg-sky-50 border-sky-100", on: "bg-sky-600 border-sky-700 text-white" },
 };
 
-export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state, closesAt, submittedAt }: Props) {
+export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state, closesAt, submittedAt, draft = false, expiredText, firstSent = false }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, QualityCode>>(() => {
     const out: Record<string, QualityCode> = {};
@@ -36,6 +52,25 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
   });
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // Brouillon (badminton) : repris au chargement, et quand la forme du jour est notee ailleurs sur la page.
+  useEffect(() => {
+    if (!draft || initial || state !== "open") return;
+    const load = () => {
+      const d = readSelfEvalDraft(sessionId);
+      setAnswers((a) => { const out = { ...a }; for (const c of criteria) if (isQualityCode(d[c.id]) && !out[c.id]) out[c.id] = d[c.id] as QualityCode; return out; });
+    };
+    load();
+    const on = (e: Event) => { if ((e as CustomEvent).detail === sessionId) load(); };
+    window.addEventListener(SELF_EVAL_DRAFT_EVENT, on);
+    return () => window.removeEventListener(SELF_EVAL_DRAFT_EVENT, on);
+  }, [draft, initial, state, sessionId, criteria]);
+  const pick = (id: string, code: QualityCode) => {
+    setAnswers((a) => {
+      const next = { ...a, [id]: code };
+      if (draft && !initial) { const d = readSelfEvalDraft(sessionId); try { localStorage.setItem(selfEvalDraftKey(sessionId), JSON.stringify({ ...d, ...next })); } catch { /* stockage indisponible */ } }
+      return next;
+    });
+  };
 
   const editable = state === "open";
   const complete = criteria.every((c) => !!answers[c.id]);
@@ -48,6 +83,7 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
       if ("error" in res) setMessage({ tone: "error", text: res.error });
       else {
         setMessage({ tone: "ok", text: "Auto-évaluation enregistrée ✅" });
+        if (draft) { try { localStorage.removeItem(selfEvalDraftKey(sessionId)); } catch { /* stockage indisponible */ } }
         router.refresh();
       }
     });
@@ -62,13 +98,13 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
       )}
       {state === "expired" && (
         <p className="bg-paper border border-line text-ink-2 text-sm rounded-xl p-3 mb-4">
-          🔒 Le délai de 24 h est écoulé. {initial ? "Voici ce que tu avais coché." : "Tu n'as pas rempli ton auto-évaluation."}
+          🔒 {expiredText ?? "Le délai de 24 h est écoulé."} {initial ? "Voici ce que tu avais coché." : expiredText ? "" : "Tu n'as pas rempli ton auto-évaluation."}
         </p>
       )}
       {state === "open" && (
         <p className={`${ui.hint} mb-3`}>
           {closesAt && <>Ouverte jusqu&apos;au {fmt(closesAt)}.</>}
-          {submittedAt && <> Dernier envoi : {fmt(submittedAt)}.</>}
+          {submittedAt && <> {firstSent ? "Envoyée le" : "Dernier envoi :"} {fmt(submittedAt)}.</>}
         </p>
       )}
 
@@ -95,7 +131,7 @@ export function SelfEvalGrid({ sessionId, criteria, instruction, initial, state,
                       type="button"
                       disabled={!editable || pending}
                       aria-pressed={selected}
-                      onClick={() => setAnswers((a) => ({ ...a, [c.id]: l.code }))}
+                      onClick={() => pick(c.id, l.code)}
                       className={cx("text-left rounded-xl border-2 px-3 py-2 transition-all flex gap-2 items-start", selected ? `${style.on} shadow-md scale-[1.01]` : `${style.idle} ${editable ? "hover:border-ink-3" : "opacity-60"}`)}
                     >
                       <span className={cx("mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[11px] font-black", selected ? "bg-white text-ink border-white" : "border-ink-3/60 text-transparent")}>✓</span>

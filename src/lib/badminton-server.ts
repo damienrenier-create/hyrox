@@ -8,6 +8,7 @@ import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, themeOf,
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 import { myRallies, readRally, undoneRallies, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
+import { BM_SELF_EVAL_WINDOW_MS } from "@/lib/self-eval-timing";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -242,10 +243,56 @@ export function pupilWindowOpen(session: SessionLike, nowMs = Date.now()): boole
   if (session.opensAt && nowMs < toMs(session.opensAt)) return false;
   return nowMs < pupilWindowEnd(session);
 }
-// Fin de cette fenetre : 24 h apres la fin de la seance (aussi la fin de l'auto-evaluation badminton).
+// Fin de cette fenetre : 24 h apres la fin de la seance.
 export function pupilWindowEnd(session: SessionLike): number {
-  const end = session.closesAt ? toMs(session.closesAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : toMs(session.createdAt) + 12 * 3600_000;
-  return end + BM_AFTER_MS;
+  return sessionEndMs(session) + BM_AFTER_MS;
+}
+// Fin du cours (heure prevue de fin).
+export function sessionEndMs(session: SessionLike): number {
+  return session.closesAt ? toMs(session.closesAt) : session.raceEndedAt ? toMs(session.raceEndedAt) : toMs(session.createdAt) + 12 * 3600_000;
+}
+// Auto-evaluation de badminton (26/11 soir) : ouverte pendant le cours et jusqu'a 3 JOURS apres sa fin (avant : 24 h ;
+// les mots selon le moment de l'envoi : src/lib/self-eval-timing.ts). Encoder ses matchs reste limite a 24 h.
+export function selfEvalEnd(session: SessionLike): number {
+  return sessionEndMs(session) + BM_SELF_EVAL_WINDOW_MS;
+}
+export function selfEvalOpen(session: SessionLike, nowMs = Date.now()): boolean {
+  if (session.deletedAt) return false;
+  if (isSessionOpen(session as Parameters<typeof isSessionOpen>[0], nowMs)) return true;
+  if (session.opensAt && nowMs < toMs(session.opensAt)) return false;
+  return nowMs < selfEvalEnd(session);
+}
+
+// CLASSEMENT ELO reserve a ceux qui ont rempli leur auto-evaluation (Sartay 26/11 soir : « bonne idee : pour avoir acces
+// au classement ELO, faut avoir rempli l'auto-eval »). Le cours qui compte : le dernier cours de badminton ou l'eleve a
+// joue un match (ni annule, ni observation) ; pendant un cours pas encore fini, c'est le precedent (sauf s'il a deja
+// rempli celle du cours en cours). null = acces libre. Sinon : le cours a remplir, et s'il est encore ouvert (3 jours) ;
+// ferme = « attends ton prochain cours » (le prochain cours remplace celui-ci des qu'il y joue un match).
+// La regle vaut pour les cours a partir du 26/11/2026 (jour ou elle a ete decidee) : un cours plus ancien sans auto-eval ne
+// bloque personne (les eleves ne connaissaient pas la regle).
+export const ELO_GATE_FROM_MS = Date.UTC(2026, 10, 25, 23, 0); // 26/11/2026 00:00 a Bruxelles
+export type EloGate = { sessionId: string; dateMs: number; endMs: number; open: boolean };
+export async function eloGate(userId: string, nowMs = Date.now()): Promise<EloGate | null> {
+  const [asA, asB] = await Promise.all([db.orm.public.BadmintonMatch.where({ playerAId: userId }).all(), db.orm.public.BadmintonMatch.where({ playerBId: userId }).all()]);
+  const rows = [...asA, ...asB].filter((m) => m.sessionId);
+  if (!rows.length) return null;
+  const events = await db.orm.public.BadmintonEvent.where((e) => e.matchId.in(rows.map((m) => m.id))).all();
+  const played = toMatches(rows, events).filter((m) => { const st = matchState(m); return (st.status === "PENDING" || st.status === "VALIDATED") && !!st.sets; });
+  const ids = [...new Set(played.map((m) => m.sessionId as string))];
+  if (!ids.length) return null;
+  const [sessions, evals] = await Promise.all([
+    db.orm.public.Session.where((s) => s.id.in(ids)).all(),
+    db.orm.public.SelfEvaluation.where({ studentId: userId }).all(),
+  ]);
+  const done = new Set(evals.map((e) => e.sessionId));
+  const list = sessions.filter((s) => !s.deletedAt && s.wodType === "BADMINTON").sort((a, b) => sessionEndMs(b) - sessionEndMs(a));
+  for (const s of list) {
+    if (done.has(s.id)) return null; // la plus recente qui compte est remplie
+    if (sessionEndMs(s) < ELO_GATE_FROM_MS) return null; // cours d'avant la regle
+    if (sessionEndMs(s) > nowMs) continue; // cours en cours, pas rempli : on regarde le precedent
+    return { sessionId: s.id, dateMs: toMs(s.opensAt ?? s.createdAt), endMs: sessionEndMs(s), open: selfEvalOpen(s, nowMs) };
+  }
+  return null;
 }
 
 // ===== Scouting (24/11, regles dans src/lib/badminton-scout.ts) =====

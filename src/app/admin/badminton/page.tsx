@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadScoutingMatches, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
+import { sessionEndMs, activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadScoutingMatches, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
+import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -117,7 +118,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       const p = selfPeople.get(id);
       const se = selfRows.find((r) => r.studentId === id);
       const answers = (se?.answers as Record<string, string> | null) ?? null;
-      return { id, name: p?.name ?? "?", lastName: p?.lastName ?? "", firstName: p?.firstName ?? "", className: p?.className ?? null, answers, grade: answers ? gradeOfAnswers(answers, "BADMINTON") : null, at: se ? toMs(se.submittedAt) : null };
+      return { id, name: p?.name ?? "?", lastName: p?.lastName ?? "", firstName: p?.firstName ?? "", className: p?.className ?? null, answers, grade: answers ? gradeOfAnswers(answers, "BADMINTON") : null, at: se ? toMs(se.submittedAt) : null, timing: se ? TIMING_LABEL[selfEvalTiming(toMs(se.submittedAt), sessionEndMs(session))] : null };
     })
     .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
     .map(({ id, name, className, answers, grade, at }) => ({ id, name, className, answers, grade, at }));

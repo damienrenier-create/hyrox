@@ -19,7 +19,7 @@ const NO_IDS: string[] = [];
 import type { HandicapCalibration } from "@/lib/badminton-tournament";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
-export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null };
+export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null; timing?: string | null };
 export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
 type SeCol = { id: string; short: string; label: string };
 type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder" | "scouting";
@@ -216,7 +216,7 @@ function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] })
                 <td className="p-2">{r.className ?? ""}</td>
                 {cols.map((c) => <td key={c.id} className={cx("p-2 text-center font-black", color(r.answers?.[c.id]))}>{r.answers?.[c.id] ?? "—"}</td>)}
                 <td className="p-2 text-right tabular-nums font-bold">{r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")}</td>
-                <td className="p-2 text-xs whitespace-nowrap">{r.at ? hm(r.at) : "pas encore"}</td>
+                <td className="p-2 text-xs whitespace-nowrap">{r.at ? <>{hm(r.at)}{r.timing ? <span className="block text-ink-2">{r.timing}</span> : null}</> : "pas encore"}</td>
               </tr>
             ))}
           </tbody>

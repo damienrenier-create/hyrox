@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { buildSessionStandings } from "@/lib/session-standings";
 import { selfEvalGridFor, selfEvalWindow } from "@/lib/wod-engines/core/self-eval";
-import { pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
+import { selfEvalOpen, studentInSession } from "@/lib/badminton-server";
+import { BM_SELF_EVAL_DAYS } from "@/lib/self-eval-timing";
 import { isQualityCode } from "@/lib/wod-engines/core/quality";
 
 export async function submitSelfEvaluationAction(
@@ -28,11 +29,10 @@ export async function submitSelfEvaluationAction(
   for (const c of grid.criteria) clean[c.id] = answers[c.id];
 
   if (session.wodType === "BADMINTON") {
-    // Badminton (03/11) : pas d'equipes. Un eleve de la seance, tant qu'il peut y encoder ses matchs (seance ouverte,
-    // ou terminee depuis moins de 24 h).
+    // Badminton (03/11) : pas d'equipes. Un eleve de la seance, pendant le cours et jusqu'a 3 jours apres (26/11 soir).
     const me = await db.orm.public.User.where({ id: user.id }).first();
     if (!(await studentInSession(session, user.id, me?.className ?? null))) return { error: "Tu n'es pas dans cette séance." };
-    if (!pupilWindowOpen(session)) return { error: "Le délai de 24 h est dépassé." };
+    if (!selfEvalOpen(session)) return { error: `Trop tard : l'auto-évaluation se remplit au plus tard ${BM_SELF_EVAL_DAYS} jours après le cours.` };
   } else {
     // L'eleve doit avoir participe (membre d'une equipe de cette seance, encode par le greffier).
     const memberships = await db.orm.public.TeamMember.where({ userId: user.id }).all();
@@ -51,7 +51,9 @@ export async function submitSelfEvaluationAction(
 
   const existing = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: user.id }).first();
   if (existing) {
-    await db.orm.public.SelfEvaluation.where({ id: existing.id }).update({ answers: clean, submittedAt: Temporal.Now.instant() });
+    // Badminton (26/11 soir) : on garde l'heure du PREMIER envoi (le petit mot de l'eleve en depend : self-eval-timing.ts).
+    if (session.wodType === "BADMINTON") await db.orm.public.SelfEvaluation.where({ id: existing.id }).update({ answers: clean });
+    else await db.orm.public.SelfEvaluation.where({ id: existing.id }).update({ answers: clean, submittedAt: Temporal.Now.instant() });
   } else {
     await db.orm.public.SelfEvaluation.create({ sessionId, studentId: user.id, answers: clean });
   }

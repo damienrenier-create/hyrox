@@ -16,7 +16,7 @@ import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
-import { badmintonTabVisible, loadMatches, preferTournamentSessions, pupilWindowEnd } from "@/lib/badminton-server";
+import { badmintonTabVisible, loadMatches, preferTournamentSessions, selfEvalEnd } from "@/lib/badminton-server";
 import { BM_FREE, matchState, mustSign, pupilStats, viewOf } from "@/lib/badminton";
 import { SelfEvalNudge } from "../_components/SelfEvalNudge";
 
@@ -111,7 +111,7 @@ export default async function ElevePage() {
                     </div>
                     <span className="flex flex-col items-end gap-1">
                       {(toSignBy.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {toSignBy.get(s.id)} à signer</span>}
-                      <SelfEvalNudge chip closesAt={s.closesAt ? toMs(s.closesAt) : null} windowEnd={pupilWindowEnd(s)} serverNow={currentTime()} sent={selfSent.has(s.id)} />
+                      <SelfEvalNudge chip closesAt={s.closesAt ? toMs(s.closesAt) : null} windowEnd={selfEvalEnd(s)} serverNow={currentTime()} sent={selfSent.has(s.id)} />
                     </span>
                   </div>
                   {/* Sartay 26/11 : « encoder mes matchs est trompeur » pendant un tournoi -> « Participer au tournoi ». */}
