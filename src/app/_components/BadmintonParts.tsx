@@ -235,7 +235,8 @@ export type LiveScout = { court: CourtKind; level: number };
 export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
 // theme (24/11) : match a theme (voir src/lib/badminton-themes.ts) ; l'arbitre clot chaque echange en l'attribuant a un
 // joueur, la regle du theme donne les points et le service.
-export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; onClose: () => void }) {
+// scouting (26/11) : une OBSERVATION, pas un match : score indicatif (ni ELO, ni tournoi), « Fin du scouting ».
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, scouting = false, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; scouting?: boolean; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
@@ -438,14 +439,14 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={nextSet} disabled={finishing || sets.length >= BM_MAX_SETS || fresh} className={btn.ghost}>Set suivant ›</button>
-        <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : "🏁 Fin du match"}</button>
+        <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : scouting ? "🏁 Fin du scouting" : "🏁 Fin du match"}</button>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {sets.length > 1 && <button type="button" onClick={dropSet} disabled={finishing} className={btn.smGhost}>← Retirer ce set</button>}
         <button type="button" onClick={restart} disabled={finishing || (sets.length === 1 && fresh)} className={btn.smGhost}>↺ Recommencer à {head[0]}-{head[1]}</button>
         <button type="button" onClick={cancelMatch} disabled={finishing} className={btn.smGhost}>✖ Annuler ce match</button>
       </div>
-      <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
+      <p className={ui.hint}>{scouting ? "Chaque impact est enregistré tout de suite : tu peux fermer et reprendre plus tard (« Mes scoutings en cours »)." : "Chaque point est enregistré tout de suite : tu peux fermer et reprendre plus tard (« Matchs que j'ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger."}</p>
     </>
   );
 
@@ -470,7 +471,8 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     );
     return overlay(
         <div className="max-w-xl mx-auto p-3 space-y-2 pb-44">
-          {header("🔭 Scouting en direct")}
+          {header(scouting ? "🔭 Scouting · score indicatif" : "🔭 Arbitrage + scouting")}
+          {scouting && <p className={ui.hint}>Ce n&apos;est pas un arbitrage : ce score ne compte ni à l&apos;ELO ni au tournoi. Seuls les impacts comptent, pour l&apos;analyse des deux joueurs.</p>}
           {extras}
           {themeBlock}
           <div className="flex items-stretch gap-1.5">

@@ -701,6 +701,30 @@ export async function badmintonPulseAction(sessionId: string): Promise<string> {
 // pour ne pas devoir ecrire le chiffre a chaque fois tout en les poussant a suivre le match ») =====
 // Un eleve qui NE JOUE PAS le match (ou un prof) l'ouvre ; chaque appui envoie la photo du score (ligne LIVE) ; « Fin du
 // match » l'enregistre (ligne SCORE de l'arbitre, validee d'office).
+// Ouvrir une OBSERVATION de scouting (26/11, Sartay : « le scouting n'est pas l'arbitrage ! il ne compte pas dans les points
+// ELO, les points sont a titre indicatif ») : un « match » marque SCOUTING, jamais charge avec les vrais matchs (ni ELO, ni
+// tournoi, ni liste, ni arbitrage) ; le tableau en direct y note le score indicatif et les impacts (RALLY).
+export async function startScoutingAction(sessionId: string, input: { playerAId: string; playerBId: string }): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (c.free || !c.session) return { error: "Le scouting se fait pendant un cours." };
+  if (!c.staff && !scoutUnlocked(readScoutConfig(c.session.settings), c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
+  const a = String(input.playerAId ?? ""), b = String(input.playerBId ?? "");
+  if (!a || !b || a === b) return { error: "Choisis les deux joueurs observés." };
+  if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : un autre élève doit te scouter." };
+  const roster = await rosterIds(c);
+  if (!roster.has(a) || !roster.has(b)) return { error: notFound(c) };
+  const role: BmRole = c.staff ? "STAFF" : "REFEREE";
+  const match = await db.transaction(async (tx) => {
+    const m = await tx.orm.public.BadmintonMatch.create({ sessionId: c.session!.id, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: null });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "SCOUTING", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
+    return m;
+  });
+  done(c.session.id);
+  return { ok: true, matchId: match.id, sets: [[0, 0]] };
+}
+
 export async function startLiveMatchAction(sessionId: string, input: { playerAId: string; playerBId: string; force?: boolean; witnessIds?: string[] }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;

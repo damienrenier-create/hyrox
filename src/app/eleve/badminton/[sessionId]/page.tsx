@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { activeTournament, badmintonRoster, loadMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
+import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { marginFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -10,7 +10,7 @@ import { scoutQueue } from "@/lib/badminton-scout-queue";
 import { ScoutView } from "../../../_components/ScoutView";
 import { swapSets } from "@/lib/badminton";
 import type { TourCardData } from "./BadmintonClient";
-import { viewOf, type BmPersonRef } from "@/lib/badminton";
+import { matchState, viewOf, type BmPersonRef } from "@/lib/badminton";
 import { readSessionClasses } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
 import { TopBar } from "../../../_components/TopBar";
@@ -40,6 +40,8 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   if (!me || !(await studentInSession(session, me.id, me.className ?? null))) redirect("/eleve");
 
   const [matches, roster] = await Promise.all([loadMatches(sessionId), badmintonRoster(session)]);
+  // Observations de scouting (26/11) : pas des matchs ; seulement pour le scouting et son analyse.
+  const scoutingObs = await loadScoutingMatches(sessionId);
   const people = await peopleOf(matches, roster.map((p) => p.id));
   const ref = (id: string): BmPersonRef => { const p = people.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
   const views = matches.map((m) => viewOf(m, me.id, false, ref));
@@ -185,14 +187,19 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const scoutOpen = scoutUnlocked(scoutCfg, me.id);
   const scoutMine = scoutOpen ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
   // Pendant un tournoi, le scout recoit le PROCHAIN match pas encore commence (26/11, voir badminton-scout-queue.ts).
-  const scoutNext = scoutOpen && tourNow ? scoutQueue(tourNow, tm, me.id).slice(0, 4) : null;
+  const watched = new Set(scoutingObs.filter((m) => matchState(m).status === "LIVE").map((m) => [m.playerAId, m.playerBId].sort().join("|")));
+  const scoutNext = scoutOpen && tourNow ? scoutQueue(tourNow, tm, me.id, watched).slice(0, 4) : null;
+  // Mes observations en cours (a reprendre).
+  const myObs = scoutOpen ? scoutingObs.filter((m) => m.createdById === me.id && matchState(m).status === "LIVE") : [];
+  const obsNames = myObs.length ? await peopleOf(myObs) : new Map();
+  const scoutResume = myObs.map((m) => ({ id: m.id, aName: obsNames.get(m.playerAId)?.name ?? "?", bName: obsNames.get(m.playerBId)?.name ?? "?", sets: matchState(m).sets ?? [[0, 0]] }));
   const scoutNames = scoutNext?.length ? await peopleOf([], scoutNext.flatMap((p) => [p.a, p.b])) : new Map();
   const scoutPicks = scoutNext ? scoutNext.map((p) => ({ a: { id: p.a, name: scoutNames.get(p.a)?.name ?? "?" }, b: { id: p.b, name: scoutNames.get(p.b)?.name ?? "?" }, label: p.label })) : null;
   const scoutable = scoutOpen ? views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15) : null;
   // Analyse de MON scouting (Sartay 24/11 : « a la fin de chaque cours, l'eleve pourra, s'il a rempli son auto-eval,
   // demander a recevoir l'analyse de son scouting ») : ce cours, et tous mes cours ; seulement apres l'auto-evaluation.
   const myScout = selfEval ? await loadPlayerScouting(me.id) : null;
-  const here = new Set(matches.map((m) => m.id));
+  const here = new Set([...matches, ...scoutingObs].map((m) => m.id));
   const scoutHere = myScout ? { rallies: myScout.rallies.filter((r) => here.has(r.matchId)), sheets: myScout.sheets.filter((s) => here.has(s.matchId)) } : null;
   const closes = session.closesAt ? new Date(toMs(session.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
 
@@ -217,6 +224,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         scout={scoutMine}
         scoutable={scoutable}
         scoutPicks={scoutPicks}
+        scoutResume={scoutResume}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>

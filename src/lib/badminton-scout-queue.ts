@@ -13,12 +13,13 @@ import { teamsOf } from "@/lib/badminton-teams";
 import { bracketOf, poolsOf, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 export type ScoutPick = { a: string; b: string; label: string };
-export function scoutQueue(t: { kind: TourKind; players: TourPlayer[]; settings: TourSettings }, matches: BmMatch[], scoutId: string): ScoutPick[] {
+// busy : paires deja observees par un autre scout (observation en cours) : jamais proposees deux fois.
+export function scoutQueue(t: { kind: TourKind; players: TourPlayer[]; settings: TourSettings }, matches: BmMatch[], scoutId: string, busy: Set<string> = new Set()): ScoutPick[] {
   const gone = new Set(t.players.filter((p) => p.gone).map((p) => p.studentId));
   const ok = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && a !== scoutId && b !== scoutId && !gone.has(a) && !gone.has(b);
   const out: ScoutPick[] = [];
   const seen = new Set<string>();
-  const push = (a: string, b: string, label: string) => { const k = [a, b].sort().join("|"); if (!seen.has(k)) { seen.add(k); out.push({ a, b, label }); } };
+  const push = (a: string, b: string, label: string) => { const k = [a, b].sort().join("|"); if (!seen.has(k) && !busy.has(k)) { seen.add(k); out.push({ a, b, label }); } };
   if (t.kind === "TEAMS") {
     const st = teamsOf(t.players, matches, t.settings);
     if (!st.next) return out;

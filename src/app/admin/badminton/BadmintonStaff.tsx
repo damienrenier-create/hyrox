@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { matchesSearch, setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
-import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "@/app/eleve/badminton-actions";
+import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction } from "@/app/eleve/badminton-actions";
 import { LiveBoard, MatchCard, PersonPicker, SetsEditor, ThemePanel, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
 import type { BmTheme } from "@/lib/badminton-themes";
 import { STROKES, type ScoutConfig, type ScoutRow } from "@/lib/badminton-scout";
@@ -81,7 +81,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
     <ScoutUnlockProvider sessionId={!free && scoutCfg ? sessionId : null} on={!!scoutCfg?.on} unlocked={!free && scoutCfg ? scoutCfg.unlocked : NO_IDS}>
     <div className="space-y-4">
       {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={profScout} onClose={() => setRefLive(null)} />}
-      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} scout={profScout} onClose={() => { setOwnLive(null); router.refresh(); }} />}
+      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} scout={profScout} scouting={!!ownLive.scouting} onClose={() => { setOwnLive(null); router.refresh(); }} />}
       {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
       {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -268,7 +268,7 @@ function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: stri
   );
 }
 
-type StaffLive = { id: string; aName: string; bName: string; sets: BmSet[]; target?: number; rule?: LiveRule; theme?: BmTheme | null };
+type StaffLive = { id: string; aName: string; bName: string; sets: BmSet[]; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean };
 function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: string; roster: BmPersonRef[]; free: boolean; onDone: () => void; onLive: (x: StaffLive) => void }) {
   const router = useRouter();
   const [a, setA] = useState<string | null>(null);
@@ -290,6 +290,15 @@ function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: st
       if (res.matchId) { onLive({ id: res.matchId, aName: first(a), bName: first(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme }); setA(null); setB(null); setTwin(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
     });
   }
+  // Scouter sans arbitrer (26/11 : « le scouting n'est pas l'arbitrage ») : une observation, score indicatif.
+  function scoutOnly() {
+    setError("");
+    start(async () => {
+      const res = await startScoutingAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "" });
+      if ("error" in res) { setError(res.error); return; }
+      if ("matchId" in res && res.matchId) { onLive({ id: res.matchId, aName: first(a), bName: first(b), sets: res.sets ?? [[0, 0]], scouting: true }); setA(null); setB(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    });
+  }
   function save(force = false) {
     setError("");
     start(async () => {
@@ -309,6 +318,7 @@ function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: st
         <PersonPicker people={roster} value={b} onChange={setB} exclude={a ? [a] : []} label="Joueur 2" placeholder="Tape un nom" />
       </div>
       <button type="button" disabled={pending || !a || !b} onClick={() => live(false)} className={cx(btn.lgPrimary, "w-full")}>🎯 Arbitrer en direct</button>
+      {!free && <button type="button" disabled={pending || !a || !b} onClick={scoutOnly} className={cx(btn.ghost, "w-full")}>🔭 Scouter seulement (score indicatif, ne compte pas)</button>}
       <p className={ui.hint}>{free ? "" : "Avec le terrain du scouting : à chaque fin d'échange, touchez où le volant est tombé. "}… ou, si le match est déjà joué, son score final :</p>
       <SetsEditor sets={sets} onChange={setSets} left={first(a) || "Joueur 1"} right={first(b) || "Joueur 2"} />
       {setsReady(sets) && a && b && <p className={ui.hint}>{resultText(sets, first(a), first(b))}</p>}

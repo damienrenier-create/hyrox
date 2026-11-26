@@ -25,15 +25,21 @@ export async function loadMatches(sessionId: string): Promise<BmMatch[]> {
   ]);
   return toMatches(rows, events);
 }
+// Les observations de scouting d'une seance (26/11) : jamais dans loadMatches (ce ne sont pas des matchs).
+export async function loadScoutingMatches(sessionId: string): Promise<BmMatch[]> {
+  const [rows, events] = await Promise.all([db.orm.public.BadmintonMatch.where({ sessionId }).all(), db.orm.public.BadmintonEvent.where({ sessionId }).all()]);
+  return toMatches(rows, events, true).filter((m) => m.scouting);
+}
 // Un seul match et son journal.
 export async function loadMatch(matchId: string): Promise<BmMatch | null> {
   const [rows, events] = await Promise.all([db.orm.public.BadmintonMatch.where({ id: matchId }).all(), db.orm.public.BadmintonEvent.where({ matchId }).all()]);
-  return toMatches(rows, events)[0] ?? null;
+  return toMatches(rows, events, true)[0] ?? null;
 }
 
 type MatchRow = { id: string; sessionId: string | null; playerAId: string; playerBId: string; createdById: string; createdAt: unknown; tournamentId?: string | null };
 type EventRow = { id: string; matchId: string; kind: string; sets: unknown; authorId: string; role: string; at: unknown; targetId?: string | null };
-function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
+// keepScouting : garder les observations de scouting (26/11) ; par defaut elles sont ecartees (ni ELO, ni tournoi, ni listes).
+function toMatches(rows: MatchRow[], events: EventRow[], keepScouting = false): BmMatch[] {
   return rows
     .map((m) => ({
       id: m.id,
@@ -52,6 +58,8 @@ function toMatches(rows: MatchRow[], events: EventRow[]): BmMatch[] {
           return kind ? [{ id: e.id, kind, sets: raw ? null : readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null, ...(raw ? { data: e.sets } : {}) }] : [];
         }),
     }))
+    .map((m) => ({ ...m, scouting: m.events.some((e) => e.kind === "SCOUTING") }))
+    .filter((m) => keepScouting || !m.scouting)
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
@@ -252,7 +260,7 @@ export async function loadPlayerScouting(playerId: string): Promise<{ rallies: M
   const rows = [...(await db.orm.public.BadmintonMatch.where({ playerAId: playerId }).all()), ...(await db.orm.public.BadmintonMatch.where({ playerBId: playerId }).all())];
   if (!rows.length) return { rallies: [], sheets: [], scouts: new Map() };
   const events = await db.orm.public.BadmintonEvent.where((e) => e.matchId.in(rows.map((r) => r.id))).all();
-  const matches = toMatches(rows, events).filter((m) => matchState(m).status !== "CANCELLED");
+  const matches = toMatches(rows, events, true).filter((m) => matchState(m).status !== "CANCELLED"); // observations de scouting comprises (26/11)
   const raw: { matchId: string; at: number; rally: Rally; side: 0 | 1 }[] = [];
   const latest = new Map<string, PlayerSheet>();
   for (const m of matches) {
