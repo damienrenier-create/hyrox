@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { matchesSearch, setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
-import { badmintonPulseAction, recordMatchAction } from "@/app/eleve/badminton-actions";
+import { badmintonPulseAction, recordMatchAction, startLiveMatchAction } from "@/app/eleve/badminton-actions";
 import { LiveBoard, MatchCard, PersonPicker, SetsEditor, ThemePanel, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
 import type { BmTheme } from "@/lib/badminton-themes";
 import { STROKES, type ScoutConfig, type ScoutRow } from "@/lib/badminton-scout";
@@ -31,7 +31,10 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { sessionTheme?: BmTheme | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
-  usePulse(pulse, 10000, !refLive);
+  // Le prof lance lui-meme un match en direct (26/11 : « les profs doivent pouvoir scouter par defaut depuis leur telephone »).
+  const [ownLive, setOwnLive] = useState<StaffLive | null>(null);
+  const router = useRouter();
+  usePulse(pulse, 10000, !refLive && !ownLive);
   const [tab, setTab] = useState<Tab>("matchs");
   const [filter, setFilter] = useState<Filter>("all");
   // Recherche (20/11) : nom, classe, score « 15-13 », statut… ; les compteurs des statuts suivent la recherche.
@@ -42,7 +45,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
   const live = views.filter((v) => v.status !== "CANCELLED").length;
   const played = rows.filter((r) => r.stats.played + r.stats.pending + r.stats.disputed > 0).length;
   const shown = filter === "all" ? found : found.filter((v) => v.status === filter);
-  const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition", on ? ui.segOn : ui.segOff);
+  const tabBtn = (on: boolean) => cx("text-sm font-bold px-3 py-1.5 rounded-lg transition whitespace-nowrap shrink-0 snap-start", on ? ui.segOn : ui.segOff);
 
   function exportCsv() {
     const q = (s: string) => (/[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
@@ -70,12 +73,15 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
+  // Scouting du prof (26/11) : toujours, sans deverrouillage (hors matchs libres), toutes les couches.
+  const profScout = !free && scoutCfg ? { court: scoutCfg.court, level: 4 } : null;
   return (
     <NotedProvider ids={noted}>
     {/* Scouting verrouille par defaut (26/11) : le nom d un eleve permet de le deverrouiller pour ce cours. */}
     <ScoutUnlockProvider sessionId={!free && scoutCfg ? sessionId : null} on={!!scoutCfg?.on} unlocked={!free && scoutCfg ? scoutCfg.unlocked : NO_IDS}>
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={scoutCfg && (scoutCfg.on || scoutCfg.unlocked.length > 0) ? { court: scoutCfg.court, level: 4 } : null} onClose={() => setRefLive(null)} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={profScout} onClose={() => setRefLive(null)} />}
+      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} scout={profScout} onClose={() => { setOwnLive(null); router.refresh(); }} />}
       {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
       {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -85,8 +91,11 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
         <Kpi label="Contestés" value={total("DISPUTED")} tone={total("DISPUTED") ? "err" : undefined} />
         {free ? <Kpi label="Officiels (au classement)" value={views.filter((v) => v.official).length} tone="ok" /> : <Kpi label="Élèves ayant joué" value={`${played}/${rows.length}`} />}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className={ui.segmented}>
+      {/* Onglets en CARROUSEL sur telephone (Sartay 26/11 : « je dois decaler l'affichage de toute la page, pas du tout ok ») :
+          la barre defile seule, horizontalement, sans elargir la page. */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={cx(ui.segmented, "flex-nowrap")}>
           <button type="button" onClick={() => setTab("matchs")} className={tabBtn(tab === "matchs")}>Matchs</button>
           <button type="button" onClick={() => setTab("eleves")} className={tabBtn(tab === "eleves")}>Élèves</button>
           {!free && <button type="button" onClick={() => setTab("autoevals")} className={tabBtn(tab === "autoevals")}>Auto-évaluations · {selfEvals.filter((r) => r.answers).length}</button>}
@@ -95,7 +104,8 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
           {tour && <button type="button" onClick={() => setTab("tournoi")} className={tabBtn(tab === "tournoi")}>🏆 Tournoi{tour.active ? " · en cours" : ""}</button>}
           <button type="button" onClick={() => setTab("encoder")} className={tabBtn(tab === "encoder")}>＋ Encoder un match</button>
         </div>
-        <button type="button" onClick={exportCsv} className={btn.smGhost}>⬇ Excel</button>
+        </div>
+        <button type="button" onClick={exportCsv} className={cx(btn.smGhost, "shrink-0")}>⬇ Excel</button>
       </div>
 
       {tab === "matchs" && (
@@ -125,7 +135,7 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} calibrations={tour.calibrations} />}
 
-      {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} onDone={() => setTab("matchs")} />}
+      {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} free={free} onDone={() => setTab("matchs")} onLive={setOwnLive} />}
     </div>
     </ScoutUnlockProvider>
     </NotedProvider>
@@ -258,22 +268,34 @@ function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: stri
   );
 }
 
-function StaffEntry({ sessionId, roster, onDone }: { sessionId: string; roster: BmPersonRef[]; onDone: () => void }) {
+type StaffLive = { id: string; aName: string; bName: string; sets: BmSet[]; target?: number; rule?: LiveRule; theme?: BmTheme | null };
+function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: string; roster: BmPersonRef[]; free: boolean; onDone: () => void; onLive: (x: StaffLive) => void }) {
   const router = useRouter();
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
   const [sets, setSets] = useState<BmSet[]>(emptySets);
   const [error, setError] = useState("");
   const [twin, setTwin] = useState<string | null>(null);
+  const [twinLive, setTwinLive] = useState(false); // le doublon signale concernait « Arbitrer en direct »
   const [pending, start] = useTransition();
   const first = (id: string | null) => roster.find((p) => p.id === id)?.name ?? "";
   const ready = !!a && !!b && setsReady(sets);
+  // Arbitrer en direct (26/11) : le tableau +1 / −1 et, hors matchs libres, le terrain du scouting (toutes les couches).
+  function live(force = false) {
+    setError("");
+    start(async () => {
+      const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force });
+      if ("error" in res) { setError(res.error); return; }
+      if ("duplicate" in res) { setTwin(res.duplicate.text); setTwinLive(true); return; }
+      if (res.matchId) { onLive({ id: res.matchId, aName: first(a), bName: first(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme }); setA(null); setB(null); setTwin(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    });
+  }
   function save(force = false) {
     setError("");
     start(async () => {
       const res = await recordMatchAction(sessionId, { playerAId: a, playerBId: b ?? "", sets, force });
       if ("error" in res) { setError(res.error); return; }
-      if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
+      if ("duplicate" in res) { setTwin(res.duplicate.text); setTwinLive(false); return; }
       setA(null); setB(null); setSets(emptySets()); setTwin(null);
       router.refresh();
       onDone();
@@ -286,12 +308,14 @@ function StaffEntry({ sessionId, roster, onDone }: { sessionId: string; roster: 
         <PersonPicker people={roster} value={a} onChange={setA} exclude={b ? [b] : []} label="Joueur 1" placeholder="Tape un nom" />
         <PersonPicker people={roster} value={b} onChange={setB} exclude={a ? [a] : []} label="Joueur 2" placeholder="Tape un nom" />
       </div>
+      <button type="button" disabled={pending || !a || !b} onClick={() => live(false)} className={cx(btn.lgPrimary, "w-full")}>🎯 Arbitrer en direct</button>
+      <p className={ui.hint}>{free ? "" : "Avec le terrain du scouting : à chaque fin d'échange, touchez où le volant est tombé. "}… ou, si le match est déjà joué, son score final :</p>
       <SetsEditor sets={sets} onChange={setSets} left={first(a) || "Joueur 1"} right={first(b) || "Joueur 2"} />
       {setsReady(sets) && a && b && <p className={ui.hint}>{resultText(sets, first(a), first(b))}</p>}
       {twin && (
         <div className={`${ui.alertWarn} space-y-2`}>
           <p>{twin}</p>
-          <button type="button" disabled={pending} onClick={() => save(true)} className={btn.smGhost}>C&apos;est un autre match (une revanche) : l&apos;encoder quand même</button>
+          <button type="button" disabled={pending} onClick={() => (twinLive ? live(true) : save(true))} className={btn.smGhost}>C&apos;est un autre match (une revanche) : {twinLive ? "l'arbitrer quand même" : "l'encoder quand même"}</button>
         </div>
       )}
       {error && <p className={ui.alertErr}>{error}</p>}
