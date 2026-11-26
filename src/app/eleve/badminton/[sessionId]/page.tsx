@@ -9,6 +9,7 @@ import { ELO_START, kFactor } from "@/lib/badminton-elo";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { loadEloBoard } from "@/lib/badminton-server";
 import type { BetData } from "./BetBox";
+import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { marginFor, readyState, scoreFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -234,12 +235,23 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const scoutOpen = scoutUnlocked(scoutCfg, me.id);
   const scoutMine = scoutOpen ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
   // Pendant un tournoi, le scout recoit le PROCHAIN match pas encore commence (26/11, voir badminton-scout-queue.ts).
-  const watched = new Set(scoutingObs.filter((m) => matchState(m).status === "LIVE").map((m) => [m.playerAId, m.playerBId].sort().join("|")));
+  // Seules les observations d'IMPACTS « prennent » un match ; les scouts de coups (26/11 soir) suivent un joueur chacun.
+  const watched = new Set(scoutingObs.filter((m) => matchState(m).status === "LIVE" && !strokeScoutOf(m)).map((m) => [m.playerAId, m.playerBId].sort().join("|")));
+  const strokeTaken = scoutingObs.filter((m) => matchState(m).status === "LIVE" && strokeScoutOf(m) && m.createdById !== me.id).map((m) => `${[m.playerAId, m.playerBId].sort().join("|")}|${strokeScoutOf(m)}`);
   const scoutNext = scoutOpen && tourNow ? scoutQueue(tourNow, tm, me.id, watched).slice(0, 4) : null;
   // Mes observations en cours (a reprendre).
-  const myObs = scoutOpen ? scoutingObs.filter((m) => m.createdById === me.id && matchState(m).status === "LIVE") : [];
-  const obsNames = myObs.length ? await peopleOf(myObs) : new Map();
+  const myAll = scoutOpen ? scoutingObs.filter((m) => m.createdById === me.id && matchState(m).status === "LIVE") : [];
+  const myObs = myAll.filter((m) => !strokeScoutOf(m));
+  const myStrokeObs = myAll.filter((m) => !!strokeScoutOf(m));
+  const obsNames = myAll.length ? await peopleOf(myAll) : new Map();
   const scoutResume = myObs.map((m) => ({ id: m.id, aName: obsNames.get(m.playerAId)?.name ?? "?", bName: obsNames.get(m.playerBId)?.name ?? "?", sets: matchState(m).sets ?? [[0, 0]] }));
+  // Mes scoutings de coups en cours : a reprendre avec les coups deja notes (et leur ligne, pour « annuler le dernier »).
+  const strokeResume = myStrokeObs.map((m) => {
+    const pid = strokeScoutOf(m)!;
+    const undone = new Set(m.events.filter((e) => e.kind === "UNRALLY" && e.targetId).map((e) => e.targetId as string));
+    const taps = m.events.filter((e) => e.kind === "STROKE" && e.targetId === pid && !undone.has(e.id)).sort((x, y) => x.at - y.at).flatMap((e) => { const t = readStrokeTap(e.data); return t ? [{ id: e.id, tap: t }] : []; });
+    return { id: m.id, playerId: pid, playerName: obsNames.get(pid)?.name ?? "?", oppName: obsNames.get(pid === m.playerAId ? m.playerBId : m.playerAId)?.name ?? "?", taps };
+  });
   const scoutNames = scoutNext?.length ? await peopleOf([], scoutNext.flatMap((p) => [p.a, p.b])) : new Map();
   const scoutPicks = scoutNext ? scoutNext.map((p) => ({ a: { id: p.a, name: scoutNames.get(p.a)?.name ?? "?" }, b: { id: p.b, name: scoutNames.get(p.b)?.name ?? "?" }, label: p.label })) : null;
   const scoutable = scoutOpen ? views.filter((v) => v.meSide === null && v.status !== "CANCELLED").sort((x, y) => Number(y.status === "LIVE") - Number(x.status === "LIVE") || y.createdAt - x.createdAt).slice(0, 15) : null;
@@ -247,7 +259,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   // demander a recevoir l'analyse de son scouting ») : ce cours, et tous mes cours ; seulement apres l'auto-evaluation.
   const myScout = selfEval ? await loadPlayerScouting(me.id) : null;
   const here = new Set([...matches, ...scoutingObs].map((m) => m.id));
-  const scoutHere = myScout ? { rallies: myScout.rallies.filter((r) => here.has(r.matchId)), sheets: myScout.sheets.filter((s) => here.has(s.matchId)) } : null;
+  const scoutHere = myScout ? { rallies: myScout.rallies.filter((r) => here.has(r.matchId)), sheets: myScout.sheets.filter((s) => here.has(s.matchId)), strokes: myScout.strokes.filter((s) => here.has(s.matchId)) } : null;
   const closes = session.closesAt ? new Date(toMs(session.closesAt)).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" }) : null;
 
   return (
@@ -276,6 +288,8 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         scoutPicks={scoutPicks}
         scoutResume={scoutResume}
         bet={bet}
+        strokeResume={strokeResume}
+        strokeTaken={strokeTaken}
         handicapOn={!!cons.handicap}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
@@ -312,16 +326,16 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
           <details className={`${ui.card} p-3`}>
             <summary className="cursor-pointer select-none font-display font-extrabold text-ink">📊 Recevoir l&apos;analyse de mon scouting</summary>
             <div className="mt-3 space-y-4">
-              {scoutHere && (scoutHere.rallies.length || scoutHere.sheets.length) ? (
+              {scoutHere && (scoutHere.rallies.length || scoutHere.sheets.length || scoutHere.strokes.length) ? (
                 <div>
                   <p className="font-bold mb-1">Ce cours</p>
-                  <ScoutView rallies={scoutHere.rallies} sheets={scoutHere.sheets} me />
+                  <ScoutView rallies={scoutHere.rallies} sheets={scoutHere.sheets} strokes={scoutHere.strokes} me />
                 </div>
               ) : <p className={ui.muted}>Pas encore de scouting sur toi dans ce cours : aucun arbitre n&apos;a noté les impacts de tes matchs, aucun scout n&apos;a rempli ta fiche technique.</p>}
-              {(myScout.rallies.length > (scoutHere?.rallies.length ?? 0) || myScout.sheets.length > (scoutHere?.sheets.length ?? 0)) && (
+              {(myScout.rallies.length > (scoutHere?.rallies.length ?? 0) || myScout.sheets.length > (scoutHere?.sheets.length ?? 0) || myScout.strokes.length > (scoutHere?.strokes.length ?? 0)) && (
                 <details>
                   <summary className="cursor-pointer font-bold">Tous mes cours</summary>
-                  <div className="mt-2"><ScoutView rallies={myScout.rallies} sheets={myScout.sheets} me /></div>
+                  <div className="mt-2"><ScoutView rallies={myScout.rallies} sheets={myScout.sheets} strokes={myScout.strokes} me /></div>
                 </details>
               )}
             </div>

@@ -33,7 +33,7 @@ export type BmRole = "PLAYER" | "REFEREE" | "STAFF" | "WITNESS";
 // SCOUTING (26/11, Sartay : « le scouting n'est pas l'arbitrage ! il ne compte pas dans les points ELO, les points sont a
 // titre indicatif ») : 1re ligne d'une OBSERVATION de scouting ; ce « match » n'est jamais un vrai match (ni ELO, ni tournoi,
 // ni liste des matchs, ni arbitrage) : les chargeurs l'ecartent, seuls le scouting et son tableau en direct le lisent.
-export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO" | "REMATCH" | "THEME" | "RALLY" | "SCOUT" | "SCOUTING" | "UNRALLY" | "HANDICAP" | "BET";
+export type BmKind = "SCORE" | "VALIDATE" | "DISPUTE" | "CANCEL" | "LIVE" | "WITNESS_ASK" | "WITNESS" | "WITNESS_NO" | "REMATCH" | "THEME" | "RALLY" | "SCOUT" | "SCOUTING" | "UNRALLY" | "HANDICAP" | "BET" | "STROKE";
 // UNRALLY (26/11, Sartay : « un bouton clair pour annuler la derniere frappe / impact, eviter un missclic ») : l'impact
 // `targetId` est annule (rien n'est efface : la ligne RALLY reste, l'analyse l'ignore).
 export type BmEvent = { id: string; kind: BmKind; sets: BmSet[] | null; authorId: string; role: BmRole; at: number; targetId?: string | null; data?: unknown };
@@ -49,7 +49,7 @@ export const BM_MAX_POINTS = 99;
 export const BM_DUPLICATE_MS = 20 * 60_000;
 
 const isRole = (v: unknown): v is BmRole => v === "PLAYER" || v === "REFEREE" || v === "STAFF" || v === "WITNESS";
-const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO" || v === "REMATCH" || v === "THEME" || v === "RALLY" || v === "SCOUT" || v === "SCOUTING" || v === "UNRALLY" || v === "HANDICAP" || v === "BET";
+const isKind = (v: unknown): v is BmKind => v === "SCORE" || v === "VALIDATE" || v === "DISPUTE" || v === "CANCEL" || v === "LIVE" || v === "WITNESS_ASK" || v === "WITNESS" || v === "WITNESS_NO" || v === "REMATCH" || v === "THEME" || v === "RALLY" || v === "SCOUT" || v === "SCOUTING" || v === "UNRALLY" || v === "HANDICAP" || v === "BET" || v === "STROKE";
 // Theme d'un match (24/11) : celui de sa ligne THEME, sinon aucun.
 export const themeOf = (m: BmMatch): BmTheme | null => readTheme(m.events.find((e) => e.kind === "THEME")?.data);
 export const readRole = (v: unknown): BmRole => (isRole(v) ? v : "PLAYER");
@@ -241,7 +241,7 @@ export const ROLE_TEXT: Record<BmRole, string> = { PLAYER: "joueur", REFEREE: "a
 export type BmHistoryLine = { at: number; icon: string; text: string };
 export function historyOf(m: BmMatch, nameOf: (id: string) => string): BmHistoryLine[] {
   // Les echanges notes par l'arbitre (RALLY) ne s'affichent pas ici : ils sont dans le scouting.
-  const events = [...m.events].filter((e) => e.kind !== "RALLY" && e.kind !== "SCOUT" && e.kind !== "SCOUTING" && e.kind !== "UNRALLY").sort((x, y) => x.at - y.at);
+  const events = [...m.events].filter((e) => e.kind !== "RALLY" && e.kind !== "SCOUT" && e.kind !== "SCOUTING" && e.kind !== "UNRALLY" && e.kind !== "STROKE").sort((x, y) => x.at - y.at);
   let first = true;
   let afterLive = false;
   const out: BmHistoryLine[] = [];

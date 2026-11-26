@@ -1,12 +1,16 @@
 import { CONCEDED, COURT_LENGTH, NET_Y, SHORT_SERVICE, STROKES, END_STROKES, courtWidth, howInfo, howOf, strokeByWinner, strokeSummary, type CourtKind, type MyRally, type StrokeSheet } from "@/lib/badminton-scout";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { CourtSvg } from "./BadmintonCourt";
+import { strokeCounts, type StrokeTap } from "@/lib/badminton-strokes";
 import { cx, ui } from "@/lib/ui";
 
 // Scouting d'un joueur (Sartay 24/11 : « voir ou et comment les joueurs gagnent et perdent des points » ; fiche technique
 // des 6 coups remplie par les scouts). Les impacts sont vus de SON cote : son camp en bas. `me` : vue de l'eleve.
-export function ScoutView({ rallies, sheets, me = false }: { rallies: MyRally[]; sheets: { sheet: StrokeSheet; by: string; at: number }[]; me?: boolean }) {
-  if (!rallies.length && !sheets.length) return null;
+// strokes (26/11 soir) : les coups notes par les scouts de coups (etape 2) : combien, et sur quoi ils debouchent.
+export function ScoutView({ rallies, sheets, me = false, strokes = [] }: { rallies: MyRally[]; sheets: { sheet: StrokeSheet; by: string; at: number }[]; me?: boolean; strokes?: StrokeTap[] }) {
+  if (!rallies.length && !sheets.length && !strokes.length) return null;
+  const used = strokeCounts(strokes);
+  const pct = (n: number, t: number) => (t ? `${Math.round((n / t) * 100)} %` : "");
   // Terrain le plus utilise ; les impacts d'un autre terrain y sont ramenes a la meme proportion de largeur.
   const kinds = rallies.reduce<Record<string, number>>((t, r) => ({ ...t, [r.court]: (t[r.court] ?? 0) + 1 }), {});
   const kind = (Object.entries(kinds).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "HALF") as CourtKind;
@@ -67,6 +71,25 @@ export function ScoutView({ rallies, sheets, me = false }: { rallies: MyRally[];
               )}
             </div>
           </div>
+        </div>
+      )}
+      {used.length > 0 && (
+        <div className="space-y-2">
+          <p className={ui.eyebrow}>🏸 {tu("Mes coups", "Ses coups")} · {strokes.length} coup{strokes.length > 1 ? "s" : ""} noté{strokes.length > 1 ? "s" : ""} par les scouts</p>
+          <table className="w-full text-sm">
+            <thead><tr className="text-left"><th className={ui.th}>Coup</th><th className={`${ui.th} text-right`}>Joués</th><th className={`${ui.th} text-right`} title="Le coup fait gagner le point">✅ gagnant</th><th className={`${ui.th} text-right`} title="L'échange continue">↔️ continue</th><th className={`${ui.th} text-right`} title="Le coup fait perdre le point">❌ perdu</th></tr></thead>
+            <tbody>
+              {used.map((c) => { const st = END_STROKES.find((x) => x.id === c.id)!; return (
+                <tr key={c.id} className="border-t border-line">
+                  <td className="p-1">{st.emoji} {st.name}</td>
+                  <td className="p-1 text-right tabular-nums font-bold">{c.total}</td>
+                  <td className="p-1 text-right tabular-nums text-success-ink">{c.win ? <>{c.win} <span className="text-xs text-ink-3">{pct(c.win, c.total)}</span></> : ""}</td>
+                  <td className="p-1 text-right tabular-nums">{c.cont ? <>{c.cont} <span className="text-xs text-ink-3">{pct(c.cont, c.total)}</span></> : ""}</td>
+                  <td className="p-1 text-right tabular-nums text-danger-ink">{c.lose ? <>{c.lose} <span className="text-xs text-ink-3">{pct(c.lose, c.total)}</span></> : ""}</td>
+                </tr>
+              ); })}
+            </tbody>
+          </table>
         </div>
       )}
       {sheets.length > 0 && (

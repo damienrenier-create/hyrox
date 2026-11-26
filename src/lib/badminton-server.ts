@@ -10,6 +10,7 @@ import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample
 import { myRallies, readRally, undoneRallies, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
 import { BM_SELF_EVAL_WINDOW_MS } from "@/lib/self-eval-timing";
 import { betsOfMatch, handicapOfMatch } from "@/lib/badminton-constraints";
+import { strokeTapsOf, type StrokeTap } from "@/lib/badminton-strokes";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -56,7 +57,7 @@ function toMatches(rows: MatchRow[], events: EventRow[], keepScouting = false): 
         .flatMap((e) => {
           const kind = readKind(e.kind);
           // THEME / RALLY (24/11) : leurs parametres sont dans la colonne JSON (`data`), pas des sets.
-          const raw = kind === "THEME" || kind === "RALLY" || kind === "SCOUT" || kind === "HANDICAP" || kind === "BET";
+          const raw = kind === "THEME" || kind === "RALLY" || kind === "SCOUT" || kind === "HANDICAP" || kind === "BET" || kind === "STROKE" || kind === "SCOUTING";
           return kind ? [{ id: e.id, kind, sets: raw ? null : readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null, ...(raw ? { data: e.sets } : {}) }] : [];
         }),
     }))
@@ -304,9 +305,10 @@ export async function loadScoutConfigs(): Promise<ScoutConfig[]> {
 // Tout le scouting d'un joueur : les echanges notes dans ses matchs (vus de son cote) et les fiches techniques remplies
 // sur lui (la plus recente de chaque scout dans chaque match). Matchs annules exclus.
 export type PlayerSheet = { sheet: StrokeSheet; by: string; at: number; matchId: string };
-export async function loadPlayerScouting(playerId: string): Promise<{ rallies: MyRally[]; sheets: PlayerSheet[]; scouts: Map<string, BmPerson> }> {
+// strokes (26/11 soir) : les coups notes par les scouts de coups, avec le match ou ils l'ont ete.
+export async function loadPlayerScouting(playerId: string): Promise<{ rallies: MyRally[]; sheets: PlayerSheet[]; scouts: Map<string, BmPerson>; strokes: (StrokeTap & { matchId: string })[] }> {
   const rows = [...(await db.orm.public.BadmintonMatch.where({ playerAId: playerId }).all()), ...(await db.orm.public.BadmintonMatch.where({ playerBId: playerId }).all())];
-  if (!rows.length) return { rallies: [], sheets: [], scouts: new Map() };
+  if (!rows.length) return { rallies: [], sheets: [], scouts: new Map(), strokes: [] };
   const events = await db.orm.public.BadmintonEvent.where((e) => e.matchId.in(rows.map((r) => r.id))).all();
   const matches = toMatches(rows, events, true).filter((m) => matchState(m).status !== "CANCELLED"); // observations de scouting comprises (26/11)
   const raw: { matchId: string; at: number; rally: Rally; side: 0 | 1 }[] = [];
@@ -323,5 +325,6 @@ export async function loadPlayerScouting(playerId: string): Promise<{ rallies: M
     }
   }
   const sheets = [...latest.values()].sort((a, b) => b.at - a.at);
-  return { rallies: myRallies(raw), sheets, scouts: await peopleOf([], [...new Set(sheets.map((s) => s.by))]) };
+  const strokes = matches.flatMap((m) => strokeTapsOf(m.events, playerId).map((t) => ({ ...t, matchId: m.id })));
+  return { rallies: myRallies(raw), sheets, scouts: await peopleOf([], [...new Set(sheets.map((s) => s.by))]), strokes };
 }

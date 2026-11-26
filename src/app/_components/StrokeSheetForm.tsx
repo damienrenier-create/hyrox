@@ -8,8 +8,9 @@ import { btn, cx, ui } from "@/lib/ui";
 // Fiche technique remplie par un scout (Sartay 24/11 : « eval simplifiee des mouvements de base, que les joueurs
 // rempliraient lors d'un scouting d'un autre eleve ; comme en Hyrox, les 4 criteres les plus importants + emoji ») :
 // pour chaque coup VU pendant le match, cocher les criteres reussis ; ❤️ quand les 4 sont vraiment tres bien faits.
-export function StrokeSheetForm({ matchId, player, onDone, onClose }: { matchId: string; player: { id: string; name: string }; onDone: () => void; onClose: () => void }) {
-  const [sheet, setSheet] = useState<StrokeSheet>({});
+// only (26/11 soir, scouting des coups) : seulement ces coups (les plus utilises), deja ouverts.
+export function StrokeSheetForm({ matchId, player, onDone, onClose, only }: { matchId: string; player: { id: string; name: string }; onDone: () => void; onClose: () => void; only?: StrokeId[] }) {
+  const [sheet, setSheet] = useState<StrokeSheet>(() => Object.fromEntries((only ?? []).map((id) => [id, { c: [false, false, false, false], heart: false }])) as StrokeSheet);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const set = (id: StrokeId, m: StrokeMark | undefined) => setSheet((s) => { const n = { ...s }; if (m) n[id] = m; else delete n[id]; return n; });
@@ -28,8 +29,8 @@ export function StrokeSheetForm({ matchId, player, onDone, onClose }: { matchId:
         <p className="font-display font-extrabold">🔭 Fiche technique de {player.name}</p>
         <button type="button" onClick={onClose} className={ui.close} aria-label="Fermer">✕</button>
       </div>
-      <p className={ui.hint}>Regarde son match. Pour chaque coup que tu as vu, touche-le puis coche ce qui est réussi. ❤️ si les 4 sont vraiment très bien faits. Les coups pas vus restent vides.</p>
-      {STROKES.map((s) => {
+      {!only && <p className={ui.hint}>Regarde son match. Pour chaque coup que tu as vu, touche-le puis coche ce qui est réussi. ❤️ si les 4 sont vraiment très bien faits. Les coups pas vus restent vides.</p>}
+      {STROKES.filter((s) => !only || only.includes(s.id)).map((s) => {
         const m = sheet[s.id];
         return (
           <div key={s.id} className={cx("rounded-xl border px-2 py-1.5", m ? "border-brand bg-brand-soft/40" : "border-line")}>

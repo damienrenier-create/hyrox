@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import type { BmPersonRef, BmSet, BmView } from "@/lib/badminton";
 import { THEME_KINDS, themeText, type BmTheme } from "@/lib/badminton-themes";
 import type { PairingStatus, TourKind } from "@/lib/badminton-tournament";
-import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction, teamReadyAction } from "../../badminton-actions";
+import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction, startStrokeScoutAction, teamReadyAction } from "../../badminton-actions";
 import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, type LiveScout, PersonPicker, SetsEditor, emptySets, resultText, setsReady } from "../../../_components/BadmintonParts";
 import { StrokeSheetForm } from "../../../_components/StrokeSheetForm";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 import type { BmBets } from "@/lib/badminton-constraints";
 import { BetBox, type BetData } from "./BetBox";
+import { StrokeScoutBoard, type StrokeResume } from "../../../_components/StrokeScoutBoard";
 
 // Ecran eleve du badminton (telephone) : « à signer » en haut, puis « Encoder un match » (j'ai joue / j'ai arbitre),
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
@@ -35,12 +36,14 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, handicapOn = false }: { bet?: BetData | null; handicapOn?: boolean; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, handicapOn = false, strokeResume = [], strokeTaken = [] }: { bet?: BetData | null; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
   const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean; head?: BmSet | null; bets?: BmBets | null } | null>(null);
-  usePulse(pulse, 8000, !live);
+  // Scouting des coups en cours sur ce telephone (26/11 soir).
+  const [strokes, setStrokes] = useState<StrokeResume | null>(null);
+  usePulse(pulse, 8000, !live && !strokes);
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
   const [preset, setPreset] = useState<string | null>(null); // adversaire du tournoi, pre-rempli
@@ -50,6 +53,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
       {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} headStart={live.head ?? null} bets={live.bets ?? null} scout={scout} scouting={!!live.scouting} onClose={() => setLive(null)} />}
+      {strokes && <StrokeScoutBoard key={strokes.id} obs={strokes} onClose={() => setStrokes(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
       {theme && writable && <p className={ui.alertInfo}>🎲 <b>Matchs à thème aujourd&apos;hui : {themeText(theme)}.</b> {THEME_KINDS.find((k) => k.id === theme.kind)?.rule} Le mieux : un arbitre en direct (« J&apos;arbitre »), qui applique la règle à chaque échange.</p>}
       {handicapOn && writable && <p className={ui.alertInfo}>⚖️ <b>Matchs à handicap aujourd&apos;hui</b> : le moins bien classé commence chaque set avec des points d&apos;avance (selon l&apos;écart d&apos;ELO) ; comptez-les dans le score final.</p>}
@@ -82,7 +86,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
         </section>
       )}
 
-      {writable && !free && scoutable && <ScoutSection matches={scoutable} picks={scoutPicks} resume={scoutResume} roster={roster} sessionId={sessionId} onLive={(x) => { setLive({ ...x, scouting: true }); window.scrollTo({ top: 0 }); }} court={!!scout} onDone={() => router.refresh()} />}
+      {writable && !free && scoutable && <ScoutSection matches={scoutable} picks={scoutPicks} resume={scoutResume} strokeResume={strokeResume} strokeTaken={strokeTaken} onStrokes={setStrokes} roster={roster} sessionId={sessionId} onLive={(x) => { setLive({ ...x, scouting: true }); window.scrollTo({ top: 0 }); }} court={!!scout} onDone={() => router.refresh()} />}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
@@ -390,7 +394,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
 // (6 coups, 4 criteres chacun) s'ouvre ici. Un eleve ne remplit jamais sa propre fiche.
 // Pendant un tournoi, les prochains matchs a scouter (pas encore commences), donnes par le serveur (badminton-scout-queue.ts).
 export type ScoutPickView = { a: { id: string; name: string }; b: { id: string; name: string }; label: string };
-function ScoutSection({ matches, picks, resume, roster, sessionId, onLive, court, onDone }: { matches: BmView[]; picks: ScoutPickView[] | null; resume: { id: string; aName: string; bName: string; sets: BmSet[] }[]; roster: BmPersonRef[]; sessionId: string; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void; court: boolean; onDone: () => void }) {
+function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken = [], onStrokes, roster, sessionId, onLive, court, onDone }: { strokeResume?: StrokeResume[]; strokeTaken?: string[]; onStrokes: (x: StrokeResume) => void; matches: BmView[]; picks: ScoutPickView[] | null; resume: { id: string; aName: string; bName: string; sets: BmSet[] }[]; roster: BmPersonRef[]; sessionId: string; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void; court: boolean; onDone: () => void }) {
   const [pa, setPa] = useState<string | null>(null);
   const [pb, setPb] = useState<string | null>(null);
   const who = (id: string | null) => roster.find((p) => p.id === id)?.name ?? "";
@@ -406,6 +410,21 @@ function ScoutSection({ matches, picks, resume, roster, sessionId, onLive, court
       if ("matchId" in res && res.matchId) onLive({ id: res.matchId, aName: p.a.name, bName: p.b.name, sets: res.sets ?? [[0, 0]] });
     });
   };
+  // Scouting des COUPS (etape 2, 26/11 soir) : un scout par joueur ; un joueur deja suivi par un autre scout n'est pas propose.
+  const goStrokes = (p: ScoutPickView, player: { id: string; name: string }) => {
+    setScoutErr("");
+    startScout(async () => {
+      const res = await startStrokeScoutAction(sessionId, { playerAId: p.a.id, playerBId: p.b.id, playerId: player.id });
+      if ("error" in res) { setScoutErr(res.error); onDone(); return; }
+      if ("matchId" in res && res.matchId) onStrokes({ id: res.matchId, playerId: player.id, playerName: player.name, oppName: (player.id === p.a.id ? p.b : p.a).name, taps: [] });
+    });
+  };
+  const taken = (p: ScoutPickView, id: string) => strokeTaken.includes(`${[p.a.id, p.b.id].sort().join("|")}|${id}`);
+  const strokeButtons = (p: ScoutPickView) => (
+    <div className="flex flex-wrap gap-1.5">
+      {[p.a, p.b].filter((x) => !taken(p, x.id)).map((x) => <button key={x.id} type="button" disabled={starting} onClick={() => goStrokes(p, x)} className={cx(btn.ghost, "flex-1 border-2 border-accent")}>🏸 Coups de {x.name.split(" ")[0]}</button>)}
+    </div>
+  );
   const [pick, setPick] = useState<{ matchId: string; player: { id: string; name: string } } | null>(null);
   const [sent, setSent] = useState("");
   if (pick) return <StrokeSheetForm key={`${pick.matchId}|${pick.player.id}`} matchId={pick.matchId} player={pick.player} onClose={() => setPick(null)} onDone={() => { setSent(`Fiche de ${pick.player.name} envoyée, merci !`); setPick(null); onDone(); }} />;
@@ -423,6 +442,8 @@ function ScoutSection({ matches, picks, resume, roster, sessionId, onLive, court
               <>
                 <button type="button" disabled={starting} onClick={() => go(picks[0])} className={cx(btn.lgPrimary, "w-full")}>📍 Scouter le prochain match : {picks[0].a.name.split(" ")[0]} – {picks[0].b.name.split(" ")[0]}</button>
                 <p className={ui.hint}>{picks[0].label} · pas encore commencé. Tu touches où tombe chaque volant. Ce n&apos;est pas un arbitrage : ton score est indicatif, il ne compte ni à l&apos;ELO ni au tournoi.</p>
+                {strokeButtons(picks[0])}
+                <p className={ui.hint}>🏸 Ou suis UN joueur et note chacun de ses coups (un scout par joueur).</p>
                 {picks.length > 1 && <p className={ui.hint}>Ou : {picks.slice(1).map((p) => <button key={`${p.a.id}|${p.b.id}`} type="button" disabled={starting} onClick={() => go(p)} className="underline mr-2">{p.a.name.split(" ")[0]} – {p.b.name.split(" ")[0]}</button>)}</p>}
               </>
             )}
@@ -435,8 +456,15 @@ function ScoutSection({ matches, picks, resume, roster, sessionId, onLive, court
             <PersonPicker people={roster} value={pa} onChange={setPa} exclude={pb ? [pb] : []} label="Joueur 1" placeholder="Tape un nom" />
             <PersonPicker people={roster} value={pb} onChange={setPb} exclude={pa ? [pa] : []} label="Joueur 2" placeholder="Tape un nom" />
             <button type="button" disabled={starting || !pa || !pb} onClick={() => pa && pb && go({ a: { id: pa, name: who(pa) }, b: { id: pb, name: who(pb) }, label: "" })} className={cx(btn.lgPrimary, "w-full")}>🔭 Commencer le scouting</button>
+            {pa && pb && strokeButtons({ a: { id: pa, name: who(pa) }, b: { id: pb, name: who(pb) }, label: "" })}
             <p className={ui.hint}>Choisis un match qui va commencer. Ce n&apos;est pas un arbitrage : ton score est indicatif, il ne compte pas à l&apos;ELO.</p>
             {scoutErr && <p className={ui.alertErr}>{scoutErr}</p>}
+          </div>
+        )}
+        {strokeResume.length > 0 && (
+          <div className="space-y-1">
+            <p className="font-bold text-sm">Mes scoutings de coups en cours</p>
+            {strokeResume.map((r) => <button key={r.id} type="button" onClick={() => onStrokes(r)} className={cx(btn.smGhost, "mr-1")}>↩ 🏸 coups de {r.playerName.split(" ")[0]} · reprendre</button>)}
           </div>
         )}
         {resume.length > 0 && (

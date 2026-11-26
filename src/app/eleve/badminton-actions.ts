@@ -5,10 +5,11 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmMatch, type BmRole, type BmSet } from "@/lib/badminton";
-import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
+import { BM_STAFF_ROLES, loadScoutingMatches, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { HANDICAP_ELO_PER_POINT, TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, readyState, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
+import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
 import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { betPair, betsAtCreation, headStartOf, readBet, readPendingBets, readSessionConstraints, type BmBets } from "@/lib/badminton-constraints";
@@ -522,7 +523,7 @@ export async function liveRallyAction(matchId: string, raw: unknown): Promise<Bm
 export async function undoRallyAction(matchId: string, rallyId: string): Promise<BmResult> {
   const x = await liveCtx(matchId);
   if ("error" in x) return x;
-  if (!x.m.events.some((e) => e.id === rallyId && e.kind === "RALLY")) return { error: "Impact introuvable." };
+  if (!x.m.events.some((e) => e.id === rallyId && (e.kind === "RALLY" || e.kind === "STROKE"))) return { error: "Impact introuvable." }; // aussi un coup (scouting des coups, 26/11 soir)
   if (undoneRallies(x.m.events).has(rallyId)) return { ok: true };
   await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", null, rallyId);
   return { ok: true };
@@ -874,6 +875,73 @@ export async function startScoutingAction(sessionId: string, input: { playerAId:
   });
   done(c.session.id);
   return { ok: true, matchId: match.id, sets: [[0, 0]] };
+}
+
+// ===== Scouting des COUPS (etape 2, 26/11 soir ; regles : src/lib/badminton-strokes.ts) =====
+// Un scout suit UN joueur pendant son match (« un scout par joueur ») : une observation (ni ELO, ni tournoi) dont la ligne
+// SCOUTING dit quel joueur. Deux scouts ne suivent jamais le meme joueur dans le meme match en meme temps.
+export async function startStrokeScoutAction(sessionId: string, input: { playerAId: string; playerBId: string; playerId: string }): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (c.free || !c.session) return { error: "Le scouting se fait pendant un cours." };
+  if (!c.staff && !scoutUnlocked(readScoutConfig(c.session.settings), c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
+  const a = String(input.playerAId ?? ""), b = String(input.playerBId ?? ""), p = String(input.playerId ?? "");
+  if (!a || !b || a === b || (p !== a && p !== b)) return { error: "Choisis le match et le joueur à observer." };
+  if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : un autre élève doit te scouter." };
+  const roster = await rosterIds(c);
+  if (!roster.has(a) || !roster.has(b)) return { error: notFound(c) };
+  const pair = [a, b].sort().join("|");
+  const busy = (await loadScoutingMatches(c.session.id)).find((m) => matchState(m).status === "LIVE" && [m.playerAId, m.playerBId].sort().join("|") === pair && strokeScoutOf(m) === p && m.createdById !== c.userId);
+  if (busy) return { error: "Un autre scout suit déjà ce joueur : prends l'autre joueur, ou un autre match." };
+  const role: BmRole = c.staff ? "STAFF" : "REFEREE";
+  const match = await db.transaction(async (tx) => {
+    const m = await tx.orm.public.BadmintonMatch.create({ sessionId: c.session!.id, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: null });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "SCOUTING", authorId: c.userId, role, sets: { mode: "STROKES", player: p }, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
+    return m;
+  });
+  done(c.session.id);
+  return { ok: true, matchId: match.id };
+}
+// Un coup vu : { stroke, out } ; il part tout de suite (l'eleve peut fermer et reprendre).
+export async function strokeTapAction(matchId: string, raw: unknown): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const p = strokeScoutOf(x.m);
+  if (!p) return { error: "Ce n'est pas un scouting des coups." };
+  const tap = readStrokeTap(raw);
+  if (!tap) return { error: "Coup illisible." };
+  const eventId = await addEventData(x.m.id, x.m.sessionId, "STROKE", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", tap, p);
+  return { ok: true, eventId };
+}
+// Plusieurs coups d'un coup (26/11 soir : un echange va vite, les touchers s'enchainent) : le telephone envoie les coups
+// pas encore partis et les annulations en UNE fois ; il recoit les lignes creees (dans l'ordre), pour les annuler ensuite.
+export async function strokeBatchAction(matchId: string, input: { add: { k: number; stroke: string; out: number }[]; undo: string[] }): Promise<{ error: string } | { ok: true; ids: Record<number, string> }> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const p = strokeScoutOf(x.m);
+  if (!p) return { error: "Ce n'est pas un scouting des coups." };
+  const role = x.c.staff ? "STAFF" : "REFEREE";
+  const ids: Record<number, string> = {};
+  for (const a of (input.add ?? []).slice(0, 200)) {
+    const tap = readStrokeTap(a);
+    if (tap && Number.isInteger(a.k)) ids[a.k] = await addEventData(x.m.id, x.m.sessionId, "STROKE", x.c.userId, role, tap, p);
+  }
+  const undone = undoneRallies(x.m.events);
+  for (const id of [...new Set(input.undo ?? [])].slice(0, 200)) {
+    if (x.m.events.some((e) => e.id === id && e.kind === "STROKE") && !undone.has(id)) await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, role, null, id);
+  }
+  return { ok: true, ids };
+}
+
+// Fin du scouting des coups : l'observation n'est plus « en cours » (la fiche des coups les plus utilises est a part).
+export async function endStrokeScoutAction(matchId: string): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  if (!strokeScoutOf(x.m)) return { error: "Ce n'est pas un scouting des coups." };
+  await addEvent(x.m.id, x.m.sessionId, "SCORE", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", [[0, 0]]);
+  done(x.m.sessionId);
+  return { ok: true };
 }
 
 export async function startLiveMatchAction(sessionId: string, input: { playerAId: string; playerBId: string; force?: boolean; witnessIds?: string[] }): Promise<BmResult> {

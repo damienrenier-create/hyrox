@@ -128,14 +128,14 @@ export default async function EleveFichePage({ params, searchParams }: { params:
           ))}
         </section>
 
-        {(bmReport || bmScout.rallies.length > 0 || bmScout.sheets.length > 0) && (
+        {(bmReport || bmScout.rallies.length > 0 || bmScout.sheets.length > 0 || bmScout.strokes.length > 0) && (
           <section id="badminton" className={`${ui.cardPad} space-y-2`}>
             {bmReport && <h2 className={ui.h2}>🏸 Badminton : progression ELO <span className="text-ink-3 text-sm font-sans font-normal">({bmRank}e sur {[...board.entries.values()].filter((e) => board.test.has(e.id) === board.test.has(s.id)).length}, toutes classes)</span></h2>}
             {bmReport && <BadmintonPerf report={bmReport} names={bmNames} />}
-            {(bmScout.rallies.length > 0 || bmScout.sheets.length > 0) && (
+            {(bmScout.rallies.length > 0 || bmScout.sheets.length > 0 || bmScout.strokes.length > 0) && (
               <div id="scouting" className="pt-2 border-t border-line space-y-2">
                 <h3 className={ui.h3}>🔭 Scouting (tous ses cours)</h3>
-                <ScoutView rallies={bmScout.rallies} sheets={bmScout.sheets} />
+                <ScoutView rallies={bmScout.rallies} sheets={bmScout.sheets} strokes={bmScout.strokes} />
               </div>
             )}
           </section>
