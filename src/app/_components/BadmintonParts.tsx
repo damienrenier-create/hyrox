@@ -7,9 +7,9 @@ import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
 import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, needsServer, priceOf, priced, rallyOutcome, readTheme, themeText, type BmTheme, type ThemeKind } from "@/lib/badminton-themes";
 import { StudentName } from "./StudentName";
-import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, editRallyAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, undoRallyAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { CourtPad } from "./BadmintonCourt";
-import { COURT_LENGTH, courtWidth, type CourtKind } from "@/lib/badminton-scout";
+import { COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, type CourtKind } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -242,6 +242,12 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const [server, setServer] = useState<0 | 1 | null>(null);
   const [exchanges, setExchanges] = useState(0); // prix de l'echange : appuis sur le bouton central
   const [flip, setFlip] = useState(false); // scouting : les joueurs ont change de cote
+  // Impacts notes sur cet ecran (26/11 : « annuler la derniere frappe ; appui long sur un impact pour l'annuler ou donner des
+  // infos ») : repere du journal (A en haut) ; add = points donnes ; set = set ou il a compte ; id = sa ligne RALLY (promesse).
+  const [impacts, setImpacts] = useState<{ k: number; x: number; y: number; w: 0 | 1; add: [number, number]; set: number; stroke?: string; end?: string }[]>([]);
+  const impactIds = useRef(new Map<number, Promise<string | null>>());
+  const impactSeq = useRef(0);
+  const [menuK, setMenuK] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null); // scouting : « +1 pour X » apres un toucher
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showFlash = (t: string) => { setFlash(t); if (flashTimer.current) clearTimeout(flashTimer.current); flashTimer.current = setTimeout(() => setFlash(null), 1800); };
@@ -469,8 +475,39 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
         </span>
       </div>
     );
+    // Annuler un impact : il disparait du terrain, ses points sont retires (s'il est du set en cours), une ligne UNRALLY part au serveur.
+    const undoImpact = (k: number) => {
+      const im = impacts.find((x) => x.k === k);
+      if (!im) return;
+      setImpacts((l) => l.filter((x) => x.k !== k));
+      if (im.set === sets.length - 1) addPoints([-im.add[0], -im.add[1]]);
+      setMenuK(null);
+      showFlash(`↶ Impact annulé (point de ${names[im.w]} retiré)`);
+      void (impactIds.current.get(k) ?? Promise.resolve(null)).then((id) => (id ? undoRallyAction(matchId, id).then((res) => { if ("error" in res) setError(res.error); }) : undefined));
+    };
+    // Preciser un impact (le coup, gagnant ou faute) : la ligne RALLY est remplacee (l'ancienne annulee).
+    const editImpact = (k: number, patch: { stroke?: string | null; end?: string | null }) => {
+      setImpacts((l) => l.map((x) => (x.k === k ? { ...x, ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}) } : x)));
+      const prev = impactIds.current.get(k) ?? Promise.resolve(null);
+      impactIds.current.set(k, prev.then((id) => (id ? editRallyAction(matchId, id, patch).then((res) => { if ("error" in res) { setError(res.error); return id; } return ("eventId" in res && res.eventId) || id; }) : null)));
+    };
+    const chip = (on: boolean) => cx(ui.chip, on ? ui.chipBrand : ui.chipMuted, "py-1 text-sm");
+    const menu = menuK !== null ? impacts.find((x) => x.k === menuK) ?? null : null;
     return overlay(
         <div className="max-w-xl mx-auto p-3 space-y-2 pb-44">
+          {menu && (
+            <div className="fixed inset-x-0 bottom-0 z-[60] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[65vh] overflow-auto" role="dialog" aria-label="Cet impact">
+              <div className="max-w-xl mx-auto space-y-2">
+                <div className="flex items-center justify-between gap-2"><p className="font-bold">Cet impact · point pour {names[menu.w]}</p><button type="button" onClick={() => setMenuK(null)} className={ui.close} aria-label="Fermer">✕</button></div>
+                <button type="button" onClick={() => undoImpact(menu.k)} className={cx(btn.ghost, "w-full border-2 border-red-500 text-red-700 font-extrabold")}>✖ Annuler cet impact</button>
+                <p className="font-bold">Le coup</p>
+                <div className="flex flex-wrap gap-1">{END_STROKES.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { stroke: menu.stroke === x.id ? null : x.id })} className={chip(menu.stroke === x.id)}>{x.emoji} {x.name}</button>)}</div>
+                <p className="font-bold">Comment ?</p>
+                <div className="flex flex-wrap gap-1">{END_KINDS.map((x) => <button key={x.id} type="button" onClick={() => editImpact(menu.k, { end: menu.end === x.id ? null : x.id })} className={chip(menu.end === x.id)}>{x.name}</button>)}</div>
+                <button type="button" onClick={() => setMenuK(null)} className={cx(btn.primary, "w-full")}>✓ OK</button>
+              </div>
+            </div>
+          )}
           {header(scouting ? "🔭 Scouting · score indicatif" : "🔭 Arbitrage + scouting")}
           {scouting && <p className={ui.hint}>Ce n&apos;est pas un arbitrage : ce score ne compte ni à l&apos;ELO ni au tournoi. Seuls les impacts comptent, pour l&apos;analyse des deux joueurs.</p>}
           {extras}
@@ -492,13 +529,18 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
             level={scout.level}
             names={[names[top], names[bottom]]}
             disabled={finishing || waitServer}
+            impacts={impacts.slice(-14).map((im, n, arr) => ({ ...(flip ? { x: W - im.x, y: COURT_LENGTH - im.y } : { x: im.x, y: im.y }), muted: true, last: n === arr.length - 1, k: im.k, title: `Point pour ${names[im.w]}` }))}
+            onUndo={() => { const l = impacts[impacts.length - 1]; if (l) undoImpact(l.k); }}
+            onImpact={setMenuK}
             onCommit={(shown) => {
               // Le dessin est retourne si les joueurs ont change de cote : on revient au repere du journal (A en haut).
               const r = flip ? { ...shown, x: W - shown.x, y: COURT_LENGTH - shown.y, ...(shown.hx !== undefined && shown.hy !== undefined ? { hx: W - shown.hx, hy: COURT_LENGTH - shown.hy } : {}), w: (shown.w === 0 ? 1 : 0) as 0 | 1 } : shown;
               const o = rallyOutcome(theme, r.w, server, exchanges);
               plus(r.w);
               showFlash(o.add[r.w] > 0 ? `+${o.add[r.w]} pour ${names[r.w]}` : `${names[r.w]} reprend le service`);
-              void liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) setError(res.error); }).catch(() => setError("Connexion perdue : cet impact n'a pas été enregistré."));
+              const k = ++impactSeq.current;
+              setImpacts((l) => [...l, { k, x: r.x, y: r.y, w: r.w, add: o.add, set: sets.length - 1, ...(r.stroke ? { stroke: r.stroke } : {}), ...(r.end ? { end: r.end } : {}) }]);
+              impactIds.current.set(k, liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) { setError(res.error); return null; } return "eventId" in res ? res.eventId ?? null : null; }).catch(() => { setError("Connexion perdue : cet impact n'a pas été enregistré."); return null; }));
             }}
           />
           {setChips}

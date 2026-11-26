@@ -196,7 +196,9 @@ export function strokeSummary(sheets: StrokeSheet[]): StrokeSummary[] {
 // Pour chaque eleve : ses echanges notes (gagnes, perdus, ses fautes dehors / au filet), ses fiches techniques recues
 // (niveau moyen par coup), et ce qu'il a scoute lui-meme (impacts notes comme arbitre, fiches remplies).
 export type ScoutRow = { id: string; rallies: number; won: number; lost: number; out: number; net: number; sheets: number; levels: Partial<Record<StrokeId, string | null>>; gaveRallies: number; gaveSheets: number };
-type EvLike = { kind: string; authorId: string; at: number; targetId?: string | null; data?: unknown };
+type EvLike = { id?: string; kind: string; authorId: string; at: number; targetId?: string | null; data?: unknown };
+// Les impacts annules d'un match (lignes UNRALLY, 26/11) : l'analyse les ignore.
+export const undoneRallies = (events: { kind: string; targetId?: string | null }[]): Set<string> => new Set(events.filter((e) => e.kind === "UNRALLY" && e.targetId).map((e) => e.targetId as string));
 type MatchLike = { id: string; playerAId: string; playerBId: string; events: EvLike[]; cancelled: boolean };
 export function sessionScoutRows(matches: MatchLike[], ids: string[]): ScoutRow[] {
   return ids.map((id) => {
@@ -206,7 +208,9 @@ export function sessionScoutRows(matches: MatchLike[], ids: string[]): ScoutRow[
     for (const m of matches) {
       if (m.cancelled) continue;
       const side = m.playerAId === id ? 0 : m.playerBId === id ? 1 : null;
+      const undone = undoneRallies(m.events);
       for (const e of m.events) {
+        if (e.kind === "RALLY" && e.id && undone.has(e.id)) continue;
         if (e.kind === "RALLY" && e.authorId === id) gaveRallies++;
         if (e.kind === "SCOUT" && e.authorId === id) gaveSheets++;
         if (side === null) continue;

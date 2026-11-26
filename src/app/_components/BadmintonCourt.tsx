@@ -8,17 +8,36 @@ import { btn, cx, ui } from "@/lib/ui";
 // vu du dessus, joueur A en haut, B en bas, filet au milieu. Pour l'arbitre (toucher = impact du volant) et pour les cartes
 // « ou je gagne / ou je perds mes points ». Marques : point gagne = rond plein (vert), point perdu = croix (rouge) : la
 // forme dit la meme chose que la couleur. Couleurs du theme (pas de mode sombre dans l'appli).
-export type CourtMark = { x: number; y: number; won?: boolean; hx?: number; hy?: number; title?: string; pending?: boolean; muted?: boolean };
-export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap }: { kind: CourtKind; scale: number; marks?: CourtMark[]; top?: string; bottom?: string; onTap?: (x: number, y: number) => void }) {
+// last (26/11) : le dernier impact, entoure ; k : son numero (appui long).
+export type CourtMark = { x: number; y: number; won?: boolean; hx?: number; hy?: number; title?: string; pending?: boolean; muted?: boolean; last?: boolean; k?: number };
+// onLongPress (26/11, Sartay : « appuyer longtemps sur un impact pour l'annuler, donner des infos ») : un appui de plus de
+// LONG_PRESS_MS ne compte pas d'impact, il signale l'endroit (le parent ouvre le menu de l'impact le plus proche).
+const LONG_PRESS_MS = 450;
+export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPress }: { kind: CourtKind; scale: number; marks?: CourtMark[]; top?: string; bottom?: string; onTap?: (x: number, y: number) => void; onLongPress?: (x: number, y: number) => void }) {
   const w = courtWidth(kind), L = COURT_LENGTH, M = COURT_MARGIN;
   const ref = useRef<SVGSVGElement>(null);
-  const tap = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!onTap || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
+  const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> | null; long: boolean } | null>(null);
+  const at = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = ref.current!.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * (w + 2 * M) - M;
     const y = ((e.clientY - r.top) / r.height) * (L + 2 * M) - M;
-    onTap(Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+    return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
   };
+  const down = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!onTap || !ref.current) return;
+    const p = at(e);
+    const cur = { ...p, timer: null as ReturnType<typeof setTimeout> | null, long: false };
+    if (onLongPress) cur.timer = setTimeout(() => { cur.long = true; try { navigator.vibrate?.(30); } catch { /* vibreur absent */ } onLongPress(p.x, p.y); }, LONG_PRESS_MS);
+    press.current = cur;
+  };
+  const up = () => {
+    const p = press.current;
+    press.current = null;
+    if (!p || !onTap) return;
+    if (p.timer) clearTimeout(p.timer);
+    if (!p.long) onTap(p.x, p.y);
+  };
+  const cancel = () => { const p = press.current; if (p?.timer) clearTimeout(p.timer); press.current = null; };
   const ln = (x1: number, y1: number, x2: number, y2: number, k: string | number, sw = 0.04) => <line key={k} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth={sw} />;
   const lines = [ln(0, NET_Y - SHORT_SERVICE, w, NET_Y - SHORT_SERVICE, "s1"), ln(0, NET_Y + SHORT_SERVICE, w, NET_Y + SHORT_SERVICE, "s2")];
   if (kind !== "HALF") lines.push(ln(w / 2, 0, w / 2, NET_Y - SHORT_SERVICE, "c1"), ln(w / 2, NET_Y + SHORT_SERVICE, w / 2, L, "c2"));
@@ -35,7 +54,11 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap }: { kind
       className={cx("block select-none touch-manipulation", onTap && "cursor-crosshair")}
       role={onTap ? "button" : "img"}
       aria-label={onTap ? "Terrain : touchez l'endroit où le volant est tombé" : "Terrain et impacts du volant"}
-      onPointerDown={onTap ? tap : undefined}
+      onPointerDown={onTap ? down : undefined}
+      onPointerUp={onTap ? up : undefined}
+      onPointerLeave={onTap ? cancel : undefined}
+      onPointerCancel={onTap ? cancel : undefined}
+      onContextMenu={onTap ? (e) => e.preventDefault() : undefined}
     >
       <rect x={-M} y={-M} width={w + 2 * M} height={L + 2 * M} rx={0.3} className="fill-paper" />
       <rect x={0} y={0} width={w} height={L} className="fill-emerald-50" />
@@ -50,7 +73,7 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap }: { kind
         <g key={i}>
           {m.hx !== undefined && m.hy !== undefined && <line x1={m.hx} y1={m.hy} x2={m.x} y2={m.y} stroke="currentColor" strokeWidth={0.03} strokeDasharray="0.15 0.12" className="text-ink-3" />}
           {m.muted ? (
-            <circle cx={m.x} cy={m.y} r={0.13} className="fill-ink-3" fillOpacity={0.6}>{m.title && <title>{m.title}</title>}</circle>
+            <g>{m.last && <circle cx={m.x} cy={m.y} r={0.3} fill="none" stroke="currentColor" strokeWidth={0.06} className="text-accent" />}<circle cx={m.x} cy={m.y} r={m.last ? 0.16 : 0.13} className={m.last ? "fill-accent" : "fill-ink-3"} fillOpacity={m.last ? 1 : 0.6}>{m.title && <title>{m.title}</title>}</circle></g>
           ) : m.won === undefined || m.pending ? (
             <circle cx={m.x} cy={m.y} r={0.22} className="fill-accent" stroke="white" strokeWidth={0.06}>{m.title && <title>{m.title}</title>}</circle>
           ) : m.won ? (
@@ -74,7 +97,8 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap }: { kind
 type Draft = { x: number; y: number; w: 0 | 1 | null; stroke?: EndStroke; hx?: number; hy?: number; end?: EndKind; hitter: boolean };
 // `big` (26/11, Sartay : « le dessin du terrain pourrait prendre plus de place et le scoring moins ») : le terrain occupe la
 // largeur de l'ecran (au plus ~65 % de sa hauteur), les choix (qui marque, le coup…) s'affichent en bas de l'ecran.
-export function CourtPad({ kind, level, names, disabled, onCommit, big = false }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean }) {
+// impacts / onUndo / onImpact (26/11) : le parent tient la liste des impacts (pour les annuler et les preciser).
+export function CourtPad({ kind, level, names, disabled, onCommit, big = false, impacts, onUndo, onImpact }: { kind: CourtKind; level: number; names: [string, string]; disabled?: boolean; onCommit: (r: Omit<Rally, "court" | "layer">) => void; big?: boolean; impacts?: CourtMark[]; onUndo?: () => void; onImpact?: (k: number) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [last, setLast] = useState<CourtMark[]>([]);
   const box = useRef<HTMLDivElement>(null);
@@ -106,7 +130,13 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false }
     setDraft({ ...d, hitter: level >= 3 });
   };
   // Les derniers impacts du match en gris, le toucher en cours en orange.
-  const marks: CourtMark[] = [...last, ...(draft ? [{ x: draft.x, y: draft.y, hx: draft.hx, hy: draft.hy, pending: true }] : [])];
+  const marks: CourtMark[] = [...(impacts ?? last), ...(draft ? [{ x: draft.x, y: draft.y, hx: draft.hx, hy: draft.hy, pending: true }] : [])];
+  // Appui long : l'impact le plus proche (a moins de 0,9 m).
+  const longPress = (x: number, y: number) => {
+    if (!onImpact || !impacts?.length) return;
+    const best = [...impacts].filter((m) => m.k !== undefined).sort((p, q) => Math.hypot(p.x - x, p.y - y) - Math.hypot(q.x - x, q.y - y))[0];
+    if (best && Math.hypot(best.x - x, best.y - y) < 0.9) onImpact(best.k!);
+  };
   const chip = (on: boolean) => cx(ui.chip, on ? ui.chipBrand : ui.chipMuted, "py-1 text-sm");
   const controls = draft && (
     <>
@@ -136,9 +166,15 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false }
   if (big) {
     return (
       <div ref={box} className="w-full">
+        {onUndo && (
+          <div className="flex items-center gap-2 mb-2">
+            <button type="button" disabled={disabled || !impacts?.length} onClick={onUndo} className={cx(btn.ghost, "flex-1 border-2 border-accent font-extrabold")}>↶ Annuler le dernier impact</button>
+          </div>
+        )}
         <div className="flex justify-center">
-          <CourtSvg kind={kind} scale={fit ?? 22} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} />
+          <CourtSvg kind={kind} scale={fit ?? 22} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} onLongPress={onImpact ? longPress : undefined} />
         </div>
+        {onImpact && <p className={`${ui.hint} text-center mt-1`}>Appui long sur un impact : l&apos;annuler, ou préciser le coup.</p>}
         {draft && (
           <div className="fixed inset-x-0 bottom-0 z-[55] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[50vh] overflow-auto">
             <div className="max-w-xl mx-auto space-y-2">{controls}</div>

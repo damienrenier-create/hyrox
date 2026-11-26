@@ -9,7 +9,7 @@ import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatche
 import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
-import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked } from "@/lib/badminton-scout";
+import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -25,7 +25,7 @@ import { toMs } from "@/lib/scheduling";
 // `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
 // endsAt (tournoi par equipes au temps, 24/11) : fin du chrono en cours, affichee au tableau de l'arbitre.
 // theme (24/11) : le theme du match ouvert en direct (regle appliquee par le tableau de l'arbitre).
-export type BmResult = { error: string } | { ok: true; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number }; theme?: BmTheme | null } | { duplicate: { matchId: string; text: string } };
+export type BmResult = { error: string } | { ok: true; eventId?: string; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number }; theme?: BmTheme | null } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -65,8 +65,8 @@ async function addEvent(matchId: string, sessionId: string | null, kind: BmKind,
 }
 
 // Ligne RALLY / SCOUT / THEME (24/11) : ses parametres (un objet, pas des sets) vont dans la colonne JSON.
-async function addEventData(matchId: string, sessionId: string | null, kind: BmKind, authorId: string, role: BmRole, data: unknown, targetId: string | null = null) {
-  await db.orm.public.BadmintonEvent.create({ matchId, sessionId, kind, authorId, role, targetId, sets: JSON.parse(JSON.stringify(data)), at: Temporal.Now.instant() });
+async function addEventData(matchId: string, sessionId: string | null, kind: BmKind, authorId: string, role: BmRole, data: unknown, targetId: string | null = null): Promise<string> {
+  return (await db.orm.public.BadmintonEvent.create({ matchId, sessionId, kind, authorId, role, targetId, sets: JSON.parse(JSON.stringify(data)), at: Temporal.Now.instant() })).id;
 }
 
 function done(sessionId: string | null) {
@@ -429,8 +429,31 @@ export async function liveRallyAction(matchId: string, raw: unknown): Promise<Bm
   if (!x.c.staff && !scoutUnlocked(readScoutConfig(x.c.session?.settings), x.c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
   const rally = readRally(raw);
   if (!rally) return { error: "Échange illisible." };
-  await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", rally);
+  const eventId = await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", rally);
+  return { ok: true, eventId };
+}
+// Annuler un impact (26/11 : « un bouton clair pour annuler la derniere frappe ; appuyer longtemps sur un impact pour
+// l'annuler ») : une ligne UNRALLY, rien n'est efface.
+export async function undoRallyAction(matchId: string, rallyId: string): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  if (!x.m.events.some((e) => e.id === rallyId && e.kind === "RALLY")) return { error: "Impact introuvable." };
+  if (undoneRallies(x.m.events).has(rallyId)) return { ok: true };
+  await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", null, rallyId);
   return { ok: true };
+}
+// Preciser un impact (appui long : le coup, gagnant ou faute) : l'ancien est annule, le nouveau le remplace (meme place).
+export async function editRallyAction(matchId: string, rallyId: string, patch: { stroke?: string | null; end?: string | null }): Promise<BmResult> {
+  const x = await liveCtx(matchId);
+  if ("error" in x) return x;
+  const old = x.m.events.find((e) => e.id === rallyId && e.kind === "RALLY");
+  const r = old ? readRally(old.data) : null;
+  if (!old || !r || undoneRallies(x.m.events).has(rallyId)) return { error: "Impact introuvable." };
+  const next = readRally({ ...r, ...(patch.stroke !== undefined ? { stroke: patch.stroke ?? undefined } : {}), ...(patch.end !== undefined ? { end: patch.end ?? undefined } : {}) });
+  if (!next) return { error: "Impact illisible." };
+  await addEventData(x.m.id, x.m.sessionId, "UNRALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", null, rallyId);
+  const eventId = await addEventData(x.m.id, x.m.sessionId, "RALLY", x.c.userId, x.c.staff ? "STAFF" : "REFEREE", next);
+  return { ok: true, eventId };
 }
 // Fiche technique d'un joueur (les 6 coups, 4 criteres chacun) remplie par un scout qui regarde son match.
 export async function scoutStrokesAction(matchId: string, playerId: string, raw: unknown): Promise<BmResult> {
