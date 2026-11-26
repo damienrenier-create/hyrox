@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
 import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, needsServer, priceOf, priced, rallyOutcome, readTheme, themeText, type BmTheme, type ThemeKind } from "@/lib/badminton-themes";
 import { StudentName } from "./StudentName";
 import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { CourtPad } from "./BadmintonCourt";
-import type { CourtKind } from "@/lib/badminton-scout";
+import { COURT_LENGTH, courtWidth, type CourtKind } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -239,6 +240,10 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
   const [exchanges, setExchanges] = useState(0); // prix de l'echange : appuis sur le bouton central
+  const [flip, setFlip] = useState(false); // scouting : les joueurs ont change de cote
+  const [flash, setFlash] = useState<string | null>(null); // scouting : « +1 pour X » apres un toucher
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showFlash = (t: string) => { setFlash(t); if (flashTimer.current) clearTimeout(flashTimer.current); flashTimer.current = setTimeout(() => setFlash(null), 1800); };
   // Points par set (rappel « set gagné ? ») : retenu sur ce telephone. Le tableau n'existe que cote navigateur (ouvert au clic).
   // 0 (« sans limite ») est un objectif de tournoi valable : match au temps (24/11).
   const [target, setTarget] = useState<number>(() => { if (initialTarget !== undefined && BM_TARGETS.includes(initialTarget as never)) return initialTarget; try { const raw = localStorage.getItem("reps_bm_target"); const t = raw === null ? NaN : Number(raw); return BM_TARGETS.includes(t as never) ? t : 21; } catch { return 21; } });
@@ -348,107 +353,167 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
       </div>
     </div>
   );
-  return (
-    <div className="fixed inset-0 z-50 bg-paper overflow-auto">
-      <div className="max-w-xl mx-auto p-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className={ui.eyebrow}>🎯 Arbitrage en direct</p>
-            <p className="text-xs text-ink-2">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
-          </div>
-          <button type="button" onClick={() => { router.refresh(); onClose(); }} className={ui.close} aria-label="Fermer (le match reste en direct)">✕</button>
+  // Plein ecran, rendu hors de la page (26/11 : un bandeau de la page passait par-dessus le terrain).
+  const overlay = (content: React.ReactNode) => (typeof document === "undefined" ? null : createPortal(<div className="fixed inset-0 z-[70] bg-paper overflow-auto">{content}</div>, document.body));
+  const header = (title: string) => (
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        <p className={ui.eyebrow}>{title}</p>
+        <p className="text-xs text-ink-2">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
+      </div>
+      <button type="button" onClick={() => { router.refresh(); onClose(); }} className={ui.close} aria-label="Fermer (le match reste en direct)">✕</button>
+    </div>
+  );
+  const setChips = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {sets.map(([a, b], i) => (
+        <span key={i} className={cx(ui.chip, i === sets.length - 1 ? ui.chipBrand : ui.chipMuted, "tabular-nums")}>Set {i + 1}{i < sets.length - 1 ? ` · ${a}-${b}` : " en cours"}</span>
+      ))}
+    </div>
+  );
+  const extras = (
+    <>
+      {error && <p className={ui.alertErr}>{error}</p>}
+      {/* Match de championnat a handicap (rule.head) : l'avance, ou « aucun point d'avance » (Sartay 16/11 : « signifie-le ! »). */}
+      {(rule?.head || head[0] > 0 || head[1] > 0) && (
+        <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-center px-3 py-2 dark:bg-amber-950 dark:text-amber-100" aria-label="Handicap">
+          {head[0] > 0 || head[1] > 0 ? (
+            <>⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b></>
+          ) : (
+            <>⚖️ Handicap : <b className={BM_ADVANCE}>aucun point d&apos;avance</b> dans ce match : les deux joueurs commencent à <b className={BM_ADVANCE}>0-0</b></>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {sets.map(([a, b], i) => (
-            <span key={i} className={cx(ui.chip, i === sets.length - 1 ? ui.chipBrand : ui.chipMuted, "tabular-nums")}>Set {i + 1}{i < sets.length - 1 ? ` · ${a}-${b}` : " en cours"}</span>
-          ))}
+      )}
+      {rule?.endsAt && (
+        <div className="rounded-2xl border-2 border-line bg-card text-center px-3 py-2" aria-label="Chrono">
+          <Countdown endsAt={rule.endsAt} big /> <span className={`${ui.hint} block`}>Match au temps : le score au coup de sifflet compte (égalité possible).</span>
         </div>
-        {error && <p className={ui.alertErr}>{error}</p>}
-        {/* Match de championnat a handicap (rule.head) : l'avance, ou « aucun point d'avance » (Sartay 16/11 : « signifie-le ! »). */}
-        {(rule?.head || head[0] > 0 || head[1] > 0) && (
-          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-center px-3 py-2 dark:bg-amber-950 dark:text-amber-100" aria-label="Handicap">
-            {head[0] > 0 || head[1] > 0 ? (
-              <>⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b></>
-            ) : (
-              <>⚖️ Handicap : <b className={BM_ADVANCE}>aucun point d&apos;avance</b> dans ce match : les deux joueurs commencent à <b className={BM_ADVANCE}>0-0</b></>
-            )}
+      )}
+      {alerts.length > 0 && (
+        <div className="rounded-2xl bg-red-600 text-white text-center font-display text-lg font-extrabold px-3 py-2 animate-pulse" role="status">
+          {alerts.map((x) => `🔥 Balle de ${x.match ? "match" : "set"} pour ${names[x.side]}`).join(" · ")}
+        </div>
+      )}
+    </>
+  );
+  const themeBlock = theme && (
+    <div className="rounded-2xl border-2 border-line bg-card px-3 py-2 space-y-2" aria-label="Thème du match">
+      <p className="text-sm text-center">🎲 <b>{themeText(theme)}</b></p>
+      {waitServer && (
+        <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+          <b>Qui sert ?</b>
+          <button type="button" onClick={() => setServer(0)} className={btn.smPrimary}>{aName}</button>
+          <button type="button" onClick={() => setServer(1)} className={btn.smPrimary}>{bName}</button>
+        </div>
+      )}
+      {priced(theme) && (
+        <div className="flex items-stretch gap-2">
+          <button type="button" onClick={() => setExchanges((x) => x + 1)} disabled={finishing} className="flex-1 rounded-2xl bg-accent text-white text-xl font-black py-4 select-none touch-manipulation" aria-label="Un échange de plus">🏸 Échange +1</button>
+          <button type="button" onClick={() => setExchanges((x) => Math.max(0, x - 1))} disabled={finishing || exchanges === 0} className="w-12 rounded-2xl bg-black/10 text-xl font-black disabled:opacity-40" aria-label="Un échange de moins">−</button>
+          <div className="text-center self-center min-w-[5.5rem]"><div className="font-display text-3xl font-extrabold tabular-nums leading-none">{price}</div><div className="text-[11px] text-ink-2">{exchanges} échange{exchanges > 1 ? "s" : ""} · le point vaut</div></div>
+        </div>
+      )}
+      {theme.serveFault && (
+        <button type="button" onClick={fault} disabled={finishing || server === null} className={cx(btn.ghost, "w-full")}>❌ Service raté{server !== null ? ` de ${names[server]}` : ""} (−1, +1 à l&apos;autre)</button>
+      )}
+      {theme.kind === "SERVE" && server !== null && <p className={`${ui.hint} text-center`}>Seul {names[server]} (au service) peut marquer ; si l&apos;autre gagne l&apos;échange, il prend le service.</p>}
+    </div>
+  );
+  const footer = (
+    <>
+      {setWinner !== null && sets.length < BM_MAX_SETS && (
+        <div className={`${ui.alertInfo} flex items-center justify-between gap-2`}>
+          <span>Set gagné par <b>{names[setWinner]}</b> ?</span>
+          <span className="flex gap-1.5">
+            <button type="button" onClick={finish} disabled={finishing} className={btn.smSuccess}>🏁 Fin du match</button>
+            <button type="button" onClick={nextSet} className={btn.smGhost}>Set suivant</button>
+          </span>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={ui.hint}>{rule ? (rule.deuce ? `Tournoi : 2 points d'écart${rule.cap ? ` (max ${rule.cap})` : ""} · ` : "Tournoi : le premier au score gagne · ") : ""}Set en</span>
+        {BM_TARGETS.map((t) => (
+          <button key={t} type="button" onClick={() => pickTarget(t)} className={cx(ui.chip, target === t ? ui.chipBrand : ui.chipMuted, "py-1")}>{t ? `${t} points` : "sans limite"}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={nextSet} disabled={finishing || sets.length >= BM_MAX_SETS || fresh} className={btn.ghost}>Set suivant ›</button>
+        <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : "🏁 Fin du match"}</button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {sets.length > 1 && <button type="button" onClick={dropSet} disabled={finishing} className={btn.smGhost}>← Retirer ce set</button>}
+        <button type="button" onClick={restart} disabled={finishing || (sets.length === 1 && fresh)} className={btn.smGhost}>↺ Recommencer à {head[0]}-{head[1]}</button>
+        <button type="button" onClick={cancelMatch} disabled={finishing} className={btn.smGhost}>✖ Annuler ce match</button>
+      </div>
+      <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
+    </>
+  );
+
+  // ===== Scouting en direct (Sartay 26/11 : « le but du scouting n'est pas d'arbitrer mais de definir ou le joueur rate et
+  // marque les points ; en touchant l'ecran en fonction des zones, ca compte les points ; le dessin du terrain pourrait
+  // prendre plus de place et le scoring moins ») : le TERRAIN en grand, le score en petit. Toucher l'impact donne le point
+  // au bon joueur (dans les lignes : l'adversaire de ce camp ; dehors : le joueur de ce camp ; filet : on choisit).
+  // « ⇅ » : les joueurs changent de cote (le dessin suit ; le journal garde toujours A en haut).
+  if (scout) {
+    const top: 0 | 1 = flip ? 1 : 0;
+    const bottom: 0 | 1 = flip ? 0 : 1;
+    const W = courtWidth(scout.court);
+    const scoreChip = (side: 0 | 1) => (
+      <div className={cx("flex-1 min-w-0 rounded-2xl pl-3 pr-1.5 py-1.5 text-white flex items-center gap-2", side === 0 ? "bg-brand" : "bg-sea", alerts.some((x) => x.side === side) && "ring-4 ring-red-500")}>
+        <span className="flex-1 min-w-0 truncate font-bold text-sm">{names[side]}{server === side ? " 🏸" : ""}</span>
+        <span className="font-display text-3xl font-extrabold tabular-nums leading-none">{cur[side]}</span>
+        <span className="flex flex-col gap-0.5">
+          <button type="button" onClick={() => plus(side)} disabled={finishing || waitServer} className="rounded-lg bg-white/20 active:bg-white/35 text-xs font-black px-2 py-1 disabled:opacity-40" aria-label={`Point pour ${names[side]} (sans impact)`}>+1</button>
+          <button type="button" onClick={() => minus(side)} disabled={finishing || cur[side] === 0} className="rounded-lg bg-black/15 active:bg-black/25 text-xs font-black px-2 py-1 disabled:opacity-40" aria-label={`Retirer un point à ${names[side]}`}>−1</button>
+        </span>
+      </div>
+    );
+    return overlay(
+        <div className="max-w-xl mx-auto p-3 space-y-2 pb-44">
+          {header("🔭 Scouting en direct")}
+          {extras}
+          {themeBlock}
+          <div className="flex items-stretch gap-1.5">
+            {scoreChip(top)}
+            <button type="button" onClick={() => setFlip((f) => !f)} className="rounded-2xl border-2 border-line bg-card px-2 text-lg font-black" title="Les joueurs changent de côté" aria-label="Les joueurs changent de côté">⇅</button>
+            {scoreChip(bottom)}
           </div>
-        )}
-        {rule?.endsAt && (
-          <div className="rounded-2xl border-2 border-line bg-card text-center px-3 py-2" aria-label="Chrono">
-            <Countdown endsAt={rule.endsAt} big /> <span className={`${ui.hint} block`}>Match au temps : le score au coup de sifflet compte (égalité possible).</span>
-          </div>
-        )}
-        {alerts.length > 0 && (
-          <div className="rounded-2xl bg-red-600 text-white text-center font-display text-lg font-extrabold px-3 py-2 animate-pulse" role="status">
-            {alerts.map((x) => `🔥 Balle de ${x.match ? "match" : "set"} pour ${names[x.side]}`).join(" · ")}
-          </div>
-        )}
-        {panel(0)}
-        {theme && (
-          <div className="rounded-2xl border-2 border-line bg-card px-3 py-2 space-y-2" aria-label="Thème du match">
-            <p className="text-sm text-center">🎲 <b>{themeText(theme)}</b></p>
-            {waitServer && (
-              <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
-                <b>Qui sert ?</b>
-                <button type="button" onClick={() => setServer(0)} className={btn.smPrimary}>{aName}</button>
-                <button type="button" onClick={() => setServer(1)} className={btn.smPrimary}>{bName}</button>
-              </div>
-            )}
-            {priced(theme) && (
-              <div className="flex items-stretch gap-2">
-                <button type="button" onClick={() => setExchanges((x) => x + 1)} disabled={finishing} className="flex-1 rounded-2xl bg-accent text-white text-xl font-black py-4 select-none touch-manipulation" aria-label="Un échange de plus">🏸 Échange +1</button>
-                <button type="button" onClick={() => setExchanges((x) => Math.max(0, x - 1))} disabled={finishing || exchanges === 0} className="w-12 rounded-2xl bg-black/10 text-xl font-black disabled:opacity-40" aria-label="Un échange de moins">−</button>
-                <div className="text-center self-center min-w-[5.5rem]"><div className="font-display text-3xl font-extrabold tabular-nums leading-none">{price}</div><div className="text-[11px] text-ink-2">{exchanges} échange{exchanges > 1 ? "s" : ""} · le point vaut</div></div>
-              </div>
-            )}
-            {theme.serveFault && (
-              <button type="button" onClick={fault} disabled={finishing || server === null} className={cx(btn.ghost, "w-full")}>❌ Service raté{server !== null ? ` de ${names[server]}` : ""} (−1, +1 à l&apos;autre)</button>
-            )}
-            {theme.kind === "SERVE" && server !== null && <p className={`${ui.hint} text-center`}>Seul {names[server]} (au service) peut marquer ; si l&apos;autre gagne l&apos;échange, il prend le service.</p>}
-          </div>
-        )}
-        {/* Scouting (24/11) : l'impact du volant a chaque fin d'echange ; le point est compte avec la regle du theme. */}
-        {scout && (
+          <details className="rounded-xl bg-accent-soft/60 px-3 py-1.5 text-sm leading-snug">
+            <summary className="cursor-pointer">👆 <b>Touche où le volant est tombé : le point va tout seul au bon joueur.</b></summary>
+            <p className="mt-1">Dans le terrain : point pour l&apos;adversaire de ce camp · dehors : point pour le joueur de ce camp · sur le filet : tu choisis. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté.</p>
+          </details>
+          {flash && <p className="text-center font-display font-extrabold text-success-ink" role="status">{flash}</p>}
           <CourtPad
+            key={flip ? "flip" : "normal"}
+            big
             kind={scout.court}
             level={scout.level}
-            names={[aName, bName]}
+            names={[names[top], names[bottom]]}
             disabled={finishing || waitServer}
-            onCommit={(r) => {
+            onCommit={(shown) => {
+              // Le dessin est retourne si les joueurs ont change de cote : on revient au repere du journal (A en haut).
+              const r = flip ? { ...shown, x: W - shown.x, y: COURT_LENGTH - shown.y, ...(shown.hx !== undefined && shown.hy !== undefined ? { hx: W - shown.hx, hy: COURT_LENGTH - shown.hy } : {}), w: (shown.w === 0 ? 1 : 0) as 0 | 1 } : shown;
+              const o = rallyOutcome(theme, r.w, server, exchanges);
               plus(r.w);
+              showFlash(o.add[r.w] > 0 ? `+${o.add[r.w]} pour ${names[r.w]}` : `${names[r.w]} reprend le service`);
               void liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) setError(res.error); }).catch(() => setError("Connexion perdue : cet impact n'a pas été enregistré."));
             }}
           />
-        )}
+          {setChips}
+          {footer}
+        </div>
+    );
+  }
+  return overlay(
+      <div className="max-w-xl mx-auto p-3 space-y-3">
+        {header("🎯 Arbitrage en direct")}
+        {setChips}
+        {extras}
+        {panel(0)}
+        {themeBlock}
         {panel(1)}
-        {setWinner !== null && sets.length < BM_MAX_SETS && (
-          <div className={`${ui.alertInfo} flex items-center justify-between gap-2`}>
-            <span>Set gagné par <b>{names[setWinner]}</b> ?</span>
-            <span className="flex gap-1.5">
-              <button type="button" onClick={finish} disabled={finishing} className={btn.smSuccess}>🏁 Fin du match</button>
-              <button type="button" onClick={nextSet} className={btn.smGhost}>Set suivant</button>
-            </span>
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={ui.hint}>{rule ? (rule.deuce ? `Tournoi : 2 points d'écart${rule.cap ? ` (max ${rule.cap})` : ""} · ` : "Tournoi : le premier au score gagne · ") : ""}Set en</span>
-          {BM_TARGETS.map((t) => (
-            <button key={t} type="button" onClick={() => pickTarget(t)} className={cx(ui.chip, target === t ? ui.chipBrand : ui.chipMuted, "py-1")}>{t ? `${t} points` : "sans limite"}</button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={nextSet} disabled={finishing || sets.length >= BM_MAX_SETS || fresh} className={btn.ghost}>Set suivant ›</button>
-          <button type="button" onClick={finish} disabled={finishing || sets.every(([a, b]) => a + b === 0)} className={btn.success}>{finishing ? "Enregistrement…" : "🏁 Fin du match"}</button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {sets.length > 1 && <button type="button" onClick={dropSet} disabled={finishing} className={btn.smGhost}>← Retirer ce set</button>}
-          <button type="button" onClick={restart} disabled={finishing || (sets.length === 1 && fresh)} className={btn.smGhost}>↺ Recommencer à {head[0]}-{head[1]}</button>
-          <button type="button" onClick={cancelMatch} disabled={finishing} className={btn.smGhost}>✖ Annuler ce match</button>
-        </div>
-        <p className={ui.hint}>Chaque point est enregistré tout de suite : tu peux fermer et reprendre l&apos;arbitrage plus tard (« Matchs que j&apos;ai arbitrés »). À la fin du match, le score compte tout de suite ; les joueurs peuvent encore le corriger.</p>
+        {footer}
       </div>
-    </div>
   );
 }
 
