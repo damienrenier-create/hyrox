@@ -16,7 +16,7 @@
 //    emoji ») : un eleve (scout) observe un joueur pendant un match et coche, pour chaque coup vu, les 4 criteres reussis ;
 //    bareme du Hyrox / Level : 0 critere = TI, 1 = I, 2 = S, 3 = B, 4 = TB, 4 + ❤️ (« vraiment tres bien fait ») = E.
 //    Ligne SCOUT du journal du match (targetId = le joueur observe ; la plus recente d'un scout pour un joueur compte).
-//    Criteres : services = Sartay (26/11) ; clear, smash, drop, lob = Claude (24/11), ⏳ a valider par Sartay.
+//    Criteres : ceux de Sartay (26/11 soir), pour les 6 coups.
 
 // ===== Terrains =====
 export type CourtKind = "HALF" | "SINGLE" | "DOUBLE";
@@ -103,29 +103,30 @@ export const STROKES: { id: StrokeId; name: string; emoji: string; criteria: str
     "Le volant devrait atterrir dans le couloir du fond.",
     "Le serveur sert au plus proche de la ligne de service.",
   ] },
+  // Clear, smash, drop, lob : criteres de Sartay (26/11 soir) aussi.
   { id: "CL", name: "Clear", emoji: "🌈", criteria: [
-    "Placé sous et derrière le volant (pas de frappe en reculant).",
     "Frappe haute, bras tendu, au-dessus et devant la tête.",
-    "Trajectoire haute et longue, au-dessus de l'adversaire.",
-    "Le volant retombe au fond du terrain adverse.",
+    "Trajectoire haute et longue.",
+    "Il retombe au fond du terrain adverse.",
+    "Le joueur entame un déplacement après sa frappe et ne recule pas en frappant.",
   ] },
   { id: "SM", name: "Smash", emoji: "⚡", criteria: [
-    "Placé derrière le volant, de profil (épaule vers le filet).",
-    "Frappe au point le plus haut, devant le corps, poignet fouetté.",
-    "Trajectoire descendante et rapide, vers le sol adverse.",
-    "Visé loin de l'adversaire, ou sur son corps.",
+    "Frappe au point le plus haut, devant le corps.",
+    "Trajectoire descendante et rapide.",
+    "Le joueur entame un déplacement après sa frappe.",
+    "Le smash atterrit dans le terrain adverse.",
   ] },
   { id: "DR", name: "Drop (amorti)", emoji: "🪶", criteria: [
     "Même préparation qu'un clear : le coup ne se devine pas.",
-    "Frappe freinée au dernier moment : le volant part lentement.",
+    "Frappe freinée au dernier moment.",
     "Le volant passe juste au-dessus du filet et retombe vite.",
-    "Il tombe devant la ligne de service court adverse.",
+    "Il tombe à 50 cm maximum du filet adverse.",
   ] },
   { id: "LO", name: "Lob", emoji: "🛡️", criteria: [
     "Fente avant, pied du côté de la raquette devant.",
     "Frappe sous le volant, de bas en haut, le bras accompagne.",
-    "Trajectoire haute, au-dessus de la raquette de l'adversaire.",
-    "Le volant retombe au fond du terrain adverse.",
+    "Trajectoire haute, lob, au-dessus de la raquette adverse.",
+    "Il retombe au fond du terrain adverse.",
   ] },
 ];
 // Coup qui finit un echange (couche 2) : les 6 coups, plus le jeu au filet et « autre ».
