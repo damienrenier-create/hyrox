@@ -35,6 +35,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
   const [preset, setPreset] = useState<string | null>(null); // adversaire du tournoi, pre-rempli
+  const [openAs, setOpenAs] = useState<"player" | "referee">("player"); // scouting (26/11) : ouvrir directement « J'ai arbitre · en direct »
   // Reprendre un direct de tournoi : avec l'objectif et la regle de ce match.
   const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id], theme: v.theme });
   return (
@@ -63,13 +64,13 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
 
       {writable && (
         <section>
-          {open ? <NewMatch key={preset ?? "nouveau"} initialB={preset} sessionId={sessionId} meId={meId} roster={roster} free={free} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
-            <button type="button" onClick={() => setOpen(true)} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match{free ? " libre" : ""}</button>
+          {open ? <NewMatch key={`${preset ?? "nouveau"}|${openAs}`} initialB={preset} initialMode={openAs} sessionId={sessionId} meId={meId} roster={roster} free={free} onDone={() => { setOpen(false); router.refresh(); }} onClose={() => setOpen(false)} onLive={(x) => { setOpen(false); setLive(x); }} /> : (
+            <button type="button" onClick={() => { setOpenAs("player"); setOpen(true); }} className={cx(btn.lgPrimary, "w-full")}>＋ Encoder un match{free ? " libre" : ""}</button>
           )}
         </section>
       )}
 
-      {writable && !free && scoutable && <ScoutSection matches={scoutable} onDone={() => router.refresh()} />}
+      {writable && !free && scoutable && <ScoutSection matches={scoutable} court={!!scout} onReferee={() => { setPreset(null); setOpenAs("referee"); setOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} onDone={() => router.refresh()} />}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
@@ -93,8 +94,8 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   );
 }
 
-function NewMatch({ sessionId, meId, roster, free, initialB = null, onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null }) => void }) {
-  const [mode, setMode] = useState<"player" | "referee">("player");
+function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode = "player", onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; initialMode?: "player" | "referee"; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null }) => void }) {
+  const [mode, setMode] = useState<"player" | "referee">(initialMode);
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
   const [a, setA] = useState<string | null>(null); // arbitre : joueur 1
@@ -322,16 +323,25 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
 
 // Scouting (24/11) : choisir un match de la seance (en direct d'abord), puis le joueur a observer ; la fiche technique
 // (6 coups, 4 criteres chacun) s'ouvre ici. Un eleve ne remplit jamais sa propre fiche.
-function ScoutSection({ matches, onDone }: { matches: BmView[]; onDone: () => void }) {
+function ScoutSection({ matches, court, onReferee, onDone }: { matches: BmView[]; court: boolean; onReferee: () => void; onDone: () => void }) {
   const [pick, setPick] = useState<{ matchId: string; player: { id: string; name: string } } | null>(null);
   const [sent, setSent] = useState("");
   if (pick) return <StrokeSheetForm key={`${pick.matchId}|${pick.player.id}`} matchId={pick.matchId} player={pick.player} onClose={() => setPick(null)} onDone={() => { setSent(`Fiche de ${pick.player.name} envoyée, merci !`); setPick(null); onDone(); }} />;
   return (
     // Apres l'envoi d'une fiche : la section reste ouverte, avec la confirmation.
-    <details open={sent ? true : undefined} className={cx(ui.card, "p-3")}>
-      <summary className="cursor-pointer font-display font-extrabold text-ink">🔭 Scouter un joueur</summary>
+    // Ouverte d'office (26/11) : un eleve deverrouille doit voir tout de suite comment noter ou tombent les volants.
+    <details open className={cx(ui.card, "p-3 border-accent")}>
+      <summary className="cursor-pointer font-display font-extrabold text-ink">🔭 Scouting</summary>
       <div className="mt-2 space-y-2">
         {sent && <p className={ui.alertOk}>✅ {sent}</p>}
+        {/* Sartay 26/11 : « le scouting le plus important, c'est d'abord ou tombent les volants » : le terrain est sur le tableau de l'arbitre en direct. */}
+        {court && (
+          <div className="rounded-xl bg-accent-soft/40 p-2 space-y-1.5">
+            <button type="button" onClick={onReferee} className={cx(btn.lgPrimary, "w-full")}>📍 Noter où tombent les volants</button>
+            <p className={ui.hint}>Tu arbitres un match en direct : le terrain s&apos;affiche sous le score. À la fin de chaque échange, touche l&apos;endroit où le volant est tombé.</p>
+          </div>
+        )}
+        <p className="font-bold">📝 Fiche technique d&apos;un joueur</p>
         <p className={ui.hint}>Regarde un match et remplis la fiche technique d&apos;un des deux joueurs : service court, service long, clear, smash, drop, lob.</p>
         {matches.length === 0 ? <p className={ui.muted}>Aucun match à observer pour l&apos;instant : il apparaît ici dès qu&apos;un arbitre l&apos;ouvre en direct ou qu&apos;il est encodé.</p> : (
           <ul className="space-y-1.5">
