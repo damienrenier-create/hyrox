@@ -9,7 +9,7 @@ import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, need
 import { StudentName } from "./StudentName";
 import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, editRallyAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, undoRallyAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { CourtPad, HowPicker } from "./BadmintonCourt";
-import { COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, deName, howInfo, howOf, howOptions, type CourtKind, type HowOption, type RallyHow } from "@/lib/badminton-scout";
+import { CONCEDED, COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, howInfo, howOf, howOptions, type CourtKind, type HowOption, type RallyHow } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Morceaux partages des ecrans Badminton (eleve et prof, Sartay 20/10) : choix d'un eleve, saisie des sets, fiche d'un match.
@@ -514,7 +514,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     // Le menu d'un impact est dans le repere du journal (A en haut) : names[0] = A.
     const menuHow = menu ? howOf({ court: scout.court, x: menu.x, y: menu.y, how: menu.how }) : null;
     const pickMenuHow = (o: HowOption) => { if (!menu) return; editImpact(menu.k, { how: o.how, w: o.w, ...(o.how === "WIN" ? { end: "WIN" } : menu.end === "WIN" ? { end: null } : {}) }); };
-    const howText = (how: RallyHow, w: 0 | 1) => (how === "WIN" ? `✅ Gagné par ${names[w]}` : `${howInfo(how).emoji} ${howInfo(how).name} ${deName(names[1 - w])}`);
+    const howText = (how: RallyHow, w: 0 | 1) => (how === "WIN" ? `✅ Gagné par ${names[w]}` : `${howInfo(how).emoji} ${howInfo(how).name} (${names[1 - w]})`);
     const hasHead = head[0] > 0 || head[1] > 0;
     const undoLast = () => { const l = impacts[impacts.length - 1]; if (l) undoImpact(l.k); };
     const shell = (content: React.ReactNode) => (typeof document === "undefined" ? null : createPortal(<div className="fixed inset-0 z-[70] bg-paper flex flex-col overflow-hidden overscroll-none">{content}</div>, document.body));
@@ -553,8 +553,8 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
                 <div className="rounded-xl bg-accent-soft/60 px-3 py-2 leading-snug space-y-1">
                   <p>👆 <b>À la fin de chaque point : touche où le volant est tombé, puis dis comment le point s&apos;est fini.</b> Le point va tout seul au bon joueur.</p>
                   <p><b className="text-success-ink">A · Gagné</b> : le volant tombe dans le terrain adverse.</p>
-                  <p><b className="text-danger-ink">B · Concédé</b> : 🏸 service raté · 🕸️ dans le filet · ↗️ dehors (hors du terrain adverse) · 💨 raté (tapé à côté).</p>
-                  <p>Le choix le plus probable est proposé en premier. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté. Appui long sur un impact : l&apos;annuler ou le corriger.</p>
+                  <p><b className="text-danger-ink">B · Concédé</b> : {CONCEDED.map((h) => `${howInfo(h).emoji} ${howInfo(h).name.toLowerCase()} (${howInfo(h).hint})`).join(" · ")}.</p>
+                  <p>Bande du filet (en couleur) : touche du côté où le volant est retombé. Le choix le plus probable d&apos;après l&apos;endroit est marqué ★. En haut : <b>{names[top]}</b>, en bas : <b>{names[bottom]}</b> ; « ⇅ » quand ils changent de côté. Appui long sur un impact : l&apos;annuler ou le corriger.</p>
                 </div>
                 <div className="space-y-1.5">
                   <p className="font-bold">Point sans impact <span className="font-normal text-ink-2">(tu n&apos;as pas vu où il est tombé)</span></p>
@@ -612,7 +612,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
           <p className="pointer-events-none absolute left-2 top-1 text-[10px] font-bold text-ink-3">{scouting ? "🔭 score indicatif" : "🔭 arbitrage + scouting"}</p>
           <p className="pointer-events-none absolute right-2 top-1 text-[10px] text-ink-3">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
           {impacts.length === 0 && !flash && !touched && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+            <div className="pointer-events-none absolute inset-x-0 top-[16%] flex justify-center px-6">
               <p className="max-w-[16rem] rounded-2xl bg-ink/85 text-white text-center text-sm font-bold px-3 py-2 shadow-lg">👆 Touche où le volant est tombé, puis dis comment le point s&apos;est fini : ✅ gagné ou ❌ concédé.<span className="block text-xs font-normal mt-1 opacity-90">Appui long sur un impact : l&apos;annuler ou le corriger. Aide et sets : « ⋯ ».</span></p>
             </div>
           )}

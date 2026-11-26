@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COURT_LENGTH, COURT_MARGIN, END_KINDS, END_STROKES, NET_Y, SHORT_SERVICE, DOUBLE_LONG_SERVICE, courtWidth, deName, howInfo, howOptions, type CourtKind, type EndKind, type EndStroke, type HowOption, type Rally, type RallyHow } from "@/lib/badminton-scout";
+import { COURT_LENGTH, COURT_MARGIN, END_KINDS, END_STROKES, NET_Y, SHORT_SERVICE, DOUBLE_LONG_SERVICE, courtWidth, howInfo, howOptions, NET_ZONE, type CourtKind, type EndKind, type EndStroke, type HowOption, type Rally, type RallyHow } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Terrain de badminton dessine a l'echelle (Sartay 24/11 : « simple, double, demi-terrain sans couloir (par defaut) »),
@@ -66,6 +66,14 @@ export function CourtSvg({ kind, scale, marks = [], top, bottom, onTap, onLongPr
     >
       <rect x={-MX} y={-MY} width={w + 2 * MX} height={L + 2 * MY} rx={0.3} className="fill-paper" />
       <rect x={0} y={0} width={w} height={L} className="fill-emerald-50" />
+      {/* Pave de l'arbitre : la bande du filet, en deux zones (cote du haut, cote du bas ; Sartay 26/11 soir). */}
+      {onTap && (
+        <g>
+          <rect x={0} y={NET_Y - NET_ZONE} width={w} height={NET_ZONE} className="fill-amber-100" />
+          <rect x={0} y={NET_Y} width={w} height={NET_ZONE} className="fill-sky-100" />
+          <g className="text-ink-3" strokeDasharray="0.12 0.1">{ln(0, NET_Y - NET_ZONE, w, NET_Y - NET_ZONE, "nz1", 0.025)}{ln(0, NET_Y + NET_ZONE, w, NET_Y + NET_ZONE, "nz2", 0.025)}</g>
+        </g>
+      )}
       <g className="text-emerald-800">
         <rect x={0} y={0} width={w} height={L} fill="none" stroke="currentColor" strokeWidth={0.06} />
         {lines}
@@ -120,7 +128,8 @@ export function HowPicker({ options, names, current = null, onPick }: { options:
           i === 0 && !current && "shadow-md",
         )}
       >
-        <span className="block font-extrabold">{h.emoji} {win ? `Gagné par ${nm(o.by)}` : `${h.name} ${deName(nm(o.by))}`}</span>
+        {i === 0 && !current && <span className="block text-[10px] font-bold uppercase tracking-wide opacity-70">★ le plus probable ici</span>}
+        <span className="block font-extrabold">{h.emoji} {win ? `Gagné par ${nm(o.by)}` : `${h.name} · ${nm(o.by)}`}</span>
         <span className="block text-xs font-semibold opacity-80">{h.hint} → point pour {nm(o.w)}</span>
       </button>
     );
@@ -202,7 +211,7 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
       ) : (
         <>
           <button type="button" onClick={() => setDraft({ ...draft, how: undefined, by: undefined, w: null })} className={cx("w-full rounded-xl border-2 px-3 py-1.5 text-left text-sm font-bold", draft.how === "WIN" ? "border-success bg-success-soft text-success-ink" : "border-danger/40 bg-danger-soft text-danger-ink")}>
-            {howInfo(draft.how).emoji} {draft.how === "WIN" ? `Gagné par ${names[chosen!.by]}` : `${howInfo(draft.how).name} ${deName(names[chosen!.by])}`} <span className="font-normal opacity-80">· changer</span>
+            {howInfo(draft.how).emoji} {draft.how === "WIN" ? `Gagné par ${names[chosen!.by]}` : `${howInfo(draft.how).name} · ${names[chosen!.by]}`} <span className="font-normal opacity-80">· changer</span>
           </button>
           {draft.hitter && <p className="font-bold text-accent-ink">🧍 Touchez où était le joueur qui a frappé.</p>}
           {level >= 2 && (
@@ -230,7 +239,7 @@ export function CourtPad({ kind, level, names, disabled, onCommit, big = false, 
       <div ref={box} className="w-full h-full overflow-hidden flex items-center justify-center">
         {fit !== null && <CourtSvg kind={kind} scale={fit.s} mx={fit.mx} my={fit.my} marks={marks} top={names[0]} bottom={names[1]} onTap={tap} onLongPress={onImpact ? longPress : undefined} />}
         {draft && (
-          <div className="fixed inset-x-0 bottom-0 z-[55] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[50vh] overflow-auto">
+          <div className="fixed inset-x-0 bottom-0 z-[55] bg-card border-t-2 border-accent shadow-2xl p-3 text-sm max-h-[62vh] overflow-auto">
             <div className="max-w-xl mx-auto space-y-2">{controls}</div>
           </div>
         )}
