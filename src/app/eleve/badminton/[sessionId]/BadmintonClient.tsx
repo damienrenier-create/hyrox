@@ -21,6 +21,8 @@ export type TeamCardData = {
   letter: string; coach: string; meCoach: boolean; pts: number; myPts: number; bracket: boolean; time: boolean; minutes: number;
   timer: { round: number; wave: number; startedAt: number; endsAt: number; stoppedAt: number | null } | null; now: number; wave: 1 | 2 | null; roundLabel: string;
   oppTeam: { letter: string; coach: string } | null;
+  // Ce qui se joue dans mon prochain match (26/11) : points rapportes selon le score, chances, ce qu'il faut pour passer devant.
+  stakes: { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; need: string | null } | null;
   current: { pts: [number, number]; status: string; matches: { ours: string; theirs: string; wave: 1 | 2; status: PairingStatus; score: string | null; pts: [number, number]; me: boolean }[] } | null;
   table: { letter: string; coach: string; pts: number; rank: number | null; lo: number; hi: number; group: number; record: string; me: boolean }[]; groups: number;
 };
@@ -292,7 +294,6 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
           {t.status === "live" ? <p className="text-sm">Ton match est arbitré en direct.</p> : t.status === "disputed" ? <p className="text-sm">Ton match est contesté : ton prof va trancher.</p> : canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}
         </div>
       ) : null}
-      <p className={ui.hint}>Une victoire rapporte à ton équipe les points ELO que tu gagnes (plus si tu bats un joueur mieux classé) ; une défaite ne coûte rien.</p>
       {team.current && (
         <details open>
           <summary className="cursor-pointer text-xs font-bold text-ink-2">Rencontre en cours : équipe {team.letter} <b>{team.current.pts[0]}</b> – <b>{team.current.pts[1]}</b> équipe {team.oppTeam?.letter ?? "?"}</summary>
@@ -317,6 +318,21 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
           ))}
         </ol>
       </details>
+      {/* Sartay 26/11 : « expliquer, au bas de leur horaire, comment sont calcules les points rapportes a l'equipe, pour
+          comprendre ce qui se joue et le score a atteindre pour sauver l'equipe ». */}
+      <div className="rounded-xl bg-paper px-3 py-2 text-sm space-y-1">
+        <p className="font-bold">🧮 Ce qui se joue{team.stakes ? " dans ton match" : ""}</p>
+        {team.stakes && (
+          <>
+            <p>Tes chances de gagner, d&apos;après l&apos;ELO : <b>{team.stakes.chance} %</b>.</p>
+            <p>✅ Si tu gagnes : <b>+{team.stakes.win[0]}</b> pour ton équipe{team.stakes.win[1] > team.stakes.win[0] ? <> (score serré) jusqu&apos;à <b>+{team.stakes.win[1]}</b> (16 points d&apos;écart ou plus)</> : null}.</p>
+            {team.stakes.draw && <p>🤝 Égalité au coup de sifflet : <b>+{team.stakes.draw[0]}</b> pour toi, +{team.stakes.draw[1]} pour ton adversaire.</p>}
+            <p>❌ Si tu perds : 0 pour ton équipe (rien n&apos;est enlevé), mais ton adversaire rapporte +{team.stakes.lose[0]}{team.stakes.lose[1] > team.stakes.lose[0] ? ` à +${team.stakes.lose[1]}` : ""} à la sienne.</p>
+            {team.stakes.need && <p className="font-bold text-accent-ink">🎯 {team.stakes.need}</p>}
+          </>
+        )}
+        <p className={ui.hint}>Comment ça marche : chaque victoire rapporte à l&apos;équipe les points ELO gagnés par le vainqueur. Battre un joueur mieux classé rapporte beaucoup, battre un joueur moins bien classé peu ; plus l&apos;écart au score est grand, plus ça rapporte (jusqu&apos;à ×1,5 à 16 points d&apos;écart). Une défaite ne rapporte rien et n&apos;enlève rien. L&apos;équipe qui a le plus de points gagne la rencontre.</p>
+      </div>
     </section>
   );
 }

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowEnd, pupilWindowOpen, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
-import { teamFormatText, teamMineOf, teamsOf } from "@/lib/badminton-teams";
+import { marginFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
 import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
 import { scoutQueue } from "@/lib/badminton-scout-queue";
@@ -76,6 +76,20 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const oppLetter = mine.rencontre ? (mine.side === 0 ? mine.rencontre.y : mine.rencontre.x) ?? null : null;
         const coachName = (l: string) => tref(st.teams.find((t) => t.letter === l)?.coach ?? "").name;
         const rc = mine.rencontre && mine.rencontre.status !== "bye" && mine.rencontre.status !== "wait" ? mine.rencontre : null;
+        // Ce qui se joue dans mon prochain match (26/11) : ce qu'il rapporte selon le score, et ce qu'il faut pour passer devant.
+        const stk = p && opp && (p.status === "todo" || p.status === "live") ? teamStakes(tour.players, tm, tour.settings, me.id, opp, !!sessionTheme(session.settings)) : null;
+        let need: string | null = null;
+        if (stk && rc) {
+          const ours = mine.side === 0 ? rc.pts[0] : rc.pts[1], theirs = mine.side === 0 ? rc.pts[1] : rc.pts[0];
+          const others = rc.matches.filter((x) => x !== p && x.status !== "played" && x.status !== "gone").length;
+          const gap = theirs - ours;
+          if (gap < 0) need = `Ton équipe mène de ${-gap} point${-gap > 1 ? "s" : ""} dans la rencontre : une victoire creuse l'écart.`;
+          else {
+            const m = marginFor(stk, gap + 1);
+            const lead = gap === 0 ? "Les deux équipes sont à égalité" : `Ton équipe est menée de ${gap} point${gap > 1 ? "s" : ""}`;
+            need = m === 0 ? `${lead} : une victoire suffit pour la faire passer devant.` : m !== null ? `${lead} : gagne avec au moins ${m} point${m > 1 ? "s" : ""} d'écart pour la faire passer devant.` : others ? `${lead} : même une large victoire ne suffit pas seule, il faudra aussi des victoires de tes coéquipiers (${others} match${others > 1 ? "s" : ""} restant${others > 1 ? "s" : ""}).` : `${lead} : même une large victoire ne suffira pas à passer devant${st.format === "BRACKET" ? "" : ", mais chaque point compte au classement"}.`;
+          }
+        }
         tourCard = {
           ...base,
           format: teamFormatText(tour.settings, st.teams.length),
@@ -100,6 +114,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
             wave: p?.wave ?? null,
             roundLabel: mine.round ? `${mine.round.label}${mine.rencontre?.stage ? ` · ${mine.rencontre.stage}` : ""}` : "",
             oppTeam: oppLetter ? { letter: oppLetter, coach: coachName(oppLetter) } : null,
+            stakes: stk ? { win: stk.win, lose: stk.lose, draw: stk.draw, chance: Math.round(stk.chance * 100), need } : null,
             current: rc ? {
               pts: mine.side === 0 ? rc.pts : [rc.pts[1], rc.pts[0]],
               status: rc.status,

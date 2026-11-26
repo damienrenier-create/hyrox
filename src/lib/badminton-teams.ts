@@ -173,6 +173,46 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
   return out;
 }
 
+// ===== Ce que se joue dans MON prochain match (Sartay 26/11 : « expliquer aux eleves, au bas de leur horaire, la maniere
+// dont sont calcules les points rapportes a l'equipe, pour comprendre ce qui se joue, ce qu'ils doivent faire ou le score
+// a atteindre pour sauver l'equipe ») : avec l'ELO du moment dans le tournoi et le vrai K de chacun (meme calcul que
+// teamMatchPoints). win = ce que je rapporte si je gagne [score serre, 16 points d'ecart ou plus] ; lose = ce que mon
+// adversaire rapporte a son equipe s'il gagne ; draw = au temps, ce que chacun rapporte sur une egalite.
+export type TeamStakes = { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; base: number; themed: boolean };
+export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSettings, me: string, opp: string, themed: boolean): TeamStakes {
+  const rating = new Map(players.map((p) => [p.studentId, p.elo]));
+  const games = new Map(players.map((p) => [p.studentId, s.launchGames[p.studentId] ?? K_NEW_GAMES]));
+  for (const m of [...matches].sort((x, y) => x.createdAt - y.createdAt)) {
+    const a = m.playerAId, b = m.playerBId;
+    if (!rating.has(a) || !rating.has(b) || a === b) continue;
+    const st = matchState(m);
+    if (!isOfficial(m, st) || !st.result) continue;
+    const ra = rating.get(a)!, rb = rating.get(b)!, ea = expectedScore(ra, rb);
+    const th = !!themeOf(m);
+    const ka = kFactor(games.get(a)!) * (th ? THEME_ELO_WEIGHT : 1), kb = kFactor(games.get(b)!) * (th ? THEME_ELO_WEIGHT : 1);
+    const mg = th ? 1 : marginFactor(st.result);
+    const sa = st.result.winner === "A" ? 1 : st.result.winner === "DRAW" ? 0.5 : 0;
+    rating.set(a, ra + ka * mg * (sa - ea));
+    rating.set(b, rb + kb * mg * (1 - sa - (1 - ea)));
+    games.set(a, games.get(a)! + 1);
+    games.set(b, games.get(b)! + 1);
+  }
+  const em = expectedScore(rating.get(me) ?? 1000, rating.get(opp) ?? 1000);
+  const w = themed ? THEME_ELO_WEIGHT : 1;
+  const km = kFactor(games.get(me) ?? K_NEW_GAMES) * w, ko = kFactor(games.get(opp) ?? K_NEW_GAMES) * w;
+  const top = themed ? 1 : 1.5; // ecart au score : x1 (serre) a x1,5 (16 points d'ecart ou plus) ; theme : sans ecart
+  const base = km * (1 - em);
+  const draw = s.team?.mode === "TIME" ? ((s.team?.draw ?? "HALF") === "HALF" ? [Math.round(base / 2), Math.round((ko * em) / 2)] as [number, number] : [Math.round(Math.max(0, km * (0.5 - em))), Math.round(Math.max(0, ko * (em - 0.5)))] as [number, number]) : null;
+  return { win: [Math.round(base), Math.round(base * top)], lose: [Math.round(ko * em), Math.round(ko * em * top)], draw, chance: em, base, themed };
+}
+// Ecart minimal au score pour rapporter au moins `need` points (null : impossible, meme a 16 points d'ecart).
+export function marginFor(st: TeamStakes, need: number): number | null {
+  if (need <= Math.round(st.base)) return 0;
+  if (st.themed) return null;
+  for (let m = 1; m <= 16; m++) if (Math.round(st.base * (1 + m / 32)) >= need) return m;
+  return null;
+}
+
 // ===== Rencontres =====
 // a = joueur de l'equipe x, b = joueur de l'equipe y ; pts = [points rapportes par a, par b].
 export type TeamPairing = { a: string; b: string; wave: 1 | 2; status: PairingStatus; matchId: string | null; sets: BmSet[] | null; winner: "A" | "B" | "DRAW" | null; pts: [number, number] };
