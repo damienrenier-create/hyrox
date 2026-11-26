@@ -7,7 +7,7 @@ const STAFF_DISPLAY: Record<string, string> = {
   GUIZER: "G. Tasquin",
   AXEZER: "A. Pirlot",
   SIMZER: "S. Baugnée",
-  RACZER: "Mme",
+  RACZER: "R. Delsa", // Rachelle Delsa (Sartay 26/11 : « elle peut apparaitre non plus en Mme mais comme R. Delsa »)
   JUSZER: "J. Piret", // 17/11 apres-midi (Sartay : « J. Piret, JUSZER, coach ») : son pseudo de connexion
   PIRZER: "J. Piret", // 17/11 midi, premier pseudo : il ouvre toujours le meme compte (voir SAME_ACCOUNT, app/actions.ts)
 };
@@ -26,7 +26,7 @@ export function displayPseudo(pseudo: string): string {
 }
 
 // Les profs peuvent etre encodes dans une equipe comme n'importe quel eleve, par leur NOM DE FAMILLE et
-// quelle que soit la classe : DAMZER = Renier, GUIZER = Tasquin, SIMZER = Baugnee, AXEZER = Pirlot, RACZER = Mme,
+// quelle que soit la classe : DAMZER = Renier, GUIZER = Tasquin, SIMZER = Baugnee, AXEZER = Pirlot, RACZER = Delsa,
 // JUSZER (ou PIRZER) = Piret.
 const STAFF_PERSON: Record<string, { firstName: string; lastName: string }> = {
   DAMZER: { firstName: "D.", lastName: "Renier" },
@@ -34,7 +34,7 @@ const STAFF_PERSON: Record<string, { firstName: string; lastName: string }> = {
   GUIZER: { firstName: "G.", lastName: "Tasquin" },
   AXEZER: { firstName: "A.", lastName: "Pirlot" },
   SIMZER: { firstName: "S.", lastName: "Baugnée" },
-  RACZER: { firstName: "", lastName: "Mme" },
+  RACZER: { firstName: "R.", lastName: "Delsa" },
   JUSZER: { firstName: "J.", lastName: "Piret" },
   PIRZER: { firstName: "J.", lastName: "Piret" },
 };
