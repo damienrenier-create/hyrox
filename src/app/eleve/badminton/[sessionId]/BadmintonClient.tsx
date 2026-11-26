@@ -10,6 +10,8 @@ import { BM_ADVANCE, Countdown, LiveBoard, MatchCard, type LiveRule, type LiveSc
 import { StrokeSheetForm } from "../../../_components/StrokeSheetForm";
 import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
+import type { BmBets } from "@/lib/badminton-constraints";
+import { BetBox, type BetData } from "./BetBox";
 
 // Ecran eleve du badminton (telephone) : « à signer » en haut, puis « Encoder un match » (j'ai joue / j'ai arbitre),
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
@@ -33,24 +35,27 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [] }: { theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, handicapOn = false }: { bet?: BetData | null; handicapOn?: boolean; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
-  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean } | null>(null);
+  const [live, setLive] = useState<{ id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean; head?: BmSet | null; bets?: BmBets | null } | null>(null);
   usePulse(pulse, 8000, !live);
   const [open, setOpen] = useState(toSign.length === 0 && toAttest.length === 0 && mine.length === 0 && writable);
   const witnessRoster = free ? roster : undefined;
   const [preset, setPreset] = useState<string | null>(null); // adversaire du tournoi, pre-rempli
   const [openAs, setOpenAs] = useState<"player" | "referee">("player"); // scouting (26/11) : ouvrir directement « J'ai arbitre · en direct »
   // Reprendre un direct de tournoi : avec l'objectif et la regle de ce match.
-  const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id], theme: v.theme });
+  const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id], theme: v.theme, head: v.handicap, bets: v.bets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
-      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} scout={scout} scouting={!!live.scouting} onClose={() => setLive(null)} />}
+      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} headStart={live.head ?? null} bets={live.bets ?? null} scout={scout} scouting={!!live.scouting} onClose={() => setLive(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
       {theme && writable && <p className={ui.alertInfo}>🎲 <b>Matchs à thème aujourd&apos;hui : {themeText(theme)}.</b> {THEME_KINDS.find((k) => k.id === theme.kind)?.rule} Le mieux : un arbitre en direct (« J&apos;arbitre »), qui applique la règle à chaque échange.</p>}
+      {handicapOn && writable && <p className={ui.alertInfo}>⚖️ <b>Matchs à handicap aujourd&apos;hui</b> : le moins bien classé commence chaque set avec des points d&apos;avance (selon l&apos;écart d&apos;ELO) ; comptez-les dans le score final.</p>}
       {tour && (tour.team ? <TeamCard t={tour} team={tour.team} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} /> : <TourCard t={tour} canPlay={writable} onPlay={(id) => { setPreset(id); setOpen(true); }} />)}
+      {/* Mise de certitude (26/11 soir) : sur mon prochain match de tournoi, sinon contre l'adversaire que je choisis. */}
+      {bet && writable && (tour && tour.opponent && tour.status === "todo" ? <BetBox key={tour.opponent.id} sessionId={sessionId} data={bet} opponent={tour.opponent} /> : <BetBox sessionId={sessionId} data={bet} roster={roster} />)}
       {free && <p className={ui.alertInfo}>Un match libre compte au classement quand il est <b>officiel</b> : 2 autres élèves l&apos;attestent (l&apos;arbitre en est un), ou ton prof le valide.</p>}
 
       {toAttest.length > 0 && (
@@ -101,7 +106,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   );
 }
 
-function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode = "player", onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; initialMode?: "player" | "referee"; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null }) => void }) {
+function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode = "player", onDone, onClose, onLive }: { sessionId: string; meId: string; roster: BmPersonRef[]; free: boolean; initialB?: string | null; initialMode?: "player" | "referee"; onDone: () => void; onClose: () => void; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null; target?: number; rule?: LiveRule; theme?: BmTheme | null; head?: BmSet | null; bets?: BmBets | null }) => void }) {
   const [mode, setMode] = useState<"player" | "referee">(initialMode);
   // Arbitre : en direct (+1 / −1 au fil du match, par defaut) ou score final tape a la fin.
   const [how, setHow] = useState<"live" | "final">("live");
@@ -127,7 +132,7 @@ function NewMatch({ sessionId, meId, roster, free, initialB = null, initialMode 
       const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force, witnessIds });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); return; }
-      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme });
+      if (res.matchId) onLive({ id: res.matchId, aName: fullName(a), bName: fullName(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme, head: res.head ?? null, bets: res.bets ?? null });
     });
   }
   function save(force = false) {
@@ -324,6 +329,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
       ) : t.opponent ? (
         <div className="space-y-2">
           <p className="text-sm">{team.roundLabel}{team.oppTeam ? <> · contre l&apos;équipe {team.oppTeam.letter} (👑 {team.oppTeam.coach})</> : null} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          {t.headStart && t.status === "todo" && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : {t.headStart.mine > 0 ? <b>tu commences chaque set avec <span className={BM_ADVANCE}>{t.headStart.mine} point{t.headStart.mine > 1 ? "s" : ""} d&apos;avance ({t.headStart.mine}-0)</span></b> : t.headStart.theirs > 0 ? <b>{t.opponent.name.split(" ")[0]} commence chaque set avec <span className={BM_ADVANCE}>{t.headStart.theirs} point{t.headStart.theirs > 1 ? "s" : ""} d&apos;avance (0-{t.headStart.theirs})</span></b> : <b className={BM_ADVANCE}>aucun point d&apos;avance (0-0)</b>}. Comptez-les dans le score final ; ils ne comptent pas dans les points de l&apos;équipe.</p>}
           {team.wave === 2 && <p className={ui.hint}>Match en plus : les deux équipes n&apos;ont pas le même nombre de joueurs, tu joues contre le joueur le plus proche de ton ELO{team.time ? " (au 2e coup de sifflet)" : ""}.</p>}
           {team.time && !timerHere && <p className={ui.hint}>⏱️ Matchs de {team.minutes} min : attends le coup de sifflet du prof.</p>}
           {t.status === "live" ? <p className="text-sm">Ton match est arbitré en direct.</p> : t.status === "disputed" ? <p className="text-sm">Ton match est contesté : ton prof va trancher.</p> : canPlay && <button type="button" onClick={() => onPlay(t.opponent!.id)} className={cx(btn.primary, "w-full")}>Encoder ce match</button>}

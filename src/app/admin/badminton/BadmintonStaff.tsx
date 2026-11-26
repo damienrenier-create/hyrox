@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { matchesSearch, setsText, STATUS_TEXT, type BmPersonRef, type BmPupilStats, type BmSet, type BmView } from "@/lib/badminton";
 import { badmintonPulseAction, recordMatchAction, startLiveMatchAction, startScoutingAction } from "@/app/eleve/badminton-actions";
-import { LiveBoard, MatchCard, PersonPicker, SetsEditor, ThemePanel, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
+import { ConstraintsPanel, LiveBoard, MatchCard, PersonPicker, SetsEditor, ThemePanel, emptySets, resultText, setsReady, type LiveRule } from "../../_components/BadmintonParts";
 import type { BmTheme } from "@/lib/badminton-themes";
+import type { BmBets } from "@/lib/badminton-constraints";
 import { CONCEDED, STROKES, howInfo, type ScoutConfig, type ScoutRow } from "@/lib/badminton-scout";
 import { ScoutPanel, type ScoutStudentRow } from "./ScoutPanel";
 import { usePulse } from "../../_components/usePulse";
@@ -28,7 +29,7 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
 // `tour` : le tournoi par poules de la seance (09/11), absent pour les matchs libres.
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { sessionTheme?: BmTheme | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
+export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, constraints = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { sessionTheme?: BmTheme | null; constraints?: { handicap: { eloPerPoint: number } | null; bet: boolean } | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   // Le prof lance lui-meme un match en direct (26/11 : « les profs doivent pouvoir scouter par defaut depuis leur telephone »).
@@ -80,9 +81,10 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
     {/* Scouting verrouille par defaut (26/11) : le nom d un eleve permet de le deverrouiller pour ce cours. */}
     <ScoutUnlockProvider sessionId={!free && scoutCfg ? sessionId : null} on={!!scoutCfg?.on} unlocked={!free && scoutCfg ? scoutCfg.unlocked : NO_IDS}>
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} scout={profScout} onClose={() => setRefLive(null)} />}
-      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} scout={profScout} scouting={!!ownLive.scouting} onClose={() => { setOwnLive(null); router.refresh(); }} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} headStart={refLive.handicap} bets={refLive.bets} scout={profScout} onClose={() => setRefLive(null)} />}
+      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} headStart={ownLive.head ?? null} bets={ownLive.bets ?? null} scout={profScout} scouting={!!ownLive.scouting} onClose={() => { setOwnLive(null); router.refresh(); }} />}
       {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
+      {!free && <ConstraintsPanel sessionId={sessionId} handicap={constraints?.handicap ?? null} bet={!!constraints?.bet} />}
       {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi label="Matchs encodés" value={live} />
@@ -268,7 +270,7 @@ function EloTable({ rows, groupClasses }: { rows: BmEloRow[]; groupClasses: stri
   );
 }
 
-type StaffLive = { id: string; aName: string; bName: string; sets: BmSet[]; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean };
+type StaffLive = { id: string; aName: string; bName: string; sets: BmSet[]; target?: number; rule?: LiveRule; theme?: BmTheme | null; scouting?: boolean; head?: BmSet | null; bets?: BmBets | null };
 function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: string; roster: BmPersonRef[]; free: boolean; onDone: () => void; onLive: (x: StaffLive) => void }) {
   const router = useRouter();
   const [a, setA] = useState<string | null>(null);
@@ -287,7 +289,7 @@ function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: st
       const res = await startLiveMatchAction(sessionId, { playerAId: a ?? "", playerBId: b ?? "", force });
       if ("error" in res) { setError(res.error); return; }
       if ("duplicate" in res) { setTwin(res.duplicate.text); setTwinLive(true); return; }
-      if (res.matchId) { onLive({ id: res.matchId, aName: first(a), bName: first(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme }); setA(null); setB(null); setTwin(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      if (res.matchId) { onLive({ id: res.matchId, aName: first(a), bName: first(b), sets: res.sets ?? [[0, 0]], target: res.target, rule: res.rule, theme: res.theme, head: res.head ?? null, bets: res.bets ?? null }); setA(null); setB(null); setTwin(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
     });
   }
   // Scouter sans arbitrer (26/11 : « le scouting n'est pas l'arbitrage ») : une observation, score indicatif.

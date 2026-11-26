@@ -9,6 +9,7 @@ import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 import { myRallies, readRally, undoneRallies, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
 import { BM_SELF_EVAL_WINDOW_MS } from "@/lib/self-eval-timing";
+import { betsOfMatch, handicapOfMatch } from "@/lib/badminton-constraints";
 
 export const BM_STAFF_ROLES = ["MASTER_ADMIN", "ADMIN", "GREFFIER"];
 // Apres la fin de la seance, un eleve peut encore signer ou corriger ses matchs pendant ce delai.
@@ -55,7 +56,7 @@ function toMatches(rows: MatchRow[], events: EventRow[], keepScouting = false): 
         .flatMap((e) => {
           const kind = readKind(e.kind);
           // THEME / RALLY (24/11) : leurs parametres sont dans la colonne JSON (`data`), pas des sets.
-          const raw = kind === "THEME" || kind === "RALLY" || kind === "SCOUT";
+          const raw = kind === "THEME" || kind === "RALLY" || kind === "SCOUT" || kind === "HANDICAP" || kind === "BET";
           return kind ? [{ id: e.id, kind, sets: raw ? null : readSets(e.sets), authorId: e.authorId, role: readRole(e.role), at: toMs(e.at), targetId: e.targetId ?? null, ...(raw ? { data: e.sets } : {}) }] : [];
         }),
     }))
@@ -128,13 +129,13 @@ export async function loadEloBoard(): Promise<EloBoard> {
   if (!matches.length) return { entries: new Map(), people: new Map(), test: new Set() };
   const people = await peopleOf(matches);
   const test = new Set([...people.values()].filter((p) => isTestClass(p.className)).map((p) => p.id));
-  // Matchs d'un championnat a handicap : esperance ½ (voir badminton-elo.ts).
+  // Matchs d'un championnat a handicap, ou avec la contrainte handicap (26/11 soir) : esperance ½ ; mises : voir badminton-elo.ts.
   const even = new Set((await db.orm.public.BadmintonTournament.where({ kind: "HANDICAP" }).all()).map((t) => t.id));
   const games: EloGame[] = [];
   for (const m of matches) {
     const st = matchState(m);
     if (!isOfficial(m, st) || test.has(m.playerAId) !== test.has(m.playerBId)) continue;
-    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: !!m.tournamentId && even.has(m.tournamentId), themed: !!themeOf(m) });
+    games.push({ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: (!!m.tournamentId && even.has(m.tournamentId)) || !!handicapOfMatch(m), themed: !!themeOf(m), bets: betsOfMatch(m) });
   }
   return { entries: computeElo(games), people, test };
 }

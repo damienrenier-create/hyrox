@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, loadPlayerScouting, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, pupilWindowOpen, selfEvalEnd, selfEvalOpen, sessionEndMs, studentInSession, BM_STAFF_ROLES } from "@/lib/badminton-server";
 import { BM_SELF_EVAL_DAYS, selfEvalTiming, timingComment } from "@/lib/self-eval-timing";
 import { AfterMatchPrompt, FormeQuick } from "./SelfEvalPrompts";
+import { betPair, headStartOf, myPendingBet, readPendingBets, readSessionConstraints } from "@/lib/badminton-constraints";
+import { ELO_START, kFactor } from "@/lib/badminton-elo";
+import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
+import { loadEloBoard } from "@/lib/badminton-server";
+import type { BetData } from "./BetBox";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { marginFor, readyState, scoreFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -54,6 +59,10 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   // Auto-evaluation de la seance (grille « AUTO-ÉVALUATION – CYCLE BADMINTON », Sartay 03/11) : ouverte tant que l'eleve
   // peut encoder ses matchs (seance ouverte, ou terminee depuis moins de 24 h).
   const writable = pupilWindowOpen(session);
+  // Contraintes de la lecon (26/11 soir) : handicap et mises ; l'ELO de chacun (avances et mises) seulement si besoin.
+  const cons = readSessionConstraints(session.settings);
+  const board = cons.handicap || cons.bet ? await loadEloBoard() : null;
+  const ratingOf = (id: string) => board?.entries.get(id)?.rating ?? ELO_START;
   // Tournoi en cours (09/11) : mon prochain adversaire (poule ou tableau), le handicap, mon classement.
   const tour = activeTournament(await loadTournaments(sessionId));
   let tourCard: TourCardData | null = null;
@@ -81,7 +90,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         const coachName = (l: string) => tref(st.teams.find((t) => t.letter === l)?.coach ?? "").name;
         const rc = mine.rencontre && mine.rencontre.status !== "bye" && mine.rencontre.status !== "wait" ? mine.rencontre : null;
         // Ce qui se joue dans mon prochain match (26/11) : ce qu'il rapporte selon le score, et ce qu'il faut pour passer devant.
-        const stk = p && opp && (p.status === "todo" || p.status === "live") ? teamStakes(tour.players, tm, tour.settings, me.id, opp, !!sessionTheme(session.settings)) : null;
+        const stk = p && opp && (p.status === "todo" || p.status === "live") ? teamStakes(tour.players, tm, tour.settings, me.id, opp, !!sessionTheme(session.settings), !!cons.handicap) : null;
         let need: string | null = null;
         if (stk && rc) {
           const ours = mine.side === 0 ? rc.pts[0] : rc.pts[1], theirs = mine.side === 0 ? rc.pts[1] : rc.pts[0];
@@ -189,6 +198,24 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
       }
     }
   }
+  // Handicap de la lecon (hors championnat a handicap, qui a le sien) : mon avance (ou la sienne) pour mon prochain match.
+  if (tourCard && tour && cons.handicap && tour.kind !== "HANDICAP" && tourCard.opponent && tourCard.status === "todo") {
+    const pts = tour.kind === "TEAMS" ? (tour.settings.team?.mode === "TIME" ? 15 : tour.settings.points) : ruleFor(tour.settings, tour.players, me.id, tourCard.opponent.id).points;
+    const h = headStartOf(ratingOf(me.id), ratingOf(tourCard.opponent.id), cons.handicap.eloPerPoint, pts);
+    tourCard = { ...tourCard, headStart: { mine: h[0], theirs: h[1] } };
+  }
+  // Mises (26/11 soir) : mes mises en cours (posees depuis notre dernier match) et l'ELO de chacun pour le tableau +/−.
+  const pending = cons.bet ? readPendingBets(session.settings) : [];
+  const since = (opp: string) => Math.max(0, ...matches.filter((m) => betPair(m.playerAId, m.playerBId) === betPair(me.id, opp)).map((m) => m.createdAt));
+  const others = roster.filter((p) => p.id !== me.id);
+  const bet: BetData | null = cons.bet && writable ? {
+    k: kFactor(board?.entries.get(me.id)?.games ?? 0),
+    even: !!cons.handicap,
+    weight: sessionTheme(session.settings) ? THEME_ELO_WEIGHT : 1,
+    me: Math.round(ratingOf(me.id)),
+    opps: Object.fromEntries(others.map((p) => [p.id, Math.round(ratingOf(p.id))])),
+    mine: Object.fromEntries(others.flatMap((p) => { const c = myPendingBet(pending, me.id, p.id, since(p.id)); return c === null ? [] : [[p.id, c]]; })),
+  } : null;
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
   // Auto-evaluation (26/11 soir) : ouverte pendant le cours et 3 jours apres ; le petit mot selon le moment du PREMIER envoi ;
@@ -248,6 +275,8 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         scoutable={scoutable}
         scoutPicks={scoutPicks}
         scoutResume={scoutResume}
+        bet={bet}
+        handicapOn={!!cons.handicap}
       />
       <section id="auto-eval" className="max-w-xl mx-auto px-4 pb-10">
         <details open={autoeval === "1"} className={`${ui.card} p-3`}>

@@ -9,12 +9,16 @@
 // - K = 40 sur les 10 premiers matchs d'un eleve (son classement se place vite), puis 20 (plus stable) ;
 // - ecart au score : ×1 pour un match serre, jusqu'a ×1,5 a 16 points d'ecart ou plus (un 21-5) ;
 // - « provisoire » tant qu'un eleve a moins de 5 matchs ;
+// - MISE DE CERTITUDE (26/11 soir, src/lib/badminton-constraints.ts) : les points gagnes OU perdus par un joueur sont
+//   multiplies par sa mise (0 = ×0,8 … 2 = ×1 … 5 = ×1,7) ; chaque joueur a la sienne ; match a HANDICAP (contrainte de la
+//   lecon) : esperance ½, comme au championnat a handicap ;
 // - recalcule a chaque affichage dans l'ordre des matchs : rien n'est stocke, une correction ou une contestation se
 //   repercute toute seule ;
 // - un seul classement pour toutes les classes (inter-classes) ; l'eleve le voit dans l'onglet « Classement » de son
 //   espace (pas sur chaque match), d'abord son groupe de cours.
 import { swapSets, type BmResult, type BmSet } from "@/lib/badminton";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
+import { betMult, type BmBets } from "@/lib/badminton-constraints";
 
 export const ELO_START = 1000;
 export const ELO_PROVISIONAL_GAMES = 5;
@@ -24,8 +28,8 @@ export const K_NEW_GAMES = 10;
 const MARGIN_FULL = 16;
 
 // even : match a handicap ; themed (24/11) : match a theme, compte pour THEME_ELO_WEIGHT d'un match, sans l'ecart au score.
-export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean; themed?: boolean };
-export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean; themed?: boolean };
+export type EloGame = { matchId: string; at: number; a: string; b: string; sets: BmSet[]; result: BmResult; even?: boolean; themed?: boolean; bets?: BmBets | null };
+export type EloStep = { matchId: string; at: number; opponentId: string; outcome: "W" | "D" | "L"; sets: BmSet[]; before: number; after: number; even?: boolean; themed?: boolean; bet?: number | null };
 export type EloEntry = { id: string; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean; steps: EloStep[] };
 
 // Score attendu de A contre B (formule ELO classique) et K d'un joueur selon son nombre de matchs deja comptes.
@@ -55,13 +59,13 @@ export function computeElo(games: EloGame[], start?: Map<string, { rating: numbe
     const w = g.themed ? THEME_ELO_WEIGHT : 1;
     const kA = kFactor(A.games) * w;
     const kB = kFactor(B.games) * w;
-    const afterA = A.rating + kA * m * (scoreA - expectA);
-    const afterB = B.rating + kB * m * (1 - scoreA - (1 - expectA));
+    const afterA = A.rating + kA * m * (scoreA - expectA) * betMult(g.bets?.[0]);
+    const afterB = B.rating + kB * m * (1 - scoreA - (1 - expectA)) * betMult(g.bets?.[1]);
     const outA = scoreA === 1 ? "W" : scoreA === 0 ? "L" : "D";
     const outB = scoreA === 1 ? "L" : scoreA === 0 ? "W" : "D";
     const flags = { ...(g.even ? { even: true } : {}), ...(g.themed ? { themed: true } : {}) };
-    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA, ...flags });
-    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB, ...flags });
+    A.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.b, outcome: outA, sets: g.sets, before: A.rating, after: afterA, ...flags, ...(g.bets?.[0] != null ? { bet: g.bets[0] } : {}) });
+    B.steps.push({ matchId: g.matchId, at: g.at, opponentId: g.a, outcome: outB, sets: swapSets(g.sets), before: B.rating, after: afterB, ...flags, ...(g.bets?.[1] != null ? { bet: g.bets[1] } : {}) });
     for (const [p, o, r] of [[A, outA, afterA], [B, outB, afterB]] as const) {
       p.rating = r;
       p.games++;

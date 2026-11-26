@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
 import { sessionEndMs, activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadScoutingMatches, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
 import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
+import { readSessionConstraints } from "@/lib/badminton-constraints";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -194,7 +195,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
         <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
+        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} constraints={readSessionConstraints(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
       </main>
     </div>
   );

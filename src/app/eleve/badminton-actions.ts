@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
-import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmRole, type BmSet } from "@/lib/badminton";
+import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmMatch, type BmRole, type BmSet } from "@/lib/badminton";
 import { BM_STAFF_ROLES, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
-import { TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
+import { HANDICAP_ELO_PER_POINT, TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, readyState, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
+import { betPair, betsAtCreation, headStartOf, readBet, readPendingBets, readSessionConstraints, type BmBets } from "@/lib/badminton-constraints";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
 
@@ -25,7 +26,7 @@ import { toMs } from "@/lib/scheduling";
 // `rule` (match de tournoi, 12/11) : 2 points d'ecart ou pas, plafond.
 // endsAt (tournoi par equipes au temps, 24/11) : fin du chrono en cours, affichee au tableau de l'arbitre.
 // theme (24/11) : le theme du match ouvert en direct (regle appliquee par le tableau de l'arbitre).
-export type BmResult = { error: string } | { ok: true; eventId?: string; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number }; theme?: BmTheme | null } | { duplicate: { matchId: string; text: string } };
+export type BmResult = { error: string } | { ok: true; eventId?: string; matchId?: string; sets?: BmSet[]; target?: number; rule?: { deuce: boolean; cap: number; sets: 1 | 2 | 3; endsAt?: number }; theme?: BmTheme | null; head?: BmSet; bets?: BmBets | null } | { duplicate: { matchId: string; text: string } };
 type Ctx = { userId: string; staff: boolean; free: boolean; test: boolean; session: Awaited<ReturnType<typeof sessionOf>> };
 
 const sessionOf = (id: string) => db.orm.public.Session.where({ id }).first();
@@ -105,6 +106,28 @@ async function askWitnesses(c: Ctx, matchId: string, a: string, b: string, role:
   return null;
 }
 
+// Contraintes de la lecon (26/11 soir, src/lib/badminton-constraints.ts) pour un nouveau match entre a et b : les points
+// d'avance du handicap (ELO actuel, bareme de la lecon ; pas pour le championnat a handicap, qui a deja les siens) et les
+// mises posees AVANT (depuis le dernier match entre eux). Recopiees dans le match : la mise n'est plus secrete.
+async function constraintsFor(c: Ctx, a: string, b: string, tour: { points: number; start: BmSet | null } | null, all: BmMatch[]): Promise<{ head: BmSet | null; handicap: { head: BmSet; eloPerPoint: number; gap: number } | null; bets: BmBets | null }> {
+  if (!c.session) return { head: null, handicap: null, bets: null };
+  const k = readSessionConstraints(c.session.settings);
+  let handicap: { head: BmSet; eloPerPoint: number; gap: number } | null = null;
+  if (k.handicap && !tour?.start) {
+    const board = await loadEloBoard();
+    const ra = board.entries.get(a)?.rating ?? ELO_START, rb = board.entries.get(b)?.rating ?? ELO_START;
+    handicap = { head: headStartOf(ra, rb, k.handicap.eloPerPoint, tour?.points ?? 15), eloPerPoint: k.handicap.eloPerPoint, gap: Math.round(ra - rb) };
+  }
+  let bets: BmBets | null = null;
+  if (k.bet) {
+    const pair = betPair(a, b);
+    const since = Math.max(0, ...all.filter((m) => betPair(m.playerAId, m.playerBId) === pair).map((m) => m.createdAt));
+    const x = betsAtCreation(readPendingBets(c.session.settings), a, b, since);
+    bets = x[0] === null && x[1] === null ? null : x;
+  }
+  return { head: handicap?.head ?? null, handicap, bets };
+}
+
 // Le meme duel encode il y a peu (par l'adversaire ou un arbitre) : on le signale plutot que d'en creer un deuxieme
 // (sauf revanche : voir recentTwin, src/lib/badminton.ts). Un ARBITRE est toujours prevenu (« es-tu sur ? ») : s'il
 // confirme, sa saisie devra etre signee par un des joueurs (REMATCH).
@@ -150,11 +173,15 @@ export async function recordMatchAction(sessionId: string, input: { playerAId?: 
   }
 
   const sid = dbSession(c);
-  const tournamentId = (await tournamentFor(c, a, b))?.id ?? null;
+  const tourRec = await tournamentFor(c, a, b);
+  const tournamentId = tourRec?.id ?? null;
   const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
+  const k = await constraintsFor(c, a, b, tourRec, all); // handicap et mises (26/11 soir)
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId });
     if (theme) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "THEME", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(theme)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    if (k.handicap) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "HANDICAP", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(k.handicap)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    if (k.bets) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "BET", authorId: c.userId, role, sets: { a: k.bets[0], b: k.bets[1] }, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "SCORE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(sets)), at: Temporal.Now.instant() });
     if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
@@ -580,6 +607,48 @@ export async function setSessionThemeAction(sessionId: string, raw: unknown): Pr
   return { ok: true };
 }
 
+// Contraintes de la lecon (26/11 soir) : ⚖️ handicap (bareme calcule sur les matchs deja joues) et 🎯 mises, pour les
+// matchs crees ensuite (ceux deja crees gardent leurs regles).
+export async function setSessionConstraintsAction(sessionId: string, patch: { handicap?: boolean; bet?: boolean }): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (!c.staff || !c.session) return { error: "Réservé aux profs." };
+  const cal = patch.handicap ? calibrateHandicap(handicapSamples(await loadEloBoard()), 15) : null;
+  const row = await sessionOf(c.session.id);
+  const next = { ...((row?.settings ?? {}) as Record<string, unknown>) };
+  if (patch.handicap !== undefined) next.handicap = patch.handicap ? { on: true, eloPerPoint: cal?.eloPerPoint ?? HANDICAP_ELO_PER_POINT } : { on: false };
+  if (patch.bet !== undefined) next.bet = patch.bet;
+  await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify(next)) });
+  done(c.session.id);
+  return { ok: true };
+}
+
+// Mise de certitude d'un eleve contre un adversaire (26/11 soir) : secrete jusqu'a la creation du match. Plusieurs
+// telephones peuvent miser en meme temps : on relit apres l'ecriture et on recommence si la mise a ete ecrasee.
+export async function placeBetAction(sessionId: string, opponentId: string, raw: unknown): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (c.staff || !c.session) return { error: "Réservé aux élèves." };
+  if (!readSessionConstraints(c.session.settings).bet) return { error: "Les mises ne sont pas ouvertes pendant ce cours." };
+  const bet = readBet(raw);
+  if (bet === null) return { error: "Une mise va de 0 à 5." };
+  const opp = String(opponentId ?? "");
+  if (!opp || opp === c.userId) return { error: "Choisis ton adversaire." };
+  if (!(await rosterIds(c)).has(opp)) return { error: notFound(c) };
+  const pair = betPair(c.userId, opp);
+  if ((await loadMatches(c.session.id)).some((m) => betPair(m.playerAId, m.playerBId) === pair && matchState(m).status === "LIVE")) return { error: "Ce match a déjà commencé : la mise est fermée." };
+  const at = Date.now();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const row = await sessionOf(c.session.id);
+    const cur = (row?.settings ?? {}) as Record<string, unknown>;
+    const list = readPendingBets(cur);
+    if (list.some((x) => x.pair === pair && x.by === c.userId && x.at === at)) { done(c.session.id); return { ok: true }; }
+    await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, bets: [...list, { pair, by: c.userId, c: bet, at }] })) });
+    await new Promise((r) => setTimeout(r, 60 + Math.floor(Math.random() * 180)));
+  }
+  return { error: "Beaucoup d'élèves misent en même temps : réessaie dans un instant." };
+}
+
 // Clore le tournoi : il reste consultable, ses matchs restent des matchs ordinaires ; un nouveau tournoi peut etre lance.
 export async function closeTournamentAction(tournamentId: string): Promise<BmResult> {
   const t = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
@@ -826,18 +895,21 @@ export async function startLiveMatchAction(sessionId: string, input: { playerAId
   }
   const sid = dbSession(c);
   const tour = await tournamentFor(c, a, b);
-  const start: BmSet[] = [tour?.start ?? [0, 0]];
+  const k = await constraintsFor(c, a, b, tour, all); // handicap et mises (26/11 soir)
+  const start: BmSet[] = [tour?.start ?? k.head ?? [0, 0]];
   const theme = c.session ? sessionTheme(c.session.settings) : null; // match a theme de la seance (24/11)
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: sid, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: tour?.id ?? null });
     if (theme) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "THEME", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(theme)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    if (k.handicap) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "HANDICAP", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(k.handicap)), at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    if (k.bets) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "BET", authorId: c.userId, role, sets: { a: k.bets[0], b: k.bets[1] }, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "LIVE", authorId: c.userId, role, sets: JSON.parse(JSON.stringify(start)), at: Temporal.Now.instant() });
     if (repeat) await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: sid, kind: "REMATCH", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().add({ milliseconds: 1 }) });
     return m;
   });
   const err = await askWitnesses(c, match.id, a, b, role, input.witnessIds);
   done(sid);
-  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, theme, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}), ...(tour.endsAt ? { endsAt: tour.endsAt } : {}) } } : {}) };
+  return err ? { error: `Match ouvert, mais : ${err}` } : { ok: true, matchId: match.id, sets: start, theme, ...(k.head ? { head: k.head } : {}), bets: k.bets, ...(tour ? { target: tour.points, rule: { deuce: tour.deuce, cap: tour.cap, sets: tour.sets, ...(tour.start ? { head: tour.start } : {}), ...(tour.endsAt ? { endsAt: tour.endsAt } : {}) } } : {}) };
 }
 
 async function liveCtx(matchId: string): Promise<{ error: string } | MatchCtx> {

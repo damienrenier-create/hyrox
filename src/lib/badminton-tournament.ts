@@ -37,6 +37,7 @@
 //   cet exempt n'a pas encore joue (voir lateBracketSeat).
 import { isOfficial, matchState, swapSets, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
 import { K_NEW_GAMES, computeElo, type EloGame } from "@/lib/badminton-elo";
+import { betsOfMatch } from "@/lib/badminton-constraints";
 
 export type TourKind = "POOLS" | "BRACKET" | "HANDICAP" | "TEAMS";
 export const TOUR_KINDS: { id: TourKind; name: string }[] = [
@@ -311,7 +312,7 @@ export function playersNow(players: TourPlayer[], matches: BmMatch[], s: TourSet
   const games: EloGame[] = matches.flatMap((m) => {
     if (!ids.has(m.playerAId) || !ids.has(m.playerBId)) return [];
     const st = matchState(m);
-    return isOfficial(m, st) ? [{ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: true, themed: !!themeOf(m) }] : [];
+    return isOfficial(m, st) ? [{ matchId: m.id, at: m.createdAt, a: m.playerAId, b: m.playerBId, sets: st.sets!, result: st.result!, even: true, themed: !!themeOf(m), bets: betsOfMatch(m) }] : [];
   });
   if (!games.length) return players;
   const now = computeElo(games, start);

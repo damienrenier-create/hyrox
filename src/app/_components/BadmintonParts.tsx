@@ -7,8 +7,9 @@ import { fold } from "@/lib/staff-names";
 import { BM_MAX_SETS, checkSets, resultOf, swapSets, type BmPersonRef, type BmSet, type BmView } from "@/lib/badminton";
 import { THEME_CAPS, THEME_FLOORS, THEME_KINDS, THEME_STARTS, faultOutcome, needsServer, priceOf, priced, rallyOutcome, readTheme, themeText, type BmTheme, type ThemeKind } from "@/lib/badminton-themes";
 import { StudentName } from "./StudentName";
-import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, editRallyAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, undoRallyAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
+import { askWitnessAction, attestMatchAction, cancelMatchAction, correctMatchAction, disputeMatchAction, editRallyAction, finishLiveMatchAction, liveRallyAction, liveScoreAction, undoRallyAction, setSessionConstraintsAction, setSessionThemeAction, validateMatchAction, type BmResult } from "@/app/eleve/badminton-actions";
 import { CourtPad, HowPicker } from "./BadmintonCourt";
+import { multText, type BmBets } from "@/lib/badminton-constraints";
 import { CONCEDED, COURT_LENGTH, END_KINDS, END_STROKES, courtWidth, howInfo, howOf, howOptions, type CourtKind, type HowOption, type RallyHow } from "@/lib/badminton-scout";
 import { btn, cx, ui } from "@/lib/ui";
 
@@ -143,6 +144,9 @@ export function MatchCard({ v, viewerId, staff = false, compact = false, onRefer
           <span className={cx(ui.chip, STATUS_CHIP[v.status])}>{statusText}</span>
           {won && v.status !== "CANCELLED" && <span className={cx(ui.chip, won.startsWith("🏆") ? ui.chipAccent : ui.chipMuted)}>{won}</span>}
           {v.theme && <span className={cx(ui.chip, ui.chipMuted)} title="Match à thème : il compte pour moitié à l'ELO, sans l'écart au score">🎲 {themeText(v.theme)}</span>}
+          {/* Contraintes (26/11 soir) : handicap et mises, revelees des que le match existe. */}
+          {v.handicap && <span className={cx(ui.chip, ui.chipMuted)} title="Match à handicap : il compte à l'ELO comme entre égaux">⚖️ {v.handicap[0] || v.handicap[1] ? `${(v.handicap[0] ? v.a : v.b).name.split(" ")[0]} +${Math.max(v.handicap[0], v.handicap[1])}` : "handicap 0-0"}</span>}
+          {v.bets && <span className={cx(ui.chip, ui.chipAccent)} title="Mises de certitude : les points ELO gagnés ou perdus sont multipliés">🎯 {v.a.name.split(" ")[0]} {v.bets[0] ?? "—"} · {v.b.name.split(" ")[0]} {v.bets[1] ?? "—"}</span>}
           {v.free && v.status !== "CANCELLED" && v.status !== "LIVE" && (
             <span className={cx(ui.chip, v.official ? ui.chipOk : ui.chipMuted)} title="Officiel = 2 témoins (l'arbitre en est un) ou validé par un prof : il compte au classement">{v.official ? "🏅 officiel" : `👀 témoins ${Math.min(v.witnesses.count, v.witnesses.needed)}/${v.witnesses.needed}`}</span>
           )}
@@ -236,7 +240,10 @@ export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
 // theme (24/11) : match a theme (voir src/lib/badminton-themes.ts) ; l'arbitre clot chaque echange en l'attribuant a un
 // joueur, la regle du theme donne les points et le service.
 // scouting (26/11) : une OBSERVATION, pas un match : score indicatif (ni ELO, ni tournoi), « Fin du scouting ».
-export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, scouting = false, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; scouting?: boolean; onClose: () => void }) {
+// headStart (26/11 soir) : points d'avance de la contrainte « handicap » de la lecon ; bets : les mises des deux joueurs,
+// a annoncer avant le premier point (Sartay : « la mise est secrete jusqu'a ce que l'arbitre lance le match ; il peut
+// ensuite l'annoncer avant le debut du match »).
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, scouting = false, headStart = null, bets = null, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; scouting?: boolean; headStart?: BmSet | null; bets?: BmBets | null; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
@@ -291,7 +298,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
   const price = priceOf(theme, exchanges);
   const minus = (side: 0 | 1) => { if (cur[side] === 0) return; const n = sets.map(([a, b]) => [a, b] as BmSet); n[n.length - 1][side] -= 1; setServer(null); change(n); };
   // Handicap (13/11) : chaque set repart du score de depart (0-3…), « Recommencer » aussi.
-  const head: BmSet = rule?.head ?? [0, 0];
+  const head: BmSet = rule?.head ?? headStart ?? [0, 0];
   const fresh = cur[0] + cur[1] <= head[0] + head[1];
   const nextSet = () => { if (sets.length >= BM_MAX_SETS || fresh) return; setServer(null); change([...sets, [head[0], head[1]]]); };
   // Se rattraper (Sartay 10/11 : « qu'un arbitre puisse annuler l'encodage en cours, pour recommencer le match a zero ; il
@@ -384,7 +391,12 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     <>
       {error && <p className={ui.alertErr}>{error}</p>}
       {/* Match de championnat a handicap (rule.head) : l'avance, ou « aucun point d'avance » (Sartay 16/11 : « signifie-le ! »). */}
-      {(rule?.head || head[0] > 0 || head[1] > 0) && (
+      {bets && (
+        <div className="rounded-2xl border-2 border-accent bg-accent-soft text-center px-3 py-2" aria-label="Mises">
+          🎯 <b>Mises à annoncer avant le premier point</b> : {aName} <b>{bets[0] ?? "—"}</b>{bets[0] !== null ? ` (${multText(bets[0])})` : ""} · {bName} <b>{bets[1] ?? "—"}</b>{bets[1] !== null ? ` (${multText(bets[1])})` : ""}
+        </div>
+      )}
+      {(rule?.head || headStart || head[0] > 0 || head[1] > 0) && (
         <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-center px-3 py-2 dark:bg-amber-950 dark:text-amber-100" aria-label="Handicap">
           {head[0] > 0 || head[1] > 0 ? (
             <>⚖️ Handicap : <b>{names[head[0] > 0 ? 0 : 1]}</b> commence chaque set avec <b className={BM_ADVANCE}>{Math.max(head[0], head[1])} point{Math.max(head[0], head[1]) > 1 ? "s" : ""} d&apos;avance</b> <b className={BM_ADVANCE}>({head[0]}-{head[1]})</b></>
@@ -577,6 +589,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
             {scoreChip(bottom)}
             <button type="button" onClick={() => { router.refresh(); onClose(); }} className={cx(ui.close, "shrink-0 self-center")} aria-label="Fermer (reprendre plus tard)">✕</button>
           </div>
+          {bets && <p className="text-center text-xs">🎯 Mises : {aName.split(" ")[0]} <b>{bets[0] ?? "—"}</b> · {bName.split(" ")[0]} <b>{bets[1] ?? "—"}</b> <span className="text-ink-3">(à annoncer avant le 1er point)</span></p>}
           {(error || rule?.endsAt || hasHead) && (
             <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs">
               {rule?.endsAt && <Countdown endsAt={rule.endsAt} />}
@@ -653,6 +666,40 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
         {panel(1)}
         {footer}
       </div>
+  );
+}
+
+// ===== Contraintes de la lecon (Sartay 26/11 soir, src/lib/badminton-constraints.ts) : ⚖️ handicap et 🎯 mises =====
+// Comme le theme : pour les matchs crees ensuite dans la seance (tous : poules, tableau, equipes, matchs du cours).
+export function ConstraintsPanel({ sessionId, handicap, bet }: { sessionId: string; handicap: { eloPerPoint: number } | null; bet: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const set = (patch: { handicap?: boolean; bet?: boolean }) => {
+    setError("");
+    start(async () => {
+      const r = await setSessionConstraintsAction(sessionId, patch);
+      if ("error" in r) setError(r.error);
+      else router.refresh();
+    });
+  };
+  const on = !!handicap || bet;
+  return (
+    <details className={cx(ui.cardPad, on && "border-accent")}>
+      <summary className="cursor-pointer font-bold">⚙️ Contraintes : {[handicap && "⚖️ handicap", bet && "🎯 mises"].filter(Boolean).join(" · ") || "aucune"}</summary>
+      <div className="mt-3 space-y-3 text-sm">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className={cx(ui.check, "mt-0.5")} checked={!!handicap} disabled={pending} onChange={(e) => set({ handicap: e.target.checked })} />
+          <span><b>⚖️ Handicap</b> : le moins bien classé commence chaque set avec des points d&apos;avance, selon l&apos;écart d&apos;ELO (au plus la moitié du set){handicap ? <> · barème : 1 point par {handicap.eloPerPoint} ELO (en 15 points), calculé sur les matchs déjà joués</> : ""}. L&apos;ELO compte ces matchs comme entre égaux ; au tournoi par équipes, les points d&apos;avance ne comptent pas et le coefficient vaut 1.</span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className={cx(ui.check, "mt-0.5")} checked={bet} disabled={pending} onChange={(e) => set({ bet: e.target.checked })} />
+          <span><b>🎯 Mises de certitude</b> : avant son match, chaque élève mise de 0 à 5 sur sa victoire (secret jusqu&apos;au lancement du match). Ses points ELO gagnés ou perdus sont multipliés : 0 = ×0,8 · 1 = ×0,9 · 2 = ×1 · 3 = ×1,2 · 4 = ×1,5 · 5 = ×1,7. Pas les points d&apos;équipe.</span>
+        </label>
+        {error && <p className={ui.alertErr}>{error}</p>}
+        <p className={ui.hint}>Pour les matchs créés ensuite dans cette séance ; un match déjà lancé garde ses règles. Cumulable avec un thème.</p>
+      </div>
+    </details>
   );
 }
 

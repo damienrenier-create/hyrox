@@ -34,6 +34,7 @@
 import { isOfficial, matchState, themeOf, type BmMatch, type BmSet } from "@/lib/badminton";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { K_NEW_GAMES, expectedScore, kFactor, marginFactor } from "@/lib/badminton-elo";
+import { handicapOfMatch } from "@/lib/badminton-constraints";
 import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, TEAM_WIN_BONUS, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
 
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
@@ -155,7 +156,12 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
     const st = matchState(m);
     if (!isOfficial(m, st) || !st.result) continue;
     const ra = rating.get(a)!, rb = rating.get(b)!;
-    const ea = expectedScore(ra, rb), eb = 1 - ea;
+    // Match avec HANDICAP (contrainte de la lecon, 26/11 soir) : le handicap a deja egalise les chances (esperance ½,
+    // coefficient 1) et ses points d'avance ne comptent pas comme points marques.
+    const head = handicapOfMatch(m);
+    const ea = head ? 0.5 : expectedScore(ra, rb), eb = 1 - ea;
+    const nSets = st.sets?.length ?? 1;
+    const scored: [number, number] = head ? [Math.max(0, st.result.points[0] - head[0] * nSets), Math.max(0, st.result.points[1] - head[1] * nSets)] : st.result.points;
     const themed = !!themeOf(m); // match a theme (24/11) : moitie de poids, sans l'ecart au score
     const ka = kFactor(games.get(a)!) * (themed ? THEME_ELO_WEIGHT : 1), kb = kFactor(games.get(b)!) * (themed ? THEME_ELO_WEIGHT : 1);
     const mg = themed ? 1 : marginFactor(st.result);
@@ -164,8 +170,8 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
     if (scoring === "POINTS") {
       // Chaque point marque compte, la victoire ajoute un bonus ; le tout x 2 x (1 - chances) (x1 a ELO egal).
       const bonusA = sa === 1 ? TEAM_WIN_BONUS : sa === 0.5 ? TEAM_WIN_BONUS / 2 : 0, bonusB = sa === 0 ? TEAM_WIN_BONUS : sa === 0.5 ? TEAM_WIN_BONUS / 2 : 0;
-      pa = (st.result.points[0] + bonusA) * 2 * (1 - ea);
-      pb = (st.result.points[1] + bonusB) * 2 * (1 - eb);
+      pa = (scored[0] + bonusA) * 2 * (1 - ea);
+      pb = (scored[1] + bonusB) * 2 * (1 - eb);
     } else if (sa === 1) pa = ka * mg * (1 - ea);
     else if (sa === 0) pb = kb * mg * (1 - eb);
     else if (draw === "HALF") { pa = (ka * (1 - ea)) / 2; pb = (kb * (1 - eb)) / 2; }
@@ -186,7 +192,8 @@ export function teamMatchPoints(players: TourPlayer[], matches: BmMatch[], s: To
 // adversaire rapporte a son equipe s'il gagne ; draw = au temps, ce que chacun rapporte sur une egalite.
 // POINTS (26/11) : coef = mon coefficient, coefOpp = celui de l'adversaire ; target = points d'un set (0 = au temps).
 export type TeamStakes = { win: [number, number]; lose: [number, number]; draw: [number, number] | null; chance: number; base: number; themed: boolean; scoring: "ELO" | "POINTS"; coef: number; coefOpp: number; target: number };
-export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSettings, me: string, opp: string, themed: boolean): TeamStakes {
+// handicap (26/11 soir) : mon prochain match se joue avec handicap (contrainte de la lecon) : coefficient 1 des deux cotes.
+export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSettings, me: string, opp: string, themed: boolean, handicap = false): TeamStakes {
   const rating = new Map(players.map((p) => [p.studentId, p.elo]));
   const games = new Map(players.map((p) => [p.studentId, s.launchGames[p.studentId] ?? K_NEW_GAMES]));
   for (const m of [...matches].sort((x, y) => x.createdAt - y.createdAt)) {
@@ -194,7 +201,7 @@ export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSet
     if (!rating.has(a) || !rating.has(b) || a === b) continue;
     const st = matchState(m);
     if (!isOfficial(m, st) || !st.result) continue;
-    const ra = rating.get(a)!, rb = rating.get(b)!, ea = expectedScore(ra, rb);
+    const ra = rating.get(a)!, rb = rating.get(b)!, ea = handicapOfMatch(m) ? 0.5 : expectedScore(ra, rb);
     const th = !!themeOf(m);
     const ka = kFactor(games.get(a)!) * (th ? THEME_ELO_WEIGHT : 1), kb = kFactor(games.get(b)!) * (th ? THEME_ELO_WEIGHT : 1);
     const mg = th ? 1 : marginFactor(st.result);
@@ -204,7 +211,7 @@ export function teamStakes(players: TourPlayer[], matches: BmMatch[], s: TourSet
     games.set(a, games.get(a)! + 1);
     games.set(b, games.get(b)! + 1);
   }
-  const em = expectedScore(rating.get(me) ?? 1000, rating.get(opp) ?? 1000);
+  const em = handicap ? 0.5 : expectedScore(rating.get(me) ?? 1000, rating.get(opp) ?? 1000);
   const w = themed ? THEME_ELO_WEIGHT : 1;
   const km = kFactor(games.get(me) ?? K_NEW_GAMES) * w, ko = kFactor(games.get(opp) ?? K_NEW_GAMES) * w;
   const top = themed ? 1 : 1.5; // ecart au score : x1 (serre) a x1,5 (16 points d'ecart ou plus) ; theme : sans ecart
