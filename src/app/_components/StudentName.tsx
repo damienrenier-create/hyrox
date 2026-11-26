@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addNoteAction, hideNoteAction, studentNotesAction, unhideNoteAction } from "@/app/admin/notes/actions";
 import { setScoutUnlockAction } from "@/app/eleve/badminton-actions";
-import { NOTE_CATEGORIES, fmtDay, noteIcon, type NoteCategory, type NoteView } from "@/lib/student-notes";
+import { NOTE_CATEGORIES, fmtDay, noteActive, noteIcon, type NoteCategory, type NoteView } from "@/lib/student-notes";
 import { btn, cx, ui } from "@/lib/ui";
 
 // Le nom d'un eleve, CLIQUABLE partout chez les profs (Sartay 15/11 : « est-ce que je peux mettre une note sur un eleve en
@@ -48,8 +48,9 @@ export function StudentName({ id, name, children, className }: { id: string; nam
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true); load(); }}
-        className={cx("text-left underline decoration-dotted decoration-1 underline-offset-2 hover:decoration-solid cursor-pointer", className)}
-        title={`Mes notes sur ${name}`}
+        // Note active : nom EN ROUGE jusqu'a « 🔕 Ne plus notifier » (Sartay 26/11 : « jusqu'a la prochaine note »).
+        className={cx("text-left underline decoration-dotted decoration-1 underline-offset-2 hover:decoration-solid cursor-pointer", className, noted && "!text-danger-ink font-bold")}
+        title={noted ? `${name} : vous avez une note sur cet élève` : `Mes notes sur ${name}`}
       >
         {children ?? name}
         {noted && <span className="ml-0.5" aria-label="(a une note)" title="Vous avez une note sur cet élève">📝</span>}
@@ -112,6 +113,14 @@ function NotesDialog({ id, name, data, loading, reload, onClose }: { id: string;
         {data && "error" in data && <p className={ui.alertWarn}>{data.error}</p>}
         {student && data && "notes" in data && (
           <>
+            {/* Sartay 26/11 : le nom reste en rouge jusqu'a ce clic ; la prochaine note le remet en rouge. Les notes restent (masquees, reactivables). */}
+            {(() => {
+              const today = new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Brussels" });
+              const active = data.notes.filter((n) => noteActive({ hiddenAt: n.hiddenAt, until: n.until ?? null }, today));
+              return active.length > 0 ? (
+                <button type="button" disabled={pending} onClick={() => run(async () => { for (const n of active) { const r = await hideNoteAction(n.id); if ("error" in r) return r; } return { ok: true }; }, () => setSaved("Plus de notification : le nom n'est plus en rouge, jusqu'à la prochaine note."))} className={cx(btn.smGhost, "w-full")}>🔕 Ne plus notifier (jusqu&apos;à la prochaine note)</button>
+              ) : null;
+            })()}
             {data.notes.length === 0 ? <p className={ui.hint}>Aucune note sur cet élève.</p> : (
               <div className="space-y-2 max-h-64 overflow-auto">
                 {data.notes.map((n) => (
