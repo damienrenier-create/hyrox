@@ -7,7 +7,7 @@ import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
 import { readSessionConstraints } from "@/lib/badminton-constraints";
 import { tourCourts } from "@/lib/badminton-courts";
 import { strokeScoutOf } from "@/lib/badminton-strokes";
-import { readCoachVotes, tallyVotes, votesReceived } from "@/lib/badminton-vote";
+import { latestVotes, readCoachVotes, tallyVotes, votesReceived } from "@/lib/badminton-vote";
 import { noteIcon } from "@/lib/student-notes";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
@@ -198,6 +198,15 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const tally = lastTour ? tallyVotes(lastTour, readCoachVotes(session.settings)) : [];
   const votePeople = tally.length ? await peopleOf([], [...new Set(tally.flatMap((g) => g.votes.map((v) => v.id)))]) : new Map();
   const coachVotes = lastTour ? tally.map((g) => ({ group: lastTour.kind === "TEAMS" ? `Équipe ${g.group}` : lastTour.kind === "BRACKET" ? "Tableau" : `Poule ${g.group}`, voters: g.voters, size: g.size, votes: g.votes.map((v) => ({ id: v.id, name: votePeople.get(v.id)?.name ?? "?", n: v.n })) })) : [];
+  // Qui a vote pour qui (27/11, Sartay : « ou est-ce que je vois qui a vote pour qui ? ») : la derniere voix de chacun, pour
+  // chacun des 3 votes ; puis les joueurs du tournoi qui n'ont pas encore vote.
+  const lastBy = { coach: latestVotes(allVotes, "COACH"), hard: latestVotes(allVotes, "HARD"), nice: latestVotes(allVotes, "NICE") };
+  const voterIds = [...new Set(allVotes.map((v) => v.by))];
+  const silentIds = lastTour ? lastTour.players.map((p) => p.studentId).filter((id) => !voterIds.includes(id)) : [];
+  const vp = voterIds.length || silentIds.length ? await peopleOf([], [...new Set([...allVotes.flatMap((v) => [v.by, v.for]), ...silentIds])]) : new Map();
+  const vn = (id: string | undefined) => (id ? vp.get(id)?.name ?? "?" : null);
+  const voteDetail = voterIds.map((id) => ({ id, name: vn(id) ?? "?", className: vp.get(id)?.className ?? null, coach: vn(lastBy.coach.get(id)), hard: vn(lastBy.hard.get(id)), nice: vn(lastBy.nice.get(id)) })).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  const noVote = silentIds.filter((id) => !vp.get(id)?.staff).map((id) => ({ id, name: vn(id) ?? "?" })).sort((a, b) => a.name.localeCompare(b.name, "fr"));
   const previous = tours.find((t) => t.closedAt) ?? null;
   // Eleves seulement : un prof est dans toutes les listes de joueurs, il ne doit pas faire remonter ses tournois partout.
   const rosterIds = new Set(roster.filter((p) => !p.staff).map((p) => p.id));
@@ -238,7 +247,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
         <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
-        <BadmintonStaff coachVotes={coachVotes} scoutLive={scoutLive} sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} constraints={readSessionConstraints(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
+        <BadmintonStaff coachVotes={coachVotes} voteDetail={voteDetail} noVote={noVote} scoutLive={scoutLive} sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} constraints={readSessionConstraints(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
       </main>
     </div>
   );

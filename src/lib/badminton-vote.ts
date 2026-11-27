@@ -53,6 +53,13 @@ export function opponentsToday(matches: BmMatch[], me: string): string[] {
   }
   return [...out];
 }
+// Les votes qu'un eleve peut faire dans cette seance : 👑 s'il joue le dernier tournoi, 💪 / 🤝 s'il a eu au moins 2
+// adversaires. (Que le vote soit ouvert a cette heure-ci : voteOpen.)
+export function voteKindsFor(lastTour: { kind: TourKind; players: TourPlayer[] } | null, matches: BmMatch[], me: string): VoteKind[] {
+  return [...(lastTour && (voteGroup(lastTour, me)?.length ?? 0) > 0 ? (["COACH"] as const) : []), ...(opponentsToday(matches, me).length >= 2 ? (["HARD", "NICE"] as const) : [])];
+}
+// Ceux qu'il n'a pas encore faits.
+export const votesLeft = (kinds: VoteKind[], list: CoachVote[], me: string) => kinds.filter((k) => !latestVotes(list, k).has(me));
 // Les voix recues par chacun pour un vote (la derniere voix de chaque votant).
 export function votesReceived(list: CoachVote[], kind: VoteKind): Map<string, number> {
   const out = new Map<string, number>();

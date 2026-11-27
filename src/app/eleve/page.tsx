@@ -16,8 +16,9 @@ import { isBirthdayToday } from "@/lib/birthday";
 import { isWinterArc } from "@/lib/winter-arc";
 import { notDeleted, readQuizOpen, readSessionSex } from "@/lib/session-roles";
 import { sexLabel } from "@/lib/journal";
-import { badmintonTabVisible, loadMatches, preferTournamentSessions, selfEvalEnd } from "@/lib/badminton-server";
-import { BM_FREE, matchState, mustSign, pupilStats, viewOf } from "@/lib/badminton";
+import { badmintonTabVisible, loadMatches, loadTournaments, preferTournamentSessions, selfEvalEnd, sessionEndMs } from "@/lib/badminton-server";
+import { BM_FREE, matchState, mustSign, pupilStats, viewOf, type BmMatch } from "@/lib/badminton";
+import { readCoachVotes, voteKindsFor, voteOpen, votesLeft } from "@/lib/badminton-vote";
 import { SelfEvalNudge } from "../_components/SelfEvalNudge";
 
 // Heure de la lecture (hors du rendu, regle react-hooks/purity) : le rappel d'auto-evaluation s'y recale.
@@ -57,8 +58,19 @@ export default async function ElevePage() {
   const toSignBy = new Map<string, number>();
   // Auto-evaluations deja envoyees (rappel des 10 dernieres minutes sur la carte Badminton, 24/11).
   const selfSent = new Set((await db.orm.public.SelfEvaluation.where({ studentId: user.id }).all()).map((r) => r.sessionId));
+  // Votes de fin de cours (27/11, Sartay : « je voudrais que les votes soient systematiques apres un cours tournoi ») : tant
+  // que le vote est ouvert (fin -10 min -> fin +24 h), la carte du cours dit combien il en reste a faire.
+  const votesTodo = new Map<string, number>();
+  const countVotes = async (s: { id: string; settings: unknown; closesAt?: unknown; raceEndedAt?: unknown; createdAt: unknown }, ms: BmMatch[]) => {
+    if (!voteOpen(sessionEndMs(s as Parameters<typeof sessionEndMs>[0]), currentTime())) return;
+    const last = (await loadTournaments(s.id)).sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
+    const n = votesLeft(voteKindsFor(last, ms, user.id), readCoachVotes(s.settings), user.id).length;
+    if (n > 0) votesTodo.set(s.id, n);
+  };
   for (const s of openSessions.filter((x) => x.wodType === "BADMINTON")) {
-    toSignBy.set(s.id, (await loadMatches(s.id)).filter((m) => mustSign(m, matchState(m), user.id)).length);
+    const ms = await loadMatches(s.id);
+    toSignBy.set(s.id, ms.filter((m) => mustSign(m, matchState(m), user.id)).length);
+    await countVotes(s, ms);
   }
   const myMatchRows = [
     ...(await db.orm.public.BadmintonMatch.where({ playerAId: user.id }).all()),
@@ -71,6 +83,7 @@ export default async function ElevePage() {
   for (const s of bmPast) {
     const ms = await loadMatches(s.id);
     const st = pupilStats(user.id, ms.map((m) => ({ match: m, state: matchState(m) })));
+    await countVotes(s, ms);
     bmHistory.push({ id: s.id, dateMs: toMs(s.createdAt), st, toSign: ms.filter((m) => mustSign(m, matchState(m), user.id)).length });
   }
 
@@ -111,6 +124,7 @@ export default async function ElevePage() {
                     </div>
                     <span className="flex flex-col items-end gap-1">
                       {(toSignBy.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {toSignBy.get(s.id)} à signer</span>}
+                      {(votesTodo.get(s.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>🗳️ {votesTodo.get(s.id)} vote{(votesTodo.get(s.id) ?? 0) > 1 ? "s" : ""} à faire</span>}
                       <SelfEvalNudge chip closesAt={s.closesAt ? toMs(s.closesAt) : null} windowEnd={selfEvalEnd(s)} serverNow={currentTime()} sent={selfSent.has(s.id)} />
                     </span>
                   </div>
@@ -222,7 +236,7 @@ export default async function ElevePage() {
                       <span className="block font-bold text-sm capitalize">{fmtDate(new Date(h.dateMs).toISOString())}</span>
                       <span className="block text-xs text-ink-2">{h.st.played} match{h.st.played > 1 ? "s" : ""} validé{h.st.played > 1 ? "s" : ""} · {h.st.won} victoire{h.st.won > 1 ? "s" : ""}{h.st.refereed ? ` · ${h.st.refereed} arbitré${h.st.refereed > 1 ? "s" : ""}` : ""}</span>
                     </span>
-                    <span className="flex items-center gap-2">{h.toSign > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {h.toSign}</span>}<span className="text-ink-3 font-black">›</span></span>
+                    <span className="flex items-center gap-2">{(votesTodo.get(h.id) ?? 0) > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>🗳️ {votesTodo.get(h.id)} à voter</span>}{h.toSign > 0 && <span className={`${ui.chip} ${ui.chipWarn}`}>✍️ {h.toSign}</span>}<span className="text-ink-3 font-black">›</span></span>
                   </Link>
                 </li>
               ))}

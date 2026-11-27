@@ -34,7 +34,8 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 export type ScoutLiveRow = { id: string; scout: string; player: string | null; opponent: string | null; match: string; mode: "IMPACTS" | "STROKES"; n: number; since: number };
 // Vote du meilleur coach (27/11) : par groupe, les voix recues et combien ont vote.
 export type CoachVoteGroup = { group: string; voters: number; size: number; votes: { id: string; name: string; n: number }[] };
-export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, constraints = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { coachVotes?: CoachVoteGroup[]; scoutLive?: ScoutLiveRow[]; sessionTheme?: BmTheme | null; constraints?: { handicap: { eloPerPoint: number } | null; bet: boolean } | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
+export type VoteDetailRow = { id: string; name: string; className: string | null; coach: string | null; hard: string | null; nice: string | null };
+export function BadmintonStaff({ voteDetail = [], noVote = [], coachVotes = [], scoutLive = [], sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, constraints = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { voteDetail?: VoteDetailRow[]; noVote?: { id: string; name: string }[]; coachVotes?: CoachVoteGroup[]; scoutLive?: ScoutLiveRow[]; sessionTheme?: BmTheme | null; constraints?: { handicap: { eloPerPoint: number } | null; bet: boolean } | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   // Le prof lance lui-meme un match en direct (26/11 : « les profs doivent pouvoir scouter par defaut depuis leur telephone »).
@@ -141,7 +142,7 @@ export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, vie
       {tab === "scouting" && <ScoutLiveList items={scoutLive} />}
       {tab === "scouting" && <ScoutTable rows={rows} scout={scoutRows} />}
 
-      {tab === "tournoi" && coachVotes.length > 0 && (
+      {tab === "tournoi" && (coachVotes.length > 0 || voteDetail.length > 0) && (
         <section className={`${ui.cardPad} space-y-2`}>
           <p className="font-bold">🗳️ Meilleur coach · votes des élèves</p>
           <p className={ui.hint}>Chaque joueur vote pour un camarade de sa poule (de son équipe), des 10 dernières minutes du cours jusqu&apos;à 24 h après. Les élèves ne voient pas les résultats. Les deux autres votes (💪 adversaire le plus difficile, 🤝 le plus agréable) : onglet Auto-évaluations.</p>
@@ -155,6 +156,28 @@ export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, vie
               </div>
             ))}
           </div>
+          {/* Qui a vote pour qui (27/11) : visible du prof seulement. */}
+          <details className="rounded-lg border border-line px-2 py-1.5" open={voteDetail.length > 0 && voteDetail.length <= 30}>
+            <summary className="cursor-pointer text-sm font-bold">🔎 Qui a voté pour qui · {voteDetail.length} votant{voteDetail.length > 1 ? "s" : ""}{noVote.length ? ` · ${noVote.length} pas encore` : ""}</summary>
+            {voteDetail.length === 0 ? <p className={ui.hint}>Personne n&apos;a encore voté.</p> : (
+              <div className="overflow-x-auto mt-1">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left"><th className={ui.th}>Votant</th><th className={ui.th}>👑 Meilleur coach</th><th className={ui.th}>💪 Le plus difficile</th><th className={ui.th}>🤝 Le plus agréable</th></tr></thead>
+                  <tbody>
+                    {voteDetail.map((r) => (
+                      <tr key={r.id} className="border-t border-line">
+                        <td className="p-1.5 font-bold"><StudentName id={r.id} name={r.name} /> <span className="font-normal text-ink-3">{r.className ?? ""}</span></td>
+                        <td className="p-1.5">{r.coach ?? <span className="text-ink-3">—</span>}</td>
+                        <td className="p-1.5">{r.hard ?? <span className="text-ink-3">—</span>}</td>
+                        <td className="p-1.5">{r.nice ?? <span className="text-ink-3">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {noVote.length > 0 && <p className="text-xs text-ink-2 mt-1">Pas encore voté : {noVote.map((p) => p.name).join(", ")}.</p>}
+          </details>
         </section>
       )}
       {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} calibrations={tour.calibrations} />}
