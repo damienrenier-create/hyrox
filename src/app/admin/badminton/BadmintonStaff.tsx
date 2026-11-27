@@ -81,8 +81,8 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
     {/* Scouting verrouille par defaut (26/11) : le nom d un eleve permet de le deverrouiller pour ce cours. */}
     <ScoutUnlockProvider sessionId={!free && scoutCfg ? sessionId : null} on={!!scoutCfg?.on} unlocked={!free && scoutCfg ? scoutCfg.unlocked : NO_IDS}>
     <div className="space-y-4">
-      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} headStart={refLive.handicap} bets={refLive.bets} scout={profScout} onClose={() => setRefLive(null)} />}
-      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} headStart={ownLive.head ?? null} bets={ownLive.bets ?? null} scout={profScout} scouting={!!ownLive.scouting} onClose={() => { setOwnLive(null); router.refresh(); }} />}
+      {refLive && <LiveBoard key={refLive.id} matchId={refLive.id} aName={refLive.a.name} bName={refLive.b.name} initialSets={refLive.sets} initialTarget={liveRules[refLive.id]?.target} rule={liveRules[refLive.id]} theme={refLive.theme} headStart={refLive.handicap} bets={refLive.bets} scout={null} onClose={() => setRefLive(null)} />}
+      {ownLive && <LiveBoard key={ownLive.id} matchId={ownLive.id} aName={ownLive.aName} bName={ownLive.bName} initialSets={ownLive.sets} initialTarget={ownLive.target} rule={ownLive.rule} theme={ownLive.theme} headStart={ownLive.head ?? null} bets={ownLive.bets ?? null} scout={ownLive.scouting ? profScout : null} scouting={!!ownLive.scouting} onClose={() => { setOwnLive(null); router.refresh(); }} />}
       {!free && <ThemePanel sessionId={sessionId} current={sessionTheme} />}
       {!free && <ConstraintsPanel sessionId={sessionId} handicap={constraints?.handicap ?? null} bet={!!constraints?.bet} />}
       {!free && scoutCfg && <ScoutPanel sessionId={sessionId} config={scoutCfg} students={scoutStudents} />}

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { sessionEndMs, activeTournament, badmintonRoster, handicapSamples, freeRoster, loadEloBoard, loadMatches, loadScoutingMatches, loadScoutConfigs, loadTournamentMatches, loadTournaments, peopleOf, pickerRef, BM_STAFF_ROLES, type BmPerson, type BmTournament, type EloBoard } from "@/lib/badminton-server";
 import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
 import { readSessionConstraints } from "@/lib/badminton-constraints";
+import { tourCourts } from "@/lib/badminton-courts";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -153,6 +154,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       settings: t.settings,
       players: now,
       // Contraintes de la lecon (26/11 soir) : point de depart des pastilles ⚖️ 🎯 🎲 de chaque match.
+      courts: t.closedAt ? undefined : (() => { try { return Object.fromEntries(tourCourts({ ...t, players: now }, tm)); } catch { return undefined; } })(), // terrains (27/11)
       lesson: { handicap: !!readSessionConstraints(session.settings).handicap, bet: readSessionConstraints(session.settings).bet, theme: !!sessionTheme(session.settings) },
     };
   };

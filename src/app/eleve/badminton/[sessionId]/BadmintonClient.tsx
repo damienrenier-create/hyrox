@@ -18,7 +18,8 @@ import { StrokeScoutBoard, type StrokeResume } from "../../../_components/Stroke
 // puis mes matchs et ceux que j'ai arbitres, chacun avec son historique (qui a encode quoi, qui a signe).
 // Matchs libres (`free`, 03/11) : tous les eleves dans la liste, temoins a demander, « à attester » en haut.
 // Tournoi par poules (`tour`, 09/11) : en tete, mon adversaire de la ronde en cours et « Encoder ce match ».
-export type TourCardData = { kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean; order: { round: number | null; a: string; b: string | null; status: PairingStatus; score: string | null; mine: boolean; points: number | null }[] | null; team?: TeamCardData };
+// court (27/11) : terrain de mon prochain match (« 3 », « 3A »), null = attendre qu'un terrain se libere, absent = rien.
+export type TourCardData = { court?: string | null; kind: TourKind; label: string; format: string; where: string; round: number | null; rounds: number; status: PairingStatus | "done"; opponent: BmPersonRef | null; sets: BmSet[] | null; rank: number | null; of: number; table: { name: string; score: number; rank: number; me: boolean }[] | null; headStart: { mine: number; theirs: number } | null; late: boolean; extra: BmPersonRef[]; poolDone: boolean; order: { round: number | null; a: string; b: string | null; status: PairingStatus; score: string | null; mine: boolean; points: number | null }[] | null; team?: TeamCardData };
 // Tournoi par equipes (24/11) : vu du cote de l'eleve (« ours » = joueur de mon equipe, pts = [nous, eux]).
 export type TeamCardData = {
   letter: string; coach: string; meCoach: boolean; pts: number; myPts: number; bracket: boolean; time: boolean; minutes: number;
@@ -36,7 +37,7 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], bet = null, betTour = false, betLesson = false, handicapOn = false, strokeResume = [], strokeTaken = [] }: { bet?: BetData | null; betTour?: boolean; betLesson?: boolean; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], strokesOn = false, bet = null, betTour = false, betLesson = false, handicapOn = false, strokeResume = [], strokeTaken = [] }: { strokesOn?: boolean; bet?: BetData | null; betTour?: boolean; betLesson?: boolean; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -52,7 +53,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
   const resume = (v: BmView) => setLive({ id: v.id, aName: v.a.name, bName: v.b.name, sets: v.sets, target: liveRules[v.id]?.target, rule: liveRules[v.id], theme: v.theme, head: v.handicap, bets: v.bets });
   return (
     <main className="max-w-xl mx-auto p-4 space-y-5">
-      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} headStart={live.head ?? null} bets={live.bets ?? null} scout={scout} scouting={!!live.scouting} onClose={() => setLive(null)} />}
+      {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} headStart={live.head ?? null} bets={live.bets ?? null} scout={live.scouting ? scout : null} scouting={!!live.scouting} onClose={() => setLive(null)} />}
       {strokes && <StrokeScoutBoard key={strokes.id} obs={strokes} onClose={() => setStrokes(null)} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
       {theme && writable && <p className={ui.alertInfo}>🎲 <b>Matchs à thème aujourd&apos;hui : {themeText(theme)}.</b> {THEME_KINDS.find((k) => k.id === theme.kind)?.rule} Le mieux : un arbitre en direct (« J&apos;arbitre »), qui applique la règle à chaque échange.</p>}
@@ -86,7 +87,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
         </section>
       )}
 
-      {writable && !free && scoutable && <ScoutSection matches={scoutable} picks={scoutPicks} resume={scoutResume} strokeResume={strokeResume} strokeTaken={strokeTaken} onStrokes={setStrokes} roster={roster} sessionId={sessionId} onLive={(x) => { setLive({ ...x, scouting: true }); window.scrollTo({ top: 0 }); }} court={!!scout} onDone={() => router.refresh()} />}
+      {writable && !free && scoutable && <ScoutSection strokesOn={strokesOn} matches={scoutable} picks={scoutPicks} resume={scoutResume} strokeResume={strokeResume} strokeTaken={strokeTaken} onStrokes={setStrokes} roster={roster} sessionId={sessionId} onLive={(x) => { setLive({ ...x, scouting: true }); window.scrollTo({ top: 0 }); }} court={!!scout} onDone={() => router.refresh()} />}
 
       <section className="space-y-2">
         <h2 className={ui.eyebrow}>Mes matchs · {mine.length}</h2>
@@ -250,6 +251,7 @@ function TourCard({ t, canPlay, onPlay }: { t: TourCardData; canPlay: boolean; o
         <div className="space-y-2">
           {t.late && <p className="text-sm">Tu es arrivé en cours de tournoi : joue tes <b>matchs de rattrapage</b> contre chacun, quand ton adversaire est libre.</p>}
           <p className="text-sm">{t.late ? "Rattrapage" : bracket ? ronde : `Ton prochain match (${ronde.toLowerCase()})`} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          {t.court !== undefined && <p className={cx("text-sm rounded-lg px-2 py-1 font-bold", t.court ? "bg-brand-soft text-brand-ink" : "bg-card text-ink-2")}>{t.court ? <>🏟️ Terrain <span className="text-base">{t.court}</span></> : "⏳ Attends qu'un terrain se libère (le premier de ta poule qui finit)."}</p>}
           {h && h.mine > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>tu commences chaque set avec <span className={BM_ADVANCE}>{h.mine} point{h.mine > 1 ? "s" : ""} d&apos;avance</span></b> <b className={BM_ADVANCE}>({h.mine}-0)</b>. Compte-les dans le score final. L&apos;avance change après chaque match joué.</p>}
           {h && h.theirs > 0 && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : <b>{t.opponent.name.split(" ")[0]} commence chaque set avec <span className={BM_ADVANCE}>{h.theirs} point{h.theirs > 1 ? "s" : ""} d&apos;avance</span></b> <b className={BM_ADVANCE}>(0-{h.theirs})</b>. Comptez-les dans le score final. L&apos;avance change après chaque match joué.</p>}
           {/* Sans avance, on le DIT (Sartay 16/11 : « si y a pas de point d'avance, signifie-le ! ») */}
@@ -355,6 +357,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
       ) : t.opponent ? (
         <div className="space-y-2">
           <p className="text-sm">{team.roundLabel}{team.oppTeam ? <> · contre l&apos;équipe {team.oppTeam.letter} (👑 {team.oppTeam.coach})</> : null} : ton adversaire est <b className="text-base">{t.opponent.name}</b>{t.opponent.className ? <span className="text-ink-3 text-xs"> {t.opponent.className}</span> : null}.</p>
+          {t.court !== undefined && <p className={cx("text-sm rounded-lg px-2 py-1 font-bold", t.court ? "bg-brand-soft text-brand-ink" : "bg-card text-ink-2")}>{t.court ? <>🏟️ Terrain <span className="text-base">{t.court}</span></> : "⏳ Attends qu'un terrain se libère."}</p>}
           {t.headStart && t.status === "todo" && <p className="text-sm rounded-lg bg-card px-2 py-1">⚖️ Handicap : {t.headStart.mine > 0 ? <b>tu commences chaque set avec <span className={BM_ADVANCE}>{t.headStart.mine} point{t.headStart.mine > 1 ? "s" : ""} d&apos;avance ({t.headStart.mine}-0)</span></b> : t.headStart.theirs > 0 ? <b>{t.opponent.name.split(" ")[0]} commence chaque set avec <span className={BM_ADVANCE}>{t.headStart.theirs} point{t.headStart.theirs > 1 ? "s" : ""} d&apos;avance (0-{t.headStart.theirs})</span></b> : <b className={BM_ADVANCE}>aucun point d&apos;avance (0-0)</b>}. Comptez-les dans le score final ; ils ne comptent pas dans les points de l&apos;équipe.</p>}
           {team.wave === 2 && <p className={ui.hint}>Match en plus : les deux équipes n&apos;ont pas le même nombre de joueurs, tu joues contre le joueur le plus proche de ton ELO{team.time ? " (au 2e coup de sifflet)" : ""}.</p>}
           {team.time && !timerHere && <p className={ui.hint}>⏱️ Matchs de {team.minutes} min : attends le coup de sifflet du prof.</p>}
@@ -416,7 +419,7 @@ function TeamCard({ t, team, canPlay, onPlay }: { t: TourCardData; team: TeamCar
 // (6 coups, 4 criteres chacun) s'ouvre ici. Un eleve ne remplit jamais sa propre fiche.
 // Pendant un tournoi, les prochains matchs a scouter (pas encore commences), donnes par le serveur (badminton-scout-queue.ts).
 export type ScoutPickView = { a: { id: string; name: string }; b: { id: string; name: string }; label: string };
-function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken = [], onStrokes, roster, sessionId, onLive, court, onDone }: { strokeResume?: StrokeResume[]; strokeTaken?: string[]; onStrokes: (x: StrokeResume) => void; matches: BmView[]; picks: ScoutPickView[] | null; resume: { id: string; aName: string; bName: string; sets: BmSet[] }[]; roster: BmPersonRef[]; sessionId: string; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void; court: boolean; onDone: () => void }) {
+function ScoutSection({ strokesOn = false, matches, picks, resume, strokeResume = [], strokeTaken = [], onStrokes, roster, sessionId, onLive, court, onDone }: { strokesOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; onStrokes: (x: StrokeResume) => void; matches: BmView[]; picks: ScoutPickView[] | null; resume: { id: string; aName: string; bName: string; sets: BmSet[] }[]; roster: BmPersonRef[]; sessionId: string; onLive: (x: { id: string; aName: string; bName: string; sets: BmSet[] | null }) => void; court: boolean; onDone: () => void }) {
   const [pa, setPa] = useState<string | null>(null);
   const [pb, setPb] = useState<string | null>(null);
   const who = (id: string | null) => roster.find((p) => p.id === id)?.name ?? "";
@@ -442,7 +445,7 @@ function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken =
     });
   };
   const taken = (p: ScoutPickView, id: string) => strokeTaken.includes(`${[p.a.id, p.b.id].sort().join("|")}|${id}`);
-  const strokeButtons = (p: ScoutPickView) => (
+  const strokeButtons = (p: ScoutPickView) => !strokesOn ? null : (
     <div className="flex flex-wrap gap-1.5">
       {[p.a, p.b].filter((x) => !taken(p, x.id)).map((x) => <button key={x.id} type="button" disabled={starting} onClick={() => goStrokes(p, x)} className={cx(btn.ghost, "flex-1 border-2 border-accent")}>🏸 Coups de {x.name.split(" ")[0]}</button>)}
     </div>
@@ -465,7 +468,7 @@ function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken =
                 <button type="button" disabled={starting} onClick={() => go(picks[0])} className={cx(btn.lgPrimary, "w-full")}>📍 Scouter le prochain match : {picks[0].a.name.split(" ")[0]} – {picks[0].b.name.split(" ")[0]}</button>
                 <p className={ui.hint}>{picks[0].label} · pas encore commencé. Tu touches où tombe chaque volant. Ce n&apos;est pas un arbitrage : ton score est indicatif, il ne compte ni à l&apos;ELO ni au tournoi.</p>
                 {strokeButtons(picks[0])}
-                <p className={ui.hint}>🏸 Ou suis UN joueur et note chacun de ses coups (un scout par joueur).</p>
+                {strokesOn && <p className={ui.hint}>🏸 Ou suis UN joueur et note chacun de ses coups (un scout par joueur).</p>}
                 {picks.length > 1 && <p className={ui.hint}>Ou : {picks.slice(1).map((p) => <button key={`${p.a.id}|${p.b.id}`} type="button" disabled={starting} onClick={() => go(p)} className="underline mr-2">{p.a.name.split(" ")[0]} – {p.b.name.split(" ")[0]}</button>)}</p>}
               </>
             )}
@@ -495,6 +498,7 @@ function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken =
             {resume.map((r) => <button key={r.id} type="button" onClick={() => onLive({ id: r.id, aName: r.aName, bName: r.bName, sets: r.sets })} className={cx(btn.smGhost, "mr-1")}>↩ {r.aName.split(" ")[0]} – {r.bName.split(" ")[0]} · reprendre</button>)}
           </div>
         )}
+        {strokesOn && <>
         <p className="font-bold">📝 Fiche technique d&apos;un joueur</p>
         <p className={ui.hint}>Regarde un match et remplis la fiche technique d&apos;un des deux joueurs : service court, service long, clear, smash, drop, lob.</p>
         {matches.length === 0 ? <p className={ui.muted}>Aucun match à observer pour l&apos;instant : il apparaît ici dès qu&apos;un arbitre l&apos;ouvre en direct ou qu&apos;il est encodé.</p> : (
@@ -509,6 +513,7 @@ function ScoutSection({ matches, picks, resume, strokeResume = [], strokeTaken =
             ))}
           </ul>
         )}
+        </>}
       </div>
     </details>
   );

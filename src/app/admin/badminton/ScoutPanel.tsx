@@ -32,7 +32,7 @@ export function ScoutPanel({ sessionId, config, students }: { sessionId: string;
     <details className={cx(ui.cardPad, anyOpen && "border-accent")}>
       <summary className="cursor-pointer font-bold">🔭 Scouting : {lock}{anyOpen ? ` · ${COURTS.find((c) => c.id === config.court)?.name.toLowerCase()} · couche ${config.level}${custom ? ` (${custom} élève${custom > 1 ? "s" : ""} à part)` : ""}` : ""}</summary>
       <div className="mt-3 space-y-3 text-sm">
-        <p className={ui.hint}>Verrouillé par défaut. Un élève déverrouillé note l&apos;impact du volant quand il arbitre en direct, et peut « 🔭 Scouter un joueur » (fiche technique des 6 coups). Pour ce cours seulement.</p>
+        <p className={ui.hint}>Verrouillé par défaut. Un élève déverrouillé scoute un match : où tombe le volant et comment le point finit (gagné, ou concédé). Pour ce cours seulement.</p>
         <label className="flex items-center gap-2 font-bold"><input type="checkbox" className={ui.check} checked={config.on} disabled={pending} onChange={(e) => run(() => setScoutConfigAction(sessionId, { on: e.target.checked }))} /> 🔓 Déverrouiller pour toute la classe</label>
         {!config.on && (
           <div>
@@ -45,6 +45,7 @@ export function ScoutPanel({ sessionId, config, students }: { sessionId: string;
             <p className={`${ui.hint} mt-1`}>Touchez le nom d&apos;un élève n&apos;importe où sur cette page (matchs, élèves, tournoi…) puis « 🔓 Déverrouiller le scouting », ou cochez-le dans la liste « Élève par élève » ci-dessous.</p>
           </div>
         )}
+        <label className="flex items-start gap-2"><input type="checkbox" className={cx(ui.check, "mt-0.5")} checked={config.strokes} disabled={pending} onChange={(e) => run(() => setScoutConfigAction(sessionId, { strokes: e.target.checked }))} /> <span><b>🏸 Aussi les coups (étape 2)</b> : un élève peut suivre UN joueur et noter chacun de ses coups (perd / continue / gagne), et remplir la fiche technique des coups. Décoché : seulement où tombe le volant et pourquoi.</span></label>
         <div>
           <span className={ui.label}>Terrain dessiné</span>
           <div className={cx(ui.segmented, "flex-wrap")}>{COURTS.map((c) => <button key={c.id} type="button" disabled={pending} onClick={() => run(() => setScoutConfigAction(sessionId, { court: c.id }))} className={seg(config.court === c.id)}>{c.name}</button>)}</div>

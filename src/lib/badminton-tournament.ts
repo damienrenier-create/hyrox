@@ -114,10 +114,15 @@ export const readTourKind = (v: unknown): TourKind => (v === "BRACKET" || v === 
 // changer le score final, et meme pour certains matchs ; par defaut pas de 2 points d'ecart, le premier au score gagne ;
 // option 2 points d'ecart, eventuellement plafonnee ») : points = objectif par defaut ; poolPoints[poule] et
 // matchPoints[paire] le remplacent ; deuce = 2 points d'ecart ; cap = plafond (0 = sans).
-export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number>; team: TeamSettings | null; pairRules: Record<string, PairRule> };
+export type TourSettings = { sets: 1 | 2 | 3; points: number; poolSize: number; poolCount: number; eloPerPoint: number; deuce: boolean; cap: number; poolPoints: Record<string, number>; matchPoints: Record<string, number>; calibration: HandicapCalibration | null; matchHandicap: Record<string, MatchHandicap>; launchGames: Record<string, number>; poolLegs: Record<string, number>; team: TeamSettings | null; pairRules: Record<string, PairRule>; courts: number; perCourt: 1 | 2 };
 // Contraintes d'UN match (Sartay 26/11 soir : « un prof peut choisir pour la lecon OU pour des matchs en particulier ») :
 // true / false = impose pour ce match, absent = comme la lecon. Cle = pairKey.
 export type PairRule = { handicap?: boolean; bet?: boolean; theme?: boolean };
+// Terrains disponibles (27/11, attribution : src/lib/badminton-courts.ts) : 8 par defaut, un match par terrain (ou 2).
+function readCourts(o: Record<string, unknown>): { courts: number; perCourt: 1 | 2 } {
+  const n = Number(o.courts);
+  return { courts: Number.isInteger(n) && n >= 1 && n <= 20 ? n : 8, perCourt: Number(o.perCourt) === 2 ? 2 : 1 };
+}
 export function readPairRules(v: unknown): Record<string, PairRule> {
   const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
   return Object.fromEntries(Object.entries(o).flatMap(([k, x]) => {
@@ -165,7 +170,7 @@ export function readTourSettings(raw: unknown, kind: TourKind = "POOLS"): TourSe
   // match, choisi par le prof (pas de revanche automatique) ; absent = automatique (revanches quand la poule a fini).
   const pl = o.poolLegs && typeof o.poolLegs === "object" ? (o.poolLegs as Record<string, unknown>) : {};
   const poolLegs = Object.fromEntries(Object.entries(pl).filter(([, n]) => Number(n) === 2 || Number(n) === 1).map(([k, n]) => [k, Number(n)]));
-  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs, team, pairRules: readPairRules(o.pairRules) };
+  return { sets, points, poolSize, poolCount, eloPerPoint, deuce, cap, poolPoints: pointsMap(o.poolPoints), matchPoints: pointsMap(o.matchPoints), calibration, matchHandicap, launchGames, poolLegs, team, pairRules: readPairRules(o.pairRules), ...readCourts(o) };
 }
 
 // ===== Bareme du handicap calcule sur les matchs joues (Sartay 13/11 : « calcul automatique au moment de lancer le

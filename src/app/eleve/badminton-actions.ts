@@ -567,13 +567,13 @@ export async function scoutStrokesAction(matchId: string, playerId: string, raw:
   return { ok: true };
 }
 // Reglages du scouting de la seance : impacts notes ou pas, terrain dessine, couches par defaut.
-export async function setScoutConfigAction(sessionId: string, patch: { on?: boolean; court?: string; level?: number }): Promise<BmResult> {
+export async function setScoutConfigAction(sessionId: string, patch: { on?: boolean; court?: string; level?: number; strokes?: boolean }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (!c.staff || !c.session) return { error: "Réservé aux profs." };
   const cur = (c.session.settings ?? {}) as Record<string, unknown>;
   const sc = readScoutConfig(cur);
-  const next = { ...sc, ...(patch.on !== undefined ? { on: !!patch.on } : {}), ...(patch.court ? { court: readCourt(patch.court) } : {}), ...(patch.level ? { level: Math.max(1, Math.min(MAX_LAYER, Math.round(Number(patch.level)))) } : {}) };
+  const next = { ...sc, ...(patch.strokes !== undefined ? { strokes: !!patch.strokes } : {}), ...(patch.on !== undefined ? { on: !!patch.on } : {}), ...(patch.court ? { court: readCourt(patch.court) } : {}), ...(patch.level ? { level: Math.max(1, Math.min(MAX_LAYER, Math.round(Number(patch.level)))) } : {}) };
   await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, scout: next })) });
   done(c.session.id);
   return { ok: true };
@@ -724,7 +724,7 @@ export async function addLatePlayerAction(tournamentId: string, studentId: strin
 // handicap : imposer l'avance d'une rencontre (to = celui qui a l'avance, pts 0 = aucune ; to null = revenir au bareme).
 // Les deux valent pour les matchs pas encore commences : un match en direct garde le score de depart de son ouverture.
 // poolLegs (13/11) : matchs retour dans UNE poule (legs 2) ; revenir a 1 seul match n'est possible que si aucun retour n'a ete joue.
-export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number }; poolLegs?: { name: string; legs: number }; pairRule?: { a: string; b: string; key: "handicap" | "bet" | "theme"; value: boolean | null } }): Promise<BmResult> {
+export async function setTournamentRuleAction(tournamentId: string, patch: { points?: number; deuce?: boolean; cap?: number; pool?: { name: string; points: number | null }; match?: { a: string; b: string; points: number | null }; eloPerPoint?: number; handicap?: { a: string; b: string; to: string | null; pts: number }; poolLegs?: { name: string; legs: number }; pairRule?: { a: string; b: string; key: "handicap" | "bet" | "theme"; value: boolean | null }; courts?: number; perCourt?: number }): Promise<BmResult> {
   const row = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
   if (!row || !row.sessionId || row.cancelledAt) return { error: "Ce tournoi est introuvable ou clos." };
   const c = await context(row.sessionId);
@@ -795,7 +795,7 @@ export async function setTournamentRuleAction(tournamentId: string, patch: { poi
     if (Object.keys(r).length) pairRules[k] = r; else delete pairRules[k];
   }
   const norm = readTourSettings({ ...cur, points: patch.points ?? s.points, deuce: patch.deuce ?? s.deuce, cap: patch.cap ?? s.cap, poolPoints, matchPoints, eloPerPoint, calibration, matchHandicap, poolLegs }, t.kind);
-  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap, poolLegs: norm.poolLegs, pairRules })) });
+  await db.orm.public.BadmintonTournament.where({ id: t.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, points: norm.points, deuce: norm.deuce, cap: norm.cap, poolPoints: norm.poolPoints, matchPoints: norm.matchPoints, eloPerPoint: norm.eloPerPoint, calibration: norm.calibration, matchHandicap: norm.matchHandicap, poolLegs: norm.poolLegs, pairRules, courts: patch.courts !== undefined && Number.isInteger(patch.courts) && patch.courts >= 1 && patch.courts <= 20 ? patch.courts : s.courts, perCourt: patch.perCourt === 2 ? 2 : patch.perCourt === 1 ? 1 : s.perCourt })) });
   done(row.sessionId);
   return { ok: true };
 }
@@ -908,6 +908,7 @@ export async function startStrokeScoutAction(sessionId: string, input: { playerA
   if ("error" in c) return c;
   if (c.free || !c.session) return { error: "Le scouting se fait pendant un cours." };
   if (!c.staff && !scoutUnlocked(readScoutConfig(c.session.settings), c.userId)) return { error: "Le scouting n'est pas déverrouillé pour toi pendant ce cours." };
+  if (!c.staff && !readScoutConfig(c.session.settings).strokes) return { error: "Aujourd'hui, on scoute où tombe le volant et pourquoi (pas les coups)." };
   const a = String(input.playerAId ?? ""), b = String(input.playerBId ?? ""), p = String(input.playerId ?? "");
   if (!a || !b || a === b || (p !== a && p !== b)) return { error: "Choisis le match et le joueur à observer." };
   if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : un autre élève doit te scouter." };

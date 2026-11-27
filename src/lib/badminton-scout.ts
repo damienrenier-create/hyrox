@@ -59,7 +59,10 @@ export const MAX_LAYER = 4;
 // par defaut ; `on` = deverrouille pour toute la classe pendant ce cours, `unlocked` = les eleves deverrouilles un par un
 // pour ce cours (leur nom, n'importe ou sur la page badminton du prof). Deverrouille = noter les impacts quand il arbitre
 // en direct, et « Scouter un joueur » (fiche technique). Recevoir l'analyse de son scouting ne depend pas du verrou.
-export type ScoutConfig = { on: boolean; court: CourtKind; level: number; students: Record<string, { level: number; at: number }>; unlocked: string[] };
+// strokes (27/11, Sartay : « Basile a scoute avec les types de coup, alors que je preferais qu'on scoute la ou le volant
+// tombe et pourquoi ») : les outils « COUPS » (grille des coups d'un joueur, fiche technique) seulement si le prof les
+// ouvre ; par defaut, le scouting = ou tombe le volant et comment le point finit (etape 1).
+export type ScoutConfig = { on: boolean; court: CourtKind; level: number; students: Record<string, { level: number; at: number }>; unlocked: string[]; strokes: boolean };
 export const scoutUnlocked = (c: ScoutConfig, studentId: string) => c.on || c.unlocked.includes(studentId);
 export function readScoutConfig(settings: unknown): ScoutConfig {
   const o = ((settings as { scout?: unknown } | null)?.scout ?? {}) as Record<string, unknown>;
@@ -72,7 +75,7 @@ export function readScoutConfig(settings: unknown): ScoutConfig {
     return l !== null && Number(x!.at) > 0 ? [[id, { level: l, at: Number(x!.at) }]] : [];
   }));
   const unlocked = Array.isArray(o.unlocked) ? [...new Set(o.unlocked.filter((x): x is string => typeof x === "string"))] : [];
-  return { on: o.on === true, court: readCourt(o.court), level: lvl(o.level) ?? 1, students, unlocked };
+  return { on: o.on === true, court: readCourt(o.court), level: lvl(o.level) ?? 1, students, unlocked, strokes: o.strokes === true };
 }
 // Couches d'un eleve : le dernier reglage du prof pour lui (toutes seances), sinon celui de la seance.
 export function studentLayer(studentId: string, session: ScoutConfig, all: ScoutConfig[]): number {

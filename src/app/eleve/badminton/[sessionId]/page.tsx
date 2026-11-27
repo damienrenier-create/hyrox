@@ -5,6 +5,7 @@ import { activeTournament, badmintonRoster, loadMatches, loadScoutingMatches, lo
 import { BM_SELF_EVAL_DAYS, selfEvalTiming, timingComment } from "@/lib/self-eval-timing";
 import { AfterMatchPrompt, FormeQuick } from "./SelfEvalPrompts";
 import { pairKey } from "@/lib/badminton-tournament";
+import { tourCourts } from "@/lib/badminton-courts";
 import { betPair, headStartOf, myPendingBet, readPendingBets, readSessionConstraints } from "@/lib/badminton-constraints";
 import { ELO_START, kFactor } from "@/lib/badminton-elo";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
@@ -205,6 +206,11 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
       }
     }
   }
+  // Terrain de mon prochain match (27/11, src/lib/badminton-courts.ts).
+  if (tourCard && tourNow && tourCard.opponent && (tourCard.status === "todo" || tourCard.status === "live")) {
+    const k = pairKey(me.id, tourCard.opponent.id);
+    try { const plan = tourCourts(tourNow, tm); if (plan.has(k)) tourCard = { ...tourCard, court: plan.get(k) ?? null }; } catch { /* sans terrains plutot qu une page en panne */ }
+  }
   // Handicap de la lecon (hors championnat a handicap, qui a le sien) : mon avance (ou la sienne) pour mon prochain match.
   if (tourCard && tour && tour.kind !== "HANDICAP" && tourCard.opponent && tourCard.status === "todo" && handicapWith(tourCard.opponent.id)) {
     const pts = tour.kind === "TEAMS" ? (tour.settings.team?.mode === "TIME" ? 15 : tour.settings.points) : ruleFor(tour.settings, tour.players, me.id, tourCard.opponent.id).points;
@@ -296,6 +302,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         scoutPicks={scoutPicks}
         scoutResume={scoutResume}
         bet={bet}
+        strokesOn={scoutOpen && scoutCfg.strokes}
         betTour={betTour}
         betLesson={cons.bet}
         strokeResume={strokeResume}
