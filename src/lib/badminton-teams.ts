@@ -35,7 +35,7 @@ import { isOfficial, matchState, themeOf, type BmMatch, type BmSet } from "@/lib
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
 import { K_NEW_GAMES, expectedScore, kFactor, marginFactor } from "@/lib/badminton-elo";
 import { handicapOfMatch } from "@/lib/badminton-constraints";
-import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, TEAM_WIN_BONUS, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
+import { POOL_NAMES, bracketSize, pairingOf, readTeamSettings, roundRobin, seedOrder, type PairingStatus, TEAM_WIN_BONUS, type TeamSettings, type TeamSub, type TeamTimer, type TourEntrant, type TourPlayer, type TourSettings , pairKey } from "@/lib/badminton-tournament";
 
 const byElo = (a: TourEntrant, b: TourEntrant) => b.elo - a.elo || a.id.localeCompare(b.id);
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
@@ -258,8 +258,11 @@ const awayNow = (iv: [number, number | null][]) => iv.some(([, to]) => to === nu
 const settled = (p: TeamPairing) => p.status === "played" || p.status === "gone";
 const sortByElo = (xs: TourPlayer[]) => [...xs].sort((a, b) => b.elo - a.elo || a.seed - b.seed || a.studentId.localeCompare(b.studentId));
 
-// Les matchs d'une rencontre (voir en tete) : 1er contre 1er… puis chaque joueur en trop contre le plus proche en ELO.
-export function pairUp(xs: TourPlayer[], ys: TourPlayer[]): { a: string; b: string; wave: 1 | 2 }[] {
+// Les matchs d'une rencontre (voir en tete) : 1er contre 1er… puis chaque joueur en trop contre un joueur de l'autre equipe.
+// ROTATION (27/11, Sartay : « pourquoi c'est toujours Mateo Van Der Kaa qui fait 2 matchs ? ») : ce « match en plus » va au
+// joueur de la petite equipe qui en a le MOINS fait jusqu'ici dans le tournoi (prior) ; a egalite, le plus proche en ELO.
+// Un match en plus deja joue ou commence (played : paires qui ont deja un match entre ces deux equipes) reste tel quel.
+export function pairUp(xs: TourPlayer[], ys: TourPlayer[], opts: { prior?: Map<string, number>; played?: Set<string> } = {}): { a: string; b: string; wave: 1 | 2 }[] {
   const sx = sortByElo(xs), sy = sortByElo(ys);
   const n = Math.min(sx.length, sy.length);
   const out: { a: string; b: string; wave: 1 | 2 }[] = [];
@@ -268,8 +271,10 @@ export function pairUp(xs: TourPlayer[], ys: TourPlayer[]): { a: string; b: stri
   const xBig = sx.length > sy.length;
   const big = xBig ? sx : sy, small = xBig ? sy : sx;
   const uses = new Map(small.map((p) => [p.studentId, 1]));
+  const prior = (id: string) => opts.prior?.get(id) ?? 0;
   for (const e of big.slice(n)) {
-    const pick = [...small].sort((p, q) => uses.get(p.studentId)! - uses.get(q.studentId)! || Math.abs(p.elo - e.elo) - Math.abs(q.elo - e.elo) || q.elo - p.elo)[0];
+    const done = small.find((p) => opts.played?.has(pairKey(e.studentId, p.studentId)));
+    const pick = done ?? [...small].sort((p, q) => uses.get(p.studentId)! - uses.get(q.studentId)! || prior(p.studentId) - prior(q.studentId) || Math.abs(p.elo - e.elo) - Math.abs(q.elo - e.elo) || q.elo - p.elo)[0];
     uses.set(pick.studentId, uses.get(pick.studentId)! + 1);
     out.push(xBig ? { a: e.studentId, b: pick.studentId, wave: 2 } : { a: pick.studentId, b: e.studentId, wave: 2 });
   }
@@ -316,6 +321,7 @@ export function teamsOf(players: TourPlayer[], matches: BmMatch[], s: TourSettin
   };
   const pointsOf = teamMatchPoints(players, matches, s);
   const live = matches.filter((m) => matchState(m).status !== "CANCELLED");
+  const extraUses = new Map<string, number>(); // matchs en plus deja attribues (rotation, 27/11), ronde apres ronde
 
   const rencontre = (x: string | null | undefined, y: string | null | undefined, round: number, stage: string, needWinner: boolean): Rencontre => {
     const key = `${round}:${x ?? "?"}-${y ?? "?"}`;
@@ -329,7 +335,10 @@ export function teamsOf(players: TourPlayer[], matches: BmMatch[], s: TourSettin
     if (start) times.push(start);
     const begun = times.length ? Math.min(...times) : null;
     const xs = withSubs(x, membersAt(x, begun), sx), ys = withSubs(y, membersAt(y, begun), sy);
-    const list: TeamPairing[] = pairUp(xs, ys).map(({ a, b, wave }) => {
+    const playedPairs = new Set(live.filter((m) => (xi.has(m.playerAId) && yi.has(m.playerBId)) || (yi.has(m.playerAId) && xi.has(m.playerBId))).map((m) => pairKey(m.playerAId, m.playerBId)));
+    const planned = pairUp(xs, ys, { prior: extraUses, played: playedPairs });
+    for (const p of planned) if (p.wave === 2) { const sm = xs.length < ys.length ? p.a : p.b; extraUses.set(sm, (extraUses.get(sm) ?? 0) + 1); }
+    const list: TeamPairing[] = planned.map(({ a, b, wave }) => {
       const raw = pairingOf(a, b, matches);
       const status: PairingStatus = (isAwayNow(a) || isAwayNow(b)) && (raw.status === "todo" || raw.status === "disputed") ? "gone" : raw.status;
       const pp = raw.status === "played" && raw.matchId ? pointsOf.get(raw.matchId) : undefined;
