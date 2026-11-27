@@ -243,7 +243,7 @@ export const BM_ADVANCE = "font-extrabold text-red-600 dark:text-red-400";
 // headStart (26/11 soir) : points d'avance de la contrainte « handicap » de la lecon ; bets : les mises des deux joueurs,
 // a annoncer avant le premier point (Sartay : « la mise est secrete jusqu'a ce que l'arbitre lance le match ; il peut
 // ensuite l'annoncer avant le debut du match »).
-export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, scouting = false, headStart = null, bets = null, onClose }: { matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; scouting?: boolean; headStart?: BmSet | null; bets?: BmBets | null; onClose: () => void }) {
+export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, rule, theme = null, scout = null, scouting = false, headStart = null, bets = null, focus = null, onClose }: { focus?: 0 | 1 | null; matchId: string; aName: string; bName: string; initialSets: BmSet[] | null; initialTarget?: number; rule?: LiveRule; theme?: BmTheme | null; scout?: LiveScout | null; scouting?: boolean; headStart?: BmSet | null; bets?: BmBets | null; onClose: () => void }) {
   const router = useRouter();
   const [sets, setSets] = useState<BmSet[]>(() => (initialSets && initialSets.length ? initialSets.map(([a, b]) => [a, b] as BmSet) : [[0, 0]]));
   const [server, setServer] = useState<0 | 1 | null>(null);
@@ -488,7 +488,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
     const scoreChip = (side: 0 | 1) => (
       <div className={cx("flex-1 min-w-0 rounded-xl px-2.5 py-1 text-white flex items-center gap-1.5", side === 0 ? "bg-brand" : "bg-sea", alerts.some((x) => x.side === side) && "ring-4 ring-red-500")} aria-label={`${side === top ? "En haut" : "En bas"} : ${names[side]}, ${cur[side]} point${cur[side] > 1 ? "s" : ""}`}>
         <span className="text-[10px] opacity-80">{arrow(side)}</span>
-        <span className="flex-1 min-w-0 truncate font-bold text-sm">{names[side]}{server === side ? " 🏸" : ""}</span>
+        <span className="flex-1 min-w-0 truncate font-bold text-sm">{focus === side ? "🔭 " : ""}{names[side]}{server === side ? " 🏸" : ""}</span>
         <span className="font-display text-2xl font-extrabold tabular-nums leading-none">{cur[side]}</span>
       </div>
     );
@@ -622,7 +622,7 @@ export function LiveBoard({ matchId, aName, bName, initialSets, initialTarget, r
               impactIds.current.set(k, liveRallyAction(matchId, { ...r, court: scout.court, layer: scout.level }).then((res) => { if ("error" in res) { setError(res.error); return null; } return "eventId" in res ? res.eventId ?? null : null; }).catch(() => { setError("Connexion perdue : cet impact n'a pas été enregistré."); return null; }));
             }}
           />
-          <p className="pointer-events-none absolute left-2 top-1 text-[10px] font-bold text-ink-3">{scouting ? "🔭 score indicatif" : "🔭 arbitrage + scouting"}</p>
+          <p className={cx("pointer-events-none absolute left-2 top-1 font-bold", focus !== null ? "text-xs text-accent-ink" : "text-[10px] text-ink-3")}>{focus !== null ? `🔭 Tu scoutes ${names[focus].split(" ")[0]}` : scouting ? "🔭 score indicatif" : "🔭 arbitrage + scouting"}</p>
           <p className="pointer-events-none absolute right-2 top-1 text-[10px] text-ink-3">{saving ? "enregistrement…" : error ? "" : "✓ enregistré"}</p>
           {impacts.length === 0 && !flash && !touched && (
             <div className="pointer-events-none absolute inset-x-0 top-[16%] flex justify-center px-6">

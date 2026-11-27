@@ -268,6 +268,14 @@ export function strokeSummary(sheets: StrokeSheet[]): StrokeSummary[] {
 // winners = ses points GAGNES (volant tombe chez l'adversaire) ; serve / net / short / long / wide / miss = les points qu'il a CONCEDES.
 export type ScoutRow = { id: string; rallies: number; won: number; lost: number; winners: number; serve: number; net: number; short: number; long: number; wide: number; miss: number; sheets: number; levels: Partial<Record<StrokeId, string | null>>; gaveRallies: number; gaveSheets: number };
 type EvLike = { id?: string; kind: string; authorId: string; at: number; targetId?: string | null; data?: unknown };
+// UN JOUEUR PAR SCOUT (27/11, Sartay : « que le scout ne scoute pour le moment qu'un seul joueur de sa fiche ») : la ligne
+// SCOUTING d'une observation dit quel joueur le scout suit (impacts comme coups) ; ses impacts ne comptent QUE pour ce
+// joueur (deux scouts sur un match, un par joueur, ne comptent donc rien deux fois). Ancienne observation : les deux.
+export function scoutTargetOf(m: { events: { kind: string; data?: unknown }[] }): string | null {
+  const d = m.events.find((e) => e.kind === "SCOUTING")?.data;
+  const o = d && typeof d === "object" ? (d as Record<string, unknown>) : null;
+  return o && typeof o.player === "string" ? o.player : null;
+}
 // Les impacts annules d'un match (lignes UNRALLY, 26/11) : l'analyse les ignore.
 export const undoneRallies = (events: { kind: string; targetId?: string | null }[]): Set<string> => new Set(events.filter((e) => e.kind === "UNRALLY" && e.targetId).map((e) => e.targetId as string));
 type MatchLike = { id: string; playerAId: string; playerBId: string; events: EvLike[]; cancelled: boolean };
@@ -280,12 +288,13 @@ export function sessionScoutRows(matches: MatchLike[], ids: string[]): ScoutRow[
       if (m.cancelled) continue;
       const side = m.playerAId === id ? 0 : m.playerBId === id ? 1 : null;
       const undone = undoneRallies(m.events);
+      const target = scoutTargetOf(m); // observation d'UN joueur : ses impacts ne comptent que pour lui
       for (const e of m.events) {
         if (e.kind === "RALLY" && e.id && undone.has(e.id)) continue;
         if (e.kind === "RALLY" && e.authorId === id) gaveRallies++;
         if (e.kind === "SCOUT" && e.authorId === id) gaveSheets++;
         if (side === null) continue;
-        if (e.kind === "RALLY") { const r = readRally(e.data); if (r) raw.push({ matchId: m.id, at: e.at, rally: r, side }); }
+        if (e.kind === "RALLY" && (!target || target === id)) { const r = readRally(e.data); if (r) raw.push({ matchId: m.id, at: e.at, rally: r, side }); }
         if (e.kind === "SCOUT" && e.targetId === id) {
           const s = readStrokeSheet(e.data);
           const k = `${m.id}|${e.authorId}`;

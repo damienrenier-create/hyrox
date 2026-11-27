@@ -6,10 +6,12 @@ import { sessionEndMs, activeTournament, badmintonRoster, handicapSamples, freeR
 import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
 import { readSessionConstraints } from "@/lib/badminton-constraints";
 import { tourCourts } from "@/lib/badminton-courts";
+import { strokeScoutOf } from "@/lib/badminton-strokes";
+import { readCoachVotes, tallyVotes } from "@/lib/badminton-vote";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
-import { readScoutConfig, sessionScoutRows, studentOwnLayer } from "@/lib/badminton-scout";
+import { readScoutConfig, scoutTargetOf, sessionScoutRows, studentOwnLayer } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
 import { rankElo } from "@/lib/badminton-elo";
 import { SELF_EVAL_GRIDS } from "@/lib/wod-engines/core/self-eval";
@@ -104,6 +106,24 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
 
   const [matches, roster] = await Promise.all([loadMatches(session.id), badmintonRoster(session)]);
   const scoutingObs = await loadScoutingMatches(session.id); // observations de scouting (26/11) : seulement pour le scouting
+  // Qui scoute quoi (27/11, Sartay : « je voudrais pouvoir voir qui scoute quoi ») : les observations en cours.
+  const liveObs = scoutingObs.filter((m) => matchState(m).status === "LIVE");
+  const obsPeople = liveObs.length ? await peopleOf(liveObs, liveObs.map((m) => m.createdById)) : new Map();
+  const obsName = (id: string) => obsPeople.get(id)?.name ?? "?";
+  const scoutLive = liveObs.map((m) => {
+    const undone = new Set(m.events.filter((e) => e.kind === "UNRALLY" && e.targetId).map((e) => e.targetId as string));
+    const target = scoutTargetOf(m);
+    return {
+      id: m.id,
+      scout: obsName(m.createdById),
+      player: target ? obsName(target) : null,
+      opponent: target ? obsName(target === m.playerAId ? m.playerBId : m.playerAId) : null,
+      match: `${obsName(m.playerAId)} – ${obsName(m.playerBId)}`,
+      mode: strokeScoutOf(m) ? ("STROKES" as const) : ("IMPACTS" as const),
+      n: m.events.filter((e) => (e.kind === "RALLY" || e.kind === "STROKE") && !undone.has(e.id)).length,
+      since: m.createdAt,
+    };
+  }).sort((a, b) => a.since - b.since);
   const people = await peopleOf(matches, roster.map((p) => p.id));
   const ref = (id: string): BmPersonRef => { const p = people.get(id); return { id, name: p?.name ?? "?", className: p?.className ?? null }; };
   const views = matches.map((m) => viewOf(m, user.id, true, ref));
@@ -159,6 +179,11 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
     };
   };
   const active = activeTournament(tours);
+  // Vote du meilleur coach (27/11) : le dernier tournoi de la seance, groupe par groupe.
+  const lastTour = [...tours].sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
+  const tally = lastTour ? tallyVotes(lastTour, readCoachVotes(session.settings)) : [];
+  const votePeople = tally.length ? await peopleOf([], [...new Set(tally.flatMap((g) => g.votes.map((v) => v.id)))]) : new Map();
+  const coachVotes = lastTour ? tally.map((g) => ({ group: lastTour.kind === "TEAMS" ? `Équipe ${g.group}` : lastTour.kind === "BRACKET" ? "Tableau" : `Poule ${g.group}`, voters: g.voters, size: g.size, votes: g.votes.map((v) => ({ id: v.id, name: votePeople.get(v.id)?.name ?? "?", n: v.n })) })) : [];
   const previous = tours.find((t) => t.closedAt) ?? null;
   // Eleves seulement : un prof est dans toutes les listes de joueurs, il ne doit pas faire remonter ses tournois partout.
   const rosterIds = new Set(roster.filter((p) => !p.staff).map((p) => p.id));
@@ -199,7 +224,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       <main className={`${ui.container} py-5 space-y-4`}>
         {nav}
         <NotesPopup notes={await notesForSessions(user.id, [session])} title={readSessionClasses(session.settings).join(" + ")} />
-        <BadmintonStaff sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} constraints={readSessionConstraints(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
+        <BadmintonStaff coachVotes={coachVotes} scoutLive={scoutLive} sessionId={session.id} viewerId={user.id} views={views} rows={rows} roster={roster.map(pickerRef)} selfEvals={selfEvals} seCols={seCols} elo={elo} groupClasses={classes} tour={tour} liveRules={liveRules} noted={await notedIdsOf(user.id)} sessionTheme={sessionTheme(session.settings)} constraints={readSessionConstraints(session.settings)} scoutCfg={scoutCfg} scoutStudents={rows.map((r) => ({ id: r.id, name: r.name, className: r.className, own: studentOwnLayer(r.id, scoutCfg, scoutAll) }))} scoutRows={sessionScoutRows([...matches, ...scoutingObs].map((m) => ({ id: m.id, playerAId: m.playerAId, playerBId: m.playerBId, events: m.events, cancelled: matchState(m).status === "CANCELLED" })), rows.map((r) => r.id))} />
       </main>
     </div>
   );

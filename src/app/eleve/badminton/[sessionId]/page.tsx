@@ -6,6 +6,7 @@ import { BM_SELF_EVAL_DAYS, selfEvalTiming, timingComment } from "@/lib/self-eva
 import { AfterMatchPrompt, FormeQuick } from "./SelfEvalPrompts";
 import { pairKey } from "@/lib/badminton-tournament";
 import { tourCourts } from "@/lib/badminton-courts";
+import { latestVotes, readCoachVotes, voteGroup, voteOpen } from "@/lib/badminton-vote";
 import { betPair, headStartOf, myPendingBet, readPendingBets, readSessionConstraints } from "@/lib/badminton-constraints";
 import { ELO_START, kFactor } from "@/lib/badminton-elo";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
@@ -15,7 +16,7 @@ import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
 import { bracketMineOf, bracketOf, formatText, liveRuleOf, mineOf, playersNow, poolsOf, ruleFor } from "@/lib/badminton-tournament";
 import { marginFor, readyState, scoreFor, teamFormatText, teamMineOf, teamStakes, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
-import { readScoutConfig, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
+import { readScoutConfig, scoutTargetOf, scoutUnlocked, studentLayer } from "@/lib/badminton-scout";
 import { scoutQueue } from "@/lib/badminton-scout-queue";
 import { ScoutView } from "../../../_components/ScoutView";
 import { swapSets } from "@/lib/badminton";
@@ -231,6 +232,15 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
     opps: Object.fromEntries(others.map((p) => [p.id, Math.round(ratingOf(p.id))])),
     mine: Object.fromEntries(others.flatMap((p) => { const c = myPendingBet(pending, me.id, p.id, since(p.id)); return c === null ? [] : [[p.id, c]]; })),
   } : null;
+  // Vote du meilleur coach (27/11) : dernier tournoi de la seance, des 10 min avant la fin et jusqu'a 24 h apres.
+  const lastTour = (await loadTournaments(sessionId)).sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
+  const voteIds = lastTour && voteOpen(sessionEndMs(session), currentTime()) ? voteGroup(lastTour, me.id) : null;
+  const votePeople = voteIds?.length ? await peopleOf([], voteIds) : null;
+  const vote = voteIds?.length && votePeople && lastTour ? {
+    candidates: voteIds.map((id) => ({ id, name: votePeople.get(id)?.name ?? "?", className: votePeople.get(id)?.className ?? null })).sort((x, y) => x.name.localeCompare(y.name, "fr")),
+    mine: latestVotes(readCoachVotes(session.settings)).get(me.id) ?? null,
+    where: lastTour.kind === "TEAMS" ? "ton équipe" : lastTour.kind === "BRACKET" ? "ton tableau" : "ta poule",
+  } : null;
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
   // Auto-evaluation (26/11 soir) : ouverte pendant le cours et 3 jours apres ; le petit mot selon le moment du PREMIER envoi ;
@@ -250,15 +260,18 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
   const scoutMine = scoutOpen ? { court: scoutCfg.court, level: studentLayer(me.id, scoutCfg, await loadScoutConfigs()) } : null;
   // Pendant un tournoi, le scout recoit le PROCHAIN match pas encore commence (26/11, voir badminton-scout-queue.ts).
   // Seules les observations d'IMPACTS « prennent » un match ; les scouts de coups (26/11 soir) suivent un joueur chacun.
-  const watched = new Set(scoutingObs.filter((m) => matchState(m).status === "LIVE" && !strokeScoutOf(m)).map((m) => [m.playerAId, m.playerBId].sort().join("|")));
-  const strokeTaken = scoutingObs.filter((m) => matchState(m).status === "LIVE" && strokeScoutOf(m) && m.createdById !== me.id).map((m) => `${[m.playerAId, m.playerBId].sort().join("|")}|${strokeScoutOf(m)}`);
+  // Un scout par JOUEUR (27/11) : un joueur deja suivi (impacts ou coups) n'est plus propose ; un match n'est « pris » que si
+  // ses deux joueurs le sont (ancienne observation sans joueur : les deux).
+  const liveObs = scoutingObs.filter((m) => matchState(m).status === "LIVE" && m.createdById !== me.id);
+  const strokeTaken = liveObs.flatMap((m) => { const pr = [m.playerAId, m.playerBId].sort().join("|"); const tg = scoutTargetOf(m); return tg ? [`${pr}|${tg}`] : [`${pr}|${m.playerAId}`, `${pr}|${m.playerBId}`]; });
+  const watched = new Set(liveObs.map((m) => [m.playerAId, m.playerBId].sort().join("|")).filter((pr) => pr.split("|").every((id) => strokeTaken.includes(`${pr}|${id}`))));
   const scoutNext = scoutOpen && tourNow ? scoutQueue(tourNow, tm, me.id, watched).slice(0, 4) : null;
   // Mes observations en cours (a reprendre).
   const myAll = scoutOpen ? scoutingObs.filter((m) => m.createdById === me.id && matchState(m).status === "LIVE") : [];
   const myObs = myAll.filter((m) => !strokeScoutOf(m));
   const myStrokeObs = myAll.filter((m) => !!strokeScoutOf(m));
   const obsNames = myAll.length ? await peopleOf(myAll) : new Map();
-  const scoutResume = myObs.map((m) => ({ id: m.id, aName: obsNames.get(m.playerAId)?.name ?? "?", bName: obsNames.get(m.playerBId)?.name ?? "?", sets: matchState(m).sets ?? [[0, 0]] }));
+  const scoutResume = myObs.map((m) => { const tg = scoutTargetOf(m); return { id: m.id, aName: obsNames.get(m.playerAId)?.name ?? "?", bName: obsNames.get(m.playerBId)?.name ?? "?", sets: matchState(m).sets ?? [[0, 0]], focus: tg === m.playerAId ? (0 as const) : tg === m.playerBId ? (1 as const) : null }; });
   // Mes scoutings de coups en cours : a reprendre avec les coups deja notes (et leur ligne, pour « annuler le dernier »).
   const strokeResume = myStrokeObs.map((m) => {
     const pid = strokeScoutOf(m)!;
@@ -302,6 +315,7 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
         scoutPicks={scoutPicks}
         scoutResume={scoutResume}
         bet={bet}
+        vote={vote}
         strokesOn={scoutOpen && scoutCfg.strokes}
         betTour={betTour}
         betLesson={cons.bet}

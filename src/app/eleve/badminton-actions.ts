@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session-server";
 import { inPreview, PREVIEW_READ_ONLY } from "@/lib/preview";
 import { BM_FREE, BM_WITNESSES_NEEDED, mustSign, recentDuel, recentTwin, checkLiveSets, checkSets, isOfficial, matchState, readSets, sameSets, setsText, trimLiveSets, type BmKind, type BmMatch, type BmRole, type BmSet } from "@/lib/badminton";
-import { BM_STAFF_ROLES, loadScoutingMatches, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
+import { BM_STAFF_ROLES, sessionEndMs, loadScoutingMatches, activeTournament, handicapSamples, loadTournamentMatches, badmintonRoster, freeRoster, loadEloBoard, loadMatch, loadMatches, loadTournaments, peopleOf, pupilWindowOpen, studentInSession } from "@/lib/badminton-server";
 import { type PairRule, HANDICAP_ELO_PER_POINT, TOUR_KINDS, calibrateHandicap, checkManualPools, makeManualPools, handicapFor, playersNow, lateBracketSeat, latePool, makePlayers, pairKey, pendingPairing, readGone, readLate, readTeamSettings, readTourKind, readTourSettings, ruleFor, POOL_NAMES } from "@/lib/badminton-tournament";
 import { checkTeams, coachOf, makeTeams, pendingTeamPairing, readyState, runningTimer, subCandidates, teamPlayers, teamsOf } from "@/lib/badminton-teams";
 import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
-import { MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
+import { scoutTargetOf, MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
+import { readCoachVotes, voteGroup, voteOpen } from "@/lib/badminton-vote";
 import { betPair, betsAtCreation, headStartOf, readBet, readPendingBets, readSessionConstraints, type BmBets } from "@/lib/badminton-constraints";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -662,6 +663,31 @@ export async function placeBetAction(sessionId: string, opponentId: string, raw:
   return { error: "Beaucoup d'élèves misent en même temps : réessaie dans un instant." };
 }
 
+// Vote du meilleur coach (27/11, regles : src/lib/badminton-vote.ts) : un eleve du dernier tournoi de la seance vote pour
+// un autre joueur de son groupe, des 10 min avant la fin du cours et jusqu'a 24 h apres. Plusieurs telephones votent en
+// meme temps : on relit apres l'ecriture et on recommence si la voix a ete ecrasee.
+export async function voteCoachAction(sessionId: string, candidateId: string): Promise<BmResult> {
+  const c = await context(sessionId);
+  if ("error" in c) return c;
+  if (c.staff || !c.session) return { error: "Réservé aux élèves." };
+  if (!voteOpen(sessionEndMs(c.session), Date.now())) return { error: "Le vote s'ouvre 10 minutes avant la fin du cours." };
+  const tours = (await loadTournaments(c.session.id)).sort((x, y) => y.createdAt - x.createdAt);
+  const group = tours[0] ? voteGroup(tours[0], c.userId) : null;
+  if (!group) return { error: "Tu n'as pas joué le tournoi de ce cours." };
+  const pick = String(candidateId ?? "");
+  if (!group.includes(pick)) return { error: pick === c.userId ? "On ne vote pas pour soi !" : "Vote pour un élève de ta poule." };
+  const at = Date.now();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const row = await sessionOf(c.session.id);
+    const cur = (row?.settings ?? {}) as Record<string, unknown>;
+    const list = readCoachVotes(cur);
+    if (list.some((v) => v.by === c.userId && v.at === at)) { done(c.session.id); return { ok: true }; }
+    await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, coachVotes: [...list, { by: c.userId, for: pick, at }] })) });
+    await new Promise((r) => setTimeout(r, 60 + Math.floor(Math.random() * 180)));
+  }
+  return { error: "Beaucoup d'élèves votent en même temps : réessaie dans un instant." };
+}
+
 // Clore le tournoi : il reste consultable, ses matchs restent des matchs ordinaires ; un nouveau tournoi peut etre lance.
 export async function closeTournamentAction(tournamentId: string): Promise<BmResult> {
   const t = await db.orm.public.BadmintonTournament.where({ id: tournamentId }).first();
@@ -879,7 +905,8 @@ export async function badmintonPulseAction(sessionId: string): Promise<string> {
 // Ouvrir une OBSERVATION de scouting (26/11, Sartay : « le scouting n'est pas l'arbitrage ! il ne compte pas dans les points
 // ELO, les points sont a titre indicatif ») : un « match » marque SCOUTING, jamais charge avec les vrais matchs (ni ELO, ni
 // tournoi, ni liste, ni arbitrage) ; le tableau en direct y note le score indicatif et les impacts (RALLY).
-export async function startScoutingAction(sessionId: string, input: { playerAId: string; playerBId: string }): Promise<BmResult> {
+// playerId (27/11) : le joueur que le scout suit (un seul) ; sans (prof) : les deux joueurs.
+export async function startScoutingAction(sessionId: string, input: { playerAId: string; playerBId: string; playerId?: string }): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (c.free || !c.session) return { error: "Le scouting se fait pendant un cours." };
@@ -887,12 +914,20 @@ export async function startScoutingAction(sessionId: string, input: { playerAId:
   const a = String(input.playerAId ?? ""), b = String(input.playerBId ?? "");
   if (!a || !b || a === b) return { error: "Choisis les deux joueurs observés." };
   if (!c.staff && (a === c.userId || b === c.userId)) return { error: "Tu joues ce match : un autre élève doit te scouter." };
+  const target = input.playerId ? String(input.playerId) : null;
+  if (target !== null && target !== a && target !== b) return { error: "Choisis le joueur que tu scoutes." };
+  if (!c.staff && target === null) return { error: "Choisis le joueur que tu scoutes (un seul)." };
   const roster = await rosterIds(c);
   if (!roster.has(a) || !roster.has(b)) return { error: notFound(c) };
+  if (target) {
+    const pair = [a, b].sort().join("|");
+    const busy = (await loadScoutingMatches(c.session.id)).find((m) => matchState(m).status === "LIVE" && m.createdById !== c.userId && [m.playerAId, m.playerBId].sort().join("|") === pair && (scoutTargetOf(m) === target || scoutTargetOf(m) === null));
+    if (busy) return { error: "Un autre scout suit déjà ce joueur : prends l'autre joueur, ou un autre match." };
+  }
   const role: BmRole = c.staff ? "STAFF" : "REFEREE";
   const match = await db.transaction(async (tx) => {
     const m = await tx.orm.public.BadmintonMatch.create({ sessionId: c.session!.id, playerAId: a, playerBId: b, createdById: c.userId, tournamentId: null });
-    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "SCOUTING", authorId: c.userId, role, sets: null, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
+    await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "SCOUTING", authorId: c.userId, role, sets: target ? { mode: "IMPACTS", player: target } : null, at: Temporal.Now.instant().subtract({ milliseconds: 1 }) });
     await tx.orm.public.BadmintonEvent.create({ matchId: m.id, sessionId: c.session!.id, kind: "LIVE", authorId: c.userId, role, sets: [[0, 0]], at: Temporal.Now.instant() });
     return m;
   });

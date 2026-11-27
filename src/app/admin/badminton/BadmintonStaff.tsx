@@ -29,7 +29,11 @@ type Filter = "all" | "LIVE" | "PENDING" | "DISPUTED" | "VALIDATED" | "CANCELLED
 
 // `free` : les matchs libres (03/11) ; pas d'auto-evaluations, la validation du prof rend un match officiel.
 // `tour` : le tournoi par poules de la seance (09/11), absent pour les matchs libres.
-export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, constraints = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { sessionTheme?: BmTheme | null; constraints?: { handicap: { eloPerPoint: number } | null; bet: boolean } | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
+// Scoutings en cours (27/11) : qui scoute quoi.
+export type ScoutLiveRow = { id: string; scout: string; player: string | null; opponent: string | null; match: string; mode: "IMPACTS" | "STROKES"; n: number; since: number };
+// Vote du meilleur coach (27/11) : par groupe, les voix recues et combien ont vote.
+export type CoachVoteGroup = { group: string; voters: number; size: number; votes: { id: string; name: string; n: number }[] };
+export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, viewerId, views, rows, roster, selfEvals, seCols, elo, groupClasses, free = false, tour, liveRules = {}, noted = [], sessionTheme = null, constraints = null, scoutCfg = null, scoutStudents = [], scoutRows = [] }: { coachVotes?: CoachVoteGroup[]; scoutLive?: ScoutLiveRow[]; sessionTheme?: BmTheme | null; constraints?: { handicap: { eloPerPoint: number } | null; bet: boolean } | null; scoutCfg?: ScoutConfig | null; scoutStudents?: ScoutStudentRow[]; scoutRows?: ScoutRow[]; sessionId: string; viewerId: string; views: BmView[]; rows: BmPupilRow[]; roster: BmPersonRef[]; selfEvals: BmSelfEvalRow[]; seCols: SeCol[]; elo: BmEloRow[]; groupClasses: string[]; free?: boolean; tour?: BmTourProps; liveRules?: Record<string, LiveRule & { target: number }>; noted?: string[] }) {
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   const [refLive, setRefLive] = useState<BmView | null>(null); // le prof reprend l'arbitrage en direct d'un match
   // Le prof lance lui-meme un match en direct (26/11 : « les profs doivent pouvoir scouter par defaut depuis leur telephone »).
@@ -133,8 +137,25 @@ export function BadmintonStaff({ sessionId, viewerId, views, rows, roster, selfE
 
       {tab === "elo" && <EloTable rows={elo} groupClasses={groupClasses} />}
 
+      {tab === "scouting" && <ScoutLiveList items={scoutLive} />}
       {tab === "scouting" && <ScoutTable rows={rows} scout={scoutRows} />}
 
+      {tab === "tournoi" && coachVotes.length > 0 && (
+        <section className={`${ui.cardPad} space-y-2`}>
+          <p className="font-bold">🗳️ Meilleur coach · votes des élèves</p>
+          <p className={ui.hint}>Chaque joueur vote pour un camarade de sa poule (de son équipe), des 10 dernières minutes du cours jusqu&apos;à 24 h après. Les élèves ne voient pas les résultats.</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {coachVotes.map((g) => (
+              <div key={g.group} className="rounded-lg bg-paper px-2 py-1.5 text-sm">
+                <p className="font-bold">{g.group} <span className="font-normal text-ink-3">· {g.voters}/{g.size} ont voté</span></p>
+                {g.votes.length === 0 ? <p className={ui.hint}>Pas encore de vote.</p> : (
+                  <ol className="mt-0.5">{g.votes.map((v, i) => <li key={v.id}>{i === 0 ? "👑 " : ""}<StudentName id={v.id} name={v.name} /> · <b>{v.n}</b> voix</li>)}</ol>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {tab === "tournoi" && tour && <TournamentPanel sessionId={sessionId} entrants={tour.entrants} active={tour.active} previous={tour.previous} elsewhere={tour.elsewhere} candidates={tour.candidates} calibrations={tour.calibrations} />}
 
       {tab === "encoder" && <StaffEntry sessionId={sessionId} roster={roster} free={free} onDone={() => setTab("matchs")} onLive={setOwnLive} />}
@@ -339,6 +360,26 @@ function StaffEntry({ sessionId, roster, free, onDone, onLive }: { sessionId: st
 // Scouting de la seance (24/11, Sartay : « il faudra qu'on puisse analyser les stats de scouting ») : par eleve, ses
 // echanges notes, ses points gagnes et perdus, ses fautes ; le niveau moyen de chaque coup sur les fiches recues ; ce
 // qu'il a scoute lui-meme. Le detail (carte du terrain, criteres) est sur sa fiche (📈).
+function ScoutLiveList({ items }: { items: ScoutLiveRow[] }) {
+  const hm = (ms: number) => new Date(ms).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+  return (
+    <section className={`${ui.cardPad} space-y-1`}>
+      <p className="font-bold">🔭 Scoutings en cours · {items.length}</p>
+      {items.length === 0 ? <p className={ui.muted}>Personne ne scoute en ce moment.</p> : (
+        <ul className="text-sm divide-y divide-line">
+          {items.map((r) => (
+            <li key={r.id} className="py-1 flex flex-wrap items-baseline gap-x-2">
+              <b>{r.scout}</b>
+              <span>→ {r.player ? <>{r.mode === "STROKES" ? "🏸 coups de" : "📍"} <b>{r.player}</b> <span className="text-ink-3">(contre {r.opponent})</span></> : <>📍 {r.match} <span className="text-ink-3">(les deux joueurs)</span></>}</span>
+              <span className={cx("text-xs", r.n ? "text-success-ink font-bold" : "text-ink-3")}>{r.n} {r.mode === "STROKES" ? "coup" : "impact"}{r.n > 1 ? "s" : ""} · depuis {hm(r.since)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function ScoutTable({ rows, scout }: { rows: BmPupilRow[]; scout: ScoutRow[] }) {
   const by = new Map(scout.map((s) => [s.id, s]));
   const levelColor = (code: string | null | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";

@@ -7,7 +7,7 @@ import { isSessionOpen, toMs } from "@/lib/scheduling";
 import { BM_FREE, isOfficial, matchState, readKind, readRole, readSets, themeOf, type BmMatch } from "@/lib/badminton";
 import { computeElo, type EloEntry, type EloGame } from "@/lib/badminton-elo";
 import { readGone, readLate, readTourKind, readTourSettings, type HandicapSample, type TourKind, type TourPlayer, type TourSettings } from "@/lib/badminton-tournament";
-import { myRallies, readRally, undoneRallies, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
+import { scoutTargetOf, myRallies, readRally, undoneRallies, readScoutConfig, readStrokeSheet, type MyRally, type Rally, type ScoutConfig, type StrokeSheet } from "@/lib/badminton-scout";
 import { BM_SELF_EVAL_WINDOW_MS } from "@/lib/self-eval-timing";
 import { betsOfMatch, handicapOfMatch } from "@/lib/badminton-constraints";
 import { strokeTapsOf, type StrokeTap } from "@/lib/badminton-strokes";
@@ -316,7 +316,7 @@ export async function loadPlayerScouting(playerId: string): Promise<{ rallies: M
   for (const m of matches) {
     const side: 0 | 1 = m.playerAId === playerId ? 0 : 1;
     for (const e of m.events) {
-      if (e.kind === "RALLY" && !undoneRallies(m.events).has(e.id)) { const r = readRally(e.data); if (r) raw.push({ matchId: m.id, at: e.at, rally: r, side }); }
+      if (e.kind === "RALLY" && !undoneRallies(m.events).has(e.id) && (!scoutTargetOf(m) || scoutTargetOf(m) === playerId)) { const r = readRally(e.data); if (r) raw.push({ matchId: m.id, at: e.at, rally: r, side }); }
       if (e.kind === "SCOUT" && e.targetId === playerId) {
         const sheet = readStrokeSheet(e.data);
         const k = `${m.id}|${e.authorId}`;
