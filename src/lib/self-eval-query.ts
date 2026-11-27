@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
+import { SELF_EVAL_CRITERIA, type SelfEvalCriterion, type SelfEvalGridKey } from "@/lib/wod-engines/core/self-eval";
+import { gradeOfAnswers } from "@/lib/carnet";
 import { isQualityCode, type QualityCode } from "@/lib/wod-engines/core/quality";
 import { wodLabel } from "@/lib/student-sessions";
 import { isDeletedSession } from "@/lib/session-roles";
@@ -21,6 +22,7 @@ export type SelfEvalRow = {
   sessionLabel: string;
   sessionDate: string;
   answers: Record<string, string>;
+  grade: number | null; // note /5 comme au carnet (27/11 : affichee pour le badminton)
   submittedAt: string;
   submittedAtMs: number;
   // Regard du prof sur cette seance, s'il existe (grille + commentaire, chacun visible ou non par l'eleve).
@@ -30,6 +32,7 @@ export type SelfEvalRow = {
 export type SelfEvalSort = "recent" | "ancien" | "prenom" | "nom" | "classe";
 
 export type SelfEvalFilters = {
+  grid?: SelfEvalGridKey; // 27/11 : la grille consultee (Hyrox = tous les WOD, ou Badminton) ; defaut Hyrox
   sessionId?: string; // vide = toutes les seances
   className?: string;
   sex?: string; // "F" | "M" ; vide = tous
@@ -74,9 +77,11 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
     if (f.sessionId === sid) participants = members.reduce((n, list) => n + list.length, 0);
   }
 
-  // Seance supprimee (corbeille) : ses auto-evaluations disparaissent avec elle. Celles du badminton (autre grille,
-  // 03/11) sont sur la page Badminton (onglet « Auto-évaluations ») et dans le carnet.
-  const all: SelfEvalRow[] = evals.filter((e) => !isDeletedSession(sessionById.get(e.sessionId)) && sessionById.get(e.sessionId)?.wodType !== "BADMINTON").map((e) => {
+  // Seance supprimee (corbeille) : ses auto-evaluations disparaissent avec elle. Une grille a la fois (27/11, Sartay : « je
+  // voudrais qu'apparaissent aussi les auto-evals de badminton ») : Hyrox (tous les WOD) ou Badminton, colonnes differentes.
+  const bm = f.grid === "badminton";
+  if (bm) participants = null; // pas d'equipes au badminton
+  const all: SelfEvalRow[] = evals.filter((e) => !isDeletedSession(sessionById.get(e.sessionId)) && (sessionById.get(e.sessionId)?.wodType === "BADMINTON") === bm).map((e) => {
     const u = studentById.get(e.studentId);
     const s = sessionById.get(e.sessionId);
     const at = String(e.submittedAt);
@@ -92,6 +97,7 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
       sessionLabel: s ? s.label ?? wodLabel(s.wodType) : "—",
       sessionDate: s ? String(s.createdAt) : at,
       answers: (e.answers as Record<string, string>) ?? {},
+      grade: gradeOfAnswers((e.answers as Record<string, string>) ?? null, s?.wodType ?? null),
       submittedAt: at,
       submittedAtMs: new Date(at).getTime(),
       review: (() => {
@@ -145,9 +151,9 @@ export async function querySelfEvaluations(f: SelfEvalFilters): Promise<SelfEval
 }
 
 // Lit les filtres de niveau depuis l'URL : ?c_engagement=TB&c_technique=B
-export function readLevelParams(sp: Record<string, string | string[] | undefined>): Partial<Record<string, QualityCode>> {
+export function readLevelParams(sp: Record<string, string | string[] | undefined>, criteria: SelfEvalCriterion[] = SELF_EVAL_CRITERIA): Partial<Record<string, QualityCode>> {
   const out: Partial<Record<string, QualityCode>> = {};
-  for (const c of SELF_EVAL_CRITERIA) {
+  for (const c of criteria) {
     const v = sp[`c_${c.id}`];
     const s = Array.isArray(v) ? v[0] : v;
     if (s && isQualityCode(s)) out[c.id] = s;

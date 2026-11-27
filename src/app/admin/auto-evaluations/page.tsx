@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session-server";
 import { db } from "@/lib/db";
-import { SELF_EVAL_CRITERIA } from "@/lib/wod-engines/core/self-eval";
+import { SELF_EVAL_GRIDS, type SelfEvalGridKey } from "@/lib/wod-engines/core/self-eval";
+import { SELF_EVAL_SHORT } from "@/lib/student-self-evals";
 import { QUALITY_LEVELS } from "@/lib/wod-engines/core/quality";
 import { wodLabel, fmtDate } from "@/lib/student-sessions";
 import { querySelfEvaluations, readLevelParams, PAGE_SIZE, type SelfEvalSort } from "@/lib/self-eval-query";
@@ -23,25 +24,33 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
   const sp = await searchParams;
 
   const sessionId = one(sp.session);
+  // Grille (27/11) : ?grille=badminton|hyrox ; une seance choisie impose la sienne ; sinon celle de la derniere auto-eval.
+  const pickedSession = sessionId ? await db.orm.public.Session.where({ id: sessionId }).first() : null;
+  const latest = pickedSession || ["badminton", "hyrox"].includes(one(sp.grille)) ? null : await db.orm.public.SelfEvaluation.where({}).orderBy((e) => e.submittedAt.desc()).first();
+  const latestType = latest ? (await db.orm.public.Session.where({ id: latest.sessionId }).first())?.wodType : null;
+  const grid: SelfEvalGridKey = pickedSession ? (pickedSession.wodType === "BADMINTON" ? "badminton" : "hyrox") : one(sp.grille) === "badminton" || one(sp.grille) === "hyrox" ? (one(sp.grille) as SelfEvalGridKey) : latestType === "BADMINTON" ? "badminton" : "hyrox";
+  const bm = grid === "badminton";
+  const SELF_EVAL_CRITERIA = SELF_EVAL_GRIDS[grid].criteria;
+  const short = (c: { id: string; label: string }) => (bm ? SELF_EVAL_SHORT[c.id] ?? c.label : c.label);
   const className = one(sp.classe);
   const sex = ["F", "M"].includes(one(sp.sexe)) ? one(sp.sexe) : "";
   const query = one(sp.q);
   const sort = (one(sp.tri) || "recent") as SelfEvalSort;
   const page = Math.max(1, parseInt(one(sp.page) || "1", 10) || 1);
-  const levels = readLevelParams(sp);
+  const levels = readLevelParams(sp, SELF_EVAL_CRITERIA);
 
   const [sessions, allClasses] = await Promise.all([
-    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all().then((all) => all.filter((s) => notDeleted(s) && s.wodType !== "BADMINTON")),
+    db.orm.public.Session.where({}).orderBy((s) => s.createdAt.desc()).all().then((all) => all.filter((s) => notDeleted(s) && (s.wodType === "BADMINTON") === bm)),
     db.orm.public.User.where({ role: "STUDENT" }).all().then((us) => [...new Set(us.map((u) => u.className).filter((c): c is string => !!c))].sort()),
   ]);
 
-  const res = await querySelfEvaluations({ sessionId: sessionId || undefined, className: className || undefined, sex: sex || undefined, query, levels, sort, page });
+  const res = await querySelfEvaluations({ grid, sessionId: sessionId || undefined, className: className || undefined, sex: sex || undefined, query, levels, sort, page });
   const colorOf = (code: string | undefined) => QUALITY_LEVELS.find((l) => l.code === code)?.color ?? "text-ink-3";
 
   // Conserve les filtres courants en changeant un seul parametre (pagination, tri).
   const linkWith = (patch: Record<string, string>) => {
     const p = new URLSearchParams();
-    const base: Record<string, string> = { session: sessionId, classe: className, sexe: sex, q: query, tri: sort, page: String(page) };
+    const base: Record<string, string> = { grille: grid, session: sessionId, classe: className, sexe: sex, q: query, tri: sort, page: String(page) };
     for (const c of SELF_EVAL_CRITERIA) if (levels[c.id]) base[`c_${c.id}`] = levels[c.id]!;
     for (const [k, v] of Object.entries({ ...base, ...patch })) if (v) p.set(k, v);
     return `/admin/auto-evaluations?${p.toString()}`;
@@ -63,8 +72,14 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
 
       <main className={`${ui.container} py-6 space-y-4`}>
         <NotedProvider ids={await notedIdsOf(user.id)}>
+        {/* ===== Grille : Badminton ou Hyrox (27/11) ===== */}
+        <nav className="flex flex-wrap items-center gap-2" aria-label="Grille">
+          <Link href="/admin/auto-evaluations?grille=badminton" className={cx(ui.chip, bm ? ui.chipBrand : ui.chipMuted, "text-sm py-1")}>🏸 Badminton</Link>
+          <Link href="/admin/auto-evaluations?grille=hyrox" className={cx(ui.chip, !bm ? ui.chipBrand : ui.chipMuted, "text-sm py-1")}>🏋️ Hyrox et autres WOD</Link>
+        </nav>
         {/* ===== Filtres (une seule soumission, tout en parametres d'URL) ===== */}
         <form className={`${ui.cardPad} space-y-3`}>
+          <input type="hidden" name="grille" value={grid} />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <label className="text-xs">
               <span className={ui.label}>Séance</span>
@@ -113,7 +128,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 mt-1">
               {SELF_EVAL_CRITERIA.map((c) => (
                 <label key={c.id} className="text-xs">
-                  <span className="block text-ink-2 truncate mb-0.5" title={c.label}>{c.label}</span>
+                  <span className="block text-ink-2 truncate mb-0.5" title={c.label}>{short(c)}</span>
                   <select name={`c_${c.id}`} defaultValue={levels[c.id] ?? ""} className={`${ui.input} w-full`}>
                     <option value="">— indifférent —</option>
                     {QUALITY_LEVELS.map((l) => <option key={l.code} value={l.code}>{l.code} · {l.label}</option>)}
@@ -125,7 +140,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
 
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" className={btn.primary}>Filtrer</button>
-            <Link href="/admin/auto-evaluations" className={btn.ghost}>Réinitialiser</Link>
+            <Link href={`/admin/auto-evaluations?grille=${grid}`} className={btn.ghost}>Réinitialiser</Link>
             {activeFilters.length > 0 && <span className={ui.hint}>Filtres actifs : {activeFilters.join(" · ")}</span>}
           </div>
         </form>
@@ -146,11 +161,12 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                 <th className={ui.th}>Élève</th>
                 <th className={ui.th}>Classe</th>
                 <th className={ui.th}>Séance</th>
-                <th className={ui.th}>Équipe</th>
+                {!bm && <th className={ui.th}>Équipe</th>}
                 {SELF_EVAL_CRITERIA.map((c) => (
-                  <th key={c.id} className={`${ui.th} text-center`} title={c.label}>{c.label}</th>
+                  <th key={c.id} className={`${ui.th} text-center`} title={c.label}>{short(c)}</th>
                 ))}
-                <th className={ui.th}>Prof</th>
+                {bm && <th className={`${ui.th} text-right`} title="Comme au carnet (« Forme du jour » hors note)">Note /5</th>}
+                <th className={ui.th}>{bm ? "Détail" : "Prof"}</th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +179,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                   <td className="p-2 font-bold whitespace-nowrap"><StudentName id={r.studentId} name={`${r.firstName} ${r.lastName}`}>{r.lastName} {r.firstName}</StudentName></td>
                   <td className="p-2 text-ink-2">{r.className}</td>
                   <td className="p-2 text-ink-2 whitespace-nowrap">{r.sessionLabel}</td>
-                  <td className="p-2 text-ink-2">{r.teamName}</td>
+                  {!bm && <td className="p-2 text-ink-2">{r.teamName}</td>}
                   {SELF_EVAL_CRITERIA.map((c) => (
                     <td key={c.id} className={cx("p-2 text-center font-black", colorOf(r.answers[c.id]))}>
                       {r.answers[c.id] ?? "—"}
@@ -173,8 +189,9 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                       )}
                     </td>
                   ))}
+                  {bm && <td className="p-2 text-right tabular-nums font-bold">{r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")}</td>}
                   <td className="p-2 whitespace-nowrap">
-                    <ReviewButton
+                    {bm ? <Link href={`/admin/badminton?session=${r.sessionId}`} className={btn.smGhost} title="Votes, notes du jour, matchs">🏸 Ouvrir</Link> : <ReviewButton
                       target={{
                         sessionId: r.sessionId,
                         studentId: r.studentId,
@@ -184,7 +201,7 @@ export default async function AutoEvaluationsPage({ searchParams }: { searchPara
                         studentAnswers: r.answers,
                         review: r.review,
                       }}
-                    />
+                    />}
                   </td>
                 </tr>
               ))}
