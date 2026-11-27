@@ -94,8 +94,8 @@ export const SELF_EVAL_CRITERIA: SelfEvalCriterion[] = [
 // Les 5 criteres du PDF mot pour mot, une ligne « coaching » (05/11, hors PDF) et « Ma forme du jour » comme au Hyrox.
 // Une auto-evaluation PAR SEANCE (le PDF dit « lors de ce cycle » : meme choix que pour le Hyrox), ouverte tant que
 // l'eleve peut encoder ses matchs.
-// ⚠️ La 5e ligne (« Fair-play et Arbitrage ») est coupee en bas de page : fins de phrase completees au plus naturel, a
-// valider par Sartay — TI « …les points ou les [décisions de l'arbitre] », I « …manque de respect envers [l'adversaire
+// La 5e ligne (« Fair-play et Arbitrage ») est coupee en bas de page : fins de phrase completees au plus naturel,
+// VALIDEES par Sartay le 26/11 (« ok pour le fair-play ») — TI « …les points ou les [décisions de l'arbitre] », I « …manque de respect envers [l'adversaire
 // ou l'arbitre] », S « …les décisions [d'arbitrage] », B « …les matchs des autres [élèves] », TB « …avant de [lancer
 // chaque échange] », E « …et sur la chaise [d'arbitre] ».
 const FORME = SELF_EVAL_CRITERIA.find((c) => c.id === "forme")!;
