@@ -4,13 +4,24 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { voteCoachAction } from "../../badminton-actions";
 import type { BmPersonRef } from "@/lib/badminton";
+import { VOTE_KINDS, type VoteKind } from "@/lib/badminton-vote";
 import { cx, ui } from "@/lib/ui";
 
-// Vote du meilleur coach (Sartay 27/11) : a la fin du cours, chaque joueur choisit le meilleur coach de sa poule (de son
-// equipe) ; il peut changer d'avis jusqu'a 24 h apres le cours.
-export function VoteBox({ sessionId, candidates, mine, where }: { sessionId: string; candidates: BmPersonRef[]; mine: string | null; where: string }) {
+// Les votes de fin de cours (Sartay 27/11) : 👑 le meilleur coach de sa poule (son equipe), 💪 l'adversaire du jour le plus
+// difficile a jouer, 🤝 le plus agreable a jouer. Secrets ; on peut changer d'avis jusqu'a 24 h apres le cours.
+export type VoteData = { kind: VoteKind; where?: string; candidates: BmPersonRef[]; mine: string | null };
+export function VoteBox({ sessionId, votes }: { sessionId: string; votes: VoteData[] }) {
+  return (
+    <section className={cx(ui.card, "p-3 space-y-3 border-2 border-brand")} aria-label="Votes de fin de cours">
+      <p className="text-sm"><b>🗳️ Les votes de fin de cours</b> <span className="text-ink-2">· secrets, un vote par question, jamais pour toi.</span></p>
+      {votes.map((v) => <OneVote key={v.kind} sessionId={sessionId} v={v} />)}
+    </section>
+  );
+}
+function OneVote({ sessionId, v }: { sessionId: string; v: VoteData }) {
   const router = useRouter();
-  const [pick, setPick] = useState<string | null>(mine);
+  const meta = VOTE_KINDS.find((k) => k.id === v.kind)!;
+  const [pick, setPick] = useState<string | null>(v.mine);
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const vote = (id: string) => {
@@ -18,22 +29,21 @@ export function VoteBox({ sessionId, candidates, mine, where }: { sessionId: str
     const before = pick;
     setPick(id);
     start(async () => {
-      const r = await voteCoachAction(sessionId, id);
+      const r = await voteCoachAction(sessionId, id, v.kind);
       if ("error" in r) { setError(r.error); setPick(before); } else router.refresh();
     });
   };
   return (
-    <section className={cx(ui.card, "p-3 space-y-2 border-2 border-brand")} aria-label="Vote du meilleur coach">
-      <p className="text-sm"><b>🗳️ Qui a été le meilleur coach de {where} aujourd&apos;hui ?</b> <span className="text-ink-2">Celui qui t&apos;a donné les meilleurs conseils, à toi ou aux autres. Ton vote est secret.</span></p>
+    <div className="space-y-1.5" aria-label={meta.title}>
+      <p className="text-sm"><b>{meta.emoji} {meta.title}{v.where ? ` de ${v.where}` : ""}</b> <span className="text-ink-2">{meta.hint}</span></p>
       <div className="grid grid-cols-2 gap-1.5">
-        {candidates.map((p) => (
+        {v.candidates.map((p) => (
           <button key={p.id} type="button" disabled={pending} onClick={() => vote(p.id)} aria-pressed={pick === p.id} className={cx("rounded-xl border-2 px-2 py-2 text-sm font-bold text-left leading-tight transition active:scale-[0.98]", pick === p.id ? "border-brand bg-brand-soft text-brand-ink" : "border-line bg-paper")}>
             {pick === p.id ? "✅ " : ""}{p.name}
           </button>
         ))}
       </div>
-      <p className={ui.hint}>{pick ? "Merci ! Tu peux encore changer d'avis jusqu'à demain." : "Un seul vote, pas pour toi-même."}</p>
       {error && <p className={ui.alertErr}>{error}</p>}
-    </section>
+    </div>
   );
 }

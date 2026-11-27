@@ -12,7 +12,7 @@ import { readTheme, sessionTheme, type BmTheme } from "@/lib/badminton-themes";
 import { readStrokeTap, strokeScoutOf } from "@/lib/badminton-strokes";
 import { scoutTargetOf, MAX_LAYER, readCourt, readRally, readScoutConfig, readStrokeSheet, scoutUnlocked, undoneRallies } from "@/lib/badminton-scout";
 import { ELO_START } from "@/lib/badminton-elo";
-import { readCoachVotes, voteGroup, voteOpen } from "@/lib/badminton-vote";
+import { opponentsToday, readCoachVotes, voteGroup, voteOpen, type VoteKind } from "@/lib/badminton-vote";
 import { betPair, betsAtCreation, headStartOf, readBet, readPendingBets, readSessionConstraints, type BmBets } from "@/lib/badminton-constraints";
 import { isTestClass } from "@/lib/session-roles";
 import { toMs } from "@/lib/scheduling";
@@ -666,23 +666,27 @@ export async function placeBetAction(sessionId: string, opponentId: string, raw:
 // Vote du meilleur coach (27/11, regles : src/lib/badminton-vote.ts) : un eleve du dernier tournoi de la seance vote pour
 // un autre joueur de son groupe, des 10 min avant la fin du cours et jusqu'a 24 h apres. Plusieurs telephones votent en
 // meme temps : on relit apres l'ecriture et on recommence si la voix a ete ecrasee.
-export async function voteCoachAction(sessionId: string, candidateId: string): Promise<BmResult> {
+// kind (27/11) : COACH (sa poule), HARD / NICE (ses adversaires du jour).
+export async function voteCoachAction(sessionId: string, candidateId: string, kind: VoteKind = "COACH"): Promise<BmResult> {
   const c = await context(sessionId);
   if ("error" in c) return c;
   if (c.staff || !c.session) return { error: "Réservé aux élèves." };
   if (!voteOpen(sessionEndMs(c.session), Date.now())) return { error: "Le vote s'ouvre 10 minutes avant la fin du cours." };
-  const tours = (await loadTournaments(c.session.id)).sort((x, y) => y.createdAt - x.createdAt);
-  const group = tours[0] ? voteGroup(tours[0], c.userId) : null;
-  if (!group) return { error: "Tu n'as pas joué le tournoi de ce cours." };
+  const k: VoteKind = kind === "HARD" || kind === "NICE" ? kind : "COACH";
   const pick = String(candidateId ?? "");
-  if (!group.includes(pick)) return { error: pick === c.userId ? "On ne vote pas pour soi !" : "Vote pour un élève de ta poule." };
+  if (k === "COACH") {
+    const tours = (await loadTournaments(c.session.id)).sort((x, y) => y.createdAt - x.createdAt);
+    const group = tours[0] ? voteGroup(tours[0], c.userId) : null;
+    if (!group) return { error: "Tu n'as pas joué le tournoi de ce cours." };
+    if (!group.includes(pick)) return { error: pick === c.userId ? "On ne vote pas pour soi !" : "Vote pour un élève de ta poule." };
+  } else if (!opponentsToday(await loadMatches(c.session.id), c.userId).includes(pick)) return { error: "Vote pour un de tes adversaires du jour." };
   const at = Date.now();
   for (let attempt = 0; attempt < 6; attempt++) {
     const row = await sessionOf(c.session.id);
     const cur = (row?.settings ?? {}) as Record<string, unknown>;
     const list = readCoachVotes(cur);
-    if (list.some((v) => v.by === c.userId && v.at === at)) { done(c.session.id); return { ok: true }; }
-    await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, coachVotes: [...list, { by: c.userId, for: pick, at }] })) });
+    if (list.some((v) => v.by === c.userId && v.at === at && v.kind === k)) { done(c.session.id); return { ok: true }; }
+    await db.orm.public.Session.where({ id: c.session.id }).update({ settings: JSON.parse(JSON.stringify({ ...cur, coachVotes: [...list, { by: c.userId, for: pick, at, kind: k }] })) });
     await new Promise((r) => setTimeout(r, 60 + Math.floor(Math.random() * 180)));
   }
   return { error: "Beaucoup d'élèves votent en même temps : réessaie dans un instant." };

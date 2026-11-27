@@ -6,7 +6,8 @@ import { BM_SELF_EVAL_DAYS, selfEvalTiming, timingComment } from "@/lib/self-eva
 import { AfterMatchPrompt, FormeQuick } from "./SelfEvalPrompts";
 import { pairKey } from "@/lib/badminton-tournament";
 import { tourCourts } from "@/lib/badminton-courts";
-import { latestVotes, readCoachVotes, voteGroup, voteOpen } from "@/lib/badminton-vote";
+import { latestVotes, opponentsToday, readCoachVotes, voteGroup, voteOpen } from "@/lib/badminton-vote";
+import type { VoteData } from "./VoteBox";
 import { betPair, headStartOf, myPendingBet, readPendingBets, readSessionConstraints } from "@/lib/badminton-constraints";
 import { ELO_START, kFactor } from "@/lib/badminton-elo";
 import { THEME_ELO_WEIGHT } from "@/lib/badminton-themes";
@@ -233,14 +234,18 @@ export default async function BadmintonPupilPage({ params, searchParams }: { par
     mine: Object.fromEntries(others.flatMap((p) => { const c = myPendingBet(pending, me.id, p.id, since(p.id)); return c === null ? [] : [[p.id, c]]; })),
   } : null;
   // Vote du meilleur coach (27/11) : dernier tournoi de la seance, des 10 min avant la fin et jusqu'a 24 h apres.
+  // + 💪 / 🤝 (meme jour) : parmi mes adversaires du jour, s'il y en a au moins 2.
   const lastTour = (await loadTournaments(sessionId)).sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
-  const voteIds = lastTour && voteOpen(sessionEndMs(session), currentTime()) ? voteGroup(lastTour, me.id) : null;
-  const votePeople = voteIds?.length ? await peopleOf([], voteIds) : null;
-  const vote = voteIds?.length && votePeople && lastTour ? {
-    candidates: voteIds.map((id) => ({ id, name: votePeople.get(id)?.name ?? "?", className: votePeople.get(id)?.className ?? null })).sort((x, y) => x.name.localeCompare(y.name, "fr")),
-    mine: latestVotes(readCoachVotes(session.settings)).get(me.id) ?? null,
-    where: lastTour.kind === "TEAMS" ? "ton équipe" : lastTour.kind === "BRACKET" ? "ton tableau" : "ta poule",
-  } : null;
+  const open = voteOpen(sessionEndMs(session), currentTime());
+  const coachIds = open && lastTour ? voteGroup(lastTour, me.id) ?? [] : [];
+  const oppIds = open ? opponentsToday(matches, me.id) : [];
+  const votePeople = coachIds.length || oppIds.length >= 2 ? await peopleOf([], [...coachIds, ...oppIds]) : null;
+  const allVotes = readCoachVotes(session.settings);
+  const refs = (ids: string[]) => ids.map((id) => ({ id, name: votePeople?.get(id)?.name ?? "?", className: votePeople?.get(id)?.className ?? null })).sort((x, y) => x.name.localeCompare(y.name, "fr"));
+  const vote: VoteData[] | null = votePeople ? [
+    ...(coachIds.length && lastTour ? [{ kind: "COACH" as const, where: lastTour.kind === "TEAMS" ? "ton équipe" : lastTour.kind === "BRACKET" ? "ton tableau" : "ta poule", candidates: refs(coachIds), mine: latestVotes(allVotes, "COACH").get(me.id) ?? null }] : []),
+    ...(oppIds.length >= 2 ? (["HARD", "NICE"] as const).map((k) => ({ kind: k, candidates: refs(oppIds), mine: latestVotes(allVotes, k).get(me.id) ?? null })) : []),
+  ] : null;
   const selfEval = await db.orm.public.SelfEvaluation.where({ sessionId, studentId: me.id }).first();
   const grid = SELF_EVAL_GRIDS.badminton;
   // Auto-evaluation (26/11 soir) : ouverte pendant le cours et 3 jours apres ; le petit mot selon le moment du PREMIER envoi ;

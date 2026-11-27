@@ -7,7 +7,8 @@ import { TIMING_LABEL, selfEvalTiming } from "@/lib/self-eval-timing";
 import { readSessionConstraints } from "@/lib/badminton-constraints";
 import { tourCourts } from "@/lib/badminton-courts";
 import { strokeScoutOf } from "@/lib/badminton-strokes";
-import { readCoachVotes, tallyVotes } from "@/lib/badminton-vote";
+import { readCoachVotes, tallyVotes, votesReceived } from "@/lib/badminton-vote";
+import { noteIcon } from "@/lib/student-notes";
 import { TOUR_POINTS, bracketOf, calibrateHandicap, formatText, liveRuleOf, playersNow, poolsOf } from "@/lib/badminton-tournament";
 import { teamFormatText, teamsOf } from "@/lib/badminton-teams";
 import { sessionTheme } from "@/lib/badminton-themes";
@@ -25,7 +26,7 @@ import { BadmintonStaff, type BmEloRow, type BmPupilRow, type BmSelfEvalRow, typ
 import type { TourView } from "./TournamentPanel";
 import { cx, ui } from "@/lib/ui";
 import { NotesPopup } from "../../_components/NotesPopup";
-import { notedIdsOf, notesForSessions } from "@/lib/student-notes-server";
+import { notedIdsOf, notesForSessions, notesOf } from "@/lib/student-notes-server";
 
 export const dynamic = "force-dynamic";
 // Heure de la lecture (hors du rendu, regle react-hooks/purity) : le chrono du tournoi par equipes s'y recale.
@@ -135,6 +136,19 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
   const selfRows = await db.orm.public.SelfEvaluation.where({ sessionId: session.id }).all();
   const selfIds = [...new Set([...rows.map((r) => r.id), ...selfRows.map((r) => r.studentId)])];
   const selfPeople = await peopleOf([], selfIds);
+  // Donnees pour l'eval (27/11, Sartay : « ce sont des datas qui serviront a l'eval » ; « les notes que je mets sur les eleves
+  // doivent aussi servir a l'eval : une tenue manquante… ») : les voix recues aux 3 votes de fin de cours, et MES notes sur
+  // l'eleve ecrites le jour du cours, plus celles qui courent encore ce jour-la (certificat jusqu'au…). Une note masquee
+  // (« ne plus me la montrer ») reste un fait : elle compte.
+  const allVotes = readCoachVotes(session.settings);
+  const received = { coach: votesReceived(allVotes, "COACH"), hard: votesReceived(allVotes, "HARD"), nice: votesReceived(allVotes, "NICE") };
+  const dayOf = (ms: number) => Temporal.Instant.fromEpochMilliseconds(ms).toZonedDateTimeISO("Europe/Brussels").toPlainDate().toString();
+  const courseDay = dayOf(sessionEndMs(session));
+  const myNotes = await notesOf(user.id);
+  const notesFor = (id: string) => myNotes
+    .filter((n) => n.studentId === id && (dayOf(n.createdAt) === courseDay || (n.until !== null && n.until >= courseDay && dayOf(n.createdAt) <= courseDay)))
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((n) => ({ icon: noteIcon(n.category), text: n.text }));
   const selfEvals: BmSelfEvalRow[] = selfIds
     .map((id) => {
       const p = selfPeople.get(id);
@@ -143,7 +157,7 @@ export default async function AdminBadmintonPage({ searchParams }: { searchParam
       return { id, name: p?.name ?? "?", lastName: p?.lastName ?? "", firstName: p?.firstName ?? "", className: p?.className ?? null, answers, grade: answers ? gradeOfAnswers(answers, "BADMINTON") : null, at: se ? toMs(se.submittedAt) : null, timing: se ? TIMING_LABEL[selfEvalTiming(toMs(se.submittedAt), sessionEndMs(session))] : null };
     })
     .sort((a, b) => (a.className ?? "").localeCompare(b.className ?? "", "fr", { numeric: true }) || a.lastName.localeCompare(b.lastName, "fr") || a.firstName.localeCompare(b.firstName, "fr"))
-    .map(({ id, name, className, answers, grade, at }) => ({ id, name, className, answers, grade, at }));
+    .map(({ id, name, className, answers, grade, at, timing }) => ({ id, name, className, answers, grade, at, timing, votes: { coach: received.coach.get(id) ?? 0, hard: received.hard.get(id) ?? 0, nice: received.nice.get(id) ?? 0 }, notes: notesFor(id) }));
   const seCols = SELF_EVAL_GRIDS.badminton.criteria.map((c) => ({ id: c.id, short: SELF_EVAL_SHORT[c.id] ?? c.label, label: c.label }));
   const board = await loadEloBoard();
   const elo = eloRows(board, classes.length > 0 && classes.every((c) => isTestClass(c)));

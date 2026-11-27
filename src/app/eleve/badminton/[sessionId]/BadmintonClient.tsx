@@ -12,7 +12,7 @@ import { usePulse } from "../../../_components/usePulse";
 import { btn, cx, ui } from "@/lib/ui";
 import { BET_LEVELS, BET_TEXT, multText, type BmBets } from "@/lib/badminton-constraints";
 import { BetBox, type BetData } from "./BetBox";
-import { VoteBox } from "./VoteBox";
+import { VoteBox, type VoteData } from "./VoteBox";
 import { StrokeScoutBoard, type StrokeResume } from "../../../_components/StrokeScoutBoard";
 
 // Ecran eleve du badminton (telephone) : « à signer » en haut, puis « Encoder un match » (j'ai joue / j'ai arbitre),
@@ -38,7 +38,7 @@ export type TeamCardData = {
 };
 // scout (24/11) : le terrain et les couches de cet eleve quand il arbitre en direct ; scoutable (null = scouting verrouille pour lui, 26/11) : les matchs de la seance
 // qu'il peut observer pour remplir la fiche technique d'un joueur.
-export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], vote = null, strokesOn = false, bet = null, betTour = false, betLesson = false, handicapOn = false, strokeResume = [], strokeTaken = [] }: { vote?: { candidates: BmPersonRef[]; mine: string | null; where: string } | null; strokesOn?: boolean; bet?: BetData | null; betTour?: boolean; betLesson?: boolean; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
+export function BadmintonClient({ sessionId, meId, writable, roster, toSign, mine, refereed, free = false, toAttest = [], witnessed = [], tour = null, liveRules = {}, theme = null, scout = null, scoutable = null, scoutPicks = null, scoutResume = [], vote = null, strokesOn = false, bet = null, betTour = false, betLesson = false, handicapOn = false, strokeResume = [], strokeTaken = [] }: { vote?: VoteData[] | null; strokesOn?: boolean; bet?: BetData | null; betTour?: boolean; betLesson?: boolean; handicapOn?: boolean; strokeResume?: StrokeResume[]; strokeTaken?: string[]; theme?: BmTheme | null; scout?: LiveScout | null; scoutable?: BmView[] | null; scoutPicks?: ScoutPickView[] | null; scoutResume?: { id: string; aName: string; bName: string; sets: BmSet[] }[]; sessionId: string; meId: string; writable: boolean; roster: BmPersonRef[]; toSign: BmView[]; mine: BmView[]; refereed: BmView[]; free?: boolean; toAttest?: BmView[]; witnessed?: BmView[]; tour?: TourCardData | null; liveRules?: Record<string, LiveRule & { target: number }> }) {
   const router = useRouter();
   const pulse = useCallback(() => badmintonPulseAction(sessionId), [sessionId]);
   // Arbitrage en direct en cours sur ce telephone (tableau de score plein ecran).
@@ -56,7 +56,7 @@ export function BadmintonClient({ sessionId, meId, writable, roster, toSign, min
     <main className="max-w-xl mx-auto p-4 space-y-5">
       {live && <LiveBoard key={live.id} matchId={live.id} aName={live.aName} bName={live.bName} initialSets={live.sets} initialTarget={live.target} rule={live.rule} theme={live.theme} headStart={live.head ?? null} bets={live.bets ?? null} scout={live.scouting ? scout : null} scouting={!!live.scouting} focus={live.focus ?? null} onClose={() => setLive(null)} />}
       {strokes && <StrokeScoutBoard key={strokes.id} obs={strokes} onClose={() => setStrokes(null)} />}
-      {vote && <VoteBox sessionId={sessionId} candidates={vote.candidates} mine={vote.mine} where={vote.where} />}
+      {vote && vote.length > 0 && <VoteBox sessionId={sessionId} votes={vote} />}
       {!writable && <p className={ui.alertInfo}>La séance est terminée depuis plus de 24 h : tu peux seulement consulter tes matchs.</p>}
       {theme && writable && <p className={ui.alertInfo}>🎲 <b>Matchs à thème aujourd&apos;hui : {themeText(theme)}.</b> {THEME_KINDS.find((k) => k.id === theme.kind)?.rule} Le mieux : un arbitre en direct (« J&apos;arbitre »), qui applique la règle à chaque échange.</p>}
       {handicapOn && writable && <p className={ui.alertInfo}>⚖️ <b>Matchs à handicap aujourd&apos;hui</b> : le moins bien classé commence chaque set avec des points d&apos;avance (selon l&apos;écart d&apos;ELO) ; comptez-les dans le score final.</p>}

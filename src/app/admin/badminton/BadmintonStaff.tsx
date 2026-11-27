@@ -20,7 +20,8 @@ const NO_IDS: string[] = [];
 import type { HandicapCalibration } from "@/lib/badminton-tournament";
 
 export type BmPupilRow = { id: string; name: string; className: string | null; stats: BmPupilStats };
-export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null; timing?: string | null };
+// votes / notes (27/11) : donnees pour l'eval (voix recues aux votes de fin de cours, mes notes du jour sur l'eleve).
+export type BmSelfEvalRow = { id: string; name: string; className: string | null; answers: Record<string, string> | null; grade: number | null; at: number | null; timing?: string | null; votes?: { coach: number; hard: number; nice: number }; notes?: { icon: string; text: string }[] };
 export type BmEloRow = { id: string; name: string; className: string | null; rating: number; games: number; won: number; draws: number; lost: number; provisional: boolean };
 type SeCol = { id: string; short: string; label: string };
 type Tab = "matchs" | "eleves" | "autoevals" | "elo" | "tournoi" | "encoder" | "scouting";
@@ -65,8 +66,8 @@ export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, vie
     L.push(["Élève", "Classe", "Matchs validés", "Victoires", "Égalités", "Défaites", "Sets +", "Sets -", "Points +", "Points -", "À signer", "Contestés", "Arbitrés", "ELO"].join(";"));
     for (const r of rows) { const s = r.stats; const e = eloOf.get(r.id); L.push([r.name, r.className ?? "", s.played, s.won, s.draws, s.lost, s.setsFor, s.setsAgainst, s.pointsFor, s.pointsAgainst, s.pending, s.disputed, s.refereed, e ? fmtElo(e.rating) : ""].map((x) => q(String(x))).join(";")); }
     L.push("");
-    L.push(["Auto-évaluation", "Classe", ...seCols.map((c) => c.label), "Note /5"].join(";"));
-    for (const r of selfEvals) L.push([r.name, r.className ?? "", ...seCols.map((c) => r.answers?.[c.id] ?? ""), r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")].map((x) => q(String(x))).join(";"));
+    L.push(["Auto-évaluation", "Classe", ...seCols.map((c) => c.label), "Note /5", "Voix meilleur coach", "Voix adversaire le plus difficile", "Voix adversaire le plus agréable", "Mes notes du jour"].join(";"));
+    for (const r of selfEvals) L.push([r.name, r.className ?? "", ...seCols.map((c) => r.answers?.[c.id] ?? ""), r.grade === null ? "" : r.grade.toFixed(1).replace(".", ","), r.votes?.coach ?? 0, r.votes?.hard ?? 0, r.votes?.nice ?? 0, (r.notes ?? []).map((n) => `${n.icon} ${n.text}`).join(" | ")].map((x) => q(String(x))).join(";"));
     const blob = new Blob(["﻿" + L.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -143,7 +144,7 @@ export function BadmintonStaff({ coachVotes = [], scoutLive = [], sessionId, vie
       {tab === "tournoi" && coachVotes.length > 0 && (
         <section className={`${ui.cardPad} space-y-2`}>
           <p className="font-bold">🗳️ Meilleur coach · votes des élèves</p>
-          <p className={ui.hint}>Chaque joueur vote pour un camarade de sa poule (de son équipe), des 10 dernières minutes du cours jusqu&apos;à 24 h après. Les élèves ne voient pas les résultats.</p>
+          <p className={ui.hint}>Chaque joueur vote pour un camarade de sa poule (de son équipe), des 10 dernières minutes du cours jusqu&apos;à 24 h après. Les élèves ne voient pas les résultats. Les deux autres votes (💪 adversaire le plus difficile, 🤝 le plus agréable) : onglet Auto-évaluations.</p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {coachVotes.map((g) => (
               <div key={g.group} className="rounded-lg bg-paper px-2 py-1.5 text-sm">
@@ -222,14 +223,19 @@ function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] })
   const hm = (ms: number) => new Date(ms).toLocaleString("fr-BE", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
   return (
     <section className={`${ui.cardPad} space-y-2`}>
-      <p className={ui.hint}>{done} auto-évaluation{done > 1 ? "s" : ""} rendue{done > 1 ? "s" : ""} sur {rows.length} élève{rows.length > 1 ? "s" : ""}. Note /5 comme au carnet (« Forme du jour » hors note).</p>
+      <p className={ui.hint}>{done} auto-évaluation{done > 1 ? "s" : ""} rendue{done > 1 ? "s" : ""} sur {rows.length} élève{rows.length > 1 ? "s" : ""}. Note /5 comme au carnet (« Forme du jour » hors note). Pour l&apos;évaluation : 👑 💪 🤝 = voix reçues aux votes de fin de cours (meilleur coach, adversaire le plus difficile, le plus agréable à jouer) ; 📝 = vos notes sur l&apos;élève ce jour-là (et certificats en cours). Tout part dans l&apos;export CSV.</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left">
               <th className={ui.th}>Élève</th><th className={ui.th}>Classe</th>
               {cols.map((c) => <th key={c.id} className={`${ui.th} text-center`} title={c.label}>{c.short}</th>)}
-              <th className={`${ui.th} text-right`}>Note /5</th><th className={ui.th}>Envoyée</th>
+              <th className={`${ui.th} text-right`}>Note /5</th>
+              <th className={`${ui.th} text-center`} title="Voix reçues : meilleur coach">👑</th>
+              <th className={`${ui.th} text-center`} title="Voix reçues : adversaire le plus difficile à jouer">💪</th>
+              <th className={`${ui.th} text-center`} title="Voix reçues : adversaire le plus agréable à jouer">🤝</th>
+              <th className={ui.th} title="Mes notes sur l'élève ce jour-là">📝</th>
+              <th className={ui.th}>Envoyée</th>
             </tr>
           </thead>
           <tbody>
@@ -239,6 +245,8 @@ function SelfEvalTable({ rows, cols }: { rows: BmSelfEvalRow[]; cols: SeCol[] })
                 <td className="p-2">{r.className ?? ""}</td>
                 {cols.map((c) => <td key={c.id} className={cx("p-2 text-center font-black", color(r.answers?.[c.id]))}>{r.answers?.[c.id] ?? "—"}</td>)}
                 <td className="p-2 text-right tabular-nums font-bold">{r.grade === null ? "" : r.grade.toFixed(1).replace(".", ",")}</td>
+                {(["coach", "hard", "nice"] as const).map((k) => <td key={k} className={cx("p-2 text-center tabular-nums", r.votes?.[k] ? "font-black text-ink" : "text-ink-3")}>{r.votes?.[k] || "·"}</td>)}
+                <td className="p-2 text-xs text-ink max-w-56">{(r.notes ?? []).map((n, i) => <span key={i} className="block">{n.icon} {n.text}</span>)}</td>
                 <td className="p-2 text-xs whitespace-nowrap">{r.at ? <>{hm(r.at)}{r.timing ? <span className="block text-ink-2">{r.timing}</span> : null}</> : "pas encore"}</td>
               </tr>
             ))}
